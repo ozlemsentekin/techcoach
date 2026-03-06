@@ -10,6 +10,22 @@ const NAV_ITEMS = [
   { id: 'paneller', label: 'Paneller' },
 ]
 
+function getLgsCountdown() {
+  const today = new Date()
+  const currentYear = today.getFullYear()
+  const target = new Date(currentYear, 5, 14)
+
+  if (today > target) {
+    target.setFullYear(currentYear + 1)
+  }
+
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const startOfTarget = new Date(target.getFullYear(), target.getMonth(), target.getDate())
+  const msPerDay = 24 * 60 * 60 * 1000
+
+  return Math.max(0, Math.ceil((startOfTarget - startOfToday) / msPerDay))
+}
+
 function BrandIcon() {
   return (
     <svg viewBox="0 0 120 120" aria-hidden="true">
@@ -32,6 +48,7 @@ function App() {
   const [authMode, setAuthMode] = useState('login')
   const [infoModal, setInfoModal] = useState(null)
   const showPricing = false
+  const lgsCountdown = getLgsCountdown()
 
   const openLogin = (event) => {
     event.preventDefault()
@@ -123,11 +140,37 @@ function App() {
           <div className="container hero-grid">
             <div>
               <div className="eyebrow">Akademik performansın dijital sistemi</div>
-              <h1>TechCoach planlar, <span className="teco-accent">Teco</span> ilerletir.</h1>
+              <h1 className="hero-title">
+                <span className="hero-title-line hero-title-lead">
+                  <span className="hero-title-brand">TechCoach</span>{' '}
+                  <span className="hero-title-word">planlar</span>
+                </span>
+                <span className="hero-title-line hero-title-subline">
+                  <span className="hero-title-accent">Teco</span>{' '}
+                  <span className="hero-title-word">ilerletir</span>
+                </span>
+              </h1>
               <p>
                 TechCoach öğrencinin akademik sürecini yöneten dijital sistemdir; Teco ise günlük
                 planı oluşturan ve öğrenciyi yönlendiren akıllı çalışma asistanıdır.
               </p>
+              <div className="hero-mobile-stack" aria-hidden="true">
+                <div className="hero-mobile-quote">
+                  <span className="hero-mobile-quote-line" />
+                  <strong>“Ölçemediğiniz şeyi geliştiremezsiniz.”</strong>
+                  <span>Peter Drucker</span>
+                </div>
+                <div className="hero-mobile-points">
+                  <div className="hero-mobile-point">
+                    <b>Plan</b>
+                    <span>Teco gunluk calisma akisini olusturur.</span>
+                  </div>
+                  <div className="hero-mobile-point">
+                    <b>Takip</b>
+                    <span>Veli ve koc ayni veriyi tek ekranda gorur.</span>
+                  </div>
+                </div>
+              </div>
               <div className="hero-flow">
                 <span><b>1</b><span className="teco-accent">Teco</span>’ya soralım</span>
                 <span><b>2</b><span className="teco-accent">Teco</span>’da planlayalım</span>
@@ -250,6 +293,14 @@ function App() {
                     <div className="phone-hero-brand">TechCoach</div>
                     <div className="phone-hero-title">Aylin, bugünkü planın hazır.</div>
                     <p>“Başlamak, işin yarısını tamamlamaktır.”</p>
+                  </div>
+
+                  <div className="phone-countdown" aria-label="LGS geri sayimi">
+                    <div>
+                      <strong>14 Haziran&apos;da LGS var</strong>
+                      <span>Hazirlik ritmini koru.</span>
+                    </div>
+                    <b>{lgsCountdown} gun</b>
                   </div>
 
                   <div className="phone-panel">
