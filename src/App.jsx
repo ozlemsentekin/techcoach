@@ -19,23 +19,92 @@ const INITIAL_AUTH_FORM = {
   acceptKvkk: false,
 }
 
-async function authRequest(path, options = {}) {
-  const response = await fetch(path, {
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  })
+const DEFAULT_AUTH_TIMEOUT_MS = 8000
+const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{12,72}$/
 
-  const data = await response.json().catch(() => ({}))
+function validateAuthPayload(mode, payload) {
+  const email = String(payload.email || '').trim().toLowerCase()
+  const password = String(payload.password || '')
 
-  if (!response.ok) {
-    throw new Error(data.error || 'İşlem tamamlanamadı.')
+  if (!email || !password) {
+    return 'E-posta ve şifre zorunludur.'
   }
 
-  return data
+  if (!EMAIL_RULE.test(email) || email.length > 320) {
+    return 'Geçerli bir e-posta adresi girin.'
+  }
+
+  if (mode !== 'register') {
+    return null
+  }
+
+  const fullName = String(payload.fullName || '').trim()
+  const passwordRepeat = String(payload.passwordRepeat || '')
+
+  if (fullName.length < 3 || fullName.length > 120) {
+    return 'Ad soyad 3 ile 120 karakter arasında olmalı.'
+  }
+
+  if (!PASSWORD_RULE.test(password)) {
+    return 'Şifre en az 12 karakter olmalı; büyük harf, küçük harf, rakam ve özel karakter içermelidir.'
+  }
+
+  if (password !== passwordRepeat) {
+    return 'Şifre tekrarı eşleşmiyor.'
+  }
+
+  if (!payload.acceptAydinlatma || !payload.acceptKvkk) {
+    return 'Devam etmek için aydınlatma ve KVKK onaylarını vermelisiniz.'
+  }
+
+  return null
+}
+
+async function authRequest(path, options = {}) {
+  const { headers, timeoutMs = DEFAULT_AUTH_TIMEOUT_MS, ...fetchOptions } = options
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const response = await fetch(path, {
+      credentials: 'include',
+      headers: {
+        ...(fetchOptions.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(headers || {}),
+      },
+      signal: controller.signal,
+      ...fetchOptions,
+    })
+
+    const contentType = response.headers.get('content-type') || ''
+    const data = contentType.includes('application/json')
+      ? await response.json().catch(() => ({}))
+      : {}
+
+    if (!response.ok) {
+      const fallbackMessage =
+        response.status >= 500 && !contentType.includes('application/json')
+          ? 'Kimlik doğrulama servisine ulaşılamadı. API sunucusunun çalıştığını kontrol edin.'
+          : 'İşlem tamamlanamadı.'
+
+      throw new Error(data.error || fallbackMessage)
+    }
+
+    return data
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('Sunucu zamanında yanıt vermedi. Lütfen tekrar deneyin.')
+    }
+
+    if (error instanceof TypeError) {
+      throw new Error('Kimlik doğrulama servisine ulaşılamadı. API sunucusunun çalıştığını kontrol edin.')
+    }
+
+    throw error
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
 }
 
 function getLgsCountdown() {
@@ -67,6 +136,104 @@ function BrandIcon() {
         strokeLinejoin="round"
       />
     </svg>
+  )
+}
+
+function TecoMessageIcon() {
+  return (
+    <svg viewBox="0 0 64 64" aria-hidden="true">
+      <defs>
+        <linearGradient id="tecoMessageGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#3ED6C3" />
+          <stop offset="100%" stopColor="#2B2F77" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M12 14 Q12 8 18 8 L46 8 Q52 8 52 14 L52 34 Q52 40 46 40 L28 40 L20 48 L20 40 L18 40 Q12 40 12 34 Z"
+        fill="url(#tecoMessageGradient)"
+      />
+      <circle cx="24" cy="24" r="3" fill="white" />
+      <circle cx="32" cy="24" r="3" fill="white" />
+      <circle cx="40" cy="24" r="3" fill="white" />
+    </svg>
+  )
+}
+
+function DashboardPreview({ days, compact = false }) {
+  return (
+    <div className={`plan-dashboard ${compact ? 'plan-dashboard-compact' : 'plan-dashboard-desktop'}`}>
+      <div className="plan-dashboard-shell">
+        <div className="plan-dashboard-banner">
+          <span>TECHCOACH</span>
+          <strong>Aylin, bugünkü planın hazır.</strong>
+        </div>
+
+        <div className="plan-dashboard-rhythm">
+          <span>BUGÜNÜN RİTMİ</span>
+          <b>CANLI</b>
+        </div>
+
+        <div className="plan-dashboard-score">
+          <div className="plan-dashboard-score-line">
+            <strong>%82</strong>
+            <span>Tamamlandı</span>
+          </div>
+          <p>Başlamak işin yarısını tamamlamaktır.</p>
+        </div>
+
+        <div className="plan-dashboard-progress" aria-hidden="true">
+          <span />
+        </div>
+
+        <div className="plan-dashboard-countdown">
+          <div>
+            <strong>14 Haziran&apos;da LGS var</strong>
+            <span>Hazırlık ritmini koru.</span>
+          </div>
+          <b>{days} gün</b>
+        </div>
+
+        <div className="plan-dashboard-discipline">
+          <div className="plan-dashboard-discipline-head">
+            <strong>Disiplin skoru</strong>
+            <b>%74</b>
+          </div>
+          <div className="plan-dashboard-discipline-progress" aria-hidden="true">
+            <span />
+          </div>
+          <p>48 dk / 120 dk · 5 gün seri</p>
+        </div>
+
+        <div className="plan-dashboard-message">
+          <div className="plan-dashboard-message-head">
+            <div className="plan-dashboard-message-icon">
+              <TecoMessageIcon />
+            </div>
+            <strong>
+              <span className="teco-accent">Teco</span>&apos;dan mesajın var!
+            </strong>
+          </div>
+
+          <div className="plan-dashboard-guidance">
+            <div className="plan-dashboard-guidance-path" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className="plan-dashboard-guidance-copy">
+              <small>Matematik sınavına 3 gün kaldı</small>
+              <strong>Önce olasılık tekrarını tamamla.</strong>
+              <p>25 dakikalık kısa tekrar ve 8 soruluk mini turla ritmi başlat.</p>
+            </div>
+          </div>
+
+          <div className="plan-dashboard-tags" aria-hidden="true">
+            <span>ÖNCELİK: OLASILIK</span>
+            <span>BUGÜN · 25 DK</span>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -124,6 +291,7 @@ function App() {
       await authRequest('/api/auth/logout', {
         method: 'POST',
         body: JSON.stringify({}),
+        timeoutMs: 10000,
       })
       setAuthUser(null)
       setAuthForm(INITIAL_AUTH_FORM)
@@ -137,14 +305,22 @@ function App() {
 
   const handleAuthSubmit = async (event) => {
     event.preventDefault()
-    setAuthLoading(true)
-    setAuthError('')
-    setAuthMessage('')
 
     const payload =
       authMode === 'register'
         ? authForm
         : { email: authForm.email, password: authForm.password }
+
+    const validationError = validateAuthPayload(authMode, payload)
+    if (validationError) {
+      setAuthError(validationError)
+      setAuthMessage('')
+      return
+    }
+
+    setAuthLoading(true)
+    setAuthError('')
+    setAuthMessage('')
 
     try {
       const data = await authRequest(
@@ -152,6 +328,7 @@ function App() {
         {
           method: 'POST',
           body: JSON.stringify(payload),
+          timeoutMs: 10000,
         },
       )
 
@@ -218,7 +395,7 @@ function App() {
 
     const loadSession = async () => {
       try {
-        const data = await authRequest('/api/auth/me', { method: 'GET' })
+        const data = await authRequest('/api/auth/me', { method: 'GET', timeoutMs: 3000 })
         if (!ignore) {
           setAuthUser(data.user)
         }
@@ -286,108 +463,52 @@ function App() {
         <section className="section hero" id="hero">
           <div className="container hero-grid">
             <div className="hero-copy">
-              <div className="eyebrow">Akademik performansın dijital sistemi</div>
-              <h1 className="hero-title">
-                <span className="hero-title-line hero-title-lead">
-                  <span className="hero-title-brand">TechCoach</span>{' '}
-                  <span className="hero-title-word">planlar</span>
-                </span>
-                <span className="hero-title-line hero-title-subline">
-                  <span className="hero-title-accent">Teco</span>{' '}
-                  <span className="hero-title-word">ilerletir</span>
-                </span>
-              </h1>
-              <p>
-                TechCoach öğrencinin akademik sürecini yöneten dijital sistemdir; Teco ise günlük
-                planı oluşturan ve öğrenciyi yönlendiren akıllı çalışma asistanıdır.
-              </p>
-              <div className="hero-mobile-stack" aria-hidden="true">
-                <div className="hero-mobile-summary">
-                  <div className="hero-mobile-banner">
-                    <span>TechCoach</span>
-                    <strong>Aylin, bugünkü planın hazır.</strong>
-                  </div>
-                  <div className="hero-mobile-summary-top">
-                    <span>Bugünün ritmi</span>
-                    <b>Canlı</b>
-                  </div>
-                  <div className="hero-mobile-score">
-                    <div className="hero-mobile-score-line">
-                      <strong>%82</strong>
-                      <span>Tamamlandı</span>
-                    </div>
-                    <p>Başlamak işin yarısını tamamlamaktır.</p>
-                  </div>
-                  <div className="hero-mobile-progress" aria-hidden="true">
-                    <span />
-                  </div>
-                  <div className="hero-mobile-countdown">
-                    <div>
-                      <strong>14 Haziran&apos;da LGS var</strong>
-                      <span>Hazırlık ritmini koru.</span>
-                    </div>
-                    <b>{lgsCountdown} gün</b>
-                  </div>
-                  <div className="hero-mobile-stats">
-                      <div className="hero-mobile-suggestion">
-                        <div className="hero-mobile-assistant-shell">
-                        <div className="hero-mobile-assistant-avatar" aria-hidden="true">
-                          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-                            <defs>
-                              <linearGradient id="tecoMessageGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" stopColor="#3ED6C3" />
-                                <stop offset="100%" stopColor="#2B2F77" />
-                              </linearGradient>
-                            </defs>
-                            <path
-                              d="M12 14 Q12 8 18 8 L46 8 Q52 8 52 14 L52 34 Q52 40 46 40 L28 40 L20 48 L20 40 L18 40 Q12 40 12 34 Z"
-                              fill="url(#tecoMessageGradient)"
-                            />
-                            <circle cx="24" cy="24" r="3" fill="white" />
-                            <circle cx="32" cy="24" r="3" fill="white" />
-                            <circle cx="40" cy="24" r="3" fill="white" />
-                          </svg>
-                        </div>
-                        <div className="hero-mobile-assistant-copy">
-                          <strong><span className="teco-accent">Teco</span>&apos; dan mesajın var!</strong>
-                        </div>
-                      </div>
-                      <div className="hero-mobile-guidance-card">
-                        <div className="hero-mobile-guidance-path" aria-hidden="true">
-                          <span />
-                          <span />
-                          <span />
-                        </div>
-                        <div className="hero-mobile-guidance-body">
-                          <small>Matematik sınavına 3 gün kaldı</small>
-                          <strong>Önce olasılık tekrarını tamamla.</strong>
-                          <p>25 dakikalık kısa tekrar ve 8 soruluk mini turla ritmi başlat.</p>
-                        </div>
-                      </div>
-                      <div className="hero-mobile-guidance-tags" aria-hidden="true">
-                        <span>Öncelik: Olasılık</span>
-                        <span>Bugün · 25 dk</span>
+              <div className="hero-copy-main">
+                <div className="eyebrow">Akademik performansın dijital sistemi</div>
+                <h1 className="hero-title">
+                  <span className="hero-title-line hero-title-lead">
+                    <span className="hero-title-brand">TechCoach</span>{' '}
+                    <span className="hero-title-word">planlar</span>
+                  </span>
+                  <span className="hero-title-line hero-title-subline">
+                    <span className="hero-title-accent">Teco</span>{' '}
+                    <span className="hero-title-word">ilerletir</span>
+                  </span>
+                </h1>
+                <p>
+                  <strong>TechCoach</strong> öğrencinin akademik sürecini yöneten dijital sistemdir;{' '}
+                  <strong>Teco</strong> ise günlük planı oluşturan ve öğrenciyi yönlendiren akıllı
+                  çalışma asistanıdır.
+                </p>
+                <div className="hero-mobile-device" aria-hidden="true">
+                  <span className="hero-mobile-device-notch" />
+                  <span className="hero-mobile-device-side hero-mobile-device-side-top" />
+                  <span className="hero-mobile-device-side hero-mobile-device-side-bottom" />
+                  <div className="hero-mobile-device-screen">
+                    <div className="hero-mobile-statusbar">
+                      <span>9:41</span>
+                      <div className="hero-mobile-status-icons">
+                        <i className="hero-mobile-signal" />
+                        <i className="hero-mobile-wifi" />
+                        <i className="hero-mobile-battery" />
                       </div>
                     </div>
-                  </div>
-                </div>
-                <div className="hero-mobile-points">
-                  <div className="hero-mobile-point">
-                    <b>Plan</b>
-                    <span>Teco günlük çalışma akışını otomatik kurar.</span>
-                  </div>
-                  <div className="hero-mobile-point">
-                    <b>Takip</b>
-                    <span>Veli ve koç aynı veriyi tek ekranda görür.</span>
+                    <DashboardPreview days={lgsCountdown} compact />
+                    <span className="hero-mobile-home-indicator" />
                   </div>
                 </div>
               </div>
+
               <div className="hero-journey" aria-label="Teco akışı">
                 <div className="hero-journey-intro">
                   <span className="hero-journey-kicker">Tek akış</span>
-                  <strong>
-                    Takvim gelir, plan oluşur, <span className="teco-accent">Teco</span> süreci
-                    yürütür.
+                  <strong className="hero-journey-headline">
+                    <span className="hero-journey-headline-line hero-journey-headline-line-primary">
+                      Takvim gelir, plan oluşur.
+                    </span>
+                    <span>
+                      <span className="teco-accent">Teco</span> süreci yürütür.
+                    </span>
                   </strong>
                   <p>
                     Öğrenci, veli ve varsa öğrenci koçunuz aynı akışın içinde kalır. Ayrı modüller
@@ -398,213 +519,25 @@ function App() {
                   <li className="hero-journey-item">
                     <b>1</b>
                     <div>
-                      <span><span className="teco-accent">Teco</span>’ya sor</span>
+                      <span className="hero-journey-title hero-journey-title-nowrap"><span className="teco-accent">Teco</span>’ya sor</span>
                       <p>Sınav takvimini içeri al, çalışma planı otomatik çıksın.</p>
                     </div>
                   </li>
                   <li className="hero-journey-item">
                     <b>2</b>
                     <div>
-                      <span><span className="teco-accent">Teco</span> planı yürütür</span>
+                      <span className="hero-journey-title hero-journey-title-nowrap"><span className="teco-accent">Teco</span> planı yürütür</span>
                       <p>Günlük görevleri hatırlatır, hata analizi yapar, öğrenciyi yönlendirir.</p>
                     </div>
                   </li>
                   <li className="hero-journey-item">
                     <b>3</b>
                     <div>
-                      <span>Herkes aynı veriyi görür</span>
+                      <span className="hero-journey-title">Herkes aynı veriyi görür</span>
                       <p>Öğrenci uygular, veli takip eder, koç veriye göre müdahale eder.</p>
                     </div>
                   </li>
                 </ol>
-              </div>
-            </div>
-
-            <div className="hero-visual">
-              <div className="glow" />
-
-              <div className="laptop">
-                <div className="laptop-screen">
-                  <div className="screen-left">
-                    <div className="screen-title">Tech<span>Coach</span></div>
-                    <div className="screen-subtitle">
-                      Planlama + Hata Analizi + Koçluk görünürlüğü tek panelde
-                    </div>
-                    <div className="illustration">
-                      <div className="feature-pill">Takvim OCR</div>
-                      <div className="feature-pill">AI Hata Defteri</div>
-                      <div className="feature-pill">Veli + Koç Paneli</div>
-                      <div className="feature-pill">Kaynak Takibi</div>
-                      <div className="feature-pill">Disiplin Skoru</div>
-                      <div className="feature-pill">Risk Alarmı</div>
-                    </div>
-                    <div className="mini-metrics">
-                      <div><strong>7s 25dk</strong><span>Haftalık süre</span></div>
-                      <div><strong>42</strong><span>Çöz. kayıt</span></div>
-                      <div><strong>%82</strong><span>Plan tamamlama</span></div>
-                    </div>
-                  </div>
-
-                  <div className="screen-right">
-                    <div className="ui-card">
-                      <div className="web-score-head">
-                        <div className="today-title">Disiplin Skoru</div>
-                        <div className="web-score-value">%74</div>
-                      </div>
-                      <div className="web-progress"><span /></div>
-                      <div className="today-sub">48 dk / 120 dk · 5 gün seri</div>
-                    </div>
-
-                    <div className="ui-card">
-                      <div className="card-title">Bugünkü Plan</div>
-                      <div className="web-plan-list">
-                        <div className="web-plan-row done">
-                          <span className="dot">✓</span>
-                          <div>
-                            <strong>Matematik - Problemler</strong>
-                            <small>20 soru · 28 dk</small>
-                          </div>
-                          <em>Tamam</em>
-                        </div>
-                        <div className="web-plan-row">
-                          <span className="dot" />
-                          <div>
-                            <strong>Fen - Deneme</strong>
-                            <small>1 test · 35 dk</small>
-                          </div>
-                        </div>
-                        <div className="web-plan-row">
-                          <span className="dot" />
-                          <div>
-                            <strong>Türkçe - Paragraf</strong>
-                            <small>15 soru · 20 dk</small>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="ui-card">
-                      <div className="card-title">AI Hata Defteri Özeti</div>
-                      <div className="today-sub">
-                        Riskli konu yoğunluğu <strong className="indigo">Matematik %17.8</strong>
-                      </div>
-                      <div className="today-sub mt8">Öneri: 48 saat içinde Olasılık mini-kampı</div>
-                    </div>
-
-                    <div className="ui-card compact-grid">
-                      <div className="micro-kpi">
-                        <strong>+5</strong>
-                        <span>Yeni sınav</span>
-                      </div>
-                      <div className="micro-kpi">
-                        <strong>126</strong>
-                        <span>İşlenen hata</span>
-                      </div>
-                      <div className="micro-kpi">
-                        <strong>3</strong>
-                        <span>Riskli konu</span>
-                      </div>
-                      <div className="micro-kpi">
-                        <strong>8</strong>
-                        <span>Koç müdahalesi</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="phone">
-                <div className="phone-screen">
-                  <div className="phone-notch" />
-                  <div className="phone-hero">
-                    <div className="phone-hero-brand">TechCoach</div>
-                    <div className="phone-hero-title">Aylin, bugünkü planın hazır.</div>
-                    <p>“Başlamak, işin yarısını tamamlamaktır.”</p>
-                  </div>
-
-                  <div className="phone-countdown" aria-label="LGS geri sayimi">
-                    <div>
-                      <strong>14 Haziran&apos;da LGS var</strong>
-                      <span>Hazirlik ritmini koru.</span>
-                    </div>
-                    <b>{lgsCountdown} gun</b>
-                  </div>
-
-                  <div className="phone-panel">
-                    <div className="phone-panel-head">
-                      <h4>Disiplin skoru</h4>
-                      <strong>%74</strong>
-                    </div>
-                    <div className="phone-progress">
-                      <span />
-                    </div>
-                    <div className="phone-panel-meta">48 dk / 120 dk · 5 gün seri</div>
-                  </div>
-
-                  <div className="phone-panel">
-                    <div className="phone-panel-head">
-                      <h4>Bugünkü plan</h4>
-                    </div>
-                    <div className="phone-plan-item done">
-                      <span className="check">✓</span>
-                      <div>
-                        <div className="name">Matematik - Problemler</div>
-                        <div className="meta">20 soru · 28 dk</div>
-                      </div>
-                      <span className="status">Tamam</span>
-                    </div>
-                    <div className="phone-plan-item">
-                      <span className="check" />
-                      <div>
-                        <div className="name">Fen - Deneme</div>
-                        <div className="meta">1 test · 35 dk</div>
-                      </div>
-                    </div>
-                    <div className="phone-plan-item">
-                      <span className="check" />
-                      <div>
-                        <div className="name">Türkçe - Paragraf</div>
-                        <div className="meta">15 soru · 20 dk</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="phone-panel">
-                    <div className="phone-panel-head">
-                      <h4>Bugün aktif öğrenciler</h4>
-                    </div>
-                    <div className="phone-list-item">
-                      <span>Nova34</span>
-                      <strong>120 soru</strong>
-                    </div>
-                    <div className="phone-list-item">
-                      <span>Delta07</span>
-                      <strong>45 dk tekrar</strong>
-                    </div>
-                    <div className="phone-list-item">
-                      <span>Axis12</span>
-                      <strong>2 konu tamamladı</strong>
-                    </div>
-                  </div>
-
-                  <div className="phone-panel">
-                    <div className="phone-panel-head">
-                      <h4>Teco Arena</h4>
-                    </div>
-                    <div className="phone-list-item">
-                      <span>Matematik de benden iyisi yok</span>
-                      <strong>#2</strong>
-                    </div>
-                    <div className="phone-list-item">
-                      <span>Türkçe’de kapışalım</span>
-                      <strong>+120 puan</strong>
-                    </div>
-                    <div className="phone-list-item">
-                      <span>Genel deneme ligi</span>
-                      <strong>Takım: Paragraf Avcıları</strong>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -633,8 +566,10 @@ function App() {
 
             <div className="steps about-steps">
               <article className="step">
-                <div className="step-num">1</div>
-                <h3>Amacı</h3>
+                <div className="step-head">
+                  <div className="step-num">1</div>
+                  <h3>Amacı</h3>
+                </div>
                 <p>
                   Öğrencinin ne çalışacağını, ne kadar ilerlediğini ve nerede zorlandığını görünür
                   hale getirerek sürdürülebilir çalışma disiplini oluşturmak.
@@ -642,8 +577,10 @@ function App() {
               </article>
 
               <article className="step">
-                <div className="step-num">2</div>
-                <h3>Vizyonu</h3>
+                <div className="step-head">
+                  <div className="step-num">2</div>
+                  <h3>Vizyonu</h3>
+                </div>
                 <p>
                   Sınava hazırlık sürecini ezbere ve baskıyla değil; ölçüm, analiz ve kişiselleştirilmiş
                   yönlendirme ile yönetilen bir standarda dönüştürmek.
@@ -651,8 +588,10 @@ function App() {
               </article>
 
               <article className="step">
-                <div className="step-num">3</div>
-                <h3>Özet Değer</h3>
+                <div className="step-head">
+                  <div className="step-num">3</div>
+                  <h3>Özet Değer</h3>
+                </div>
                 <p>
                   Öğrenci uygular, veli takip eder, koç yön verir. TechCoach bu üç rolü tek bir
                   veri diliyle birleştirir.
@@ -775,7 +714,6 @@ function App() {
                     <li><span>✓</span>Yüklenen sorudan konu ve hata türü tespiti yapar</li>
                     <li><span>✓</span>Her ders için kısa tekrar seti ve öncelik önerir</li>
                   </ul>
-                  <a className="btn btn-primary" href="#arena">Teco Arena’yı Keşfet</a>
                 </div>
                 <div className="split-visual">
                   <div className="teco-board">
@@ -830,7 +768,7 @@ function App() {
                   </div>
                 </div>
                 <div>
-                  <h2 className="section-title split-title"><span className="teco-accent">Teco</span> Arena&apos; da arkadaşlarınla güvenli performans yarışı</h2>
+                  <h2 className="section-title split-title"><span className="teco-accent">Teco</span> Arena&apos;da arkadaşlarınla güvenli performans yarışı</h2>
                   <p className="split-text">
                     Öğrenciler takım kurar, birbirini yarışa davet eder ve ders bazlı liglerde kapışır.
                     Sosyal medya dağınıklığı yok; sadece görev, puan, rozet ve sıralama var.
@@ -1029,6 +967,9 @@ function App() {
                       type="text"
                       placeholder="Adınızı ve soyadınızı girin"
                       autoComplete="name"
+                      minLength="3"
+                      maxLength="120"
+                      required
                       value={authForm.fullName}
                       onChange={handleAuthInputChange}
                     />
@@ -1042,6 +983,7 @@ function App() {
                   type="email"
                   placeholder="ornek@mail.com"
                   autoComplete="email"
+                  required
                   value={authForm.email}
                   onChange={handleAuthInputChange}
                 />
@@ -1053,6 +995,7 @@ function App() {
                   type="password"
                   placeholder="Şifrenizi girin"
                   autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
+                  required
                   value={authForm.password}
                   onChange={handleAuthInputChange}
                 />
@@ -1066,6 +1009,7 @@ function App() {
                       type="password"
                       placeholder="Şifrenizi tekrar girin"
                       autoComplete="new-password"
+                      required
                       value={authForm.passwordRepeat}
                       onChange={handleAuthInputChange}
                     />
