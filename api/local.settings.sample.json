@@ -1,0 +1,11 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "SQL_CONNECTION_STRING": "Server=tcp:<server>.database.windows.net,1433;Database=<database>;User ID=<user>;Password=<password>;Encrypt=true;TrustServerCertificate=false;Connection Timeout=30;",
+    "AUTH_JWT_SECRET": "replace-with-a-32-byte-random-secret",
+    "AUTH_COOKIE_NAME": "techcoach_session",
+    "AUTH_COOKIE_SECURE": "false"
+  }
+}
