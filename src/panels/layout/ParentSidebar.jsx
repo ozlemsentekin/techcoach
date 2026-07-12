@@ -30,6 +30,22 @@ export default function ParentSidebar() {
             {item.label}
           </NavLink>
         ))}
+
+        {authUser?.isAdmin ? (
+          <NavLink
+            to="/parent/admin/users"
+            className={({ isActive }) =>
+              `flex items-center gap-3 rounded-xl px-3 py-2.5 text-base font-medium transition-colors ${
+                isActive
+                  ? 'bg-panel-lilac-soft text-panel-lilac'
+                  : 'text-panel-text-muted hover:bg-panel-bg hover:text-panel-text'
+              }`
+            }
+          >
+            <NavIcon name="ShieldCheck" size={18} />
+            Admin Paneli
+          </NavLink>
+        ) : null}
       </nav>
 
       <button

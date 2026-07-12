@@ -11,6 +11,7 @@ import {
   MoreHorizontal,
   LogOut,
   X,
+  ShieldCheck,
 } from 'lucide-react'
 
 const ICONS = {
@@ -26,6 +27,7 @@ const ICONS = {
   MoreHorizontal,
   LogOut,
   X,
+  ShieldCheck,
 }
 
 export default function NavIcon({ name, size = 20, className }) {

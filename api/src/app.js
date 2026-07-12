@@ -1,5 +1,6 @@
 const { app } = require('@azure/functions')
 const { loginHandler, logoutHandler, meHandler, registerHandler } = require('./auth')
+const { listUsersHandler } = require('./admin')
 
 app.http('auth-register', {
   authLevel: 'anonymous',
@@ -27,4 +28,11 @@ app.http('auth-logout', {
   methods: ['POST'],
   route: 'auth/logout',
   handler: logoutHandler,
+})
+
+app.http('panel-admin-users', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-admin/users',
+  handler: listUsersHandler,
 })

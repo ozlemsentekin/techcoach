@@ -19,6 +19,7 @@ function sanitizeUser(record) {
     fullName: record.full_name,
     email: record.email,
     role: record.role,
+    isAdmin: Boolean(record.is_admin),
     lastLoginAt: record.last_login_at,
     createdAt: record.created_at,
   }
@@ -113,6 +114,7 @@ async function loginHandler(request) {
         full_name,
         email,
         role,
+        is_admin,
         password_hash,
         failed_login_count,
         lockout_until,
@@ -187,7 +189,7 @@ async function meHandler(request) {
       id: { type: sql.UniqueIdentifier, value: session.sub },
     })
     const result = await requestDb.query(`
-      SELECT TOP 1 id, full_name, email, role, last_login_at, created_at
+      SELECT TOP 1 id, full_name, email, role, is_admin, last_login_at, created_at
       FROM dbo.Users
       WHERE id = @id;
     `)
@@ -216,4 +218,5 @@ module.exports = {
   logoutHandler,
   meHandler,
   registerHandler,
+  sanitizeUser,
 }
