@@ -6,6 +6,22 @@
   --color-tc-dark: #12142a;
   --color-tc-bg: #f6f7fb;
   --font-sans: Inter, Manrope, Arial, sans-serif;
+
+  /* Panel design tokens — öğrenci/ebeveyn panelleri için sakin palet (brief bölüm 19) */
+  --color-panel-bg: #fbfaf7;
+  --color-panel-surface: #ffffff;
+  --color-panel-border: #e7e5df;
+  --color-panel-text: #2b2a33;
+  --color-panel-text-muted: #6f6e78;
+  --color-panel-blue: #6f8fd9;
+  --color-panel-blue-soft: #eaf0fc;
+  --color-panel-sage: #7fae94;
+  --color-panel-sage-soft: #e8f2ec;
+  --color-panel-lilac: #a596d6;
+  --color-panel-lilac-soft: #f0ecfa;
+  --color-panel-accent: #e8a23d;
+  --color-panel-accent-soft: #fbf0dd;
+  --color-panel-warm: #e08e4f;
 }
 
 * {

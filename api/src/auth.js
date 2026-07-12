@@ -1,4 +1,5 @@
 const { sql, withRequest } = require('./db')
+const { isConfigError } = require('./config')
 const { clearSessionHeaders, createSessionHeaders, getClientIp, json } = require('./http')
 const { consumeRateLimit } = require('./rate-limit')
 const {
@@ -17,9 +18,19 @@ function sanitizeUser(record) {
     id: record.id,
     fullName: record.full_name,
     email: record.email,
+    role: record.role,
     lastLoginAt: record.last_login_at,
     createdAt: record.created_at,
   }
+}
+
+function createAuthServiceErrorResponse(error, fallbackMessage) {
+  if (isConfigError(error)) {
+    return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+  }
+
+  console.error(fallbackMessage, error)
+  return json(500, { error: 'Kimlik doğrulama servisi şu anda kullanılamıyor.' })
 }
 
 async function registerHandler(request) {
@@ -49,13 +60,14 @@ async function registerHandler(request) {
       fullName: { type: sql.NVarChar(120), value: payload.fullName.trim() },
       email: { type: sql.NVarChar(320), value: email },
       passwordHash: { type: sql.NVarChar(255), value: passwordHash },
+      role: { type: sql.NVarChar(20), value: payload.role ? String(payload.role) : null },
       consentAt: { type: sql.DateTime2, value: now },
     })
 
     const result = await requestDb.query(`
-      INSERT INTO dbo.Users (full_name, email, password_hash, aydinlatma_accepted_at, kvkk_accepted_at)
-      OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.last_login_at, inserted.created_at
-      VALUES (@fullName, @email, @passwordHash, @consentAt, @consentAt);
+      INSERT INTO dbo.Users (full_name, email, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
+      OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.role, inserted.last_login_at, inserted.created_at
+      VALUES (@fullName, @email, @passwordHash, @role, @consentAt, @consentAt);
     `)
 
     const user = sanitizeUser(result.recordset[0])
@@ -67,8 +79,7 @@ async function registerHandler(request) {
       return json(409, { error: 'Bu e-posta adresi ile daha önce kayıt oluşturulmuş.' })
     }
 
-    console.error('registerHandler failed', error)
-    return json(500, { error: 'Kayıt işlemi sırasında beklenmeyen bir hata oluştu.' })
+    return createAuthServiceErrorResponse(error, 'registerHandler failed')
   }
 }
 
@@ -101,6 +112,7 @@ async function loginHandler(request) {
         id,
         full_name,
         email,
+        role,
         password_hash,
         failed_login_count,
         lockout_until,
@@ -159,8 +171,7 @@ async function loginHandler(request) {
 
     return json(200, { user }, createSessionHeaders(token))
   } catch (error) {
-    console.error('loginHandler failed', error)
-    return json(500, { error: 'Giriş sırasında beklenmeyen bir hata oluştu.' })
+    return createAuthServiceErrorResponse(error, 'loginHandler failed')
   }
 }
 
@@ -176,7 +187,7 @@ async function meHandler(request) {
       id: { type: sql.UniqueIdentifier, value: session.sub },
     })
     const result = await requestDb.query(`
-      SELECT TOP 1 id, full_name, email, last_login_at, created_at
+      SELECT TOP 1 id, full_name, email, role, last_login_at, created_at
       FROM dbo.Users
       WHERE id = @id;
     `)
@@ -187,7 +198,11 @@ async function meHandler(request) {
     }
 
     return json(200, { user: sanitizeUser(record) })
-  } catch {
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
     return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
   }
 }

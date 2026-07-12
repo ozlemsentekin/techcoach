@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
-const { config } = require('./config')
+const { getConfig, getRuntimeConfig } = require('./config')
 
 const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{12,72}$/
 
@@ -59,15 +59,18 @@ async function verifyPassword(password, hash) {
 }
 
 function createSessionToken(user) {
+  const { jwtSecret, tokenTtlSeconds } = getConfig()
+
   return jwt.sign(
     {
       sub: user.id,
       email: user.email,
       fullName: user.fullName,
+      role: user.role,
     },
-    config.jwtSecret,
+    jwtSecret,
     {
-      expiresIn: config.tokenTtlSeconds,
+      expiresIn: tokenTtlSeconds,
       issuer: 'techcoach-api',
       audience: 'techcoach-web',
     },
@@ -75,18 +78,21 @@ function createSessionToken(user) {
 }
 
 function readSessionToken(request) {
+  const { cookieName } = getRuntimeConfig()
   const cookieHeader = request.headers.get('cookie') || ''
   const cookies = cookieHeader
     .split(';')
     .map((part) => part.trim())
     .filter(Boolean)
 
-  const target = cookies.find((cookie) => cookie.startsWith(`${config.cookieName}=`))
-  return target ? decodeURIComponent(target.slice(config.cookieName.length + 1)) : null
+  const target = cookies.find((cookie) => cookie.startsWith(`${cookieName}=`))
+  return target ? decodeURIComponent(target.slice(cookieName.length + 1)) : null
 }
 
 function verifySessionToken(token) {
-  return jwt.verify(token, config.jwtSecret, {
+  const { jwtSecret } = getConfig()
+
+  return jwt.verify(token, jwtSecret, {
     issuer: 'techcoach-api',
     audience: 'techcoach-web',
   })

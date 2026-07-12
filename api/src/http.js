@@ -1,4 +1,4 @@
-const { config } = require('./config')
+const { getRuntimeConfig } = require('./config')
 
 function json(status, body, extraHeaders = {}) {
   return {
@@ -21,15 +21,16 @@ function getClientIp(request) {
 }
 
 function serializeSessionCookie(token, maxAgeSeconds) {
+  const { cookieName, cookieSecure } = getRuntimeConfig()
   const parts = [
-    `${config.cookieName}=${token}`,
+    `${cookieName}=${token}`,
     'Path=/',
     'HttpOnly',
     'SameSite=Strict',
     `Max-Age=${maxAgeSeconds}`,
   ]
 
-  if (config.cookieSecure) {
+  if (cookieSecure) {
     parts.push('Secure')
   }
 
@@ -37,8 +38,9 @@ function serializeSessionCookie(token, maxAgeSeconds) {
 }
 
 function createSessionHeaders(token) {
+  const { tokenTtlSeconds } = getRuntimeConfig()
   return {
-    'Set-Cookie': serializeSessionCookie(token, config.tokenTtlSeconds),
+    'Set-Cookie': serializeSessionCookie(token, tokenTtlSeconds),
   }
 }
 
