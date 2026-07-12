@@ -19,7 +19,11 @@ export const PARENT_PRIMARY_NAV = [
   { to: '/parent/weekly-plan', label: 'Haftalık Görünüm', icon: 'CalendarRange' },
   { to: '/parent/progress', label: 'Gelişim', icon: 'TrendingUp' },
   { to: '/parent/messages', label: 'Mesajlar', icon: 'MessageCircle' },
+]
+
+export const PARENT_MORE_NAV = [
+  { to: '/parent/students', label: 'Öğrenci Profillerim', icon: 'Users' },
   { to: '/parent/settings', label: 'Ayarlar', icon: 'Settings' },
 ]
 
-export const PARENT_SIDEBAR_NAV = PARENT_PRIMARY_NAV
+export const PARENT_SIDEBAR_NAV = [...PARENT_PRIMARY_NAV, ...PARENT_MORE_NAV]

@@ -61,7 +61,9 @@ async function registerHandler(request) {
       fullName: { type: sql.NVarChar(120), value: payload.fullName.trim() },
       email: { type: sql.NVarChar(320), value: email },
       passwordHash: { type: sql.NVarChar(255), value: passwordHash },
-      role: { type: sql.NVarChar(20), value: payload.role ? String(payload.role) : null },
+      // Herkese açık kayıt formu yalnızca ebeveyn hesabı oluşturur; öğrenciler
+      // yalnızca bir ebeveynin "Öğrenci Profillerim" ekranından eklenebilir.
+      role: { type: sql.NVarChar(20), value: 'ebeveyn' },
       consentAt: { type: sql.DateTime2, value: now },
     })
 

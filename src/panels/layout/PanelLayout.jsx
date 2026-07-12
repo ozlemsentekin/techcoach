@@ -6,12 +6,13 @@ import {
   STUDENT_PRIMARY_NAV,
   STUDENT_MORE_NAV,
   PARENT_PRIMARY_NAV,
+  PARENT_MORE_NAV,
 } from './navConfig'
 
 export default function PanelLayout({ role }) {
   const Sidebar = role === 'parent' ? ParentSidebar : StudentSidebar
   const primaryItems = role === 'parent' ? PARENT_PRIMARY_NAV : STUDENT_PRIMARY_NAV
-  const moreItems = role === 'parent' ? [] : STUDENT_MORE_NAV
+  const moreItems = role === 'parent' ? PARENT_MORE_NAV : STUDENT_MORE_NAV
 
   return (
     <div className="min-h-screen bg-panel-bg">

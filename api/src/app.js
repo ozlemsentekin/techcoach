@@ -1,6 +1,7 @@
 const { app } = require('@azure/functions')
 const { loginHandler, logoutHandler, meHandler, registerHandler } = require('./auth')
 const { listUsersHandler } = require('./admin')
+const { listStudentsHandler, createStudentHandler } = require('./students')
 
 app.http('auth-register', {
   authLevel: 'anonymous',
@@ -35,4 +36,18 @@ app.http('panel-admin-users', {
   methods: ['GET'],
   route: 'panel-admin/users',
   handler: listUsersHandler,
+})
+
+app.http('parent-students-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'parent/students',
+  handler: listStudentsHandler,
+})
+
+app.http('parent-students-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'parent/students',
+  handler: createStudentHandler,
 })

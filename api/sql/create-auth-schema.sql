@@ -3,13 +3,17 @@ CREATE TABLE dbo.Users (
     full_name NVARCHAR(120) NOT NULL,
     email NVARCHAR(320) NOT NULL,
     password_hash NVARCHAR(255) NOT NULL,
+    role NVARCHAR(20) NULL,
+    is_admin BIT NOT NULL CONSTRAINT DF_Users_IsAdmin DEFAULT 0,
+    parent_id UNIQUEIDENTIFIER NULL CONSTRAINT FK_Users_ParentId REFERENCES dbo.Users(id),
     aydinlatma_accepted_at DATETIME2 NOT NULL,
     kvkk_accepted_at DATETIME2 NOT NULL,
     failed_login_count INT NOT NULL CONSTRAINT DF_Users_FailedLoginCount DEFAULT 0,
     lockout_until DATETIME2 NULL,
     last_login_at DATETIME2 NULL,
     created_at DATETIME2 NOT NULL CONSTRAINT DF_Users_CreatedAt DEFAULT SYSUTCDATETIME(),
-    updated_at DATETIME2 NOT NULL CONSTRAINT DF_Users_UpdatedAt DEFAULT SYSUTCDATETIME()
+    updated_at DATETIME2 NOT NULL CONSTRAINT DF_Users_UpdatedAt DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT CK_Users_StudentRequiresParent CHECK (role <> 'ogrenci' OR parent_id IS NOT NULL)
 );
 GO
 

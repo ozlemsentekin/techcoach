@@ -12,6 +12,7 @@ import {
   LogOut,
   X,
   ShieldCheck,
+  Users,
 } from 'lucide-react'
 
 const ICONS = {
@@ -28,6 +29,7 @@ const ICONS = {
   LogOut,
   X,
   ShieldCheck,
+  Users,
 }
 
 export default function NavIcon({ name, size = 20, className }) {

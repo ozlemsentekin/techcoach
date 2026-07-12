@@ -38,9 +38,11 @@ async function listUsersHandler(request) {
 
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
-      SELECT id, full_name, email, role, is_admin, last_login_at, created_at
-      FROM dbo.Users
-      ORDER BY created_at ASC;
+      SELECT u.id, u.full_name, u.email, u.role, u.is_admin, u.parent_id,
+             p.full_name AS parent_full_name, u.last_login_at, u.created_at
+      FROM dbo.Users u
+      LEFT JOIN dbo.Users p ON p.id = u.parent_id
+      ORDER BY u.created_at ASC;
     `)
 
     const users = result.recordset.map((record) => ({
@@ -49,6 +51,8 @@ async function listUsersHandler(request) {
       email: record.email,
       role: record.role,
       isAdmin: Boolean(record.is_admin),
+      parentId: record.parent_id,
+      parentName: record.parent_full_name,
       lastLoginAt: record.last_login_at,
       createdAt: record.created_at,
     }))

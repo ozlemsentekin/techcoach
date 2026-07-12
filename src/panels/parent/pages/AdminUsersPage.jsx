@@ -52,6 +52,7 @@ export default function AdminUsersPage() {
                 <th className="px-4 py-3 font-medium">Ad Soyad</th>
                 <th className="px-4 py-3 font-medium">E-posta</th>
                 <th className="px-4 py-3 font-medium">Rol</th>
+                <th className="px-4 py-3 font-medium">Ebeveyn</th>
                 <th className="px-4 py-3 font-medium">Kayıt Tarihi</th>
                 <th className="px-4 py-3 font-medium">Son Giriş</th>
               </tr>
@@ -72,6 +73,7 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-4 py-3 text-panel-text-muted">{user.email}</td>
                   <td className="px-4 py-3 text-panel-text-muted">{user.role || '—'}</td>
+                  <td className="px-4 py-3 text-panel-text-muted">{user.parentName || '—'}</td>
                   <td className="px-4 py-3 text-panel-text-muted">{formatDate(user.createdAt)}</td>
                   <td className="px-4 py-3 text-panel-text-muted">{formatDate(user.lastLoginAt)}</td>
                 </tr>
