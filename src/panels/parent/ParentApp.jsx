@@ -8,6 +8,9 @@ import MessagesPage from './pages/MessagesPage'
 import SettingsPage from './pages/SettingsPage'
 import AdminUsersPage from './pages/AdminUsersPage'
 import StudentsPage from './pages/StudentsPage'
+import HomeworkPage from './pages/HomeworkPage'
+import TestsPage from './pages/TestsPage'
+import MistakesPage from './pages/MistakesPage'
 
 function RequireAdmin({ children }) {
   const { authUser } = useAuth()
@@ -23,6 +26,9 @@ export default function ParentApp() {
         <Route path="weekly-plan" element={<WeeklyPlanPage />} />
         <Route path="progress" element={<ProgressPage />} />
         <Route path="messages" element={<MessagesPage />} />
+        <Route path="homework" element={<HomeworkPage />} />
+        <Route path="tests" element={<TestsPage />} />
+        <Route path="mistakes" element={<MistakesPage />} />
         <Route path="students" element={<StudentsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route

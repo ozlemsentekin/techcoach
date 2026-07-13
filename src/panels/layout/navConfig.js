@@ -16,12 +16,16 @@ export const STUDENT_SIDEBAR_NAV = [...STUDENT_PRIMARY_NAV, ...STUDENT_MORE_NAV]
 
 export const PARENT_PRIMARY_NAV = [
   { to: '/parent/dashboard', label: 'Bugün', icon: 'Home' },
-  { to: '/parent/weekly-plan', label: 'Haftalık Görünüm', icon: 'CalendarRange' },
-  { to: '/parent/progress', label: 'Gelişim', icon: 'TrendingUp' },
+  { to: '/parent/weekly-plan', label: 'Haftalık Plan', icon: 'CalendarRange' },
+  { to: '/parent/homework', label: 'Ödevler', icon: 'NotebookPen' },
   { to: '/parent/messages', label: 'Mesajlar', icon: 'MessageCircle' },
 ]
 
 export const PARENT_MORE_NAV = [
+  { to: '/parent/weekly-plan?openDrawer=1', label: 'Plan Oluştur', icon: 'ClipboardList' },
+  { to: '/parent/tests', label: 'Test ve Denemeler', icon: 'FileCheck2' },
+  { to: '/parent/progress', label: 'Gelişim', icon: 'TrendingUp' },
+  { to: '/parent/mistakes', label: 'Yanlışlar', icon: 'AlertCircle' },
   { to: '/parent/students', label: 'Öğrenci Profillerim', icon: 'Users' },
   { to: '/parent/settings', label: 'Ayarlar', icon: 'Settings' },
 ]

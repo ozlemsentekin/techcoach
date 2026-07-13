@@ -30,6 +30,28 @@ export function updateTask(date, taskId, updates) {
   return nextTasks
 }
 
+/** Ebeveyn panelinden yeni bir görev oluşturur (canlı plana doğrudan yazar). */
+export function createTask(date, taskData) {
+  const tasks = getTasksForDate(date)
+  const task = {
+    id: generateId('task'),
+    date,
+    status: 'bekliyor',
+    createdBy: 'ebeveyn',
+    priority: 'orta',
+    ...taskData,
+  }
+  saveTasksForDate(date, [...tasks, task])
+  return task
+}
+
+export function deleteTask(date, taskId) {
+  const tasks = getTasksForDate(date)
+  const nextTasks = tasks.filter((task) => task.id !== taskId)
+  saveTasksForDate(date, nextTasks)
+  return nextTasks
+}
+
 export function toggleSubGoal(date, taskId, subGoalIndex) {
   const tasks = getTasksForDate(date)
   const nextTasks = tasks.map((task) => {
