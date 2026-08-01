@@ -3,7 +3,7 @@ import { ChevronDown } from 'lucide-react'
 import { getSortedTasks } from '../../../utils/taskSelectors'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { TASK_TYPES } from '../../../data/taskTypes'
-import TaskListCard from './TaskListCard'
+import TaskGroupSection from './TaskGroupSection'
 import TaskDetailsDrawer from './TaskDetailsDrawer'
 import TaskAnswerSheetModal from './TaskAnswerSheetModal'
 import ReadingProgressModal from './ReadingProgressModal'
@@ -59,6 +59,18 @@ export default function TaskListSection({
     return getAssignmentStatus(task).filterKey === filter
   })
 
+  const grouped = useMemo(() => {
+    const byLabel = new Map()
+    filtered.forEach((task) => {
+      const label = lessonLabelFor(task)
+      if (!byLabel.has(label)) byLabel.set(label, [])
+      byLabel.get(label).push(task)
+    })
+    const knownOrder = SUBJECTS.filter((item) => item !== 'Tüm Dersler' && byLabel.has(item))
+    const extraOrder = [...byLabel.keys()].filter((label) => !knownOrder.includes(label))
+    return [...knownOrder, ...extraOrder].map((label) => ({ label, tasks: byLabel.get(label) }))
+  }, [filtered])
+
   return (
     <div className="panel-card flex flex-col gap-5 bg-panel-surface p-5 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -109,13 +121,8 @@ export default function TaskListSection({
         <EmptyState title="Bu filtrede görev yok" description="Farklı bir filtre veya ders seçmeyi deneyebilirsin." />
       ) : (
         <div className="flex flex-col gap-4">
-          {filtered.map((task) => (
-            <TaskListCard
-              key={task.id}
-              task={task}
-              lessonLabel={lessonLabelFor(task).toLocaleUpperCase('tr-TR')}
-              onOpenDetails={openTask}
-            />
+          {grouped.map((group) => (
+            <TaskGroupSection key={group.label} subject={group.label} tasks={group.tasks} onOpenDetails={openTask} />
           ))}
         </div>
       )}

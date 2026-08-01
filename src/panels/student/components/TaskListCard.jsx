@@ -2,21 +2,7 @@ import { ArrowRight, Circle, Timer, CheckCircle2, Eye, HelpCircle, RotateCcw, Al
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { parseAssignmentDetails } from '../../../utils/assignmentDetails'
 import { daysLate } from '../../../utils/time'
-
-const SUBJECT_STYLES = {
-  Matematik: { text: 'text-panel-blue', soft: 'bg-panel-blue-soft', border: 'border-l-panel-blue' },
-  Türkçe: { text: 'text-panel-lilac', soft: 'bg-panel-lilac-soft', border: 'border-l-panel-lilac' },
-  'Fen Bilimleri': { text: 'text-panel-sage', soft: 'bg-panel-sage-soft', border: 'border-l-panel-sage' },
-  'T.C. İnkılap Tarihi': { text: 'text-panel-slate', soft: 'bg-panel-slate-soft', border: 'border-l-panel-slate' },
-  İngilizce: { text: 'text-panel-warm', soft: 'bg-panel-warm-soft', border: 'border-l-panel-warm' },
-  'Din Kültürü': { text: 'text-panel-accent', soft: 'bg-panel-accent-soft', border: 'border-l-panel-accent' },
-}
-
-const DEFAULT_SUBJECT_STYLE = {
-  text: 'text-panel-text-muted',
-  soft: 'bg-panel-surface-soft',
-  border: 'border-l-student-theme-primary',
-}
+import { SUBJECT_STYLES, DEFAULT_SUBJECT_STYLE } from './subjectStyles'
 
 const STATUS_ICONS = { Circle, Timer, CheckCircle2, Eye, HelpCircle, RotateCcw, AlertTriangle }
 
@@ -29,7 +15,7 @@ const STATUS_TONE_CLASSES = {
   red: 'bg-panel-red-soft text-panel-red',
 }
 
-export default function TaskListCard({ task, lessonLabel, onOpenDetails }) {
+export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLessonLabel = true }) {
   const subjectStyle = SUBJECT_STYLES[task.subject] || DEFAULT_SUBJECT_STYLE
   const details = parseAssignmentDetails(task)
   const overdueDays = daysLate(task.date)
@@ -51,8 +37,17 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails }) {
   return (
     <div className={`flex flex-col gap-4 rounded-2xl border border-panel-border border-l-4 ${subjectStyle.border} bg-panel-surface p-4 shadow-panel-1 transition-shadow hover:shadow-panel-2 sm:p-5 lg:flex-row lg:items-center lg:gap-6`}>
       <div className="min-w-0 flex-1">
-        <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold tracking-wide ${subjectStyle.soft} ${subjectStyle.text}`}>
-          {lessonLabel}
+        {showLessonLabel ? (
+          <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold tracking-wide ${subjectStyle.soft} ${subjectStyle.text}`}>
+            {lessonLabel}
+          </span>
+        ) : null}
+
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${showLessonLabel ? 'ml-2' : ''} ${STATUS_TONE_CLASSES[status.tone]}`}
+        >
+          {StatusIcon ? <StatusIcon size={13} aria-hidden="true" /> : null}
+          {status.label}
         </span>
 
         {details.kaynak ? (
@@ -106,13 +101,6 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails }) {
       ) : null}
 
       <div className="flex shrink-0 flex-col items-start gap-2 lg:items-end">
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${STATUS_TONE_CLASSES[status.tone]}`}
-        >
-          {StatusIcon ? <StatusIcon size={13} aria-hidden="true" /> : null}
-          {status.label}
-        </span>
-
         <button
           type="button"
           onClick={() => onOpenDetails(task)}
