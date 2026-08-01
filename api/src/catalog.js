@@ -2,7 +2,7 @@ const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
 const { clearSessionHeaders, json } = require('./http')
 const { requireAdmin } = require('./admin')
-const { readSessionToken, verifySessionToken } = require('./security')
+const { isSessionError, readSessionToken, verifySessionToken } = require('./security')
 
 function sanitizeSubject(record) {
   return {
@@ -84,8 +84,12 @@ async function listSubjectsHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
     console.error('listSubjectsHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    return json(500, { error: 'Dersler yüklenemedi.' })
   }
 }
 
@@ -108,8 +112,12 @@ async function listSubjectsForPanelHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
     console.error('listSubjectsForPanelHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    return json(500, { error: 'Dersler yüklenemedi.' })
   }
 }
 
@@ -131,8 +139,12 @@ async function listPublishersHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
     console.error('listPublishersHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    return json(500, { error: 'Yayınevleri yüklenemedi.' })
   }
 }
 
@@ -196,8 +208,12 @@ async function listResourceBooksHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
     console.error('listResourceBooksHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    return json(500, { error: 'Kaynak kitaplar yüklenemedi.' })
   }
 }
 
@@ -229,8 +245,12 @@ async function listResourceBooksForPanelHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
     console.error('listResourceBooksForPanelHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    return json(500, { error: 'Kaynak kitaplar yüklenemedi.' })
   }
 }
 
@@ -378,8 +398,12 @@ async function listResourceBookTopicsHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
     console.error('listResourceBookTopicsHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    return json(500, { error: 'Konular yüklenemedi.' })
   }
 }
 
@@ -541,8 +565,12 @@ async function listResourceBookTopicsForPanelHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
     console.error('listResourceBookTopicsForPanelHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    return json(500, { error: 'Konular yüklenemedi.' })
   }
 }
 
@@ -615,8 +643,12 @@ async function listQuestionsForTestHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
     console.error('listQuestionsForTestHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    return json(500, { error: 'Sorular yüklenemedi.' })
   }
 }
 
@@ -726,8 +758,12 @@ async function listResourceBookTopicTestsHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
     console.error('listResourceBookTopicTestsHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    return json(500, { error: 'Testler yüklenemedi.' })
   }
 }
 
@@ -921,8 +957,12 @@ async function listTestAnswerKeyHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
     console.error('listTestAnswerKeyHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    return json(500, { error: 'Cevap anahtarı yüklenemedi.' })
   }
 }
 

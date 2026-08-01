@@ -1,6 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk')
 const { sql, withRequest } = require('./db')
-const { getConfig, isConfigError } = require('./config')
+const { getAnthropicConfig, isConfigError } = require('./config')
 const { json } = require('./http')
 const { requireAdmin } = require('./admin')
 
@@ -47,7 +47,7 @@ Görseldeki her çoktan seçmeli soruyu ayıkla. Her soru için:
 Sadece görselde açıkça yazan metni aktar, yorum katma. El yazısı işaretlemeleri (doğru cevap işaretleri) YOK SAY — onları ayrıca başka bir kaynaktan alacağız, sadece soru metnini çıkar.`
 
 function getAnthropicClient() {
-  const { anthropicApiKey } = getConfig()
+  const { anthropicApiKey } = getAnthropicConfig()
   return new Anthropic({ apiKey: anthropicApiKey })
 }
 

@@ -1,6 +1,7 @@
 const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
 const { json } = require('./http')
+const { isSessionError } = require('./security')
 const { requireStudentContext } = require('./studentScope')
 
 function toISODate(value) {
@@ -64,8 +65,12 @@ async function listMessagesHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
     console.error('listMessagesHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' })
+    return json(500, { error: 'Mesajlar yüklenemedi.' })
   }
 }
 
@@ -166,8 +171,12 @@ async function listCoachNotesHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
     console.error('listCoachNotesHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' })
+    return json(500, { error: 'Koç notları yüklenemedi.' })
   }
 }
 
@@ -228,8 +237,12 @@ async function listStudentRequestsHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
     console.error('listStudentRequestsHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' })
+    return json(500, { error: 'Öğrenci talepleri yüklenemedi.' })
   }
 }
 

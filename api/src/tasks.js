@@ -1,6 +1,7 @@
 const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
 const { json } = require('./http')
+const { isSessionError } = require('./security')
 const { requireStudentContext } = require('./studentScope')
 
 function toISODate(value) {
@@ -135,8 +136,12 @@ async function listTasksHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
     console.error('listTasksHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' })
+    return json(500, { error: 'Görevler yüklenemedi.' })
   }
 }
 
@@ -167,8 +172,12 @@ async function getTaskHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
     console.error('getTaskHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' })
+    return json(500, { error: 'Görev yüklenemedi.' })
   }
 }
 
@@ -365,8 +374,12 @@ async function getTaskAnswerSheetHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
     console.error('getTaskAnswerSheetHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' })
+    return json(500, { error: 'Cevap kağıdı yüklenemedi.' })
   }
 }
 
@@ -557,8 +570,12 @@ async function getWeeklyPlanStatusHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
     console.error('getWeeklyPlanStatusHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' })
+    return json(500, { error: 'Haftalık plan durumu yüklenemedi.' })
   }
 }
 

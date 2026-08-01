@@ -71,9 +71,8 @@ function getRuntimeConfig() {
   }
 }
 
-function getConfig() {
+function getSqlConfig() {
   return {
-    ...getRuntimeConfig(),
     sqlConnectionString: getRequiredEnv('SQL_CONNECTION_STRING', {
       placeholders: [
         'REPLACE_WITH_SQL_ADMIN_PASSWORD',
@@ -83,9 +82,20 @@ function getConfig() {
         '<password>',
       ],
     }),
+  }
+}
+
+function getAuthConfig() {
+  return {
+    ...getRuntimeConfig(),
     jwtSecret: getRequiredEnv('AUTH_JWT_SECRET', {
       placeholders: ['replace-with-a-32-byte-random-secret'],
     }),
+  }
+}
+
+function getAnthropicConfig() {
+  return {
     anthropicApiKey: getRequiredEnv('ANTHROPIC_API_KEY'),
   }
 }
@@ -96,7 +106,9 @@ function isConfigError(error) {
 
 module.exports = {
   DEFAULT_COOKIE_NAME,
-  getConfig,
+  getSqlConfig,
+  getAuthConfig,
+  getAnthropicConfig,
   getRuntimeConfig,
   isConfigError,
 }

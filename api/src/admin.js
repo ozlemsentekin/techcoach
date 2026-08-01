@@ -1,7 +1,7 @@
 const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
 const { clearSessionHeaders, json } = require('./http')
-const { readSessionToken, verifySessionToken } = require('./security')
+const { isSessionError, readSessionToken, verifySessionToken } = require('./security')
 
 async function requireAdmin(request) {
   const token = readSessionToken(request)
@@ -63,8 +63,12 @@ async function listUsersHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
     console.error('listUsersHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    return json(500, { error: 'Kullanıcılar yüklenemedi.' })
   }
 }
 

@@ -4,6 +4,7 @@ const { clearSessionHeaders, createSessionHeaders, json } = require('./http')
 const {
   createSessionToken,
   hashPassword,
+  isSessionError,
   normalizeEmail,
   readSessionToken,
   validateRegistrationInput,
@@ -75,8 +76,12 @@ async function listStudentsHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
     console.error('listStudentsHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    return json(500, { error: 'Öğrenciler yüklenemedi.' })
   }
 }
 
@@ -180,8 +185,12 @@ async function enterStudentHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
     console.error('enterStudentHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    return json(500, { error: 'Öğrenci görünümüne geçilemedi.' })
   }
 }
 
@@ -217,8 +226,12 @@ async function exitStudentHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
     console.error('exitStudentHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    return json(500, { error: 'Ebeveyn görünümüne dönülemedi.' })
   }
 }
 

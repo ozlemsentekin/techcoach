@@ -1,11 +1,11 @@
 const sql = require('mssql')
-const { getConfig } = require('./config')
+const { getSqlConfig } = require('./config')
 
 let poolPromise
 let poolConnectionString
 
 function getPool() {
-  const { sqlConnectionString } = getConfig()
+  const { sqlConnectionString } = getSqlConfig()
 
   if (!poolPromise || poolConnectionString !== sqlConnectionString) {
     poolConnectionString = sqlConnectionString

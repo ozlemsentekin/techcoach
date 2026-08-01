@@ -5,6 +5,7 @@ const { consumeRateLimit } = require('./rate-limit')
 const {
   createSessionToken,
   hashPassword,
+  isSessionError,
   normalizeEmail,
   readSessionToken,
   validateLoginInput,
@@ -211,8 +212,12 @@ async function meHandler(request) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
 
-    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    console.error('meHandler failed', error)
+    return json(500, { error: 'Kullanıcı bilgileri alınamadı.' })
   }
 }
 

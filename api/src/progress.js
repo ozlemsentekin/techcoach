@@ -1,6 +1,7 @@
 const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
 const { json } = require('./http')
+const { isSessionError } = require('./security')
 const { requireStudentContext } = require('./studentScope')
 
 function sanitizeCheckIn(record) {
@@ -73,8 +74,12 @@ async function getCheckInHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
     console.error('getCheckInHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' })
+    return json(500, { error: 'Check-in bilgisi yüklenemedi.' })
   }
 }
 
@@ -152,8 +157,12 @@ async function listWrongQuestionsHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
     console.error('listWrongQuestionsHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' })
+    return json(500, { error: 'Yanlış sorular yüklenemedi.' })
   }
 }
 
@@ -284,8 +293,12 @@ async function listStudySessionsHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
     console.error('listStudySessionsHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' })
+    return json(500, { error: 'Çalışma oturumları yüklenemedi.' })
   }
 }
 
@@ -360,8 +373,12 @@ async function getSmallGoalHandler(request) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
 
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
     console.error('getSmallGoalHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' })
+    return json(500, { error: 'Küçük hedef yüklenemedi.' })
   }
 }
 

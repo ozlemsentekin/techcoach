@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
-const { getConfig, getRuntimeConfig } = require('./config')
+const { getAuthConfig, getRuntimeConfig } = require('./config')
 
 const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{12,72}$/
 
@@ -59,7 +59,7 @@ async function verifyPassword(password, hash) {
 }
 
 function createSessionToken(user, options = {}) {
-  const { jwtSecret, tokenTtlSeconds } = getConfig()
+  const { jwtSecret, tokenTtlSeconds } = getAuthConfig()
 
   const payload = {
     sub: user.id,
@@ -93,7 +93,7 @@ function readSessionToken(request) {
 }
 
 function verifySessionToken(token) {
-  const { jwtSecret } = getConfig()
+  const { jwtSecret } = getAuthConfig()
 
   return jwt.verify(token, jwtSecret, {
     issuer: 'techcoach-api',
@@ -101,9 +101,17 @@ function verifySessionToken(token) {
   })
 }
 
+// True for a rejected/expired/malformed JWT (jsonwebtoken's own error types) — i.e. an
+// actually invalid session, as opposed to an unrelated failure (DB error, etc.) that
+// happened to occur while handling an otherwise-valid session.
+function isSessionError(error) {
+  return error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError || error instanceof jwt.NotBeforeError
+}
+
 module.exports = {
   createSessionToken,
   hashPassword,
+  isSessionError,
   normalizeEmail,
   readSessionToken,
   validateLoginInput,

@@ -1,6 +1,7 @@
 const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
 const { json } = require('./http')
+const { isSessionError } = require('./security')
 const { requireStudentContext } = require('./studentScope')
 
 function toISODate(value) {
@@ -112,9 +113,12 @@ async function listHomeworksHandler(request) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
 
     console.error('listHomeworksHandler failed', error)
-    return json(401, { error: 'Oturum geçersiz.' })
+    return json(500, { error: 'Ödevler yüklenemedi.' })
   }
 }
 
