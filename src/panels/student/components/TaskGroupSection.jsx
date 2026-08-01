@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import TaskListCard from './TaskListCard'
 import { SUBJECT_STYLES, DEFAULT_SUBJECT_STYLE } from './subjectStyles'
 
-export default function TaskGroupSection({ subject, tasks, onOpenDetails }) {
+export default function TaskGroupSection({ subject, tasks, onOpenDetails, showDate = false }) {
   const [expanded, setExpanded] = useState(true)
   const style = SUBJECT_STYLES[subject] || DEFAULT_SUBJECT_STYLE
 
@@ -31,7 +31,7 @@ export default function TaskGroupSection({ subject, tasks, onOpenDetails }) {
       {expanded ? (
         <div className="flex flex-col gap-4 border-t border-panel-border px-4 pb-4 pt-4 sm:px-5">
           {tasks.map((task) => (
-            <TaskListCard key={task.id} task={task} onOpenDetails={onOpenDetails} showLessonLabel={false} />
+            <TaskListCard key={task.id} task={task} onOpenDetails={onOpenDetails} showLessonLabel={false} showDate={showDate} />
           ))}
         </div>
       ) : null}

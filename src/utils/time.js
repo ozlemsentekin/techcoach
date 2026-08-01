@@ -20,6 +20,15 @@ export function getMondayOfWeek(dateISO) {
   return addDaysISO(dateISO, diffToMonday)
 }
 
+/** Verilen tarihin içinde bulunduğu ayın tüm günlerini (ISO) döner. */
+export function getMonthDates(dateISO) {
+  const date = new Date(dateISO)
+  const year = date.getFullYear()
+  const month = date.getMonth()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  return Array.from({ length: daysInMonth }, (_, index) => dateToISO(new Date(year, month, index + 1)))
+}
+
 export function formatDateShort(dateISO) {
   return new Date(dateISO).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })
 }

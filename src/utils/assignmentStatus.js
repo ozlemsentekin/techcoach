@@ -22,10 +22,10 @@ export function getAssignmentStatus(task) {
     return { filterKey: null, label: 'Yeniden planlandı', tone: 'slate', icon: 'RotateCcw' }
   }
   if (task.status === 'yardim-bekliyor') {
-    return { filterKey: 'in-progress', label: 'Yardım isteniyor', tone: 'accent', icon: 'HelpCircle' }
+    return { filterKey: 'pending', label: 'Yardım isteniyor', tone: 'accent', icon: 'HelpCircle' }
   }
   if (task.status === 'devam-ediyor') {
-    return { filterKey: 'in-progress', label: 'Devam Ediyor', tone: 'theme', icon: 'Timer' }
+    return { filterKey: 'pending', label: 'Devam Ediyor', tone: 'theme', icon: 'Timer' }
   }
-  return { filterKey: 'todo', label: 'Yapılacak', tone: 'theme', icon: 'Circle' }
+  return { filterKey: 'pending', label: 'Yapılacak', tone: 'theme', icon: 'Circle' }
 }

@@ -88,6 +88,7 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
   const [subjectId, setSubjectId] = useState(book?.subjectId || '')
   const [type, setType] = useState(book?.type || '')
   const [isActive, setIsActive] = useState(book ? book.isActive : true)
+  const [hasAnswerKey, setHasAnswerKey] = useState(book ? book.hasAnswerKey : true)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -122,6 +123,7 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
         pageCount: pageCountNumber,
         isActive,
         type,
+        hasAnswerKey: type === 'soru_bankasi' ? hasAnswerKey : true,
       }
       const data = isEdit
         ? await authRequest(`/api/panel-admin/resource-books/${book.id}`, {
@@ -224,6 +226,18 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
             <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} className="h-4 w-4" />
             <span className="text-sm font-medium text-panel-text">Aktif</span>
           </label>
+
+          {type === 'soru_bankasi' ? (
+            <label className="flex items-center gap-2.5">
+              <input
+                type="checkbox"
+                checked={hasAnswerKey}
+                onChange={(event) => setHasAnswerKey(event.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="text-sm font-medium text-panel-text">Cevap Anahtarı Var</span>
+            </label>
+          ) : null}
 
           <Button type="submit" disabled={loading} size="md" className="w-full">
             {loading ? 'Kaydediliyor...' : isEdit ? 'Kaydet' : 'Kaynak Kitap Oluştur'}
@@ -1105,6 +1119,11 @@ function BookBlock({ book, subjectsById, topics, tests, onAddTopic, onAddTest, o
                   {RESOURCE_BOOK_TYPE_LABELS[book.type] || book.type}
                 </span>
               ) : null}
+              {book.type === 'soru_bankasi' && !book.hasAnswerKey ? (
+                <span className="inline-flex items-center rounded-full bg-panel-accent-soft px-2.5 py-1 text-[11px] font-medium text-panel-warm">
+                  Cevap Anahtarı Yok
+                </span>
+              ) : null}
               <button
                 type="button"
                 onClick={(event) => {
@@ -1307,6 +1326,7 @@ export default function AdminPublishersPage() {
           pageCount: book.pageCount,
           isActive: !book.isActive,
           type: book.type,
+          hasAnswerKey: book.hasAnswerKey,
         }),
       })
       handleBookSaved(data.resourceBook)

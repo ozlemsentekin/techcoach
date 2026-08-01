@@ -3,7 +3,12 @@ import { parseTimeToMinutes, taskTimeState } from './time'
 const PENDING_STATUSES = new Set(['bekliyor', 'devam-ediyor', 'yardim-bekliyor'])
 
 export function getSortedTasks(tasks) {
-  return [...tasks].sort((a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime))
+  return [...tasks].sort((a, b) => {
+    const dateA = a.date || ''
+    const dateB = b.date || ''
+    if (dateA !== dateB) return dateA < dateB ? -1 : 1
+    return parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime)
+  })
 }
 
 export function getPendingTasks(tasks) {

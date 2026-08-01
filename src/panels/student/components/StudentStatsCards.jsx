@@ -4,6 +4,7 @@ import { TASK_TYPES } from '../../../data/taskTypes'
 const DOT_COLORS = ['#7B5FF5', '#3B82F6', '#22A55E', '#E8A23D', '#EF4444', '#06B6D4', '#EC4899', '#84CC16']
 
 const WORKED_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
+const READING_RESOURCE_TYPE = 'okuma_kitabi'
 
 function getSubjectLabel(task) {
   return task.subject || TASK_TYPES[task.taskType]?.label || 'Genel'
@@ -78,14 +79,22 @@ function SubjectDetailList({ items, formatValue, columns = 2 }) {
 }
 
 export default function StudentStatsCards({ tasks = [], completed, total, progress }) {
+  const workedTasks = tasks.filter((task) => WORKED_STATUSES.has(task.status))
+
   const timeBySubject = aggregateBySubject(
-    tasks.filter((task) => WORKED_STATUSES.has(task.status)),
+    workedTasks.filter((task) => task.resourceType !== READING_RESOURCE_TYPE),
     (task) => task.durationMinutes,
   )
   const totalMinutes = timeBySubject.reduce((sum, item) => sum + item.value, 0)
 
   const questionsBySubject = aggregateBySubject(tasks, (task) => task.completedQuestionCount)
   const totalQuestions = questionsBySubject.reduce((sum, item) => sum + item.value, 0)
+
+  const readingBySubject = aggregateBySubject(
+    workedTasks.filter((task) => task.resourceType === READING_RESOURCE_TYPE),
+    (task) => task.durationMinutes,
+  )
+  const totalReadingMinutes = readingBySubject.reduce((sum, item) => sum + item.value, 0)
 
   return (
     <div className="grid grid-cols-1 gap-3.5 min-[700px]:grid-cols-2 min-[1100px]:grid-cols-4">
@@ -142,10 +151,10 @@ export default function StudentStatsCards({ tasks = [], completed, total, progre
         iconColor="#E8A23D"
         icon={(color) => <BookOpen size={17} style={{ color }} aria-hidden="true" />}
         title="Okuma Süresi"
-        mainValue={formatDuration(0)}
+        mainValue={formatDuration(totalReadingMinutes)}
         subtitle="Toplam okuma süresi"
       >
-        <SubjectDetailList items={[]} formatValue={formatDuration} columns={1} />
+        <SubjectDetailList items={readingBySubject} formatValue={formatDuration} columns={1} />
       </StatCard>
     </div>
   )

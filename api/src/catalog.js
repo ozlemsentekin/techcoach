@@ -32,6 +32,7 @@ function sanitizeResourceBook(record) {
     pageCount: record.page_count,
     isActive: Boolean(record.is_active),
     type: record.resource_type,
+    hasAnswerKey: Boolean(record.has_answer_key),
     createdAt: record.created_at,
   }
 }
@@ -196,7 +197,7 @@ async function listResourceBooksHandler(request) {
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
       SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, rb.name, rb.page_count,
-             rb.is_active, rb.resource_type, rb.created_at
+             rb.is_active, rb.resource_type, rb.has_answer_key, rb.created_at
       FROM dbo.ResourceBooks rb
       LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
       ORDER BY rb.created_at ASC;
@@ -232,7 +233,7 @@ async function listResourceBooksForPanelHandler(request) {
     )
     const result = await requestDb.query(`
       SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, rb.name, rb.page_count,
-             rb.is_active, rb.resource_type, rb.created_at
+             rb.is_active, rb.resource_type, rb.has_answer_key, rb.created_at
       FROM dbo.ResourceBooks rb
       LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
       WHERE rb.is_active = 1 ${subjectId ? 'AND rb.subject_id = @subjectId' : ''}
@@ -268,6 +269,7 @@ async function createResourceBookHandler(request) {
     const pageCount = Number(payload?.pageCount)
     const isActive = payload?.isActive !== false
     const type = payload?.type
+    const hasAnswerKey = payload?.hasAnswerKey !== false
 
     if (!publisherId) {
       return json(400, { error: 'Yayın evi seçilmeli.' })
@@ -289,12 +291,13 @@ async function createResourceBookHandler(request) {
       pageCount: { type: sql.Int, value: pageCount },
       isActive: { type: sql.Bit, value: isActive },
       resourceType: { type: sql.NVarChar(30), value: type },
+      hasAnswerKey: { type: sql.Bit, value: hasAnswerKey },
     })
 
     const result = await requestDb.query(`
-      INSERT INTO dbo.ResourceBooks (publisher_id, subject_id, name, page_count, is_active, resource_type)
-      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.page_count, inserted.is_active, inserted.resource_type, inserted.created_at
-      VALUES (@publisherId, @subjectId, @name, @pageCount, @isActive, @resourceType);
+      INSERT INTO dbo.ResourceBooks (publisher_id, subject_id, name, page_count, is_active, resource_type, has_answer_key)
+      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.page_count, inserted.is_active, inserted.resource_type, inserted.has_answer_key, inserted.created_at
+      VALUES (@publisherId, @subjectId, @name, @pageCount, @isActive, @resourceType, @hasAnswerKey);
     `)
 
     return json(201, { resourceBook: sanitizeResourceBook(result.recordset[0]) })
@@ -327,6 +330,7 @@ async function updateResourceBookHandler(request) {
     const pageCount = Number(payload?.pageCount)
     const isActive = payload?.isActive !== false
     const type = payload?.type
+    const hasAnswerKey = payload?.hasAnswerKey !== false
 
     if (!publisherId) {
       return json(400, { error: 'Yayın evi seçilmeli.' })
@@ -349,12 +353,13 @@ async function updateResourceBookHandler(request) {
       pageCount: { type: sql.Int, value: pageCount },
       isActive: { type: sql.Bit, value: isActive },
       resourceType: { type: sql.NVarChar(30), value: type },
+      hasAnswerKey: { type: sql.Bit, value: hasAnswerKey },
     })
 
     const result = await requestDb.query(`
       UPDATE dbo.ResourceBooks
-      SET publisher_id = @publisherId, subject_id = @subjectId, name = @name, page_count = @pageCount, is_active = @isActive, resource_type = @resourceType
-      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.page_count, inserted.is_active, inserted.resource_type, inserted.created_at
+      SET publisher_id = @publisherId, subject_id = @subjectId, name = @name, page_count = @pageCount, is_active = @isActive, resource_type = @resourceType, has_answer_key = @hasAnswerKey
+      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.page_count, inserted.is_active, inserted.resource_type, inserted.has_answer_key, inserted.created_at
       WHERE id = @id;
     `)
 

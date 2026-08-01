@@ -1,7 +1,7 @@
 import { ArrowRight, Circle, Timer, CheckCircle2, Eye, HelpCircle, RotateCcw, AlertTriangle } from 'lucide-react'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { parseAssignmentDetails } from '../../../utils/assignmentDetails'
-import { daysLate } from '../../../utils/time'
+import { daysLate, formatDateShort } from '../../../utils/time'
 import { SUBJECT_STYLES, DEFAULT_SUBJECT_STYLE } from './subjectStyles'
 
 const STATUS_ICONS = { Circle, Timer, CheckCircle2, Eye, HelpCircle, RotateCcw, AlertTriangle }
@@ -15,7 +15,7 @@ const STATUS_TONE_CLASSES = {
   red: 'bg-panel-red-soft text-panel-red',
 }
 
-export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLessonLabel = true }) {
+export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLessonLabel = true, showDate = false }) {
   const subjectStyle = SUBJECT_STYLES[task.subject] || DEFAULT_SUBJECT_STYLE
   const details = parseAssignmentDetails(task)
   const overdueDays = daysLate(task.date)
@@ -50,9 +50,17 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
           {status.label}
         </span>
 
+        {showDate && task.date ? (
+          <span className="ml-2 inline-flex items-center text-xs font-medium text-panel-text-muted">
+            {formatDateShort(task.date)}
+          </span>
+        ) : null}
+
         {details.kaynak ? (
           <p className="mt-2 flex items-start gap-1.5 text-sm text-panel-text-muted">
-            <span className="font-semibold text-panel-text">Kaynak:</span> {details.kaynak}
+            <span className="font-semibold text-panel-text">Kaynak:</span>{' '}
+            {task.publisherName ? `${task.publisherName} - ` : ''}
+            {details.kaynak}
           </p>
         ) : null}
         {details.rawText ? <p className="mt-2 text-sm text-panel-text-muted">{details.rawText}</p> : null}

@@ -7,6 +7,7 @@ import TaskGroupSection from './TaskGroupSection'
 import TaskDetailsDrawer from './TaskDetailsDrawer'
 import TaskAnswerSheetModal from './TaskAnswerSheetModal'
 import ReadingProgressModal from './ReadingProgressModal'
+import QuestionCountModal from './QuestionCountModal'
 import EmptyState from '../../shared/EmptyState'
 
 function isQuestionBankTask(task) {
@@ -19,9 +20,14 @@ function isReadingTask(task) {
 
 const FILTERS = [
   { key: 'all', label: 'Tümü' },
-  { key: 'todo', label: 'Yapılacak' },
-  { key: 'in-progress', label: 'Devam Eden' },
+  { key: 'pending', label: 'Bekleyen' },
   { key: 'done', label: 'Tamamlanan' },
+]
+
+const DATE_FILTERS = [
+  { key: 'today', label: 'Bugün' },
+  { key: 'week', label: 'Bu Hafta' },
+  { key: 'month', label: 'Bu Ay' },
 ]
 
 const SUBJECTS = ['Tüm Dersler', 'Türkçe', 'Matematik', 'Fen Bilimleri', 'T.C. İnkılap Tarihi', 'İngilizce', 'Din Kültürü']
@@ -32,22 +38,29 @@ function lessonLabelFor(task) {
 
 export default function TaskListSection({
   tasks,
+  dateFilter,
+  onDateFilterChange,
+  loadingRange = false,
   onComplete,
   onPartialComplete,
   onReschedule,
   onHelp,
   onAnswerSheetSaved,
   onSaveReadingProgress,
+  onSaveQuestionCount,
 }) {
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useState('pending')
   const [subject, setSubject] = useState('Tüm Dersler')
   const [detailsTask, setDetailsTask] = useState(null)
   const [answerSheetTask, setAnswerSheetTask] = useState(null)
   const [readingTask, setReadingTask] = useState(null)
+  const [questionCountTask, setQuestionCountTask] = useState(null)
 
   const openTask = (task) => {
-    if (isQuestionBankTask(task)) setAnswerSheetTask(task)
-    else if (isReadingTask(task)) setReadingTask(task)
+    if (isQuestionBankTask(task)) {
+      if (task.hasAnswerKey === false) setQuestionCountTask(task)
+      else setAnswerSheetTask(task)
+    } else if (isReadingTask(task)) setReadingTask(task)
     else setDetailsTask(task)
   }
 
@@ -97,6 +110,26 @@ export default function TaskListSection({
 
           <div className="relative">
             <select
+              value={dateFilter}
+              onChange={(event) => onDateFilterChange(event.target.value)}
+              aria-label="Zamana göre filtrele"
+              className="w-full appearance-none rounded-full border border-panel-border bg-panel-surface py-2 pl-4 pr-9 text-sm font-medium text-panel-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary sm:w-auto"
+            >
+              {DATE_FILTERS.map((item) => (
+                <option key={item.key} value={item.key}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={16}
+              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-panel-text-muted"
+              aria-hidden="true"
+            />
+          </div>
+
+          <div className="relative">
+            <select
               value={subject}
               onChange={(event) => setSubject(event.target.value)}
               aria-label="Derse göre filtrele"
@@ -118,11 +151,21 @@ export default function TaskListSection({
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState title="Bu filtrede görev yok" description="Farklı bir filtre veya ders seçmeyi deneyebilirsin." />
+        loadingRange ? (
+          <EmptyState title="Görevler yükleniyor..." description="Seçtiğin zaman aralığındaki görevler getiriliyor." />
+        ) : (
+          <EmptyState title="Bu filtrede görev yok" description="Farklı bir filtre veya ders seçmeyi deneyebilirsin." />
+        )
       ) : (
         <div className="flex flex-col gap-4">
           {grouped.map((group) => (
-            <TaskGroupSection key={group.label} subject={group.label} tasks={group.tasks} onOpenDetails={openTask} />
+            <TaskGroupSection
+              key={group.label}
+              subject={group.label}
+              tasks={group.tasks}
+              onOpenDetails={openTask}
+              showDate={dateFilter !== 'today'}
+            />
           ))}
         </div>
       )}
@@ -169,6 +212,16 @@ export default function TaskListSection({
           onSaved={(updatedTask) => {
             onAnswerSheetSaved(updatedTask)
             setAnswerSheetTask(updatedTask)
+          }}
+        />
+      ) : null}
+
+      {questionCountTask ? (
+        <QuestionCountModal
+          task={questionCountTask}
+          onClose={() => setQuestionCountTask(null)}
+          onSave={(payload) => {
+            onSaveQuestionCount(questionCountTask, payload)
           }}
         />
       ) : null}
