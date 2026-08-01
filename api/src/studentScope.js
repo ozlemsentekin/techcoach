@@ -1,0 +1,68 @@
+const { sql, withRequest } = require('./db')
+const { json } = require('./http')
+const { readSessionToken, verifySessionToken } = require('./security')
+
+/**
+ * Resolves which student's data a request may act on.
+ * - A student session (own or entered-via-parent) is scoped to itself.
+ * - A parent session must specify studentId (query or body) and own that student;
+ *   omitting it defaults to the parent's first student (by created_at ASC).
+ */
+async function requireStudentContext(request, { studentId: bodyStudentId } = {}) {
+  const token = readSessionToken(request)
+  if (!token) {
+    return { error: json(401, { error: 'Oturum bulunamadı.' }) }
+  }
+
+  const session = verifySessionToken(token)
+
+  const requestDb = await withRequest({
+    id: { type: sql.UniqueIdentifier, value: session.sub },
+  })
+  const result = await requestDb.query(`
+    SELECT TOP 1 id, role, parent_id FROM dbo.Users WHERE id = @id;
+  `)
+  const record = result.recordset[0]
+  if (!record) {
+    return { error: json(401, { error: 'Oturum geçersiz.' }) }
+  }
+
+  if (record.role === 'ogrenci') {
+    return { studentId: record.id }
+  }
+
+  if (record.role !== 'ebeveyn') {
+    return { error: json(403, { error: 'Bu alana erişim yetkiniz yok.' }) }
+  }
+
+  const requestedStudentId = bodyStudentId || request.query.get('studentId')
+
+  if (requestedStudentId) {
+    const ownershipDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: requestedStudentId },
+      parentId: { type: sql.UniqueIdentifier, value: session.sub },
+    })
+    const ownershipResult = await ownershipDb.query(`
+      SELECT TOP 1 id FROM dbo.Users WHERE id = @studentId AND parent_id = @parentId;
+    `)
+    if (!ownershipResult.recordset[0]) {
+      return { error: json(404, { error: 'Öğrenci bulunamadı.' }) }
+    }
+    return { studentId: requestedStudentId }
+  }
+
+  const firstStudentDb = await withRequest({
+    parentId: { type: sql.UniqueIdentifier, value: session.sub },
+  })
+  const firstStudentResult = await firstStudentDb.query(`
+    SELECT TOP 1 id FROM dbo.Users WHERE parent_id = @parentId ORDER BY created_at ASC;
+  `)
+  const firstStudent = firstStudentResult.recordset[0]
+  if (!firstStudent) {
+    return { error: json(404, { error: 'Bağlı öğrenci bulunamadı.' }) }
+  }
+
+  return { studentId: firstStudent.id }
+}
+
+module.exports = { requireStudentContext }

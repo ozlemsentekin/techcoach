@@ -3,7 +3,7 @@ import { STAR_MESSAGES } from '../../../data/coachMessages'
 
 export default function DailyStarsCard({ count, criteria }) {
   return (
-    <div className="rounded-2xl border border-panel-border bg-panel-surface p-6">
+    <div className="panel-card p-6">
       <h2 className="text-lg font-semibold text-panel-text">Bugün {count} gelişim yıldızı kazandın</h2>
       <div className="mt-3 flex gap-1" aria-hidden="true">
         {[0, 1, 2, 3, 4].map((index) => (

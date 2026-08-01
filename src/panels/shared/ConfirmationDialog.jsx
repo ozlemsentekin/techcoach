@@ -13,7 +13,7 @@ export default function ConfirmationDialog({
       aria-modal="true"
       aria-label={title}
     >
-      <div className="w-full max-w-sm rounded-2xl border border-panel-border bg-panel-surface p-6 shadow-lg">
+      <div className="w-full max-w-sm panel-card p-6 shadow-lg">
         <h2 className="text-lg font-semibold text-panel-text">{title}</h2>
         {description ? <p className="mt-2 text-base text-panel-text-muted">{description}</p> : null}
         <div className="mt-6 flex gap-3">

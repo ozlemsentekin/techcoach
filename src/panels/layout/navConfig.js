@@ -7,9 +7,7 @@ export const STUDENT_PRIMARY_NAV = [
 
 export const STUDENT_MORE_NAV = [
   { to: '/student/homework', label: 'Ödevlerim', icon: 'NotebookPen' },
-  { to: '/student/mistakes', label: 'Yanlışlarım', icon: 'AlertCircle' },
-  { to: '/student/coach', label: 'Koçum', icon: 'Sparkles' },
-  { to: '/student/settings', label: 'Ayarlar', icon: 'Settings' },
+  { to: '/student/mistakes', label: 'Hata Defterim', icon: 'AlertCircle' },
 ]
 
 export const STUDENT_SIDEBAR_NAV = [...STUDENT_PRIMARY_NAV, ...STUDENT_MORE_NAV]
@@ -31,3 +29,19 @@ export const PARENT_MORE_NAV = [
 ]
 
 export const PARENT_SIDEBAR_NAV = [...PARENT_PRIMARY_NAV, ...PARENT_MORE_NAV]
+
+export function isNavItemActive(to, location) {
+  const [path, search = ''] = to.split('?')
+  if (location.pathname !== path) return false
+  return location.search.replace(/^\?/, '') === search
+}
+
+export const PARENT_ADMIN_NAV = {
+  label: 'Admin Paneli',
+  icon: 'ShieldCheck',
+  children: [
+    { to: '/parent/admin/users', label: 'Üyeler', icon: 'Users' },
+    { to: '/parent/admin/subjects', label: 'Dersler', icon: 'BookOpen' },
+    { to: '/parent/admin/publishers', label: 'Yayın Evleri', icon: 'Building2' },
+  ],
+}

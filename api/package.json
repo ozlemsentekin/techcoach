@@ -9,6 +9,7 @@
     "lint": "echo \"No API lint configured\""
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@azure/functions": "^4.8.0",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",

@@ -7,7 +7,7 @@ export default function ParentMessageCard({ message }) {
   })
 
   return (
-    <div className="rounded-2xl border border-panel-border bg-panel-surface p-4">
+    <div className="panel-card p-4">
       <p className="text-sm font-medium text-panel-text-muted">
         {message.from === 'ebeveyn' ? 'Sen gönderdin' : 'Aylin gönderdi'} · {time}
       </p>

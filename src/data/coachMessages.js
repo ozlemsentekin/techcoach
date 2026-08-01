@@ -1,17 +1,3 @@
-export const DAILY_COACH_MESSAGES = [
-  'Bugün zor bir konuyla karşılaşman, onu öğrenemeyeceğin anlamına gelmez.',
-  'Motivasyon her gün aynı olmayabilir. Önemli olan küçük de olsa yeniden başlayabilmek.',
-  'Mola vermek zaman kaybetmek değil, zihnini bir sonraki adıma hazırlamaktır.',
-  'Bir testin tamamını bitiremediysen yaptığın bölüm yine de değerlidir.',
-]
-
-export const FEEL_GOOD_TIPS = [
-  'Kısa molalarında sevdiğin bir müzik dinlemek zihnini tazeler.',
-  'Su içmeyi unutma; odaklanman için basit ama etkili bir destek.',
-  'Bir görevi bitirdiğinde kendine küçük bir mola hediye et.',
-  'Zor bir soruyu es geçip devam etmek de bir stratejidir.',
-]
-
 export const STRESS_SUPPORT_MESSAGES = [
   'Her şeyi şu anda bitirmek zorunda değilsin.',
   'Bir sonraki küçük adımı birlikte seçelim.',

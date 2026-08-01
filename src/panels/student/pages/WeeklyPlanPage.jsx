@@ -4,7 +4,7 @@ import EmptyState from '../../shared/EmptyState'
 
 export default function WeeklyPlanPage() {
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-5">
+    <div className="flex w-full flex-col gap-5">
       <PageHeader title="Haftalık Plan" subtitle="Haftanın tüm günlerini burada görebileceksin." />
       <EmptyState
         icon={CalendarRange}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { TASK_TYPES } from '../../../data/taskTypes'
 import { TASK_TEMPLATES } from '../../../data/taskTemplates'
@@ -48,10 +48,31 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
 
   const durationMinutes = computeDurationMinutes(form.startTime, form.endTime)
 
-  const conflict = useMemo(() => {
-    if (!getExistingTasksForDate || durationMinutes <= 0) return false
-    const tasksForDate = getExistingTasksForDate(form.date)
-    return hasOverlap(tasksForDate, form.startTime, form.endTime, initialTask?.id)
+  const [conflict, setConflict] = useState(false)
+
+  useEffect(() => {
+    let ignore = false
+
+    if (!getExistingTasksForDate || durationMinutes <= 0) {
+      Promise.resolve().then(() => {
+        if (!ignore) setConflict(false)
+      })
+      return () => {
+        ignore = true
+      }
+    }
+
+    Promise.resolve(getExistingTasksForDate(form.date))
+      .then((tasksForDate) => {
+        if (!ignore) setConflict(hasOverlap(tasksForDate, form.startTime, form.endTime, initialTask?.id))
+      })
+      .catch(() => {
+        if (!ignore) setConflict(false)
+      })
+
+    return () => {
+      ignore = true
+    }
   }, [form.date, form.startTime, form.endTime, getExistingTasksForDate, initialTask?.id, durationMinutes])
 
   const handleChange = (field) => (event) => {
@@ -124,7 +145,7 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
                   key={template.label}
                   type="button"
                   onClick={() => applyTemplate(template)}
-                  className="rounded-full border border-panel-border px-3 py-1.5 text-xs font-medium text-panel-text hover:bg-panel-bg"
+                  className="rounded-full border border-panel-border px-3 py-1.5 text-xs font-medium text-panel-text hover:bg-panel-surface-soft"
                 >
                   {template.label}
                 </button>

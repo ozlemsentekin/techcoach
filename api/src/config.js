@@ -86,6 +86,7 @@ function getConfig() {
     jwtSecret: getRequiredEnv('AUTH_JWT_SECRET', {
       placeholders: ['replace-with-a-32-byte-random-secret'],
     }),
+    anthropicApiKey: getRequiredEnv('ANTHROPIC_API_KEY'),
   }
 }
 

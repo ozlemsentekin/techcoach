@@ -31,7 +31,7 @@ export default function WeeklyPlannerGrid({ weekDates, tasksByDate, onAddTask, o
         const metrics = dayMetrics(tasks)
 
         return (
-          <div key={date} className="flex flex-col gap-2 rounded-2xl border border-panel-border bg-panel-surface p-3">
+          <div key={date} className="flex flex-col gap-2 panel-card p-3">
             <div>
               <p className="text-sm font-semibold text-panel-text">{DAY_LABELS[index]}</p>
               <p className="text-xs text-panel-text-muted">{formatDateShort(date)}</p>
@@ -63,7 +63,7 @@ export default function WeeklyPlannerGrid({ weekDates, tasksByDate, onAddTask, o
             <button
               type="button"
               onClick={() => onAddTask(date)}
-              className="rounded-lg border border-dashed border-panel-border px-2 py-1.5 text-xs font-medium text-panel-text-muted hover:bg-panel-bg"
+              className="rounded-lg border border-dashed border-panel-border px-2 py-1.5 text-xs font-medium text-panel-text-muted hover:bg-panel-surface-soft"
             >
               + Görev Ekle
             </button>

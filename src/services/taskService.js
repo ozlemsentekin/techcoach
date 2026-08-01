@@ -1,90 +1,111 @@
-import { readJSON, writeJSON, hasKey, generateId } from './storage'
-import { buildMondayDemoTasks } from '../data/mondayDemoData'
-import { todayISODate } from '../utils/time'
+import { authRequest } from './authClient'
 
-function tasksKey(date) {
-  return `tasks:${date}`
+function taskQuery(date, isDraft) {
+  return `/api/panel/tasks?date=${date}&isDraft=${isDraft}`
 }
 
-export function getTasksForDate(date) {
-  const key = tasksKey(date)
-
-  if (!hasKey(key) && date === todayISODate()) {
-    const seeded = buildMondayDemoTasks()
-    writeJSON(key, seeded)
-    return seeded
-  }
-
-  return readJSON(key, [])
+/** @returns {Promise<object[]>} */
+export async function getTasksForDate(date, { isDraft = false } = {}) {
+  const data = await authRequest(taskQuery(date, isDraft), { method: 'GET' })
+  return data.tasks
 }
 
-export function saveTasksForDate(date, tasks) {
-  writeJSON(tasksKey(date), tasks)
-  return tasks
+/** @returns {Promise<object>} */
+export async function getTaskById(taskId) {
+  const data = await authRequest(`/api/panel/tasks/${taskId}`, { method: 'GET' })
+  return data.task
 }
 
-export function updateTask(date, taskId, updates) {
-  const tasks = getTasksForDate(date)
-  const nextTasks = tasks.map((task) => (task.id === taskId ? { ...task, ...updates } : task))
-  saveTasksForDate(date, nextTasks)
-  return nextTasks
+/** @returns {Promise<object>} */
+export async function postTask(taskData) {
+  const data = await authRequest('/api/panel/tasks', {
+    method: 'POST',
+    body: JSON.stringify(taskData),
+  })
+  return data.task
+}
+
+/** @returns {Promise<object>} */
+export async function patchTask(taskId, updates) {
+  const data = await authRequest(`/api/panel/tasks/${taskId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  })
+  return data.task
+}
+
+export async function removeTask(taskId) {
+  await authRequest(`/api/panel/tasks/${taskId}`, { method: 'DELETE' })
+}
+
+/** Soru bankası görevinin dijital cevap kağıdı: testler, soru sayıları, kayıtlı cevaplar/sonuçlar. */
+export async function getTaskAnswerSheet(taskId) {
+  const data = await authRequest(`/api/panel/tasks/${taskId}/answer-sheet`, { method: 'GET' })
+  return data.tests
+}
+
+/** Cevap kağıdındaki tek "Kaydet" butonu: görevdeki tüm testlerin o anki cevaplarını tek istekte gönderir. */
+export async function saveTaskAnswers(taskId, tests) {
+  const data = await authRequest(`/api/panel/tasks/${taskId}/answers`, {
+    method: 'PATCH',
+    body: JSON.stringify({ tests }),
+  })
+  return data.task
 }
 
 /** Ebeveyn panelinden yeni bir görev oluşturur (canlı plana doğrudan yazar). */
-export function createTask(date, taskData) {
-  const tasks = getTasksForDate(date)
-  const task = {
-    id: generateId('task'),
-    date,
+export async function createTask(date, taskData, { isDraft = false } = {}) {
+  return postTask({
     status: 'bekliyor',
     createdBy: 'ebeveyn',
     priority: 'orta',
     ...taskData,
-  }
-  saveTasksForDate(date, [...tasks, task])
-  return task
-}
-
-export function deleteTask(date, taskId) {
-  const tasks = getTasksForDate(date)
-  const nextTasks = tasks.filter((task) => task.id !== taskId)
-  saveTasksForDate(date, nextTasks)
-  return nextTasks
-}
-
-export function toggleSubGoal(date, taskId, subGoalIndex) {
-  const tasks = getTasksForDate(date)
-  const nextTasks = tasks.map((task) => {
-    if (task.id !== taskId) return task
-    const completed = new Set(task.completedSubGoals || [])
-    if (completed.has(subGoalIndex)) {
-      completed.delete(subGoalIndex)
-    } else {
-      completed.add(subGoalIndex)
-    }
-    return { ...task, completedSubGoals: Array.from(completed) }
+    date,
+    isDraft,
   })
-  saveTasksForDate(date, nextTasks)
-  return nextTasks
+}
+
+export async function updateTask(date, taskId, updates, { isDraft = false } = {}) {
+  await patchTask(taskId, updates)
+  return getTasksForDate(date, { isDraft })
+}
+
+export async function deleteTask(date, taskId, { isDraft = false } = {}) {
+  await removeTask(taskId)
+  return getTasksForDate(date, { isDraft })
+}
+
+export async function toggleSubGoal(date, taskId, subGoalIndex) {
+  const task = await getTaskById(taskId)
+  const completed = new Set(task.completedSubGoals || [])
+  if (completed.has(subGoalIndex)) {
+    completed.delete(subGoalIndex)
+  } else {
+    completed.add(subGoalIndex)
+  }
+  await patchTask(taskId, { completedSubGoals: Array.from(completed) })
+  return getTasksForDate(date, { isDraft: task.isDraft })
 }
 
 /**
  * Görevi başka bir tarih/saate taşır: orijinal görev 'yeniden-planlandi' olarak işaretlenir,
  * hedef tarihte 'bekliyor' durumunda yeni bir görev oluşturulur (kaybolmaz).
  */
-export function rescheduleTask(date, taskId, { newDate, newTime, reason }) {
-  const tasks = getTasksForDate(date)
-  const original = tasks.find((task) => task.id === taskId)
-  if (!original) return { sourceTasks: tasks, targetTasks: getTasksForDate(newDate) }
-
-  const durationMinutes = original.durationMinutes
+export async function rescheduleTask(date, taskId, { newDate, newTime, reason }) {
+  const original = await getTaskById(taskId)
   const [hours, minutes] = newTime.split(':').map(Number)
-  const endMinutes = hours * 60 + minutes + durationMinutes
+  const endMinutes = hours * 60 + minutes + original.durationMinutes
   const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`
 
-  const rescheduledTask = {
+  await patchTask(taskId, {
+    status: 'yeniden-planlandi',
+    rescheduledTo: `${newDate} ${newTime}`,
+    rescheduleReason: reason,
+  })
+
+  await postTask({
     ...original,
-    id: generateId('task'),
+    id: undefined,
     date: newDate,
     startTime: newTime,
     endTime,
@@ -94,22 +115,10 @@ export function rescheduleTask(date, taskId, { newDate, newTime, reason }) {
     rescheduleReason: null,
     completedAt: null,
     completedQuestionCount: original.targetQuestionCount ? 0 : undefined,
-  }
+    completedPageCount: original.targetPageCount ? 0 : undefined,
+  })
 
-  const markedSourceTasks = tasks.map((task) =>
-    task.id === taskId
-      ? { ...task, status: 'yeniden-planlandi', rescheduledTo: `${newDate} ${newTime}`, rescheduleReason: reason }
-      : task,
-  )
-
-  if (newDate === date) {
-    const merged = [...markedSourceTasks, rescheduledTask]
-    saveTasksForDate(date, merged)
-    return { sourceTasks: merged, targetTasks: merged }
-  }
-
-  saveTasksForDate(date, markedSourceTasks)
-  const targetTasks = [...getTasksForDate(newDate), rescheduledTask]
-  saveTasksForDate(newDate, targetTasks)
-  return { sourceTasks: markedSourceTasks, targetTasks }
+  const sourceTasks = await getTasksForDate(date, { isDraft: original.isDraft })
+  const targetTasks = newDate === date ? sourceTasks : await getTasksForDate(newDate, { isDraft: original.isDraft })
+  return { sourceTasks, targetTasks }
 }

@@ -1,17 +1,18 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import NavIcon from './NavIcon'
+import { isNavItemActive } from './navConfig'
 
 export default function MobileBottomNavigation({ primaryItems, moreItems = [] }) {
   const [showMore, setShowMore] = useState(false)
   const location = useLocation()
-  const isMoreActive = moreItems.some((item) => location.pathname.startsWith(item.to))
+  const isMoreActive = moreItems.some((item) => isNavItemActive(item.to, location))
 
   return (
     <>
       <nav
         aria-label="Alt gezinme"
-        className="fixed inset-x-0 bottom-0 z-40 flex border-t border-panel-border bg-panel-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 flex bg-panel-surface shadow-panel-2 pb-[env(safe-area-inset-bottom)] md:hidden"
       >
         {primaryItems.map((item) => (
           <NavLink
@@ -67,9 +68,9 @@ export default function MobileBottomNavigation({ primaryItems, moreItems = [] })
                   key={item.to}
                   to={item.to}
                   onClick={() => setShowMore(false)}
-                  className={({ isActive }) =>
+                  className={() =>
                     `flex items-center gap-3 rounded-xl px-3 py-3 text-base font-medium ${
-                      isActive ? 'bg-panel-blue-soft text-panel-blue' : 'text-panel-text'
+                      isNavItemActive(item.to, location) ? 'bg-panel-blue-soft text-panel-blue' : 'text-panel-text'
                     }`
                   }
                 >

@@ -1,13 +1,15 @@
 const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
-const { clearSessionHeaders, json } = require('./http')
+const { clearSessionHeaders, createSessionHeaders, json } = require('./http')
 const {
+  createSessionToken,
   hashPassword,
   normalizeEmail,
   readSessionToken,
   validateRegistrationInput,
   verifySessionToken,
 } = require('./security')
+const { sanitizeUser } = require('./auth')
 
 function sanitizeStudent(record) {
   return {
@@ -134,7 +136,95 @@ async function createStudentHandler(request) {
   }
 }
 
+async function enterStudentHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const studentId = request.params.studentId
+
+    const requestDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      parentId: { type: sql.UniqueIdentifier, value: parentId },
+    })
+    const result = await requestDb.query(`
+      SELECT TOP 1 id, full_name, email, role, last_login_at, created_at
+      FROM dbo.Users
+      WHERE id = @studentId AND parent_id = @parentId;
+    `)
+    const record = result.recordset[0]
+    if (!record) {
+      return json(404, { error: 'Öğrenci bulunamadı.' })
+    }
+
+    const parentDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: parentId },
+    })
+    const parentResult = await parentDb.query(`
+      SELECT TOP 1 full_name FROM dbo.Users WHERE id = @id;
+    `)
+    const parentFullName = parentResult.recordset[0]?.full_name
+
+    const student = sanitizeStudent(record)
+    const token = createSessionToken(student, {
+      actingParentId: parentId,
+      actingParentName: parentFullName,
+    })
+
+    const user = { ...student, actingParent: { id: parentId, fullName: parentFullName } }
+    return json(200, { user }, createSessionHeaders(token))
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    console.error('enterStudentHandler failed', error)
+    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+  }
+}
+
+async function exitStudentHandler(request) {
+  try {
+    const token = readSessionToken(request)
+    if (!token) {
+      return json(401, { error: 'Oturum bulunamadı.' })
+    }
+
+    const session = verifySessionToken(token)
+    if (!session.actingParentId) {
+      return json(400, { error: 'Aktif bir ebeveyn görünümü yok.' })
+    }
+
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: session.actingParentId },
+    })
+    const result = await requestDb.query(`
+      SELECT TOP 1 id, full_name, email, role, is_admin, last_login_at, created_at
+      FROM dbo.Users WHERE id = @id;
+    `)
+    const record = result.recordset[0]
+    if (!record || record.role !== 'ebeveyn') {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    const user = sanitizeUser(record)
+    const newToken = createSessionToken(user)
+    return json(200, { user }, createSessionHeaders(newToken))
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    console.error('exitStudentHandler failed', error)
+    return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+  }
+}
+
 module.exports = {
   listStudentsHandler,
   createStudentHandler,
+  enterStudentHandler,
+  exitStudentHandler,
 }

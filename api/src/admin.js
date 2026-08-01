@@ -70,4 +70,5 @@ async function listUsersHandler(request) {
 
 module.exports = {
   listUsersHandler,
+  requireAdmin,
 }

@@ -9,7 +9,7 @@ export default function QuickActionsPanel({ onPlanWeek, onAddHomework, onAddTest
   ]
 
   return (
-    <div className="rounded-2xl border border-panel-border bg-panel-surface p-5">
+    <div className="panel-card p-5">
       <h2 className="text-base font-semibold text-panel-text">Hızlı İşlemler</h2>
       <div className="mt-3 grid grid-cols-2 gap-2">
         {actions.map((action) => (
@@ -17,7 +17,7 @@ export default function QuickActionsPanel({ onPlanWeek, onAddHomework, onAddTest
             key={action.label}
             type="button"
             onClick={action.onClick}
-            className="flex flex-col items-center gap-1.5 rounded-xl border border-panel-border p-3 text-center text-sm font-medium text-panel-text hover:bg-panel-bg"
+            className="flex flex-col items-center gap-1.5 rounded-xl border border-panel-border p-3 text-center text-sm font-medium text-panel-text hover:bg-panel-surface-soft"
           >
             <action.icon size={18} aria-hidden="true" />
             {action.label}
@@ -27,7 +27,7 @@ export default function QuickActionsPanel({ onPlanWeek, onAddHomework, onAddTest
       <button
         type="button"
         onClick={onAddFreeTime}
-        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl border border-panel-border p-3 text-sm font-medium text-panel-text hover:bg-panel-bg"
+        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl border border-panel-border p-3 text-sm font-medium text-panel-text hover:bg-panel-surface-soft"
       >
         <Sun size={18} aria-hidden="true" />
         Serbest Zaman Ekle

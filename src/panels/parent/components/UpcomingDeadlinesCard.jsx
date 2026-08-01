@@ -15,7 +15,7 @@ export default function UpcomingDeadlinesCard({ homeworks }) {
     .slice(0, 3)
 
   return (
-    <div className="rounded-2xl border border-panel-border bg-panel-surface p-5">
+    <div className="panel-card p-5">
       <h2 className="text-base font-semibold text-panel-text">Yaklaşan Teslimler</h2>
       {upcoming.length === 0 ? (
         <p className="mt-2 text-sm text-panel-text-muted">Yaklaşan bir teslim yok.</p>

@@ -69,6 +69,13 @@ export function formatSecondsAsTimer(totalSeconds) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
+/** Bir tarihin bugüne göre kaç tam gün geride kaldığını döner (henüz geçmediyse 0). */
+export function daysLate(dateISO) {
+  const today = todayISODate()
+  if (!dateISO || dateISO >= today) return 0
+  return Math.round((new Date(today) - new Date(dateISO)) / (1000 * 60 * 60 * 24))
+}
+
 export function minutesUntil(targetTime) {
   return parseTimeToMinutes(targetTime) - nowMinutes()
 }

@@ -1,62 +1,87 @@
-import { NavLink } from 'react-router-dom'
+import { useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
 import NavIcon from './NavIcon'
-import { PARENT_SIDEBAR_NAV } from './navConfig'
+import { PARENT_ADMIN_NAV, PARENT_SIDEBAR_NAV, isNavItemActive } from './navConfig'
 
 export default function ParentSidebar() {
-  const { authUser, logout } = useAuth()
+  const { authUser } = useAuth()
+  const location = useLocation()
+  const isAdminSectionActive = location.pathname.startsWith('/parent/admin')
+  const [adminOpen, setAdminOpen] = useState(isAdminSectionActive)
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r border-panel-border bg-panel-surface px-4 py-6 md:flex">
-      <div className="mb-6 px-2">
-        <p className="text-lg font-semibold text-panel-text">{authUser?.fullName?.split(' ')[0]}</p>
-        <p className="text-sm text-panel-text-muted">Ebeveyn görünümü</p>
+    <aside className="hidden shrink-0 flex-col bg-panel-surface px-2 py-5 shadow-panel-1 md:flex md:w-20 lg:w-64 lg:px-3">
+      <div className="mb-5 flex h-9 items-center gap-2 border-b border-panel-border px-1 pb-5 lg:px-2">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-panel-blue text-xs font-bold text-white">
+          T
+        </div>
+        <span className="hidden truncate text-xl font-bold tracking-wide text-panel-text lg:inline">TechCoach</span>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1" aria-label="Ebeveyn menüsü">
+      <nav className="flex flex-1 flex-col gap-0.5" aria-label="Ebeveyn menüsü">
         {PARENT_SIDEBAR_NAV.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
-            className={({ isActive }) =>
-              `flex items-center gap-3 rounded-xl px-3 py-2.5 text-base font-medium transition-colors ${
-                isActive
+            title={item.label}
+            className={() =>
+              `flex items-center gap-3 rounded-xl px-2.5 py-2 text-base font-medium transition-colors md:justify-center lg:justify-start ${
+                isNavItemActive(item.to, location)
                   ? 'bg-panel-blue-soft text-panel-blue'
-                  : 'text-panel-text-muted hover:bg-panel-bg hover:text-panel-text'
+                  : 'text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-text'
               }`
             }
           >
             <NavIcon name={item.icon} size={18} />
-            {item.label}
+            <span className="hidden lg:inline">{item.label}</span>
           </NavLink>
         ))}
 
         {authUser?.isAdmin ? (
-          <NavLink
-            to="/parent/admin/users"
-            className={({ isActive }) =>
-              `flex items-center gap-3 rounded-xl px-3 py-2.5 text-base font-medium transition-colors ${
-                isActive
-                  ? 'bg-panel-lilac-soft text-panel-lilac'
-                  : 'text-panel-text-muted hover:bg-panel-bg hover:text-panel-text'
-              }`
-            }
-          >
-            <NavIcon name="ShieldCheck" size={18} />
-            Admin Paneli
-          </NavLink>
+          <div className="flex flex-col gap-0.5">
+            <button
+              type="button"
+              onClick={() => setAdminOpen((open) => !open)}
+              aria-expanded={adminOpen}
+              title={PARENT_ADMIN_NAV.label}
+              className={`flex items-center gap-3 rounded-xl px-2.5 py-2 text-base font-medium transition-colors md:justify-center lg:justify-start ${
+                isAdminSectionActive
+                  ? 'bg-panel-blue-soft text-panel-blue'
+                  : adminOpen
+                    ? 'bg-panel-surface-soft text-panel-text'
+                    : 'text-panel-text hover:bg-panel-surface-soft'
+              }`}
+            >
+              <NavIcon name={PARENT_ADMIN_NAV.icon} size={18} />
+              <span className="hidden flex-1 text-left lg:inline">{PARENT_ADMIN_NAV.label}</span>
+              <NavIcon name={adminOpen ? 'ChevronDown' : 'ChevronRight'} size={16} className="hidden lg:block" />
+            </button>
+
+            {adminOpen ? (
+              <div className="flex flex-col gap-0.5 lg:ml-4 lg:border-l lg:border-panel-border lg:pl-3">
+                {PARENT_ADMIN_NAV.children.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    title={item.label}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 rounded-xl px-2.5 py-1.5 text-sm font-medium transition-colors md:justify-center lg:justify-start ${
+                        isActive
+                          ? 'bg-panel-blue-soft text-panel-blue'
+                          : 'text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-text'
+                      }`
+                    }
+                  >
+                    <NavIcon name={item.icon} size={16} />
+                    <span className="hidden lg:inline">{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </nav>
-
-      <button
-        type="button"
-        onClick={() => logout().catch(() => {})}
-        aria-label="Çıkış yap"
-        className="mt-4 flex items-center gap-3 rounded-xl px-3 py-2.5 text-base font-medium text-panel-text-muted hover:bg-panel-bg hover:text-panel-text"
-      >
-        <NavIcon name="LogOut" size={18} />
-        Çıkış Yap
-      </button>
     </aside>
   )
 }

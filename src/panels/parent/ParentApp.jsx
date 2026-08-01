@@ -7,6 +7,8 @@ import ProgressPage from './pages/ProgressPage'
 import MessagesPage from './pages/MessagesPage'
 import SettingsPage from './pages/SettingsPage'
 import AdminUsersPage from './pages/AdminUsersPage'
+import AdminSubjectsPage from './pages/AdminSubjectsPage'
+import AdminPublishersPage from './pages/AdminPublishersPage'
 import StudentsPage from './pages/StudentsPage'
 import HomeworkPage from './pages/HomeworkPage'
 import TestsPage from './pages/TestsPage'
@@ -36,6 +38,22 @@ export default function ParentApp() {
           element={
             <RequireAdmin>
               <AdminUsersPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="admin/subjects"
+          element={
+            <RequireAdmin>
+              <AdminSubjectsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="admin/publishers"
+          element={
+            <RequireAdmin>
+              <AdminPublishersPage />
             </RequireAdmin>
           }
         />

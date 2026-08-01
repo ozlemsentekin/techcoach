@@ -4,8 +4,8 @@ import EmptyState from '../../shared/EmptyState'
 
 export default function MistakesPage() {
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-5">
-      <PageHeader title="Yanlışlarım" subtitle="Yanlış yaptığın sorular burada tutulacak." />
+    <div className="flex w-full flex-col gap-5">
+      <PageHeader title="Hata Defterim" subtitle="Yanlış yaptığın sorular burada tutulacak." />
       <EmptyState
         icon={AlertCircle}
         title="Yakında burada olacak"

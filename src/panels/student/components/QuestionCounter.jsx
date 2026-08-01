@@ -1,6 +1,6 @@
 export default function QuestionCounter({ value, target, onChange }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-2xl border border-panel-border bg-panel-surface p-6">
+    <div className="flex flex-col items-center gap-2 panel-card p-6">
       <p className="text-sm font-medium text-panel-text-muted">Çözülen soru sayısı</p>
       <div className="flex items-center gap-4">
         <button

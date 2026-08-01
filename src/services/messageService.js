@@ -1,4 +1,4 @@
-import { readJSON, writeJSON, generateId } from './storage'
+import { authRequest } from './authClient'
 
 /**
  * @typedef {Object} ParentMessage
@@ -9,43 +9,34 @@ import { readJSON, writeJSON, generateId } from './storage'
  * @property {string|null} readAt
  */
 
-const KEY = 'messages'
-
-export function getMessages() {
-  return readJSON(KEY, [])
+/** @returns {Promise<ParentMessage[]>} */
+export async function getMessages() {
+  const data = await authRequest('/api/panel/messages', { method: 'GET' })
+  return data.messages
 }
 
-export function sendMessage({ from, text }) {
-  const messages = getMessages()
-  const record = {
-    id: generateId('msg'),
-    from,
-    text,
-    createdAt: new Date().toISOString(),
-    readAt: null,
-  }
-  writeJSON(KEY, [...messages, record])
-  return record
+/** @returns {Promise<ParentMessage>} */
+export async function sendMessage({ from, text }) {
+  const data = await authRequest('/api/panel/messages', {
+    method: 'POST',
+    body: JSON.stringify({ from, text }),
+  })
+  return data.message
 }
 
-const COACH_NOTES_KEY = 'coachNotes'
-
-export function getCoachNotes() {
-  return readJSON(COACH_NOTES_KEY, [])
+export async function addCoachNote(text) {
+  const data = await authRequest('/api/panel/coach-notes', {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  })
+  return data.note
 }
 
-export function addCoachNote(text) {
-  const notes = getCoachNotes()
-  const record = { id: generateId('note'), text, createdAt: new Date().toISOString() }
-  writeJSON(COACH_NOTES_KEY, [...notes, record])
-  return record
-}
-
-export function markAllRead(from) {
-  const messages = getMessages()
-  const next = messages.map((message) =>
-    message.from !== from && !message.readAt ? { ...message, readAt: new Date().toISOString() } : message,
-  )
-  writeJSON(KEY, next)
-  return next
+/** @returns {Promise<ParentMessage[]>} */
+export async function markAllRead(from) {
+  await authRequest('/api/panel/messages/mark-read', {
+    method: 'POST',
+    body: JSON.stringify({ from }),
+  })
+  return getMessages()
 }

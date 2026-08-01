@@ -19,11 +19,3 @@ export function readJSON(key, fallback) {
 export function writeJSON(key, value) {
   window.localStorage.setItem(fullKey(key), JSON.stringify(value))
 }
-
-export function hasKey(key) {
-  return window.localStorage.getItem(fullKey(key)) !== null
-}
-
-export function generateId(prefix) {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-}

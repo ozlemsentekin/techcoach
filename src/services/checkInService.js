@@ -1,4 +1,4 @@
-import { readJSON, writeJSON } from './storage'
+import { authRequest } from './authClient'
 
 /**
  * @typedef {Object} DailyCheckIn
@@ -7,16 +7,17 @@ import { readJSON, writeJSON } from './storage'
  * @property {string} [note]
  */
 
-function checkInKey(date) {
-  return `checkin:${date}`
+/** @returns {Promise<DailyCheckIn|null>} */
+export async function getCheckIn(date) {
+  const data = await authRequest(`/api/panel/check-in?date=${date}`, { method: 'GET' })
+  return data.checkIn
 }
 
-export function getCheckIn(date) {
-  return readJSON(checkInKey(date), null)
-}
-
-export function saveCheckIn(date, { energyLevel, note }) {
-  const checkIn = { date, energyLevel, note: note || '' }
-  writeJSON(checkInKey(date), checkIn)
-  return checkIn
+/** @returns {Promise<DailyCheckIn>} */
+export async function saveCheckIn(date, { energyLevel, note }) {
+  const data = await authRequest('/api/panel/check-in', {
+    method: 'PUT',
+    body: JSON.stringify({ date, energyLevel, note: note || '' }),
+  })
+  return data.checkIn
 }

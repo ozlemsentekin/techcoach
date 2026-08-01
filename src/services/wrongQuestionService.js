@@ -1,4 +1,4 @@
-import { readJSON, writeJSON, generateId } from './storage'
+import { authRequest } from './authClient'
 
 /**
  * @typedef {Object} WrongQuestion
@@ -14,28 +14,26 @@ import { readJSON, writeJSON, generateId } from './storage'
  * @property {string|null} [resolvedAt]
  */
 
-const KEY = 'wrongQuestions'
-
-export function getWrongQuestions() {
-  return readJSON(KEY, [])
+/** @returns {Promise<WrongQuestion[]>} */
+export async function getWrongQuestions() {
+  const data = await authRequest('/api/panel/wrong-questions', { method: 'GET' })
+  return data.wrongQuestions
 }
 
-export function addWrongQuestion(entry) {
-  const items = getWrongQuestions()
-  const record = {
-    id: generateId('wrong'),
-    createdAt: new Date().toISOString(),
-    reviewStatus: 'tekrar-bekliyor',
-    resolvedAt: null,
-    ...entry,
-  }
-  writeJSON(KEY, [...items, record])
-  return record
+/** @returns {Promise<WrongQuestion>} */
+export async function addWrongQuestion(entry) {
+  const data = await authRequest('/api/panel/wrong-questions', {
+    method: 'POST',
+    body: JSON.stringify(entry),
+  })
+  return data.wrongQuestion
 }
 
-export function updateWrongQuestion(id, updates) {
-  const items = getWrongQuestions()
-  const next = items.map((item) => (item.id === id ? { ...item, ...updates } : item))
-  writeJSON(KEY, next)
-  return next
+/** @returns {Promise<WrongQuestion>} */
+export async function updateWrongQuestion(id, updates) {
+  const data = await authRequest(`/api/panel/wrong-questions/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  })
+  return data.wrongQuestion
 }

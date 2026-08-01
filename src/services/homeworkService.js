@@ -1,4 +1,4 @@
-import { readJSON, writeJSON, generateId } from './storage'
+import { authRequest } from './authClient'
 
 /**
  * @typedef {Object} HomeworkDayPlan
@@ -7,59 +7,72 @@ import { readJSON, writeJSON, generateId } from './storage'
  *
  * @typedef {Object} Homework
  * @property {string} id
+ * @property {string} subjectId
  * @property {string} subject
+ * @property {string} [resourceBookId]
+ * @property {string[]} [testIds]
  * @property {string} title
  * @property {string} [description]
  * @property {string} assignedDate
  * @property {string} dueDate
- * @property {number} [estimatedDurationMinutes]
  * @property {number} totalQuestionCount
  * @property {number} completedQuestionCount
+ * @property {number} [totalPageCount]
  * @property {string} priority
  * @property {string} status  // 'bekliyor' | 'devam-ediyor' | 'tamamlandi'
  * @property {boolean} isSplit
  * @property {HomeworkDayPlan[]} [dayPlans]
  */
 
-const KEY = 'homeworks'
-
-export function getHomeworks() {
-  return readJSON(KEY, [])
+/** @returns {Promise<Homework[]>} */
+export async function getHomeworks() {
+  const data = await authRequest('/api/panel/homeworks', { method: 'GET' })
+  return data.homeworks
 }
 
-export function addHomework({ subject, title, description, assignedDate, dueDate, totalQuestionCount, priority, dayPlans }) {
-  const homeworks = getHomeworks()
-  const record = {
-    id: generateId('hw'),
-    subject,
-    title,
-    description: description || '',
-    assignedDate,
-    dueDate,
-    totalQuestionCount: Number(totalQuestionCount) || 0,
-    completedQuestionCount: 0,
-    priority: priority || 'orta',
-    status: 'bekliyor',
-    isSplit: Boolean(dayPlans && dayPlans.length > 1),
-    dayPlans: dayPlans || [],
-  }
-  writeJSON(KEY, [...homeworks, record])
-  return record
+/** @returns {Promise<Homework>} */
+export async function addHomework({
+  subjectId,
+  resourceBookId,
+  testIds,
+  title,
+  description,
+  assignedDate,
+  dueDate,
+  totalQuestionCount,
+  totalPageCount,
+  priority,
+  taskDate,
+}) {
+  const data = await authRequest('/api/panel/homeworks', {
+    method: 'POST',
+    body: JSON.stringify({
+      subjectId,
+      resourceBookId,
+      testIds,
+      title,
+      description,
+      assignedDate,
+      dueDate,
+      totalQuestionCount: Number(totalQuestionCount) || 0,
+      totalPageCount: totalPageCount !== undefined ? Number(totalPageCount) || 0 : undefined,
+      priority,
+      taskDate,
+    }),
+  })
+  return data.homework
 }
 
-export function updateHomework(id, updates) {
-  const homeworks = getHomeworks()
-  const next = homeworks.map((homework) => (homework.id === id ? { ...homework, ...updates } : homework))
-  writeJSON(KEY, next)
-  return next
+/** @returns {Promise<Homework>} */
+export async function updateHomework(id, updates) {
+  const data = await authRequest(`/api/panel/homeworks/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  })
+  return data.homework
 }
 
-/** Ödevi eşit parçalara bölerek günlere dağıtır (örn. 80 soru / 4 gün -> 20/20/20/20). */
-export function splitQuestionsAcrossDays(totalQuestionCount, dates) {
-  const perDay = Math.floor(totalQuestionCount / dates.length)
-  const remainder = totalQuestionCount % dates.length
-  return dates.map((date, index) => ({
-    date,
-    questionCount: perDay + (index < remainder ? 1 : 0),
-  }))
+/** @returns {Promise<void>} */
+export async function deleteHomework(id) {
+  await authRequest(`/api/panel/homeworks/${id}`, { method: 'DELETE' })
 }

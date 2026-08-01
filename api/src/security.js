@@ -58,23 +58,26 @@ async function verifyPassword(password, hash) {
   return bcrypt.compare(password, hash)
 }
 
-function createSessionToken(user) {
+function createSessionToken(user, options = {}) {
   const { jwtSecret, tokenTtlSeconds } = getConfig()
 
-  return jwt.sign(
-    {
-      sub: user.id,
-      email: user.email,
-      fullName: user.fullName,
-      role: user.role,
-    },
-    jwtSecret,
-    {
-      expiresIn: tokenTtlSeconds,
-      issuer: 'techcoach-api',
-      audience: 'techcoach-web',
-    },
-  )
+  const payload = {
+    sub: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    role: user.role,
+  }
+
+  if (options.actingParentId) {
+    payload.actingParentId = options.actingParentId
+    payload.actingParentName = options.actingParentName
+  }
+
+  return jwt.sign(payload, jwtSecret, {
+    expiresIn: tokenTtlSeconds,
+    issuer: 'techcoach-api',
+    audience: 'techcoach-web',
+  })
 }
 
 function readSessionToken(request) {

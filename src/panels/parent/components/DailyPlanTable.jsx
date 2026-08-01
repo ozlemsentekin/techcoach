@@ -20,52 +20,52 @@ export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSave
   }
 
   return (
-    <div className="rounded-2xl border border-panel-border bg-panel-surface p-5">
+    <div className="overflow-hidden rounded-2xl border border-[#e4e8e9] bg-white p-5 shadow-[0_4px_16px_rgba(37,61,62,0.06)]">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-base font-semibold text-panel-text">Bugünün Planı</h2>
-        <span className="text-sm text-panel-text-muted">Toplam {sorted.length} görev</span>
+        <h2 className="text-base font-semibold text-[#253d3e]">Bugünün Planı</h2>
+        <span className="text-sm text-[#667475]">Toplam {sorted.length} görev</span>
       </div>
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px] text-left text-sm">
           <thead>
-            <tr className="border-b border-panel-border text-panel-text-muted">
-              <th className="py-2 pr-3 font-medium">Saat</th>
-              <th className="py-2 pr-3 font-medium">Görev</th>
-              <th className="py-2 pr-3 font-medium">Durum</th>
-              <th className="py-2 font-medium">İşlemler</th>
+            <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#655e94]">
+              <th className="py-2 pl-3 pr-3">Saat</th>
+              <th className="py-2 pr-3">Görev</th>
+              <th className="py-2 pr-3">Durum</th>
+              <th className="py-2 pr-3">İşlemler</th>
             </tr>
           </thead>
           <tbody>
             {sorted.map((task) => (
               <Fragment key={task.id}>
-                <tr className="border-b border-panel-border last:border-0">
-                  <td className="py-2.5 pr-3 text-panel-text-muted">
+                <tr className="border-b border-[#edf0f1] last:border-0 hover:bg-[#f8f7fb]">
+                  <td className="py-2.5 pl-3 pr-3 text-[#667475]">
                     {task.startTime} – {task.endTime}
                   </td>
-                  <td className="py-2.5 pr-3 text-panel-text">{task.title}</td>
+                  <td className="py-2.5 pr-3 text-[#253d3e]">{task.title}</td>
                   <td className="py-2.5 pr-3">
                     <TaskStatusBadge status={task.status} />
                   </td>
-                  <td className="py-2.5">
+                  <td className="py-2.5 pr-3">
                     <div className="flex flex-wrap gap-2">
-                      <button type="button" onClick={() => onEdit(task)} className="text-panel-blue hover:underline">
+                      <button type="button" onClick={() => onEdit(task)} className="text-[#655e94] hover:underline">
                         Düzenle
                       </button>
                       <button
                         type="button"
                         onClick={() => setExpandedId(expandedId === task.id ? null : task.id)}
-                        className="text-panel-blue hover:underline"
+                        className="text-[#655e94] hover:underline"
                       >
                         Detay
                       </button>
-                      <button type="button" onClick={() => onMove(task)} className="text-panel-blue hover:underline">
+                      <button type="button" onClick={() => onMove(task)} className="text-[#655e94] hover:underline">
                         Taşı
                       </button>
                       <button
                         type="button"
                         onClick={() => startNoteDraft(task)}
-                        className="text-panel-blue hover:underline"
+                        className="text-[#655e94] hover:underline"
                       >
                         Not ekle
                       </button>
@@ -80,27 +80,27 @@ export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSave
                   </td>
                 </tr>
                 {expandedId === task.id ? (
-                  <tr key={`${task.id}-detail`} className="border-b border-panel-border bg-panel-surface-soft">
-                    <td colSpan={4} className="px-2 py-3 text-sm text-panel-text-muted">
+                  <tr key={`${task.id}-detail`} className="border-b border-[#edf0f1] bg-[#f8f7fb]">
+                    <td colSpan={4} className="px-3 py-3 text-sm text-[#667475]">
                       {task.description || 'Açıklama eklenmemiş.'}
-                      {task.notes ? <p className="mt-1 text-panel-text">Not: {task.notes}</p> : null}
+                      {task.notes ? <p className="mt-1 text-[#253d3e]">Not: {task.notes}</p> : null}
                     </td>
                   </tr>
                 ) : null}
                 {noteDraftId === task.id ? (
-                  <tr key={`${task.id}-note`} className="border-b border-panel-border">
-                    <td colSpan={4} className="px-2 py-3">
+                  <tr key={`${task.id}-note`} className="border-b border-[#edf0f1]">
+                    <td colSpan={4} className="px-3 py-3">
                       <div className="flex gap-2">
                         <input
                           value={noteText}
                           onChange={(event) => setNoteText(event.target.value)}
-                          className="flex-1 rounded-xl border border-panel-border p-2 text-sm text-panel-text"
+                          className="flex-1 rounded-xl border border-[#dfe4e5] p-2 text-sm text-[#253d3e]"
                           placeholder="Bu görevle ilgili bir not yaz"
                         />
                         <button
                           type="button"
                           onClick={() => saveNote(task)}
-                          className="rounded-xl bg-panel-blue px-3 py-2 text-sm font-semibold text-white"
+                          className="rounded-[10px] bg-[#655e94] px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
                         >
                           Kaydet
                         </button>

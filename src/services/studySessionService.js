@@ -1,4 +1,4 @@
-import { readJSON, writeJSON, generateId } from './storage'
+import { authRequest } from './authClient'
 
 /**
  * @typedef {Object} StudySession
@@ -16,15 +16,17 @@ import { readJSON, writeJSON, generateId } from './storage'
  * @property {string} [note]
  */
 
-const KEY = 'studySessions'
-
-export function getSessions() {
-  return readJSON(KEY, [])
+/** @returns {Promise<StudySession[]>} */
+export async function getSessions() {
+  const data = await authRequest('/api/panel/study-sessions', { method: 'GET' })
+  return data.sessions
 }
 
-export function addSession(session) {
-  const sessions = getSessions()
-  const record = { id: generateId('session'), ...session }
-  writeJSON(KEY, [...sessions, record])
-  return record
+/** @returns {Promise<StudySession>} */
+export async function addSession(session) {
+  const data = await authRequest('/api/panel/study-sessions', {
+    method: 'POST',
+    body: JSON.stringify(session),
+  })
+  return data.session
 }

@@ -4,7 +4,7 @@ import TaskTypeIcon from '../../shared/TaskTypeIcon'
 export default function CurrentTaskCard({ task, onEncourage, onExtendTime, onOpenDetail, onEdit }) {
   if (!task) {
     return (
-      <div className="rounded-2xl border border-panel-border bg-panel-surface p-5">
+      <div className="panel-card p-5">
         <h2 className="text-base font-semibold text-panel-text">Şu anda</h2>
         <p className="mt-2 text-base text-panel-text-muted">
           Aylin şu an planlı bir görev üzerinde çalışmıyor.
@@ -20,7 +20,7 @@ export default function CurrentTaskCard({ task, onEncourage, onExtendTime, onOpe
       : null
 
   return (
-    <div className="rounded-2xl border border-panel-border bg-panel-surface p-5">
+    <div className="panel-card p-5">
       <h2 className="text-base font-semibold text-panel-text">Şu anda</h2>
       <div className="mt-3 flex items-center gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-panel-blue-soft text-panel-blue">

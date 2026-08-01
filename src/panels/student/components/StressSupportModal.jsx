@@ -27,7 +27,7 @@ export default function StressSupportModal({ onSelectOption, onClose }) {
               key={option.id}
               type="button"
               onClick={() => onSelectOption(option.id)}
-              className="rounded-xl border border-panel-border px-4 py-3 text-left text-base font-medium text-panel-text hover:bg-panel-bg"
+              className="rounded-xl border border-panel-border px-4 py-3 text-left text-base font-medium text-panel-text hover:bg-panel-surface-soft"
             >
               {option.label}
             </button>

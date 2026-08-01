@@ -5,30 +5,28 @@ import { getCheckIn, saveCheckIn } from '../../../services/checkInService'
 import { addSession } from '../../../services/studySessionService'
 import { addHomework } from '../../../services/homeworkService'
 import { sendMessage, addCoachNote } from '../../../services/messageService'
-import { computeDailyStars } from '../../../services/starService'
 import { todayISODate } from '../../../utils/time'
-import { getNextTask, getCurrentTask } from '../../../utils/taskSelectors'
+import { getNextTask } from '../../../utils/taskSelectors'
 import { FOCUS_TASK_TYPES } from '../../../data/taskTypes'
-import { MONDAY_DAILY_SUMMARY, MONDAY_MAIN_MESSAGE } from '../../../data/mondayDemoData'
-import GreetingCard from '../components/GreetingCard'
+import StudentWelcomeBanner from '../components/StudentWelcomeBanner'
 import EnergyCheckIn from '../components/EnergyCheckIn'
-import DailySummaryCard from '../components/DailySummaryCard'
-import NextTaskCard from '../components/NextTaskCard'
-import DailyTimeline from '../components/DailyTimeline'
-import DailyStarsCard from '../components/DailyStarsCard'
+import TaskListSection from '../components/TaskListSection'
 import TaskFocusScreen from '../components/TaskFocusScreen'
 import SessionCompletionModal from '../components/SessionCompletionModal'
 import RescheduleTaskModal from '../components/RescheduleTaskModal'
 import AddHomeworkModal from '../components/AddHomeworkModal'
 import StressSupportModal from '../components/StressSupportModal'
 import BreathingExercise from '../components/BreathingExercise'
+import LoadingState from '../../shared/LoadingState'
 
 const date = todayISODate()
 
 export default function TodayPage() {
   const { authUser } = useAuth()
-  const [tasks, setTasks] = useState(() => getTasksForDate(date))
-  const [checkIn, setCheckIn] = useState(() => getCheckIn(date))
+  const [tasks, setTasks] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [checkIn, setCheckIn] = useState(null)
   const [focusTaskId, setFocusTaskId] = useState(null)
   const [pendingSession, setPendingSession] = useState(null)
   const [reschedulingTask, setReschedulingTask] = useState(null)
@@ -38,6 +36,25 @@ export default function TodayPage() {
   const [banner, setBanner] = useState('')
 
   useEffect(() => {
+    let ignore = false
+    Promise.all([getTasksForDate(date), getCheckIn(date)])
+      .then(([tasksData, checkInData]) => {
+        if (ignore) return
+        setTasks(tasksData)
+        setCheckIn(checkInData)
+      })
+      .catch((err) => {
+        if (!ignore) setLoadError(err.message)
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [])
+
+  useEffect(() => {
     if (!banner) return undefined
     const timeout = window.setTimeout(() => setBanner(''), 4000)
     return () => window.clearTimeout(timeout)
@@ -45,49 +62,62 @@ export default function TodayPage() {
 
   const focusTask = tasks.find((task) => task.id === focusTaskId) || null
   const nextTask = getNextTask(tasks)
-  const currentTask = getCurrentTask(tasks, nextTask)
-  const stars = computeDailyStars(tasks, checkIn)
 
   const isFocusType = (task) => FOCUS_TASK_TYPES.has(task.taskType) || task.taskType === 'gunluk-degerlendirme'
 
-  const handleEnergySelect = (levelId) => {
-    setCheckIn(saveCheckIn(date, { energyLevel: levelId, note: checkIn?.note }))
+  const handleEnergySelect = async (levelId) => {
+    setCheckIn(await saveCheckIn(date, { energyLevel: levelId, note: checkIn?.note }))
   }
 
-  const handleStart = (task) => {
+  const handleStart = async (task) => {
     if (isFocusType(task)) {
       if (task.status === 'bekliyor') {
-        setTasks(updateTask(date, task.id, { status: 'devam-ediyor' }))
+        setTasks(await updateTask(date, task.id, { status: 'devam-ediyor' }))
       }
       setFocusTaskId(task.id)
     } else {
-      setTasks(updateTask(date, task.id, { status: 'devam-ediyor' }))
+      setTasks(await updateTask(date, task.id, { status: 'devam-ediyor' }))
     }
   }
 
-  const handleCompleteInline = (task) => {
-    setTasks(updateTask(date, task.id, { status: 'tamamlandi', completedAt: new Date().toISOString() }))
+  const handleCompleteInline = async (task) => {
+    setTasks(await updateTask(date, task.id, { status: 'tamamlandi', completedAt: new Date().toISOString() }))
   }
 
-  const handlePartialComplete = (task) => {
-    setTasks(updateTask(date, task.id, { status: 'kismen-tamamlandi', completedAt: new Date().toISOString() }))
+  const handlePartialComplete = async (task) => {
+    setTasks(await updateTask(date, task.id, { status: 'kismen-tamamlandi', completedAt: new Date().toISOString() }))
   }
 
-  const handleHelp = (task) => {
-    setTasks(updateTask(date, task.id, { status: 'yardim-bekliyor' }))
+  const handleHelp = async (task) => {
+    setTasks(await updateTask(date, task.id, { status: 'yardim-bekliyor' }))
     setShowStressModal(true)
   }
 
-  const handleConfirmReschedule = ({ newDate, newTime, reason }) => {
-    const { sourceTasks } = rescheduleTask(date, reschedulingTask.id, { newDate, newTime, reason })
+  const handleAnswerSheetSaved = (updatedTask) => {
+    setTasks((current) => current.map((task) => (task.id === updatedTask.id ? updatedTask : task)))
+  }
+
+  const handleSaveReadingProgress = async (task, payload) => {
+    setTasks(
+      await updateTask(date, task.id, {
+        completedPageCount: payload.completedPageCount,
+        currentPageNumber: payload.currentPageNumber,
+        status: payload.status,
+        completedAt: new Date().toISOString(),
+      }),
+    )
+  }
+
+  const handleConfirmReschedule = async ({ newDate, newTime, reason }) => {
+    const { sourceTasks } = await rescheduleTask(date, reschedulingTask.id, { newDate, newTime, reason })
     setTasks(sourceTasks)
     setReschedulingTask(null)
     setBanner('Görev taşındı. Kaybolmadı, yeni zamanında seni bekliyor.')
   }
 
-  const handleToggleSubGoal = (index) => {
+  const handleToggleSubGoal = async (index) => {
     if (!focusTaskId) return
-    setTasks(toggleSubGoal(date, focusTaskId, index))
+    setTasks(await toggleSubGoal(date, focusTaskId, index))
   }
 
   const handleFinishSession = ({ elapsedSeconds, completedQuestionCount, stuckNote }) => {
@@ -96,10 +126,10 @@ export default function TodayPage() {
     setPendingSession({ task, elapsedSeconds, completedQuestionCount, stuckNote })
   }
 
-  const handleSaveSession = (payload) => {
+  const handleSaveSession = async (payload) => {
     const { task, elapsedSeconds, stuckNote } = pendingSession
     setTasks(
-      updateTask(date, task.id, {
+      await updateTask(date, task.id, {
         completedQuestionCount: payload.completedQuestionCount,
         correctCount: payload.correctCount,
         wrongCount: payload.wrongCount,
@@ -111,7 +141,7 @@ export default function TodayPage() {
         completedAt: new Date().toISOString(),
       }),
     )
-    addSession({
+    await addSession({
       taskId: task.id,
       startedAt: new Date(Date.now() - elapsedSeconds * 1000).toISOString(),
       endedAt: new Date().toISOString(),
@@ -126,9 +156,9 @@ export default function TodayPage() {
     })
   }
 
-  const handleSubmitReflection = (answers) => {
+  const handleSubmitReflection = async (answers) => {
     setTasks(
-      updateTask(date, focusTaskId, {
+      await updateTask(date, focusTaskId, {
         status: 'tamamlandi',
         completedAt: new Date().toISOString(),
         reflectionAnswers: answers,
@@ -137,13 +167,13 @@ export default function TodayPage() {
     setFocusTaskId(null)
   }
 
-  const handleSaveHomework = (payload) => {
-    addHomework(payload)
+  const handleSaveHomework = async (payload) => {
+    await addHomework(payload)
     setShowHomeworkModal(false)
     setBanner('Ödevini planladın. Artık hepsini aklında tutmak zorunda değilsin.')
   }
 
-  const handleStressOption = (optionId) => {
+  const handleStressOption = async (optionId) => {
     setShowStressModal(false)
 
     if (optionId === 'breathe') {
@@ -162,7 +192,7 @@ export default function TodayPage() {
       )
       if (target) {
         const reduced = Math.max(5, Math.floor(target.targetQuestionCount / 2))
-        setTasks(updateTask(date, target.id, { targetQuestionCount: reduced }))
+        setTasks(await updateTask(date, target.id, { targetQuestionCount: reduced }))
         setBanner(`${target.targetQuestionCount} soru yerine önce ${reduced} soruyla başlamak ister misin?`)
       } else {
         setBanner('Şu an küçültülecek bir hedef bulunamadı, planı Haftalık Plan sayfasından düzenleyebilirsin.')
@@ -183,28 +213,28 @@ export default function TodayPage() {
     }
 
     if (optionId === 'notify-parent') {
-      sendMessage({ from: 'ogrenci', text: 'Şu an kendimi bunalmış hissediyorum, desteğe ihtiyacım var.' })
+      await sendMessage({ from: 'ogrenci', text: 'Şu an kendimi bunalmış hissediyorum, desteğe ihtiyacım var.' })
       setBanner('Annene haber verildi.')
       return
     }
 
     if (optionId === 'note-coach') {
-      addCoachNote(`Yardıma ihtiyacım var: ${nextTask?.title || 'genel destek'}`)
+      await addCoachNote(`Yardıma ihtiyacım var: ${nextTask?.title || 'genel destek'}`)
       setBanner('Koçuna not bırakıldı.')
     }
   }
 
-  return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-5">
-      <GreetingCard firstName={authUser?.fullName?.split(' ')[0] || ''} mainMessage={MONDAY_MAIN_MESSAGE} />
+  if (loading) {
+    return <LoadingState label="Bugünkü plan yükleniyor..." />
+  }
 
-      <button
-        type="button"
-        onClick={() => setShowStressModal(true)}
-        className="rounded-xl border border-panel-accent bg-panel-accent-soft px-4 py-3 text-base font-semibold text-panel-warm"
-      >
-        Şu an çok bunaldım
-      </button>
+  return (
+    <div className="flex w-full flex-col gap-5">
+      <StudentWelcomeBanner studentName={authUser?.fullName || ''} tasks={tasks} checkIn={checkIn} />
+
+      {loadError ? (
+        <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{loadError}</div>
+      ) : null}
 
       {banner ? (
         <div className="rounded-xl bg-panel-sage-soft px-4 py-3 text-base text-panel-text" role="status">
@@ -212,29 +242,17 @@ export default function TodayPage() {
         </div>
       ) : null}
 
-      <EnergyCheckIn selectedLevel={checkIn?.energyLevel} onSelect={handleEnergySelect} />
-
-      <DailySummaryCard items={MONDAY_DAILY_SUMMARY} />
-
-      <NextTaskCard
-        currentTask={currentTask}
-        nextTask={nextTask}
-        onStart={handleStart}
-        onLater={() => setBanner('İstediğinde başlayabilirsin.')}
-        onEdit={(task) => setReschedulingTask(task)}
-        onHelp={handleHelp}
-      />
-
-      <DailyStarsCard count={stars.count} criteria={stars.criteria} />
-
-      <DailyTimeline
+      <TaskListSection
         tasks={tasks}
-        onStart={handleStart}
         onComplete={handleCompleteInline}
         onPartialComplete={handlePartialComplete}
         onReschedule={(task) => setReschedulingTask(task)}
         onHelp={handleHelp}
+        onAnswerSheetSaved={handleAnswerSheetSaved}
+        onSaveReadingProgress={handleSaveReadingProgress}
       />
+
+      <EnergyCheckIn selectedLevel={checkIn?.energyLevel} onSelect={handleEnergySelect} />
 
       {focusTask ? (
         <TaskFocusScreen

@@ -4,6 +4,9 @@ import { authRequest } from '../../../services/authClient'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
+import Button from '../../ui/Button'
+import DataTable from '../../ui/DataTable'
+import { MotionDiv } from '../../ui/motion'
 
 const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{12,72}$/
 const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -72,11 +75,8 @@ function AddStudentModal({ onCreated, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-2xl border border-panel-border bg-panel-surface p-6"
-      >
-        <div className="mb-4 flex items-center justify-between">
+      <form onSubmit={handleSubmit} className="w-full max-w-md panel-card p-5">
+        <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">Öğrenci Ekle</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
             <X size={20} />
@@ -84,17 +84,17 @@ function AddStudentModal({ onCreated, onClose }) {
         </div>
 
         {error ? (
-          <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
+          <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-2.5 text-sm text-panel-warm">{error}</div>
         ) : null}
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-panel-text-muted">Ad Soyad</span>
             <input
               name="fullName"
               value={form.fullName}
               onChange={handleChange}
-              className="rounded-xl border border-panel-border p-3 text-base text-panel-text"
+              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
             />
           </label>
 
@@ -105,7 +105,7 @@ function AddStudentModal({ onCreated, onClose }) {
               type="email"
               value={form.email}
               onChange={handleChange}
-              className="rounded-xl border border-panel-border p-3 text-base text-panel-text"
+              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
             />
           </label>
 
@@ -116,7 +116,7 @@ function AddStudentModal({ onCreated, onClose }) {
               type="password"
               value={form.password}
               onChange={handleChange}
-              className="rounded-xl border border-panel-border p-3 text-base text-panel-text"
+              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
             />
           </label>
 
@@ -127,7 +127,7 @@ function AddStudentModal({ onCreated, onClose }) {
               type="password"
               value={form.passwordRepeat}
               onChange={handleChange}
-              className="rounded-xl border border-panel-border p-3 text-base text-panel-text"
+              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
             />
           </label>
 
@@ -142,13 +142,9 @@ function AddStudentModal({ onCreated, onClose }) {
             <span>Bu öğrenci için ebeveyn olarak KVKK ve aydınlatma metni onayını veriyorum.</span>
           </label>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white disabled:opacity-60"
-          >
+          <Button type="submit" disabled={loading} className="w-full">
             {loading ? 'Oluşturuluyor...' : 'Öğrenci Profilini Oluştur'}
-          </button>
+          </Button>
         </div>
       </form>
     </div>
@@ -176,18 +172,16 @@ export default function StudentsPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-5">
+    <div className="flex flex-col gap-5">
       <PageHeader
         title="Öğrenci Profillerim"
-        subtitle="Hesabınıza bağlı öğrenci profillerini buradan yönetin."
         actions={
-          <button
-            type="button"
+          <Button
             onClick={() => setShowModal(true)}
-            className="rounded-xl bg-panel-blue px-4 py-2.5 text-sm font-semibold text-white"
+            className="h-10 rounded-[10px] bg-[#655e94] px-4 text-sm font-medium text-white hover:opacity-90"
           >
             + Öğrenci Ekle
-          </button>
+          </Button>
         }
       />
 
@@ -202,17 +196,34 @@ export default function StudentsPage() {
           description="Yukarıdaki butonla ilk öğrenci profilini oluşturabilirsiniz."
         />
       ) : (
-        <div className="flex flex-col gap-3">
-          {students.map((student) => (
-            <div key={student.id} className="rounded-2xl border border-panel-border bg-panel-surface p-4">
-              <p className="text-base font-semibold text-panel-text">{student.fullName}</p>
-              <p className="text-sm text-panel-text-muted">{student.email}</p>
-              <p className="mt-1 text-sm text-panel-text-muted">
-                Kayıt: {formatDate(student.createdAt)} · Son giriş: {formatDate(student.lastLoginAt)}
-              </p>
-            </div>
-          ))}
-        </div>
+        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <DataTable>
+            <table className="w-full min-w-[480px] text-left">
+              <thead>
+                <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#655e94]">
+                  <th className="px-4 py-3">Ad Soyad</th>
+                  <th className="px-4 py-3">E-posta</th>
+                  <th className="px-4 py-3">Kayıt Tarihi</th>
+                  <th className="px-4 py-3">Son Giriş</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#edf0f1]">
+                {students.map((student) => (
+                  <tr key={student.id} className="hover:bg-[#f8f7fb]">
+                    <td className="px-4 py-3 text-sm font-semibold text-[#253d3e]">{student.fullName}</td>
+                    <td className="px-4 py-3 text-sm text-[#667475]">{student.email}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">
+                      {formatDate(student.createdAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">
+                      {formatDate(student.lastLoginAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </DataTable>
+        </MotionDiv>
       )}
 
       {showModal ? <AddStudentModal onCreated={handleCreated} onClose={() => setShowModal(false)} /> : null}

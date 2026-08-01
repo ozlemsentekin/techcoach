@@ -52,7 +52,7 @@ export default function SessionCompletionModal({ task, initialCompletedQuestionC
   if (result) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-        <div className="w-full max-w-md rounded-2xl border border-panel-border bg-panel-surface p-6 text-center">
+        <div className="w-full max-w-md panel-card p-6 text-center">
           <p className="text-base text-panel-text">{result}</p>
           <button
             type="button"
@@ -68,7 +68,7 @@ export default function SessionCompletionModal({ task, initialCompletedQuestionC
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-panel-border bg-panel-surface p-6">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto panel-card p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">Çalışma Değerlendirmesi</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>

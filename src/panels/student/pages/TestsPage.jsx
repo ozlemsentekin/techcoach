@@ -4,7 +4,7 @@ import EmptyState from '../../shared/EmptyState'
 
 export default function TestsPage() {
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-5">
+    <div className="flex w-full flex-col gap-5">
       <PageHeader title="Testlerim" subtitle="Çözdüğün testler burada listelenecek." />
       <EmptyState
         icon={ListChecks}

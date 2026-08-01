@@ -106,6 +106,24 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const enterStudent = async (studentId) => {
+    const data = await authRequest(`/api/parent/students/${studentId}/enter`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    setAuthUser(data.user)
+    return data.user
+  }
+
+  const returnToParent = async () => {
+    const data = await authRequest('/api/parent/return', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    setAuthUser(data.user)
+    return data.user
+  }
+
   const value = useMemo(
     () => ({
       authUser,
@@ -116,6 +134,8 @@ export function AuthProvider({ children }) {
       login,
       register,
       logout,
+      enterStudent,
+      returnToParent,
       clearAuthFeedback,
       setAuthError,
     }),

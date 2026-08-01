@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getTasksForDate, updateTask, createTask, deleteTask, rescheduleTask } from '../../../services/taskService'
 import { getCheckIn } from '../../../services/checkInService'
@@ -20,6 +20,7 @@ import { ENERGY_LEVELS } from '../../../data/taskTypes'
 import { TASK_TEMPLATES } from '../../../data/taskTemplates'
 import { PARENT_MESSAGE_TEMPLATES } from '../../../data/coachMessages'
 import PageHeader from '../../layout/PageHeader'
+import LoadingState from '../../shared/LoadingState'
 import ProgressSummaryCard from '../../shared/ProgressSummaryCard'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import ParentMessageCard from '../components/ParentMessageCard'
@@ -38,33 +39,74 @@ import { CheckCircle2, Clock, RotateCw, HeartPulse } from 'lucide-react'
 const date = todayISODate()
 const weekStart = getMondayOfWeek(date)
 
-function buildWeekTasksMap() {
-  return Object.fromEntries(getWeekDates(weekStart).map((day) => [day, getDraftTasksForDate(day)]))
+async function buildWeekTasksMap() {
+  const days = getWeekDates(weekStart)
+  const lists = await Promise.all(days.map((day) => getDraftTasksForDate(day)))
+  return Object.fromEntries(days.map((day, index) => [day, lists[index]]))
 }
 
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const [tasks, setTasks] = useState(() => getTasksForDate(date))
-  const [checkIn] = useState(() => getCheckIn(date))
-  const [homeworks, setHomeworks] = useState(() => getHomeworks())
-  const [requests, setRequests] = useState(() => getRequests())
-  const [messages, setMessages] = useState(() => getMessages())
-  const [weekTasks, setWeekTasks] = useState(() => buildWeekTasksMap())
-  const [planStatus, setPlanStatus] = useState(() => getPlanStatus(weekStart))
+  const [tasks, setTasks] = useState([])
+  const [checkIn, setCheckIn] = useState(null)
+  const [wrongQuestions, setWrongQuestions] = useState([])
+  const [homeworks, setHomeworks] = useState([])
+  const [requests, setRequests] = useState([])
+  const [messages, setMessages] = useState([])
+  const [weekTasks, setWeekTasks] = useState({})
+  const [planStatus, setPlanStatus] = useState('taslak')
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [drawerState, setDrawerState] = useState(null)
   const [homeworkModalOpen, setHomeworkModalOpen] = useState(false)
   const [reschedulingTask, setReschedulingTask] = useState(null)
   const [deletingTask, setDeletingTask] = useState(null)
   const [banner, setBanner] = useState('')
 
+  useEffect(() => {
+    let ignore = false
+
+    Promise.all([
+      getTasksForDate(date),
+      getHomeworks(),
+      buildWeekTasksMap(),
+      getPlanStatus(weekStart),
+      getRequests(),
+      getMessages(),
+      getCheckIn(date),
+      getWrongQuestions(),
+    ])
+      .then(([tasksData, homeworksData, weekTasksData, planStatusData, requestsData, messagesData, checkInData, wrongQuestionsData]) => {
+        if (ignore) return
+        setTasks(tasksData)
+        setHomeworks(homeworksData)
+        setWeekTasks(weekTasksData)
+        setPlanStatus(planStatusData)
+        setRequests(requestsData)
+        setMessages(messagesData)
+        setCheckIn(checkInData)
+        setWrongQuestions(wrongQuestionsData)
+      })
+      .catch((err) => {
+        if (!ignore) setLoadError(err.message)
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false)
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [])
+
   const showBanner = (text) => {
     setBanner(text)
     window.setTimeout(() => setBanner(''), 4000)
   }
 
-  const refreshWeek = () => {
-    setWeekTasks(buildWeekTasksMap())
-    setPlanStatus(getPlanStatus(weekStart))
+  const refreshWeek = async () => {
+    setWeekTasks(await buildWeekTasksMap())
+    setPlanStatus(await getPlanStatus(weekStart))
   }
 
   const summary = {
@@ -80,7 +122,7 @@ export default function DashboardPage() {
 
   const strugglingTopic = (() => {
     const counts = {}
-    getWrongQuestions().forEach((item) => {
+    wrongQuestions.forEach((item) => {
       const key = item.topic ? `${item.subject} – ${item.topic}` : item.subject
       counts[key] = (counts[key] || 0) + 1
     })
@@ -91,92 +133,94 @@ export default function DashboardPage() {
   const currentTask = tasks.find((task) => task.status === 'devam-ediyor') || null
   const balance = evaluateDayBalance(tasks)
 
-  const handleSendMessage = (text) => {
+  const handleSendMessage = async (text) => {
     if (!text.trim()) return
-    sendMessage({ from: 'ebeveyn', text: text.trim() })
-    setMessages(getMessages())
+    await sendMessage({ from: 'ebeveyn', text: text.trim() })
+    setMessages(await getMessages())
   }
 
-  const handleSaveDrawerTask = (taskData) => {
+  const handleSaveDrawerTask = async (taskData) => {
     const initialTask = drawerState?.initialTask
     if (initialTask && taskData.date === initialTask.date) {
-      updateTask(initialTask.date, initialTask.id, taskData)
+      setTasks(await updateTask(initialTask.date, initialTask.id, taskData))
     } else if (initialTask) {
-      deleteTask(initialTask.date, initialTask.id)
-      createTask(taskData.date, taskData)
+      await deleteTask(initialTask.date, initialTask.id)
+      await createTask(taskData.date, taskData)
+      setTasks(await getTasksForDate(date))
     } else {
-      createTask(taskData.date, taskData)
+      await createTask(taskData.date, taskData)
+      setTasks(await getTasksForDate(date))
     }
-    setTasks(getTasksForDate(date))
     setDrawerState(null)
     showBanner('Görev kaydedildi.')
   }
 
-  const handleDeleteConfirmed = () => {
-    deleteTask(date, deletingTask.id)
-    setTasks(getTasksForDate(date))
+  const handleDeleteConfirmed = async () => {
+    setTasks(await deleteTask(date, deletingTask.id))
     setDeletingTask(null)
   }
 
-  const handleSaveNote = (task, note) => {
-    updateTask(date, task.id, { notes: note })
-    setTasks(getTasksForDate(date))
+  const handleSaveNote = async (task, note) => {
+    setTasks(await updateTask(date, task.id, { notes: note }))
   }
 
-  const handleConfirmReschedule = ({ newDate, newTime, reason }) => {
-    const { sourceTasks } = rescheduleTask(date, reschedulingTask.id, { newDate, newTime, reason })
+  const handleConfirmReschedule = async ({ newDate, newTime, reason }) => {
+    const { sourceTasks } = await rescheduleTask(date, reschedulingTask.id, { newDate, newTime, reason })
     setTasks(sourceTasks)
     setReschedulingTask(null)
     showBanner('Görev taşındı.')
   }
 
-  const handleExtendTime = () => {
+  const handleExtendTime = async () => {
     if (!currentTask) return
     const [h, m] = currentTask.endTime.split(':').map(Number)
     const total = h * 60 + m + 10
     const newEndTime = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
-    updateTask(date, currentTask.id, { endTime: newEndTime, durationMinutes: (currentTask.durationMinutes || 0) + 10 })
-    setTasks(getTasksForDate(date))
+    setTasks(await updateTask(date, currentTask.id, { endTime: newEndTime, durationMinutes: (currentTask.durationMinutes || 0) + 10 }))
     showBanner('Süreye 10 dakika eklendi.')
   }
 
-  const handleEncourage = () => {
-    sendMessage({ from: 'ebeveyn', text: PARENT_MESSAGE_TEMPLATES[0] })
-    setMessages(getMessages())
+  const handleEncourage = async () => {
+    await sendMessage({ from: 'ebeveyn', text: PARENT_MESSAGE_TEMPLATES[0] })
+    setMessages(await getMessages())
     showBanner('Cesaret mesajı gönderildi.')
   }
 
-  const handleSaveHomework = (payload) => {
-    addHomework(payload)
-    setHomeworks(getHomeworks())
+  const handleSaveHomework = async (payload) => {
+    await addHomework(payload)
+    setHomeworks(await getHomeworks())
     setHomeworkModalOpen(false)
     showBanner('Ödev eklendi.')
   }
 
-  const handleApproveRequest = (request) => {
-    setRequests(updateRequestStatus(request.id, 'onaylandi'))
-    sendMessage({ from: 'ebeveyn', text: 'İsteğini onayladım, planına yansıttım.' })
-    setMessages(getMessages())
+  const handleApproveRequest = async (request) => {
+    setRequests(await updateRequestStatus(request.id, 'onaylandi'))
+    await sendMessage({ from: 'ebeveyn', text: 'İsteğini onayladım, planına yansıttım.' })
+    setMessages(await getMessages())
   }
 
-  const handleMessageRequest = (request) => {
-    sendMessage({ from: 'ebeveyn', text: `"${request.message}" konusunu konuşalım.` })
-    setMessages(getMessages())
+  const handleMessageRequest = async (request) => {
+    await sendMessage({ from: 'ebeveyn', text: `"${request.message}" konusunu konuşalım.` })
+    setMessages(await getMessages())
     showBanner('Mesaj gönderildi.')
   }
 
-  const handleSuggestOtherTime = (request) => {
-    setRequests(updateRequestStatus(request.id, 'reddedildi'))
-    sendMessage({ from: 'ebeveyn', text: 'Başka bir saat önerdim, birlikte bakalım.' })
-    setMessages(getMessages())
+  const handleSuggestOtherTime = async (request) => {
+    setRequests(await updateRequestStatus(request.id, 'reddedildi'))
+    await sendMessage({ from: 'ebeveyn', text: 'Başka bir saat önerdim, birlikte bakalım.' })
+    setMessages(await getMessages())
   }
 
-  const handlePostponeRequest = (request) => {
-    setRequests(updateRequestStatus(request.id, 'ertelendi'))
+  const handlePostponeRequest = async (request) => {
+    setRequests(await updateRequestStatus(request.id, 'ertelendi'))
+  }
+
+  if (loading) {
+    return <LoadingState label="Panel yükleniyor..." />
   }
 
   return (
-    <div className="mx-auto grid max-w-6xl grid-cols-1 gap-5 lg:grid-cols-[1fr_320px]">
+    <div className="grid w-full grid-cols-1 gap-5 lg:grid-cols-[1fr_320px]">
       <div className="flex flex-col gap-5">
         <PageHeader
           title="Aylin'in Bugünü"
@@ -200,6 +244,10 @@ export default function DashboardPage() {
             </>
           }
         />
+
+        {loadError ? (
+          <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{loadError}</div>
+        ) : null}
 
         {banner ? (
           <div className="rounded-xl bg-panel-sage-soft px-4 py-3 text-base text-panel-text" role="status">
@@ -249,26 +297,26 @@ export default function DashboardPage() {
           weekDates={getWeekDates(weekStart)}
           tasksByDate={weekTasks}
           planStatus={planStatus}
-          onCopyPreviousWeek={() => {
-            copyPreviousWeek(weekStart)
-            refreshWeek()
+          onCopyPreviousWeek={async () => {
+            await copyPreviousWeek(weekStart)
+            await refreshWeek()
             showBanner('Geçen hafta bu haftanın taslağına kopyalandı.')
           }}
-          onSuggestPlan={() => {
-            suggestWeekPlan(weekStart)
-            refreshWeek()
+          onSuggestPlan={async () => {
+            await suggestWeekPlan(weekStart)
+            await refreshWeek()
             showBanner('Basit bir plan önerisi oluşturuldu, dilediğin gibi düzenleyebilirsin.')
           }}
-          onPublish={() => {
-            publishWeek(weekStart)
-            refreshWeek()
-            setTasks(getTasksForDate(date))
+          onPublish={async () => {
+            await publishWeek(weekStart)
+            await refreshWeek()
+            setTasks(await getTasksForDate(date))
             showBanner('Plan yayınlandı.')
           }}
         />
 
         {strugglingTopic ? (
-          <div className="rounded-2xl border border-panel-border bg-panel-surface p-5">
+          <div className="panel-card p-5">
             <h2 className="text-base font-semibold text-panel-text">Gelişim alanı</h2>
             <p className="mt-1 text-base text-panel-text-muted">
               {strugglingTopic} konusunda tekrar ihtiyacı görünüyor.
@@ -298,7 +346,7 @@ export default function DashboardPage() {
 
         <UpcomingDeadlinesCard homeworks={homeworks} />
 
-        <div className="rounded-2xl border border-panel-border bg-panel-surface p-5">
+        <div className="panel-card p-5">
           <h2 className="text-base font-semibold text-panel-text">Motivasyon Mesajı Gönder</h2>
           <div className="mt-3 flex flex-col gap-2">
             {PARENT_MESSAGE_TEMPLATES.map((template) => (
@@ -306,7 +354,7 @@ export default function DashboardPage() {
                 key={template}
                 type="button"
                 onClick={() => handleSendMessage(template)}
-                className="rounded-xl border border-panel-border px-3 py-2.5 text-left text-sm text-panel-text hover:bg-panel-bg"
+                className="rounded-xl border border-panel-border px-3 py-2.5 text-left text-sm text-panel-text hover:bg-panel-surface-soft"
               >
                 {template}
               </button>

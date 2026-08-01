@@ -15,6 +15,7 @@ import {
 import { evaluateDayBalance } from '../../../utils/planInsights'
 import { addDaysISO, getMondayOfWeek, todayISODate } from '../../../utils/time'
 import PageHeader from '../../layout/PageHeader'
+import LoadingState from '../../shared/LoadingState'
 import PlanBalanceCard from '../components/PlanBalanceCard'
 import WeeklyPlannerGrid from '../components/WeeklyPlannerGrid'
 import AddTaskDrawer from '../components/AddTaskDrawer'
@@ -41,22 +42,33 @@ export default function WeeklyPlanPage() {
   const weekStart = addDaysISO(currentWeekStart, weekOffset * 7)
   const weekDates = getWeekDates(weekStart)
 
-  const [tasksByDate, setTasksByDate] = useState(() =>
-    Object.fromEntries(weekDates.map((date) => [date, getDraftTasksForDate(date)])),
-  )
-  const [status, setStatus] = useState(() => getPlanStatus(weekStart))
+  const [tasksByDate, setTasksByDate] = useState({})
+  const [status, setStatus] = useState('taslak')
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [drawerState, setDrawerState] = useState(null)
   const [banner, setBanner] = useState('')
 
-  const refresh = (nextWeekStart = weekStart) => {
-    setTasksByDate(
-      Object.fromEntries(getWeekDates(nextWeekStart).map((date) => [date, getDraftTasksForDate(date)])),
-    )
-    setStatus(getPlanStatus(nextWeekStart))
+  const refresh = async (nextWeekStart = weekStart) => {
+    const days = getWeekDates(nextWeekStart)
+    const lists = await Promise.all(days.map((date) => getDraftTasksForDate(date)))
+    setTasksByDate(Object.fromEntries(days.map((date, index) => [date, lists[index]])))
+    setStatus(await getPlanStatus(nextWeekStart))
   }
 
   useEffect(() => {
+    let ignore = false
+    setLoading(true)
     refresh(weekStart)
+      .catch((err) => {
+        if (!ignore) setLoadError(err.message)
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false)
+      })
+    return () => {
+      ignore = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset])
 
@@ -73,25 +85,25 @@ export default function WeeklyPlanPage() {
     window.setTimeout(() => setBanner(''), 4000)
   }
 
-  const markUpdatedIfPublished = () => {
+  const markUpdatedIfPublished = async () => {
     if (status === 'yayinlandi') {
-      setPlanStatus(weekStart, 'guncellendi')
+      await setPlanStatus(weekStart, 'guncellendi')
       setStatus('guncellendi')
     }
   }
 
-  const handleSaveDrawerTask = (taskData) => {
+  const handleSaveDrawerTask = async (taskData) => {
     const initialTask = drawerState?.initialTask
     if (initialTask && taskData.date === initialTask.date) {
-      updateDraftTask(initialTask.date, initialTask.id, taskData)
+      await updateDraftTask(initialTask.date, initialTask.id, taskData)
     } else if (initialTask) {
-      deleteDraftTask(initialTask.date, initialTask.id)
-      saveDraftTask(taskData.date, taskData)
+      await deleteDraftTask(initialTask.date, initialTask.id)
+      await saveDraftTask(taskData.date, taskData)
     } else {
-      saveDraftTask(taskData.date, taskData)
+      await saveDraftTask(taskData.date, taskData)
     }
-    refresh()
-    markUpdatedIfPublished()
+    await refresh()
+    await markUpdatedIfPublished()
     setDrawerState(null)
     showBanner('Görev taslağa kaydedildi.')
   }
@@ -100,7 +112,7 @@ export default function WeeklyPlanPage() {
   const todaysBalance = evaluateDayBalance(tasksByDate[todayISODate()] || [])
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-5">
+    <div className="flex w-full flex-col gap-5">
       <PageHeader
         title="Aylin'in Haftasını Planla"
         subtitle="Dersleri, ödevleri, molaları ve serbest zamanı dengeli şekilde planla."
@@ -144,9 +156,9 @@ export default function WeeklyPlanPage() {
 
         <button
           type="button"
-          onClick={() => {
-            copyPreviousWeek(weekStart)
-            refresh()
+          onClick={async () => {
+            await copyPreviousWeek(weekStart)
+            await refresh()
             showBanner('Geçen hafta bu haftanın taslağına kopyalandı.')
           }}
           className="rounded-xl border border-panel-border px-3 py-2 text-sm font-medium text-panel-text"
@@ -155,9 +167,9 @@ export default function WeeklyPlanPage() {
         </button>
         <button
           type="button"
-          onClick={() => {
-            suggestWeekPlan(weekStart)
-            refresh()
+          onClick={async () => {
+            await suggestWeekPlan(weekStart)
+            await refresh()
             showBanner('Basit bir plan önerisi oluşturuldu, dilediğin gibi düzenleyebilirsin.')
           }}
           className="rounded-xl border border-panel-border px-3 py-2 text-sm font-medium text-panel-text"
@@ -173,9 +185,9 @@ export default function WeeklyPlanPage() {
         </button>
         <button
           type="button"
-          onClick={() => {
-            publishWeek(weekStart)
-            refresh()
+          onClick={async () => {
+            await publishWeek(weekStart)
+            await refresh()
             showBanner('Plan yayınlandı. Aylin\'in ekranında yeni haftalık planın hazır.')
           }}
           className="rounded-xl bg-panel-blue px-3 py-2 text-sm font-semibold text-white"
@@ -184,6 +196,14 @@ export default function WeeklyPlanPage() {
         </button>
       </div>
 
+      {loadError ? (
+        <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{loadError}</div>
+      ) : null}
+
+      {loading ? (
+        <LoadingState label="Haftalık plan yükleniyor..." />
+      ) : (
+        <>
       <WeeklyPlannerGrid
         weekDates={weekDates}
         tasksByDate={tasksByDate}
@@ -202,6 +222,8 @@ export default function WeeklyPlanPage() {
           onClose={() => setDrawerState(null)}
         />
       ) : null}
+        </>
+      )}
     </div>
   )
 }

@@ -20,7 +20,7 @@ export default function TaskFocusScreen({
   if (task.taskType === 'gunluk-degerlendirme') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-panel-bg p-4">
-        <div className="w-full max-w-lg rounded-2xl border border-panel-border bg-panel-surface p-6">
+        <div className="w-full max-w-lg panel-card p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-semibold text-panel-text">{task.title}</h2>
             <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -86,7 +86,7 @@ export default function TaskFocusScreen({
         ) : null}
 
         {task.subGoals ? (
-          <div className="rounded-2xl border border-panel-border bg-panel-surface p-5">
+          <div className="panel-card p-5">
             <p className="mb-3 text-sm font-medium text-panel-text-muted">Alt hedefler</p>
             <ul className="flex flex-col gap-2">
               {task.subGoals.map((goal, index) => {
@@ -120,7 +120,7 @@ export default function TaskFocusScreen({
         ) : null}
 
         {showStuckForm ? (
-          <div className="rounded-2xl border border-panel-border bg-panel-surface p-4">
+          <div className="panel-card p-4">
             <p className="mb-2 text-sm font-medium text-panel-text-muted">Takıldığım soru</p>
             <div className="mb-2 flex items-center gap-2 rounded-xl border border-dashed border-panel-border p-3 text-sm text-panel-text-muted">
               <Camera size={18} aria-hidden="true" />

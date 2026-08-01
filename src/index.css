@@ -7,21 +7,54 @@
   --color-tc-bg: #f6f7fb;
   --font-sans: Inter, Manrope, Arial, sans-serif;
 
-  /* Panel design tokens — öğrenci/ebeveyn panelleri için sakin palet (brief bölüm 19) */
-  --color-panel-bg: #fbfaf7;
+  /*
+   * Panel design tokens — öğrenci/ebeveyn panelleri için sakin palet (brief bölüm 19).
+   * Bu, ebeveyn panelinin de kullandığı değişmeyen taban palettir. Öğrenci panelinde
+   * ThemeProvider bir data-theme özniteliği ekler ("pink" | "blue" | "neutral" | "purple" |
+   * "green" | "orange") ve aşağıdaki [data-theme="..."] blokları bu custom property'leri
+   * geçersiz kılar. Her bileşen bu token'ları kullandığı için tema değişimi hiçbir bileşen
+   * kodu değiştirilmeden tüm arayüze yayılır; ebeveyn paneli data-theme almadığından
+   * bu taban palette sabit kalır.
+   */
+  --color-panel-bg: #ffffff;
   --color-panel-surface: #ffffff;
+  --color-panel-surface-soft: #f4f3ef;
   --color-panel-border: #e7e5df;
+  --color-panel-border-strong: #d7d4cb;
   --color-panel-text: #2b2a33;
   --color-panel-text-muted: #6f6e78;
-  --color-panel-blue: #6f8fd9;
-  --color-panel-blue-soft: #eaf0fc;
-  --color-panel-sage: #7fae94;
-  --color-panel-sage-soft: #e8f2ec;
-  --color-panel-lilac: #a596d6;
-  --color-panel-lilac-soft: #f0ecfa;
+  --color-panel-blue: #655e94;
+  --color-panel-blue-soft: #ece9f4;
+  --color-panel-sage: #87a3a5;
+  --color-panel-sage-soft: #eef3f3;
+  --color-panel-lilac: #af6a8c;
+  --color-panel-lilac-soft: #f3e8ed;
+  --color-panel-slate: #5b7088;
+  --color-panel-slate-soft: #eaeef2;
   --color-panel-accent: #e8a23d;
   --color-panel-accent-soft: #fbf0dd;
   --color-panel-warm: #e08e4f;
+  --color-panel-warm-soft: #f7e8db;
+  --color-panel-red: #b5473a;
+  --color-panel-red-soft: #f7e3df;
+  --color-panel-yellow: #b8933a;
+  --color-panel-yellow-soft: #f8f0da;
+
+  /*
+   * "Görevlerim" ve benzer öğrenci-paneli bileşenleri için tema-duyarlı takma adlar.
+   * Değerleri sabit yazmak yerine panel-blue'ya (her temanın "ana rengi") referans verir;
+   * böylece data-theme değiştiğinde bu değişkenler de otomatik güncellenir ve hiçbir
+   * bileşen kodunda renk sabitlenmez.
+   */
+  --color-student-theme-primary: var(--color-panel-blue);
+  --color-student-theme-hover: color-mix(in srgb, var(--color-panel-blue) 82%, black);
+  --color-student-theme-soft: var(--color-panel-blue-soft);
+  --color-student-theme-border: var(--color-panel-blue);
+  --color-student-theme-text: var(--color-panel-blue);
+  --color-student-theme-button-text: #ffffff;
+
+  --shadow-panel-1: 0 1px 2px rgba(30, 27, 20, 0.05), 0 1px 6px rgba(30, 27, 20, 0.04);
+  --shadow-panel-2: 0 2px 4px rgba(30, 27, 20, 0.06), 0 6px 16px rgba(30, 27, 20, 0.07);
 }
 
 * {
@@ -48,4 +81,149 @@ body {
   background: var(--tc-bg);
   color: var(--tc-dark);
   overflow-x: hidden;
+}
+
+/*
+ * Tema token geçersiz kılmaları (yalnızca öğrenci paneli — ThemeProvider ile sarılı alan).
+ * Ebeveyn paneli data-theme almadığından yukarıdaki taban palette değişmeden kalır.
+ */
+[data-theme='neutral'] {
+  --color-panel-bg: #fcfbf8;
+  --color-panel-surface: #fffefc;
+  --color-panel-surface-soft: #f7f3ee;
+  --color-panel-border: #e7ddd1;
+  --color-panel-border-strong: #d8cab9;
+  --color-panel-text: #4d433c;
+  --color-panel-text-muted: #72665d;
+  --color-panel-blue: #7a6758;
+  --color-panel-blue-soft: #ece4da;
+  --color-panel-sage: #7c9270;
+  --color-panel-sage-soft: #eaefe4;
+  --color-panel-lilac: #bb819e;
+  --color-panel-lilac-soft: #f3e8ed;
+  --color-panel-accent: #b8894f;
+  --color-panel-accent-soft: #f3e7d8;
+  --color-panel-warm: #8f6a3c;
+}
+
+[data-theme='pink'] {
+  --color-panel-bg: #fffafb;
+  --color-panel-surface: #fffdfd;
+  --color-panel-surface-soft: #fff4f6;
+  --color-panel-border: #f1d9df;
+  --color-panel-border-strong: #e8c3cd;
+  --color-panel-text: #5b3745;
+  --color-panel-text-muted: #8a6170;
+  --color-panel-blue: #a85d73;
+  --color-panel-blue-soft: #f8dfe5;
+  --color-panel-sage: #6f9c7f;
+  --color-panel-sage-soft: #e6f1ea;
+  --color-panel-lilac: #8e61ae;
+  --color-panel-lilac-soft: #eee7f3;
+  --color-panel-accent: #d98a4e;
+  --color-panel-accent-soft: #fdead9;
+  --color-panel-warm: #a8632f;
+}
+
+[data-theme='blue'] {
+  --color-panel-bg: #f8fbff;
+  --color-panel-surface: #ffffff;
+  --color-panel-surface-soft: #eef6ff;
+  --color-panel-border: #dbe8f5;
+  --color-panel-border-strong: #c6d9ec;
+  --color-panel-text: #2f4258;
+  --color-panel-text-muted: #5c7590;
+  --color-panel-blue: #4f78a8;
+  --color-panel-blue-soft: #dfeeff;
+  --color-panel-sage: #5f9c8a;
+  --color-panel-sage-soft: #e3f3ee;
+  --color-panel-lilac: #bd7f9e;
+  --color-panel-lilac-soft: #f3e7ed;
+  --color-panel-accent: #d68a4a;
+  --color-panel-accent-soft: #fdecd9;
+  --color-panel-warm: #a8642c;
+}
+
+[data-theme='purple'] {
+  --color-panel-bg: #faf8ff;
+  --color-panel-surface: #ffffff;
+  --color-panel-surface-soft: #f3effc;
+  --color-panel-border: #e6e0f5;
+  --color-panel-border-strong: #d4c9ea;
+  --color-panel-text: #362f4d;
+  --color-panel-text-muted: #6b6284;
+  --color-panel-blue: #7c5cbf;
+  --color-panel-blue-soft: #ece4fa;
+  --color-panel-sage: #6fa08a;
+  --color-panel-sage-soft: #e5f1ec;
+  --color-panel-lilac: #b36b8f;
+  --color-panel-lilac-soft: #f3e7ed;
+  --color-panel-accent: #d68a4a;
+  --color-panel-accent-soft: #fbeddb;
+  --color-panel-warm: #b4703a;
+}
+
+[data-theme='green'] {
+  --color-panel-bg: #f7fbf7;
+  --color-panel-surface: #ffffff;
+  --color-panel-surface-soft: #eef6ee;
+  --color-panel-border: #dcebdc;
+  --color-panel-border-strong: #c3dcc4;
+  --color-panel-text: #24382a;
+  --color-panel-text-muted: #56705a;
+  --color-panel-blue: #3f7a4f;
+  --color-panel-blue-soft: #e1f0e4;
+  --color-panel-sage: #6f9c7f;
+  --color-panel-sage-soft: #e3f3ee;
+  --color-panel-lilac: #bd7f9e;
+  --color-panel-lilac-soft: #f3e7ed;
+  --color-panel-accent: #d6a34a;
+  --color-panel-accent-soft: #faf0d9;
+  --color-panel-warm: #a87d2c;
+}
+
+[data-theme='orange'] {
+  --color-panel-bg: #fffaf5;
+  --color-panel-surface: #ffffff;
+  --color-panel-surface-soft: #fff1e3;
+  --color-panel-border: #f3ddc4;
+  --color-panel-border-strong: #e8c79f;
+  --color-panel-text: #4a3320;
+  --color-panel-text-muted: #8a6a4a;
+  --color-panel-blue: #b85f22;
+  --color-panel-blue-soft: #f8e3d0;
+  --color-panel-sage: #6f9c7f;
+  --color-panel-sage-soft: #e3f3ee;
+  --color-panel-lilac: #b36b8f;
+  --color-panel-lilac-soft: #f3e7ed;
+  --color-panel-accent: #cf9a3a;
+  --color-panel-accent-soft: #faf0d9;
+  --color-panel-warm: #a8642c;
+}
+
+.panel-card {
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-panel-border) 60%, transparent);
+  background: var(--color-panel-surface);
+  box-shadow: var(--shadow-panel-1);
+}
+
+/* Tema değişiminde renkler yumuşak geçsin; sert flash olmasın. */
+[data-theme] * {
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme] * {
+    transition: none;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-panel-blue);
+  outline-offset: 2px;
 }

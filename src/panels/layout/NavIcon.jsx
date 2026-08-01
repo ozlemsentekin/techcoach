@@ -15,6 +15,10 @@ import {
   Users,
   ClipboardList,
   FileCheck2,
+  BookOpen,
+  Building2,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
 
 const ICONS = {
@@ -34,6 +38,10 @@ const ICONS = {
   Users,
   ClipboardList,
   FileCheck2,
+  BookOpen,
+  Building2,
+  ChevronDown,
+  ChevronRight,
 }
 
 export default function NavIcon({ name, size = 20, className }) {

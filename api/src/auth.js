@@ -201,7 +201,12 @@ async function meHandler(request) {
       return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
     }
 
-    return json(200, { user: sanitizeUser(record) })
+    const user = sanitizeUser(record)
+    if (session.actingParentId) {
+      user.actingParent = { id: session.actingParentId, fullName: session.actingParentName }
+    }
+
+    return json(200, { user })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })

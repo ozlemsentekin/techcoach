@@ -2,7 +2,7 @@ import { CheckCircle2, AlertTriangle } from 'lucide-react'
 
 export default function PlanBalanceCard({ warnings }) {
   return (
-    <div className="rounded-2xl border border-panel-border bg-panel-surface p-5">
+    <div className="panel-card p-5">
       <h2 className="text-base font-semibold text-panel-text">Plan Denge Kontrolü</h2>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         {warnings.map((warning) => (

@@ -10,7 +10,7 @@ export default function StudentRequestsCard({ requests, onApprove, onMessage, on
   const resolved = requests.filter((request) => request.status !== 'bekliyor')
 
   return (
-    <div className="rounded-2xl border border-panel-border bg-panel-surface p-5">
+    <div className="panel-card p-5">
       <h2 className="text-base font-semibold text-panel-text">Aylin'in Talepleri</h2>
 
       {pending.length === 0 ? (

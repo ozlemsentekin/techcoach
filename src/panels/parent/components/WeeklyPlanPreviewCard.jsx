@@ -6,7 +6,7 @@ const DAY_LABELS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cts', 'Paz']
 
 export default function WeeklyPlanPreviewCard({ weekDates, tasksByDate, onCopyPreviousWeek, onSuggestPlan, onPublish, planStatus }) {
   return (
-    <div className="rounded-2xl border border-panel-border bg-panel-surface p-5">
+    <div className="panel-card p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-base font-semibold text-panel-text">Aylin'in Haftasını Planla</h2>
         <Link to="/parent/weekly-plan" className="text-sm font-medium text-panel-blue hover:underline">
