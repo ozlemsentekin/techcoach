@@ -61,18 +61,19 @@ async function createTaskForHomework(studentId, homework, taskDate, resourceBook
       resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId || null },
       selectedTestIdsJson: { type: sql.NVarChar(sql.MAX), value: sanitizedTestIds.length ? JSON.stringify(sanitizedTestIds) : null },
       targetPageCount: { type: sql.Int, value: homework.resourceType === 'okuma_kitabi' ? homework.totalPageCount || null : null },
+      homeworkId: { type: sql.UniqueIdentifier, value: homework.id },
     })
 
     await requestDb.query(`
       INSERT INTO dbo.Tasks (
         student_id, date, title, description, subject, task_type, start_time, end_time,
         duration_minutes, target_question_count, completed_question_count, is_draft,
-        resource_book_id, selected_test_ids_json, target_page_count, completed_page_count
+        resource_book_id, selected_test_ids_json, target_page_count, completed_page_count, homework_id
       )
       VALUES (
         @studentId, @date, @title, @description, @subject, @taskType, @startTime, @endTime,
         @durationMinutes, @targetQuestionCount, 0, 0,
-        @resourceBookId, @selectedTestIdsJson, @targetPageCount, 0
+        @resourceBookId, @selectedTestIdsJson, @targetPageCount, 0, @homeworkId
       );
     `)
   } catch (error) {

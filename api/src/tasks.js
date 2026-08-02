@@ -17,6 +17,7 @@ function sanitizeTask(record) {
     date: toISODate(record.date),
     title: record.title,
     taskType: record.task_type,
+    homeworkId: record.homework_id || undefined,
     subject: record.subject || undefined,
     topic: record.topic || undefined,
     startTime: record.start_time,
@@ -56,8 +57,26 @@ function sanitizeTask(record) {
   }
 }
 
+// Ödevden oluşturulmuş bir görevin (bkz. homework.js createTaskForHomework) ilerleme/durumu
+// değiştiğinde, aynı bilgiyi bağlı olduğu dbo.Homeworks satırına da yazar; aksi halde Ödevler
+// sayfası hep atama anındaki (genelde 0/bekliyor) donuk değerleri gösterir.
+async function syncHomeworkCompletion(taskRecord) {
+  if (!taskRecord?.homework_id) return
+
+  const homeworkDb = await withRequest({
+    id: { type: sql.UniqueIdentifier, value: taskRecord.homework_id },
+    completedQuestionCount: { type: sql.Int, value: taskRecord.completed_question_count ?? 0 },
+    status: { type: sql.NVarChar(20), value: taskRecord.status },
+  })
+  await homeworkDb.query(`
+    UPDATE dbo.Homeworks
+    SET completed_question_count = @completedQuestionCount, status = @status
+    WHERE id = @id;
+  `)
+}
+
 const SELECT_TASK = `
-  SELECT t.id, t.student_id, t.is_draft, t.date, t.title, t.task_type, t.subject, t.topic, t.start_time, t.end_time, t.duration_minutes,
+  SELECT t.id, t.student_id, t.is_draft, t.date, t.title, t.task_type, t.homework_id, t.subject, t.topic, t.start_time, t.end_time, t.duration_minutes,
          t.target_question_count, t.completed_question_count, t.target_page_count, t.completed_page_count,
          t.current_page_number, t.priority, t.status, t.description, t.parent_note, t.created_by,
          t.notes, t.completed_at, t.rescheduled_from, t.rescheduled_to, t.reschedule_reason, t.correct_count, t.wrong_count,
@@ -271,6 +290,7 @@ async function updateTaskHandler(request) {
 
     const fetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: taskId } })
     const fetchResult = await fetchDb.query(`${SELECT_TASK} WHERE t.id = @id;`)
+    await syncHomeworkCompletion(fetchResult.recordset[0])
 
     return json(200, { task: sanitizeTask(fetchResult.recordset[0]) })
   } catch (error) {
@@ -521,6 +541,7 @@ async function saveTaskAnswersHandler(request) {
 
     const fetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: taskId } })
     const fetchResult = await fetchDb.query(`${SELECT_TASK} WHERE t.id = @id;`)
+    await syncHomeworkCompletion(fetchResult.recordset[0])
 
     return json(200, { task: sanitizeTask(fetchResult.recordset[0]) })
   } catch (error) {
