@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../../../context/useAuth'
 import { getTasksForDate, updateTask, toggleSubGoal, rescheduleTask } from '../../../services/taskService'
 import { getCheckIn, saveCheckIn } from '../../../services/checkInService'
 import { addSession } from '../../../services/studySessionService'
 import { addHomework } from '../../../services/homeworkService'
 import { sendMessage, addCoachNote } from '../../../services/messageService'
-import { getWeekDates } from '../../../services/weeklyPlanService'
-import { todayISODate, getMondayOfWeek, getMonthDates } from '../../../utils/time'
+import { todayISODate } from '../../../utils/time'
 import { getNextTask } from '../../../utils/taskSelectors'
 import { FOCUS_TASK_TYPES } from '../../../data/taskTypes'
 import StudentWelcomeBanner from '../components/StudentWelcomeBanner'
@@ -35,9 +34,6 @@ export default function TodayPage() {
   const [showStressModal, setShowStressModal] = useState(false)
   const [showBreathing, setShowBreathing] = useState(false)
   const [banner, setBanner] = useState('')
-  const [dateFilter, setDateFilter] = useState('today')
-  const [extraDayTasks, setExtraDayTasks] = useState({})
-  const [loadedRangeFilter, setLoadedRangeFilter] = useState('today')
 
   useEffect(() => {
     let ignore = false
@@ -57,52 +53,6 @@ export default function TodayPage() {
       ignore = true
     }
   }, [])
-
-  const extraDays = useMemo(() => {
-    if (dateFilter === 'today') return []
-    const rangeDates = dateFilter === 'week' ? getWeekDates(getMondayOfWeek(date)) : getMonthDates(date)
-    return rangeDates.filter((day) => day !== date)
-  }, [dateFilter])
-
-  useEffect(() => {
-    if (dateFilter === 'today') return undefined
-    let ignore = false
-    Promise.all(extraDays.map((day) => getTasksForDate(day)))
-      .then((results) => {
-        if (ignore) return
-        const map = {}
-        extraDays.forEach((day, index) => {
-          map[day] = results[index]
-        })
-        setExtraDayTasks(map)
-        setLoadedRangeFilter(dateFilter)
-      })
-      .catch((err) => {
-        if (!ignore) setLoadError(err.message)
-      })
-    return () => {
-      ignore = true
-    }
-  }, [dateFilter, extraDays])
-
-  const rangeLoading = dateFilter !== 'today' && loadedRangeFilter !== dateFilter
-
-  const listTasks = useMemo(() => {
-    if (dateFilter === 'today') return tasks
-    return [...tasks, ...extraDays.flatMap((day) => extraDayTasks[day] || [])]
-  }, [dateFilter, tasks, extraDays, extraDayTasks])
-
-  /** Bir günün API sonucunu, o gün 'tasks' (bugün) ya da 'extraDayTasks' (aralıktaki diğer günler) neredeyse oraya yazar. */
-  const applyDayResult = (dayDate, dayTasks) => {
-    if (dayDate === date) {
-      setTasks(dayTasks)
-      return
-    }
-    setExtraDayTasks((current) => {
-      if (!extraDays.includes(dayDate)) return current
-      return { ...current, [dayDate]: dayTasks }
-    })
-  }
 
   useEffect(() => {
     if (!banner) return undefined
@@ -131,34 +81,25 @@ export default function TodayPage() {
   }
 
   const handleCompleteInline = async (task) => {
-    applyDayResult(task.date, await updateTask(task.date, task.id, { status: 'tamamlandi', completedAt: new Date().toISOString() }))
+    setTasks(await updateTask(date, task.id, { status: 'tamamlandi', completedAt: new Date().toISOString() }))
   }
 
   const handlePartialComplete = async (task) => {
-    applyDayResult(task.date, await updateTask(task.date, task.id, { status: 'kismen-tamamlandi', completedAt: new Date().toISOString() }))
+    setTasks(await updateTask(date, task.id, { status: 'kismen-tamamlandi', completedAt: new Date().toISOString() }))
   }
 
   const handleHelp = async (task) => {
-    applyDayResult(task.date, await updateTask(task.date, task.id, { status: 'yardim-bekliyor' }))
+    setTasks(await updateTask(date, task.id, { status: 'yardim-bekliyor' }))
     setShowStressModal(true)
   }
 
   const handleAnswerSheetSaved = (updatedTask) => {
-    const replace = (list) => list.map((task) => (task.id === updatedTask.id ? updatedTask : task))
-    if (updatedTask.date === date) {
-      setTasks(replace)
-      return
-    }
-    setExtraDayTasks((current) => {
-      if (!extraDays.includes(updatedTask.date)) return current
-      return { ...current, [updatedTask.date]: replace(current[updatedTask.date] || []) }
-    })
+    setTasks((current) => current.map((task) => (task.id === updatedTask.id ? updatedTask : task)))
   }
 
   const handleSaveReadingProgress = async (task, payload) => {
-    applyDayResult(
-      task.date,
-      await updateTask(task.date, task.id, {
+    setTasks(
+      await updateTask(date, task.id, {
         completedPageCount: payload.completedPageCount,
         currentPageNumber: payload.currentPageNumber,
         status: payload.status,
@@ -168,9 +109,8 @@ export default function TodayPage() {
   }
 
   const handleSaveQuestionCount = async (task, payload) => {
-    applyDayResult(
-      task.date,
-      await updateTask(task.date, task.id, {
+    setTasks(
+      await updateTask(date, task.id, {
         completedQuestionCount: payload.completedQuestionCount,
         status: payload.status,
         completedAt: new Date().toISOString(),
@@ -179,10 +119,8 @@ export default function TodayPage() {
   }
 
   const handleConfirmReschedule = async ({ newDate, newTime, reason }) => {
-    const sourceDate = reschedulingTask.date
-    const { sourceTasks, targetTasks } = await rescheduleTask(sourceDate, reschedulingTask.id, { newDate, newTime, reason })
-    applyDayResult(sourceDate, sourceTasks)
-    if (newDate !== sourceDate) applyDayResult(newDate, targetTasks)
+    const { sourceTasks } = await rescheduleTask(date, reschedulingTask.id, { newDate, newTime, reason })
+    setTasks(sourceTasks)
     setReschedulingTask(null)
     setBanner('Görev taşındı. Kaybolmadı, yeni zamanında seni bekliyor.')
   }
@@ -315,10 +253,7 @@ export default function TodayPage() {
       ) : null}
 
       <TaskListSection
-        tasks={listTasks}
-        dateFilter={dateFilter}
-        onDateFilterChange={setDateFilter}
-        loadingRange={rangeLoading}
+        tasks={tasks}
         onComplete={handleCompleteInline}
         onPartialComplete={handlePartialComplete}
         onReschedule={(task) => setReschedulingTask(task)}

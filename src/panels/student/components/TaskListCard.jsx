@@ -15,7 +15,7 @@ const STATUS_TONE_CLASSES = {
   red: 'bg-panel-red-soft text-panel-red',
 }
 
-export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLessonLabel = true, showDate = false }) {
+export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLessonLabel = true }) {
   const subjectStyle = SUBJECT_STYLES[task.subject] || DEFAULT_SUBJECT_STYLE
   const details = parseAssignmentDetails(task)
   const overdueDays = daysLate(task.date)
@@ -50,9 +50,10 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
           {status.label}
         </span>
 
-        {showDate && task.date ? (
+        {task.date ? (
           <span className="ml-2 inline-flex items-center text-xs font-medium text-panel-text-muted">
             {formatDateShort(task.date)}
+            {task.startTime ? ` · ${task.startTime}` : ''}
           </span>
         ) : null}
 
