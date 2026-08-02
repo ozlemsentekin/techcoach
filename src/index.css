@@ -88,7 +88,7 @@ body {
  * Ebeveyn paneli data-theme almadığından yukarıdaki taban palette değişmeden kalır.
  */
 [data-theme='neutral'] {
-  --color-panel-bg: #fcfbf8;
+  --color-panel-bg: #ffffff;
   --color-panel-surface: #fffefc;
   --color-panel-surface-soft: #f7f3ee;
   --color-panel-border: #e7ddd1;
@@ -107,7 +107,7 @@ body {
 }
 
 [data-theme='pink'] {
-  --color-panel-bg: #fffafb;
+  --color-panel-bg: #ffffff;
   --color-panel-surface: #fffdfd;
   --color-panel-surface-soft: #fff4f6;
   --color-panel-border: #f1d9df;
@@ -126,7 +126,7 @@ body {
 }
 
 [data-theme='blue'] {
-  --color-panel-bg: #f8fbff;
+  --color-panel-bg: #ffffff;
   --color-panel-surface: #ffffff;
   --color-panel-surface-soft: #eef6ff;
   --color-panel-border: #dbe8f5;
@@ -145,7 +145,7 @@ body {
 }
 
 [data-theme='purple'] {
-  --color-panel-bg: #faf8ff;
+  --color-panel-bg: #ffffff;
   --color-panel-surface: #ffffff;
   --color-panel-surface-soft: #f3effc;
   --color-panel-border: #e6e0f5;
@@ -164,7 +164,7 @@ body {
 }
 
 [data-theme='green'] {
-  --color-panel-bg: #f7fbf7;
+  --color-panel-bg: #ffffff;
   --color-panel-surface: #ffffff;
   --color-panel-surface-soft: #eef6ee;
   --color-panel-border: #dcebdc;
@@ -183,7 +183,7 @@ body {
 }
 
 [data-theme='orange'] {
-  --color-panel-bg: #fffaf5;
+  --color-panel-bg: #ffffff;
   --color-panel-surface: #ffffff;
   --color-panel-surface-soft: #fff1e3;
   --color-panel-border: #f3ddc4;

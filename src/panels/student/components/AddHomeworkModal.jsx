@@ -270,48 +270,46 @@ export default function AddHomeworkModal({ onSave, onClose }) {
         </div>
 
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-panel-text-muted">Ders</span>
-              <select
-                required
-                value={subjectId}
-                onChange={handleSubjectChange}
-                disabled={!subjects?.length}
-                className="rounded-xl border border-panel-border p-3 text-sm text-panel-text"
-              >
-                <option value="" disabled>
-                  {subjects === null ? 'Dersler yükleniyor...' : 'Ders seçin'}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-panel-text-muted">Ders</span>
+            <select
+              required
+              value={subjectId}
+              onChange={handleSubjectChange}
+              disabled={!subjects?.length}
+              className="rounded-xl border border-panel-border p-3 text-sm text-panel-text"
+            >
+              <option value="" disabled>
+                {subjects === null ? 'Dersler yükleniyor...' : 'Ders seçin'}
+              </option>
+              {subjects?.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
                 </option>
-                {subjects?.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-              {subjectsError ? <span className="text-xs text-panel-warm">{subjectsError}</span> : null}
-            </label>
+              ))}
+            </select>
+            {subjectsError ? <span className="text-xs text-panel-warm">{subjectsError}</span> : null}
+          </label>
 
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-panel-text-muted">Kaynak (isteğe bağlı)</span>
-              <ResourceBookSelect
-                resourceBooks={resourceBooks}
-                value={resourceBookId}
-                onChange={(bookId) => handleResourceBookChange({ target: { value: bookId } })}
-                disabled={!subjectId || !resourceBooks?.length}
-                placeholder={
-                  !subjectId
-                    ? 'Önce ders seçin'
-                    : resourceBooks === null
-                      ? 'Kaynaklar yükleniyor...'
-                      : resourceBooks.length === 0
-                        ? 'Bu derse ait aktif kaynak yok'
-                        : 'Kaynak seçin (isteğe bağlı)'
-                }
-              />
-              {resourceBooksError ? <span className="text-xs text-panel-warm">{resourceBooksError}</span> : null}
-            </label>
-          </div>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-panel-text-muted">Kaynak (isteğe bağlı)</span>
+            <ResourceBookSelect
+              resourceBooks={resourceBooks}
+              value={resourceBookId}
+              onChange={(bookId) => handleResourceBookChange({ target: { value: bookId } })}
+              disabled={!subjectId || !resourceBooks?.length}
+              placeholder={
+                !subjectId
+                  ? 'Önce ders seçin'
+                  : resourceBooks === null
+                    ? 'Kaynaklar yükleniyor...'
+                    : resourceBooks.length === 0
+                      ? 'Bu derse ait aktif kaynak yok'
+                      : 'Kaynak seçin (isteğe bağlı)'
+              }
+            />
+            {resourceBooksError ? <span className="text-xs text-panel-warm">{resourceBooksError}</span> : null}
+          </label>
 
           {resourceBookId && !isReadingBook ? (
             <label className="flex flex-col gap-1.5">

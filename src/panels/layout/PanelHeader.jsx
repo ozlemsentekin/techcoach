@@ -65,7 +65,7 @@ export default function PanelHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-end gap-3 border-b border-panel-border bg-panel-surface/90 px-4 backdrop-blur md:px-6">
+    <header className="sticky top-0 z-20 flex h-14 items-center justify-end gap-3 border-b border-panel-border bg-panel-surface px-4 md:px-6">
       {actingParent ? (
         <button
           type="button"

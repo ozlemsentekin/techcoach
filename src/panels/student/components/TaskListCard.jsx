@@ -1,4 +1,4 @@
-import { ArrowRight, Circle, Timer, CheckCircle2, Eye, HelpCircle, RotateCcw, AlertTriangle } from 'lucide-react'
+import { ArrowRight, Circle, Timer, CheckCircle2, Eye, HelpCircle, RotateCcw, AlertTriangle, Clock } from 'lucide-react'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { parseAssignmentDetails } from '../../../utils/assignmentDetails'
 import { daysLate, formatDateShort } from '../../../utils/time'
@@ -15,7 +15,7 @@ const STATUS_TONE_CLASSES = {
   red: 'bg-panel-red-soft text-panel-red',
 }
 
-export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLessonLabel = true }) {
+export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLessonLabel = true, emphasizeTime = false }) {
   const subjectStyle = SUBJECT_STYLES[task.subject] || DEFAULT_SUBJECT_STYLE
   const details = parseAssignmentDetails(task)
   const overdueDays = daysLate(task.date)
@@ -37,6 +37,13 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
   return (
     <div className={`flex flex-col gap-4 rounded-2xl border border-panel-border border-l-4 ${subjectStyle.border} bg-panel-surface p-4 shadow-panel-1 transition-shadow hover:shadow-panel-2 sm:p-5 lg:flex-row lg:items-center lg:gap-6`}>
       <div className="min-w-0 flex-1">
+        {emphasizeTime && task.startTime ? (
+          <div className="mb-2.5 flex w-fit items-center gap-1.5 rounded-lg bg-student-theme-primary px-3 py-1.5 text-base font-bold text-student-theme-button-text">
+            <Clock size={18} aria-hidden="true" />
+            {task.startTime}
+          </div>
+        ) : null}
+
         {showLessonLabel ? (
           <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold tracking-wide ${subjectStyle.soft} ${subjectStyle.text}`}>
             {lessonLabel}
@@ -50,7 +57,7 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
           {status.label}
         </span>
 
-        {task.date ? (
+        {task.date && !emphasizeTime ? (
           <span className="ml-2 inline-flex items-center text-xs font-medium text-panel-text-muted">
             {formatDateShort(task.date)}
             {task.startTime ? ` · ${task.startTime}` : ''}

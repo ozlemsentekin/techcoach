@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react'
 import { getSortedTasks } from '../../../utils/taskSelectors'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { TASK_TYPES } from '../../../data/taskTypes'
+import { addDaysISO, formatDateLong, todayISODate } from '../../../utils/time'
 import TaskGroupSection from './TaskGroupSection'
 import TaskDetailsDrawer from './TaskDetailsDrawer'
 import TaskAnswerSheetModal from './TaskAnswerSheetModal'
@@ -24,10 +25,24 @@ const FILTERS = [
   { key: 'done', label: 'Tamamlanan' },
 ]
 
+const VIEW_MODES = [
+  { key: 'time', label: 'Zamana Göre' },
+  { key: 'subject', label: 'Derse Göre' },
+]
+
 const SUBJECTS = ['Tüm Dersler', 'Türkçe', 'Matematik', 'Fen Bilimleri', 'T.C. İnkılap Tarihi', 'İngilizce', 'Din Kültürü']
 
 function lessonLabelFor(task) {
   return task.subject || TASK_TYPES[task.taskType]?.label || 'Genel'
+}
+
+function dateGroupLabel(dateISO) {
+  if (!dateISO) return 'Tarihsiz'
+  const today = todayISODate()
+  if (dateISO === today) return 'Bugün'
+  if (dateISO === addDaysISO(today, 1)) return 'Yarın'
+  if (dateISO === addDaysISO(today, -1)) return 'Dün'
+  return formatDateLong(new Date(dateISO))
 }
 
 export default function TaskListSection({
@@ -42,6 +57,7 @@ export default function TaskListSection({
 }) {
   const [filter, setFilter] = useState('pending')
   const [subject, setSubject] = useState('Tüm Dersler')
+  const [viewMode, setViewMode] = useState('time')
   const [detailsTask, setDetailsTask] = useState(null)
   const [answerSheetTask, setAnswerSheetTask] = useState(null)
   const [readingTask, setReadingTask] = useState(null)
@@ -75,49 +91,83 @@ export default function TaskListSection({
     return [...knownOrder, ...extraOrder].map((label) => ({ label, tasks: byLabel.get(label) }))
   }, [filtered])
 
+  const groupedByDate = useMemo(() => {
+    const byDate = new Map()
+    filtered.forEach((task) => {
+      const key = task.date || ''
+      if (!byDate.has(key)) byDate.set(key, [])
+      byDate.get(key).push(task)
+    })
+    let entries = [...byDate.entries()]
+    if (filter === 'done') {
+      entries = entries.reverse().map(([date, dateTasks]) => [date, [...dateTasks].reverse()])
+    }
+    return entries.map(([date, dateTasks]) => ({ label: dateGroupLabel(date), tasks: dateTasks }))
+  }, [filtered, filter])
+
+  const visibleGroups = viewMode === 'subject' ? grouped : groupedByDate
+
   return (
     <div className="panel-card flex flex-col gap-5 bg-panel-surface p-5 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-bold text-panel-text sm:text-2xl">Görevlerim</h2>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="flex gap-2 overflow-x-auto pb-1 sm:overflow-visible sm:pb-0">
-            {FILTERS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                aria-pressed={filter === item.key}
-                onClick={() => setFilter(item.key)}
-                className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
-                  filter === item.key
-                    ? 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text'
-                    : 'border-panel-border bg-panel-surface text-panel-text-muted hover:border-student-theme-primary hover:bg-student-theme-soft hover:text-student-theme-text'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="relative">
-            <select
-              value={subject}
-              onChange={(event) => setSubject(event.target.value)}
-              aria-label="Derse göre filtrele"
-              className="w-full appearance-none rounded-full border border-panel-border bg-panel-surface py-2 pl-4 pr-9 text-sm font-medium text-panel-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary sm:w-auto"
+        <div className="flex gap-2 overflow-x-auto pb-1 sm:overflow-visible sm:pb-0">
+          {VIEW_MODES.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              aria-pressed={viewMode === item.key}
+              onClick={() => setViewMode(item.key)}
+              className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
+                viewMode === item.key
+                  ? 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text'
+                  : 'border-panel-border bg-panel-surface text-panel-text-muted hover:border-student-theme-primary hover:bg-student-theme-soft hover:text-student-theme-text'
+              }`}
             >
-              {SUBJECTS.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-            <ChevronDown
-              size={16}
-              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-panel-text-muted"
-              aria-hidden="true"
-            />
-          </div>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+        <div className="flex gap-2 overflow-x-auto pb-1 sm:overflow-visible sm:pb-0">
+          {FILTERS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              aria-pressed={filter === item.key}
+              onClick={() => setFilter(item.key)}
+              className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
+                filter === item.key
+                  ? 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text'
+                  : 'border-panel-border bg-panel-surface text-panel-text-muted hover:border-student-theme-primary hover:bg-student-theme-soft hover:text-student-theme-text'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative">
+          <select
+            value={subject}
+            onChange={(event) => setSubject(event.target.value)}
+            aria-label="Derse göre filtrele"
+            className="w-full appearance-none rounded-full border border-panel-border bg-panel-surface py-2 pl-4 pr-9 text-sm font-medium text-panel-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary sm:w-auto"
+          >
+            {SUBJECTS.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={16}
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-panel-text-muted"
+            aria-hidden="true"
+          />
         </div>
       </div>
 
@@ -125,8 +175,17 @@ export default function TaskListSection({
         <EmptyState title="Bu filtrede görev yok" description="Farklı bir filtre veya ders seçmeyi deneyebilirsin." />
       ) : (
         <div className="flex flex-col gap-4">
-          {grouped.map((group) => (
-            <TaskGroupSection key={group.label} subject={group.label} tasks={group.tasks} onOpenDetails={openTask} />
+          {visibleGroups.map((group, index) => (
+            <TaskGroupSection
+              key={`${viewMode}-${filter}-${group.label}`}
+              subject={group.label}
+              tasks={group.tasks}
+              onOpenDetails={openTask}
+              showLessonLabel={viewMode === 'time'}
+              getLessonLabel={viewMode === 'time' ? lessonLabelFor : undefined}
+              emphasizeTime={viewMode === 'time'}
+              defaultExpanded={viewMode === 'time' && filter === 'done' ? index === 0 : true}
+            />
           ))}
         </div>
       )}

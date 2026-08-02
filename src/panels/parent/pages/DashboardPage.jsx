@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getTasksForDate, updateTask, createTask, deleteTask, rescheduleTask } from '../../../services/taskService'
-import { getCheckIn } from '../../../services/checkInService'
 import { getWrongQuestions } from '../../../services/wrongQuestionService'
 import { sendMessage, getMessages } from '../../../services/messageService'
 import { getHomeworks, addHomework } from '../../../services/homeworkService'
@@ -15,16 +14,12 @@ import {
   publishWeek,
 } from '../../../services/weeklyPlanService'
 import { evaluateDayBalance } from '../../../utils/planInsights'
-import { todayISODate, formatDateLong, getMondayOfWeek } from '../../../utils/time'
-import { ENERGY_LEVELS } from '../../../data/taskTypes'
+import { todayISODate, getMondayOfWeek } from '../../../utils/time'
 import { TASK_TEMPLATES } from '../../../data/taskTemplates'
 import { PARENT_MESSAGE_TEMPLATES } from '../../../data/coachMessages'
-import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
-import ProgressSummaryCard from '../../shared/ProgressSummaryCard'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import ParentMessageCard from '../components/ParentMessageCard'
-import CurrentTaskCard from '../components/CurrentTaskCard'
 import DailyPlanTable from '../components/DailyPlanTable'
 import WeeklyPlanPreviewCard from '../components/WeeklyPlanPreviewCard'
 import StudentRequestsCard from '../components/StudentRequestsCard'
@@ -34,7 +29,6 @@ import UpcomingDeadlinesCard from '../components/UpcomingDeadlinesCard'
 import AddTaskDrawer from '../components/AddTaskDrawer'
 import AddHomeworkModal from '../../student/components/AddHomeworkModal'
 import RescheduleTaskModal from '../../student/components/RescheduleTaskModal'
-import { CheckCircle2, Clock, RotateCw, HeartPulse } from 'lucide-react'
 
 const date = todayISODate()
 const weekStart = getMondayOfWeek(date)
@@ -48,7 +42,6 @@ async function buildWeekTasksMap() {
 export default function DashboardPage() {
   const navigate = useNavigate()
   const [tasks, setTasks] = useState([])
-  const [checkIn, setCheckIn] = useState(null)
   const [wrongQuestions, setWrongQuestions] = useState([])
   const [homeworks, setHomeworks] = useState([])
   const [requests, setRequests] = useState([])
@@ -73,10 +66,9 @@ export default function DashboardPage() {
       getPlanStatus(weekStart),
       getRequests(),
       getMessages(),
-      getCheckIn(date),
       getWrongQuestions(),
     ])
-      .then(([tasksData, homeworksData, weekTasksData, planStatusData, requestsData, messagesData, checkInData, wrongQuestionsData]) => {
+      .then(([tasksData, homeworksData, weekTasksData, planStatusData, requestsData, messagesData, wrongQuestionsData]) => {
         if (ignore) return
         setTasks(tasksData)
         setHomeworks(homeworksData)
@@ -84,7 +76,6 @@ export default function DashboardPage() {
         setPlanStatus(planStatusData)
         setRequests(requestsData)
         setMessages(messagesData)
-        setCheckIn(checkInData)
         setWrongQuestions(wrongQuestionsData)
       })
       .catch((err) => {
@@ -109,17 +100,6 @@ export default function DashboardPage() {
     setPlanStatus(await getPlanStatus(weekStart))
   }
 
-  const summary = {
-    total: tasks.length,
-    completed: tasks.filter((task) => task.status === 'tamamlandi').length,
-    partial: tasks.filter((task) => task.status === 'kismen-tamamlandi').length,
-    rescheduled: tasks.filter((task) => task.status === 'yeniden-planlandi').length,
-  }
-
-  const energyLabel = checkIn
-    ? ENERGY_LEVELS.find((level) => level.id === checkIn.energyLevel)?.label
-    : 'Henüz belirtilmedi'
-
   const strugglingTopic = (() => {
     const counts = {}
     wrongQuestions.forEach((item) => {
@@ -130,7 +110,6 @@ export default function DashboardPage() {
     return sorted[0]?.[0] || null
   })()
 
-  const currentTask = tasks.find((task) => task.status === 'devam-ediyor') || null
   const balance = evaluateDayBalance(tasks)
 
   const handleSendMessage = async (text) => {
@@ -171,21 +150,6 @@ export default function DashboardPage() {
     showBanner('Görev taşındı.')
   }
 
-  const handleExtendTime = async () => {
-    if (!currentTask) return
-    const [h, m] = currentTask.endTime.split(':').map(Number)
-    const total = h * 60 + m + 10
-    const newEndTime = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
-    setTasks(await updateTask(date, currentTask.id, { endTime: newEndTime, durationMinutes: (currentTask.durationMinutes || 0) + 10 }))
-    showBanner('Süreye 10 dakika eklendi.')
-  }
-
-  const handleEncourage = async () => {
-    await sendMessage({ from: 'ebeveyn', text: PARENT_MESSAGE_TEMPLATES[0] })
-    setMessages(await getMessages())
-    showBanner('Cesaret mesajı gönderildi.')
-  }
-
   const handleSaveHomework = async (payload) => {
     await addHomework(payload)
     setHomeworks(await getHomeworks())
@@ -222,29 +186,6 @@ export default function DashboardPage() {
   return (
     <div className="grid w-full grid-cols-1 gap-5 lg:grid-cols-[1fr_320px]">
       <div className="flex flex-col gap-5">
-        <PageHeader
-          title="Aylin'in Bugünü"
-          subtitle={formatDateLong()}
-          actions={
-            <>
-              <button
-                type="button"
-                onClick={() => navigate('/parent/weekly-plan')}
-                className="rounded-xl border border-panel-border bg-panel-surface px-4 py-2.5 text-sm font-semibold text-panel-text"
-              >
-                Bugünkü Planı Düzenle
-              </button>
-              <button
-                type="button"
-                onClick={() => setDrawerState({ defaultDate: date })}
-                className="rounded-xl bg-panel-blue px-4 py-2.5 text-sm font-semibold text-white"
-              >
-                + Yeni Görev Ekle
-              </button>
-            </>
-          }
-        />
-
         {loadError ? (
           <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{loadError}</div>
         ) : null}
@@ -255,38 +196,9 @@ export default function DashboardPage() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <ProgressSummaryCard
-            icon={CheckCircle2}
-            title="Tamamlanan"
-            value={`${summary.completed} / ${summary.total}`}
-            description="Bugün planlanan görevlerden"
-          />
-          <ProgressSummaryCard
-            icon={Clock}
-            title="Kısmen tamamlanan"
-            value={summary.partial}
-            description="Emek gösterilen görevler"
-          />
-          <ProgressSummaryCard
-            icon={RotateCw}
-            title="Yeniden planlanan"
-            value={summary.rescheduled}
-            description="Kaybolmadı, esnek planlama"
-          />
-          <ProgressSummaryCard icon={HeartPulse} title="Bugünkü enerji" value={energyLabel} description="Nazik bir destek iyi gelebilir" />
-        </div>
-
-        <CurrentTaskCard
-          task={currentTask}
-          onEncourage={handleEncourage}
-          onExtendTime={handleExtendTime}
-          onOpenDetail={() => currentTask && setDrawerState({ initialTask: currentTask })}
-          onEdit={() => currentTask && setDrawerState({ initialTask: currentTask })}
-        />
-
         <DailyPlanTable
           tasks={tasks}
+          onAddTask={() => setDrawerState({ defaultDate: date })}
           onEdit={(task) => setDrawerState({ initialTask: task })}
           onMove={(task) => setReschedulingTask(task)}
           onDelete={(task) => setDeletingTask(task)}

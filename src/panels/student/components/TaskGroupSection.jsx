@@ -3,8 +3,16 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import TaskListCard from './TaskListCard'
 import { SUBJECT_STYLES, DEFAULT_SUBJECT_STYLE } from './subjectStyles'
 
-export default function TaskGroupSection({ subject, tasks, onOpenDetails }) {
-  const [expanded, setExpanded] = useState(true)
+export default function TaskGroupSection({
+  subject,
+  tasks,
+  onOpenDetails,
+  showLessonLabel = false,
+  getLessonLabel,
+  emphasizeTime = false,
+  defaultExpanded = true,
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded)
   const style = SUBJECT_STYLES[subject] || DEFAULT_SUBJECT_STYLE
 
   return (
@@ -31,7 +39,14 @@ export default function TaskGroupSection({ subject, tasks, onOpenDetails }) {
       {expanded ? (
         <div className="flex flex-col gap-4 border-t border-panel-border px-4 pb-4 pt-4 sm:px-5">
           {tasks.map((task) => (
-            <TaskListCard key={task.id} task={task} onOpenDetails={onOpenDetails} showLessonLabel={false} />
+            <TaskListCard
+              key={task.id}
+              task={task}
+              lessonLabel={getLessonLabel ? getLessonLabel(task) : subject}
+              onOpenDetails={onOpenDetails}
+              showLessonLabel={showLessonLabel}
+              emphasizeTime={emphasizeTime}
+            />
           ))}
         </div>
       ) : null}
