@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, ChevronDown, LogOut, Undo2, Users } from 'lucide-react'
+import { Check, ChevronDown, LogOut, RefreshCw, Undo2, Users } from 'lucide-react'
 import { useAuth } from '../../context/useAuth'
 import { authRequest } from '../../services/authClient'
 import ThemeContext from '../../theme/themeContextObject'
@@ -37,6 +37,15 @@ export default function PanelHeader() {
       .then((data) => setStudents(data.students))
       .catch(() => setStudents([]))
   }, [open, isParent, students])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        window.location.reload()
+      }
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [])
 
   const handleEnterStudent = async (studentId) => {
     setSwitching(true)
@@ -77,6 +86,16 @@ export default function PanelHeader() {
           {actingParent.fullName} olarak devam ediyorsunuz · Ebeveyn Paneline Dön
         </button>
       ) : null}
+
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        aria-label="Sayfayı yenile"
+        title="Sayfayı yenile"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-text"
+      >
+        <RefreshCw size={16} aria-hidden="true" />
+      </button>
 
       {themeCtx ? (
         <div className="flex items-center gap-1.5" role="group" aria-label="Renk tonu seç">
