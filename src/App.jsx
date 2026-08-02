@@ -1,10 +1,12 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './context/useAuth'
-import LandingPage from './marketing/LandingPage'
-import PaywallPage from './marketing/PaywallPage'
 import LoadingState from './panels/shared/LoadingState'
-import StudentApp from './panels/student/StudentApp'
-import ParentApp from './panels/parent/ParentApp'
+
+const LandingPage = lazy(() => import('./marketing/LandingPage'))
+const PaywallPage = lazy(() => import('./marketing/PaywallPage'))
+const StudentApp = lazy(() => import('./panels/student/StudentApp'))
+const ParentApp = lazy(() => import('./panels/parent/ParentApp'))
 
 const ALLOWED_ENTITLEMENT_STATUSES = new Set(['active', 'trial', 'grace_period'])
 
@@ -50,26 +52,28 @@ function RequireRole({ role, children }) {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<RootRoute />} />
-      <Route path="/paywall" element={<PaywallPage />} />
-      <Route
-        path="/student/*"
-        element={
-          <RequireRole role="ogrenci">
-            <StudentApp />
-          </RequireRole>
-        }
-      />
-      <Route
-        path="/parent/*"
-        element={
-          <RequireRole role="ebeveyn">
-            <ParentApp />
-          </RequireRole>
-        }
-      />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <Suspense fallback={<LoadingState label="Sayfa yükleniyor..." fullScreen />}>
+      <Routes>
+        <Route path="/" element={<RootRoute />} />
+        <Route path="/paywall" element={<PaywallPage />} />
+        <Route
+          path="/student/*"
+          element={
+            <RequireRole role="ogrenci">
+              <StudentApp />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/parent/*"
+          element={
+            <RequireRole role="ebeveyn">
+              <ParentApp />
+            </RequireRole>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   )
 }
