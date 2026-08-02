@@ -61,6 +61,7 @@ const {
   updateWrongQuestionHandler,
   listStudySessionsHandler,
   addStudySessionHandler,
+  getProgressOverviewHandler,
   getSmallGoalHandler,
   setSmallGoalHandler,
 } = require('./progress')
@@ -567,6 +568,13 @@ app.http('panel-study-sessions-create', {
   methods: ['POST'],
   route: 'panel/study-sessions',
   handler: addStudySessionHandler,
+})
+
+app.http('panel-progress-overview', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/progress-overview',
+  handler: getProgressOverviewHandler,
 })
 
 app.http('panel-parent-messages-list', {

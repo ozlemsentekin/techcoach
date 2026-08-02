@@ -609,7 +609,10 @@ async function listResourceBookTopicsForPanelHandler(request) {
         }
         if (a.minPageStart === null) return 1
         if (b.minPageStart === null) return -1
-        return a.minPageStart - b.minPageStart
+        if (a.minPageStart !== b.minPageStart) return a.minPageStart - b.minPageStart
+        // Tests independently paginated per topic (e.g. weekly denemeler each starting at
+        // page 1) tie on minPageStart — fall back to topic creation order in that case.
+        return new Date(a.topic.created_at) - new Date(b.topic.created_at)
       })
       .map(({ topic, topicTests }) => ({
         ...sanitizeResourceBookTopic(topic),

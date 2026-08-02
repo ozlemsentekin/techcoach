@@ -35,14 +35,14 @@ function sanitizeHomework(record) {
   }
 }
 
-async function validateAssignedResourceBook(studentId, subjectId, resourceBookId) {
+async function getAssignedResourceBook(studentId, subjectId, resourceBookId) {
   const requestDb = await withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
     subjectId: { type: sql.UniqueIdentifier, value: subjectId },
     resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
   })
   const result = await requestDb.query(`
-    SELECT TOP 1 rb.id
+    SELECT TOP 1 rb.id, rb.resource_type
     FROM dbo.StudentResourceBooks srb
     INNER JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id
     WHERE srb.student_id = @studentId
@@ -51,7 +51,13 @@ async function validateAssignedResourceBook(studentId, subjectId, resourceBookId
       AND rb.is_active = 1;
   `)
 
-  return Boolean(result.recordset[0])
+  const record = result.recordset[0]
+  if (!record) return null
+
+  return {
+    id: record.id,
+    resourceType: record.resource_type,
+  }
 }
 
 // Parent bir tarih seçtiyse, öğrencinin o güne ait canlı plan görev listesinde de görünmesi için
@@ -249,30 +255,31 @@ async function createHomeworkHandler(request) {
       return json(400, { error: 'Tarih bilgileri zorunludur.' })
     }
 
-    const isAssignedResource = await validateAssignedResourceBook(studentId, subjectId, resourceBookId)
-    if (!isAssignedResource) {
+    const assignedResource = await getAssignedResourceBook(studentId, subjectId, resourceBookId)
+    if (!assignedResource) {
       return json(400, { error: 'Seçilen kaynak bu öğrenciye bu ders için atanmamış.' })
     }
 
-    const duplicateCheckDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-      subjectId: { type: sql.UniqueIdentifier, value: subjectId },
-      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
-      description: { type: sql.NVarChar(1000), value: description },
-    })
-    const duplicateResult = await duplicateCheckDb.query(`
-      SELECT TOP 1 h.id
-      FROM dbo.Homeworks h
-      WHERE h.student_id = @studentId
-        AND h.subject_id = @subjectId
-        AND (
-          (h.resource_book_id = @resourceBookId)
-          OR (h.resource_book_id IS NULL AND @resourceBookId IS NULL)
-        )
-        AND h.description = @description;
-    `)
-    if (duplicateResult.recordset.length) {
-      return json(409, { error: 'Bu kaynak ve test için zaten bir ödev eklenmiş.' })
+    if (assignedResource.resourceType !== 'okuma_kitabi') {
+      const duplicateCheckDb = await withRequest({
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+        resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+        description: { type: sql.NVarChar(1000), value: description },
+        dueDate: { type: sql.Date, value: dueDate },
+      })
+      const duplicateResult = await duplicateCheckDb.query(`
+        SELECT TOP 1 h.id
+        FROM dbo.Homeworks h
+        WHERE h.student_id = @studentId
+          AND h.subject_id = @subjectId
+          AND h.resource_book_id = @resourceBookId
+          AND h.description = @description
+          AND h.due_date = @dueDate;
+      `)
+      if (duplicateResult.recordset.length) {
+        return json(409, { error: 'Bu kaynak ve test için zaten bir ödev eklenmiş.' })
+      }
     }
 
     const requestDb = await withRequest({

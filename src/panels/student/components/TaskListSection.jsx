@@ -59,6 +59,7 @@ export default function TaskListSection({
   onAnswerSheetSaved,
   onSaveReadingProgress,
   onSaveQuestionCount,
+  onSaveNotes,
 }) {
   const [filter, setFilter] = useState('pending')
   const [viewMode, setViewMode] = useState('time')
@@ -211,6 +212,10 @@ export default function TaskListSection({
           onHelp={(task) => {
             setDetailsTask(null)
             onHelp(task)
+          }}
+          onSaveNotes={async (task, notes) => {
+            const updatedTask = await onSaveNotes(task, notes)
+            if (updatedTask) setDetailsTask(updatedTask)
           }}
         />
       ) : null}

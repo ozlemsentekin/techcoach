@@ -193,6 +193,12 @@ export default function TodayPage() {
     )
   }
 
+  const handleSaveNotes = async (task, notes) => {
+    const updatedTasks = await updateTask(task.date, task.id, { notes })
+    applyDayResult(task.date, updatedTasks)
+    return updatedTasks.find((item) => item.id === task.id) || { ...task, notes }
+  }
+
   const handleConfirmReschedule = async ({ newDate, newTime, reason }) => {
     const sourceDate = reschedulingTask.date
     const { sourceTasks, targetTasks } = await rescheduleTask(sourceDate, reschedulingTask.id, { newDate, newTime, reason })
@@ -340,6 +346,7 @@ export default function TodayPage() {
             onAnswerSheetSaved={handleAnswerSheetSaved}
             onSaveReadingProgress={handleSaveReadingProgress}
             onSaveQuestionCount={handleSaveQuestionCount}
+            onSaveNotes={handleSaveNotes}
           />
         </div>
 

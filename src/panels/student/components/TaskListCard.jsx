@@ -1,4 +1,16 @@
-import { ArrowRight, Circle, Timer, CheckCircle2, Eye, HelpCircle, RotateCcw, AlertTriangle, Clock } from 'lucide-react'
+import {
+  ArrowRight,
+  Circle,
+  Timer,
+  CheckCircle2,
+  Eye,
+  HelpCircle,
+  RotateCcw,
+  AlertTriangle,
+  Clock,
+  Coffee,
+  Utensils,
+} from 'lucide-react'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { parseAssignmentDetails } from '../../../utils/assignmentDetails'
 import { daysLate, formatDateShort } from '../../../utils/time'
@@ -13,6 +25,18 @@ const STATUS_TONE_CLASSES = {
   accent: 'bg-panel-accent-soft text-panel-warm',
   slate: 'bg-panel-slate-soft text-panel-slate',
   red: 'bg-panel-red-soft text-panel-red',
+}
+
+const BREAK_TASK_TYPES = new Set(['mola', 'dinlenme', 'yemek', 'yemek-dinlenme'])
+const BREAK_STYLE = { text: 'text-panel-sage', soft: 'bg-panel-sage-soft', border: 'border-l-panel-sage' }
+const FREE_TIME_STYLE = { text: 'text-panel-accent', soft: 'bg-panel-accent-soft', border: 'border-l-panel-accent' }
+
+function BreakTypeIcon({ taskType, size = 16 }) {
+  if (taskType === 'yemek' || taskType === 'yemek-dinlenme') {
+    return <Utensils size={size} aria-hidden="true" />
+  }
+
+  return <Coffee size={size} aria-hidden="true" />
 }
 
 function getPrimaryText(task, details) {
@@ -36,7 +60,13 @@ function getSecondaryItems(details) {
 }
 
 export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLessonLabel = true, emphasizeTime = false }) {
-  const subjectStyle = SUBJECT_STYLES[task.subject] || DEFAULT_SUBJECT_STYLE
+  const isBreakTask = BREAK_TASK_TYPES.has(task.taskType)
+  const isFreeTimeTask = task.taskType === 'serbest-zaman'
+  const subjectStyle = isBreakTask
+    ? BREAK_STYLE
+    : isFreeTimeTask
+      ? FREE_TIME_STYLE
+      : SUBJECT_STYLES[task.subject] || DEFAULT_SUBJECT_STYLE
   const details = parseAssignmentDetails(task)
   const overdueDays = daysLate(task.date)
   const isActive = task.status === 'bekliyor' || task.status === 'devam-ediyor' || task.status === 'yardim-bekliyor'
@@ -56,22 +86,45 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
   const secondaryItems = getSecondaryItems(details)
   const displayLessonLabel = String(lessonLabel || '').toLocaleUpperCase('tr-TR')
   const isCompletedStatus = status.filterKey === 'done'
+  const actionLabel = isBreakTask ? 'Mola Detayı' : 'İşlem Yap'
+
+  const handleCardKeyDown = (event) => {
+    if (!isFreeTimeTask) return
+    if (event.key !== 'Enter' && event.key !== ' ') return
+
+    event.preventDefault()
+    onOpenDetails(task)
+  }
 
   return (
     <article
-      className={`grid gap-4 border-l-4 ${subjectStyle.border} bg-panel-surface px-4 py-4 transition-colors hover:bg-panel-surface-soft/70 sm:px-5 lg:grid-cols-[minmax(0,1fr)_180px_auto] lg:items-center`}
+      role={isFreeTimeTask ? 'button' : undefined}
+      tabIndex={isFreeTimeTask ? 0 : undefined}
+      onClick={isFreeTimeTask ? () => onOpenDetails(task) : undefined}
+      onKeyDown={handleCardKeyDown}
+      aria-label={isFreeTimeTask ? `${task.title} detayını aç` : undefined}
+      className={`grid gap-4 border-l-4 ${subjectStyle.border} px-4 py-4 transition-colors sm:px-5 lg:items-center ${
+        isFreeTimeTask ? 'lg:grid-cols-[minmax(0,1fr)] cursor-pointer bg-panel-accent-soft/35 hover:bg-panel-accent-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-accent' : 'lg:grid-cols-[minmax(0,1fr)_180px_auto]'
+      } ${
+        isBreakTask ? 'bg-panel-sage-soft/35 hover:bg-panel-sage-soft/60' : !isFreeTimeTask ? 'bg-panel-surface hover:bg-panel-surface-soft/70' : ''
+      }`}
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           {emphasizeTime && task.startTime ? (
-            <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-student-theme-primary px-3 text-sm font-bold text-student-theme-button-text">
+            <span
+              className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-sm font-bold ${
+                isBreakTask ? 'bg-panel-sage text-white' : 'bg-student-theme-primary text-student-theme-button-text'
+              }`}
+            >
               <Clock size={15} aria-hidden="true" />
               {task.startTime}
             </span>
           ) : null}
 
           {showLessonLabel ? (
-            <span className={`inline-flex min-h-8 max-w-full items-center rounded-full px-3.5 py-1 text-[15px] font-extrabold leading-none ${subjectStyle.soft} ${subjectStyle.text}`}>
+            <span className={`inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full px-3.5 py-1 text-[15px] font-extrabold leading-none ${subjectStyle.soft} ${subjectStyle.text}`}>
+              {isBreakTask ? <BreakTypeIcon taskType={task.taskType} size={15} /> : null}
               <span className="truncate">{displayLessonLabel}</span>
             </span>
           ) : null}
@@ -111,6 +164,11 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
         ) : null}
 
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-panel-text-muted">
+          {isBreakTask && task.durationMinutes ? (
+            <span>
+              <span className="font-semibold text-panel-text">Dinlenme:</span> {task.durationMinutes} dk
+            </span>
+          ) : null}
           {total > 0 ? (
             <span>
               <span className="font-semibold text-panel-text">{isReading ? 'Sayfa' : 'Soru'}:</span> {total} {unit}
@@ -138,19 +196,26 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
           </div>
           <span className="self-end text-xs font-bold text-student-theme-text">%{progressPct}</span>
         </div>
-      ) : (
+      ) : !isFreeTimeTask ? (
         <div className="hidden lg:block" />
-      )}
+      ) : null}
 
-      <button
-        type="button"
-        onClick={() => onOpenDetails(task)}
-        aria-label={`${task.title} - İşlem Yap`}
-        className="inline-flex h-10 min-w-32 shrink-0 items-center justify-center gap-2 rounded-xl border border-student-theme-primary bg-student-theme-primary px-4 text-sm font-semibold text-student-theme-button-text shadow-sm transition-colors hover:border-student-theme-hover hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary active:scale-[0.98]"
-      >
-        İşlem Yap
-        <ArrowRight size={16} aria-hidden="true" />
-      </button>
+      {!isFreeTimeTask ? (
+        <button
+          type="button"
+          onClick={() => onOpenDetails(task)}
+          aria-label={`${task.title} - ${actionLabel}`}
+          className={`inline-flex h-10 min-w-32 shrink-0 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.98] ${
+            isBreakTask
+              ? 'border-panel-sage bg-panel-sage text-white hover:border-panel-sage hover:bg-panel-sage/90 focus-visible:outline-panel-sage'
+              : 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text hover:border-student-theme-hover hover:bg-student-theme-hover focus-visible:outline-student-theme-primary'
+          }`}
+        >
+          {isBreakTask ? <BreakTypeIcon taskType={task.taskType} size={16} /> : null}
+          {actionLabel}
+          {!isBreakTask ? <ArrowRight size={16} aria-hidden="true" /> : null}
+        </button>
+      ) : null}
     </article>
   )
 }

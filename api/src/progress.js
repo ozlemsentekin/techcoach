@@ -4,6 +4,11 @@ const { json } = require('./http')
 const { isSessionError } = require('./security')
 const { requireStudentContext } = require('./studentScope')
 
+function toISODate(value) {
+  if (!value) return null
+  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10)
+}
+
 function sanitizeCheckIn(record) {
   if (!record) return null
   return {
@@ -45,6 +50,113 @@ function sanitizeStudySession(record) {
     emotion: record.emotion || undefined,
     note: record.note || undefined,
     createdAt: record.created_at,
+  }
+}
+
+function parseJson(value, fallback) {
+  if (!value) return fallback
+  try {
+    return JSON.parse(value)
+  } catch {
+    return fallback
+  }
+}
+
+function sanitizeProgressResourceBook(record) {
+  return {
+    id: record.id,
+    publisherId: record.publisher_id,
+    publisherName: record.publisher_name || undefined,
+    subjectId: record.subject_id || undefined,
+    subjectName: record.subject_name || undefined,
+    name: record.name,
+    pageCount: record.page_count,
+    type: record.resource_type,
+    hasAnswerKey: record.has_answer_key === null || record.has_answer_key === undefined ? undefined : Boolean(record.has_answer_key),
+  }
+}
+
+function sanitizeProgressTest(record) {
+  return {
+    id: record.id,
+    resourceBookId: record.resource_book_id,
+    topicName: record.topic_name || undefined,
+    name: record.name,
+    questionCount: record.question_count,
+  }
+}
+
+function sanitizeProgressTask(record) {
+  return {
+    id: record.id,
+    date: toISODate(record.date),
+    title: record.title,
+    taskType: record.task_type,
+    homeworkId: record.homework_id || undefined,
+    subject: record.subject || undefined,
+    topic: record.topic || undefined,
+    durationMinutes: record.duration_minutes,
+    targetQuestionCount: record.target_question_count ?? undefined,
+    completedQuestionCount: record.completed_question_count ?? undefined,
+    targetPageCount: record.target_page_count ?? undefined,
+    completedPageCount: record.completed_page_count ?? undefined,
+    status: record.status,
+    completedAt: record.completed_at,
+    correctCount: record.correct_count ?? undefined,
+    wrongCount: record.wrong_count ?? undefined,
+    blankCount: record.blank_count ?? undefined,
+    resourceBookId: record.resource_book_id || undefined,
+    resourceBookName: record.resource_book_name || undefined,
+    resourceType: record.resource_type || undefined,
+    publisherName: record.publisher_name || undefined,
+    subjectId: record.resource_subject_id || undefined,
+    subjectName: record.resource_subject_name || undefined,
+    selectedTestIds: parseJson(record.selected_test_ids_json, []),
+    testResults: parseJson(record.test_results_json, {}),
+    createdAt: record.created_at,
+    updatedAt: record.updated_at,
+  }
+}
+
+function sanitizeProgressSession(record) {
+  return {
+    ...sanitizeStudySession(record),
+    taskDate: toISODate(record.task_date),
+    taskTitle: record.task_title || undefined,
+    taskType: record.task_type || undefined,
+    homeworkId: record.homework_id || undefined,
+    subject: record.subject || undefined,
+    topic: record.topic || undefined,
+    resourceBookId: record.resource_book_id || undefined,
+    resourceBookName: record.resource_book_name || undefined,
+    resourceType: record.resource_type || undefined,
+    publisherName: record.publisher_name || undefined,
+    subjectId: record.resource_subject_id || undefined,
+    subjectName: record.resource_subject_name || undefined,
+    selectedTestIds: parseJson(record.selected_test_ids_json, []),
+    testResults: parseJson(record.test_results_json, {}),
+  }
+}
+
+function sanitizeProgressHomework(record) {
+  return {
+    id: record.id,
+    subjectId: record.subject_id || undefined,
+    subject: record.subject_name,
+    resourceBookId: record.resource_book_id || undefined,
+    resourceBookName: record.resource_book_name || undefined,
+    resourceType: record.resource_type || undefined,
+    publisherName: record.publisher_name || undefined,
+    title: record.title,
+    description: record.description || undefined,
+    assignedDate: toISODate(record.assigned_date),
+    dueDate: toISODate(record.due_date),
+    totalQuestionCount: record.total_question_count,
+    completedQuestionCount: record.completed_question_count,
+    totalPageCount: record.total_page_count ?? undefined,
+    status: record.status,
+    createdAt: record.created_at,
+    updatedAt: record.updated_at,
   }
 }
 
@@ -302,6 +414,131 @@ async function listStudySessionsHandler(request) {
   }
 }
 
+async function getProgressOverviewHandler(request) {
+  try {
+    const { error, studentId } = await requireStudentContext(request)
+    if (error) {
+      return error
+    }
+
+    const bindings = {
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    }
+
+    const [
+      resourceBooksResult,
+      testsResult,
+      tasksResult,
+      sessionsResult,
+      homeworksResult,
+      wrongQuestionsResult,
+    ] = await Promise.all([
+      withRequest(bindings).then((requestDb) =>
+        requestDb.query(`
+          SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
+                 rb.name, rb.page_count, rb.resource_type, rb.has_answer_key
+          FROM dbo.StudentResourceBooks srb
+          INNER JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id
+          LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
+          LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+          WHERE srb.student_id = @studentId AND rb.is_active = 1
+          ORDER BY s.name ASC, rb.name ASC;
+        `),
+      ),
+      withRequest(bindings).then((requestDb) =>
+        requestDb.query(`
+          SELECT tt.id, rbt.resource_book_id, COALESCE(tt.topic_name, rbt.name) AS topic_name,
+                 tt.name, tt.question_count
+          FROM dbo.StudentResourceBooks srb
+          INNER JOIN dbo.ResourceBookTopics rbt ON rbt.resource_book_id = srb.resource_book_id
+          INNER JOIN dbo.ResourceBookTopicTests tt ON tt.topic_id = rbt.id
+          WHERE srb.student_id = @studentId
+          ORDER BY rbt.created_at ASC, tt.created_at ASC;
+        `),
+      ),
+      withRequest(bindings).then((requestDb) =>
+        requestDb.query(`
+          SELECT t.id, t.date, t.title, t.task_type, t.homework_id, t.subject, t.topic,
+                 t.duration_minutes, t.target_question_count, t.completed_question_count,
+                 t.target_page_count, t.completed_page_count, t.status, t.completed_at,
+                 t.correct_count, t.wrong_count, t.blank_count, t.resource_book_id,
+                 t.selected_test_ids_json, t.test_results_json, rb.name AS resource_book_name,
+                 rb.resource_type, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
+                 s.name AS resource_subject_name, t.created_at, t.updated_at
+          FROM dbo.Tasks t
+          LEFT JOIN dbo.ResourceBooks rb ON rb.id = t.resource_book_id
+          LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
+          LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+          WHERE t.student_id = @studentId AND t.is_draft = 0
+          ORDER BY t.date DESC, t.start_time ASC;
+        `),
+      ),
+      withRequest(bindings).then((requestDb) =>
+        requestDb.query(`
+          SELECT ss.id, ss.student_id, ss.task_id, ss.started_at, ss.ended_at, ss.duration_minutes,
+                 ss.completed_question_count, ss.correct_count, ss.wrong_count, ss.blank_count,
+                 ss.difficulty_rating, ss.emotion, ss.note, ss.created_at, t.date AS task_date,
+                 t.title AS task_title, t.task_type, t.homework_id, t.subject, t.topic, t.resource_book_id,
+                 t.selected_test_ids_json, t.test_results_json, rb.name AS resource_book_name,
+                 rb.resource_type, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
+                 s.name AS resource_subject_name
+          FROM dbo.StudySessions ss
+          LEFT JOIN dbo.Tasks t ON t.id = ss.task_id
+          LEFT JOIN dbo.ResourceBooks rb ON rb.id = t.resource_book_id
+          LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
+          LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+          WHERE ss.student_id = @studentId
+          ORDER BY ss.started_at DESC;
+        `),
+      ),
+      withRequest(bindings).then((requestDb) =>
+        requestDb.query(`
+          SELECT h.id, h.subject_id, s.name AS subject_name, h.resource_book_id,
+                 rb.name AS resource_book_name, rb.resource_type, p.name AS publisher_name,
+                 h.title, h.description, h.assigned_date, h.due_date,
+                 h.total_question_count, h.completed_question_count, h.total_page_count,
+                 h.status, h.created_at, h.updated_at
+          FROM dbo.Homeworks h
+          INNER JOIN dbo.Subjects s ON s.id = h.subject_id
+          LEFT JOIN dbo.ResourceBooks rb ON rb.id = h.resource_book_id
+          LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+          WHERE h.student_id = @studentId
+          ORDER BY h.due_date DESC;
+        `),
+      ),
+      withRequest(bindings).then((requestDb) =>
+        requestDb.query(`
+          SELECT id, student_id, task_id, subject, topic, question_number, error_type, student_note,
+                 review_status, resolved_at, created_at
+          FROM dbo.WrongQuestions
+          WHERE student_id = @studentId
+          ORDER BY created_at DESC;
+        `),
+      ),
+    ])
+
+    return json(200, {
+      resourceBooks: resourceBooksResult.recordset.map(sanitizeProgressResourceBook),
+      tests: testsResult.recordset.map(sanitizeProgressTest),
+      tasks: tasksResult.recordset.map(sanitizeProgressTask),
+      sessions: sessionsResult.recordset.map(sanitizeProgressSession),
+      homeworks: homeworksResult.recordset.map(sanitizeProgressHomework),
+      wrongQuestions: wrongQuestionsResult.recordset.map(sanitizeWrongQuestion),
+    })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('getProgressOverviewHandler failed', error)
+    return json(500, { error: 'Gelişim verileri yüklenemedi.' })
+  }
+}
+
 async function addStudySessionHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
@@ -419,6 +656,7 @@ module.exports = {
   updateWrongQuestionHandler,
   listStudySessionsHandler,
   addStudySessionHandler,
+  getProgressOverviewHandler,
   getSmallGoalHandler,
   setSmallGoalHandler,
 }
