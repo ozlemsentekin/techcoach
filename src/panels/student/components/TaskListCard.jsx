@@ -55,6 +55,7 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
   const progressPct = task.status === 'tamamlandi' ? 100 : total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0
   const secondaryItems = getSecondaryItems(details)
   const displayLessonLabel = String(lessonLabel || '').toLocaleUpperCase('tr-TR')
+  const isCompletedStatus = status.filterKey === 'done'
 
   return (
     <article
@@ -70,14 +71,22 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
           ) : null}
 
           {showLessonLabel ? (
-            <span className={`inline-flex min-h-8 max-w-full items-center rounded-full px-3.5 py-1 text-sm font-extrabold leading-none ${subjectStyle.soft} ${subjectStyle.text}`}>
+            <span className={`inline-flex min-h-8 max-w-full items-center rounded-full px-3.5 py-1 text-[15px] font-extrabold leading-none ${subjectStyle.soft} ${subjectStyle.text}`}>
               <span className="truncate">{displayLessonLabel}</span>
             </span>
           ) : null}
 
-          <span className={`inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ${STATUS_TONE_CLASSES[status.tone]}`}>
-            {StatusIcon ? <StatusIcon size={13} aria-hidden="true" /> : null}
-            {status.label}
+          <span
+            aria-label={isCompletedStatus ? status.label : undefined}
+            title={isCompletedStatus ? status.label : undefined}
+            className={
+              isCompletedStatus
+                ? `inline-flex h-8 w-8 items-center justify-center rounded-full ${STATUS_TONE_CLASSES[status.tone]}`
+                : `inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ${STATUS_TONE_CLASSES[status.tone]}`
+            }
+          >
+            {StatusIcon ? <StatusIcon size={isCompletedStatus ? 16 : 13} aria-hidden="true" /> : null}
+            {isCompletedStatus ? null : status.label}
           </span>
 
           {task.date && !emphasizeTime ? (

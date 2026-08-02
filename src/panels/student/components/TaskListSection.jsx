@@ -96,6 +96,9 @@ export default function TaskListSection({
       byDate.get(key).push(task)
     })
     let entries = [...byDate.entries()]
+    if (filter === 'all') {
+      entries = entries.reverse()
+    }
     if (filter === 'done') {
       entries = entries.reverse().map(([date, dateTasks]) => [date, [...dateTasks].reverse()])
     }
