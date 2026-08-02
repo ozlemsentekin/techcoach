@@ -100,6 +100,14 @@ function getAnthropicConfig() {
   }
 }
 
+function getBillingConfig() {
+  return {
+    revenueCatWebhookAuthHeader: getRequiredEnv('REVENUECAT_WEBHOOK_AUTH_HEADER', {
+      placeholders: ['replace-with-the-revenuecat-webhook-auth-header'],
+    }),
+  }
+}
+
 function isConfigError(error) {
   return error?.code === 'CONFIG_ERROR'
 }
@@ -109,6 +117,7 @@ module.exports = {
   getSqlConfig,
   getAuthConfig,
   getAnthropicConfig,
+  getBillingConfig,
   getRuntimeConfig,
   isConfigError,
 }

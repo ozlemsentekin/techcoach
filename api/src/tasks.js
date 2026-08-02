@@ -448,6 +448,7 @@ async function saveTaskAnswersHandler(request) {
     submittedTests.forEach((entry) => {
       const testId = entry?.testId
       if (!testId || !selectedTestIds.includes(testId)) return
+      if (results[testId]) return // Değerlendirilmiş test: cevaplar kilitli, üzerine yazılamaz.
 
       const sanitizedAnswers = {}
       Object.entries(entry?.answers || {}).forEach(([orderNo, label]) => {

@@ -71,6 +71,7 @@ const {
   setDailySelectionHandler,
   incrementSwitchCountHandler,
 } = require('./motivation')
+const { revenuecatWebhookHandler } = require('./entitlements')
 
 app.http('auth-register', {
   authLevel: 'anonymous',
@@ -98,6 +99,13 @@ app.http('auth-logout', {
   methods: ['POST'],
   route: 'auth/logout',
   handler: logoutHandler,
+})
+
+app.http('billing-revenuecat-webhook', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'billing/revenuecat-webhook',
+  handler: revenuecatWebhookHandler,
 })
 
 app.http('panel-admin-users', {

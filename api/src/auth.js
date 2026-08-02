@@ -192,9 +192,13 @@ async function meHandler(request) {
       id: { type: sql.UniqueIdentifier, value: session.sub },
     })
     const result = await requestDb.query(`
-      SELECT TOP 1 id, full_name, email, role, is_admin, last_login_at, created_at
-      FROM dbo.Users
-      WHERE id = @id;
+      SELECT TOP 1
+        u.id, u.full_name, u.email, u.role, u.is_admin, u.last_login_at, u.created_at,
+        e.status AS entitlement_status, e.source AS entitlement_source,
+        e.current_period_end AS entitlement_current_period_end
+      FROM dbo.Users u
+      LEFT JOIN dbo.Entitlements e ON e.parent_id = COALESCE(u.parent_id, u.id)
+      WHERE u.id = @id;
     `)
     const record = result.recordset[0]
 
@@ -205,6 +209,11 @@ async function meHandler(request) {
     const user = sanitizeUser(record)
     if (session.actingParentId) {
       user.actingParent = { id: session.actingParentId, fullName: session.actingParentName }
+    }
+    user.entitlement = {
+      status: record.entitlement_status || 'none',
+      source: record.entitlement_source || null,
+      currentPeriodEnd: record.entitlement_current_period_end || null,
     }
 
     return json(200, { user })

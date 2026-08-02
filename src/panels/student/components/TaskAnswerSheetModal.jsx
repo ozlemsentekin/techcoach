@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { X, CheckCircle2, XCircle, MinusCircle } from 'lucide-react'
-import { getTaskAnswerSheet, saveTaskAnswers } from '../../../services/taskService'
+import { getTaskAnswerSheet, saveTaskAnswers, patchTask } from '../../../services/taskService'
 import LoadingState from '../../shared/LoadingState'
 
 const OPTIONS = ['A', 'B', 'C', 'D']
@@ -31,16 +31,20 @@ function ResultBadge({ result }) {
 }
 
 function TestSection({ test, answers, result, onSelect }) {
+  const locked = Boolean(result)
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-panel-border p-4">
-      <div className="flex flex-col gap-1">
-        <h3 className="text-sm font-bold text-panel-text">{test.name}</h3>
-        {test.topicName ? <p className="text-xs text-panel-text-muted">{test.topicName}</p> : null}
-      </div>
+      <h3
+        className="truncate text-sm font-bold text-panel-text"
+        title={test.topicName ? `${test.name} · ${test.topicName}` : test.name}
+      >
+        {test.name}
+        {test.topicName ? <span className="font-normal text-panel-text-muted"> · {test.topicName}</span> : null}
+      </h3>
 
       <ResultBadge result={result} />
 
-      <div className="grid grid-cols-1 gap-y-2">
+      <div className="grid grid-cols-1 gap-y-0.5">
         {Array.from({ length: test.questionCount }, (_, index) => index + 1).map((orderNo) => {
           const key = String(orderNo)
           const selected = answers[key]
@@ -49,7 +53,7 @@ function TestSection({ test, answers, result, onSelect }) {
           return (
             <div
               key={key}
-              className={`flex items-center gap-2 rounded-lg px-2 py-1 transition-colors ${
+              className={`flex items-center gap-2 rounded-lg px-2 py-0.5 transition-colors ${
                 isWrong ? 'bg-panel-red-soft' : ''
               }`}
             >
@@ -62,17 +66,20 @@ function TestSection({ test, answers, result, onSelect }) {
                     <button
                       key={option}
                       type="button"
+                      disabled={locked}
                       aria-pressed={isSelected}
                       aria-label={`${orderNo}. soru için ${option} şıkkı`}
                       onClick={() => onSelect(orderNo, isSelected ? null : option)}
-                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
+                        locked ? 'cursor-not-allowed' : ''
+                      } ${
                         isSelected
                           ? isWrong
                             ? 'border-panel-red bg-panel-red text-white'
                             : 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text'
                           : isCorrectReveal
                             ? 'border-panel-yellow bg-panel-yellow text-white'
-                            : 'border-panel-border text-panel-text-muted hover:border-student-theme-primary hover:text-student-theme-text'
+                            : `border-panel-border text-panel-text-muted ${locked ? '' : 'hover:border-student-theme-primary hover:text-student-theme-text'}`
                       }`}
                     >
                       {option}
@@ -94,6 +101,9 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
   const [answersByTest, setAnswersByTest] = useState({})
   const [resultsByTest, setResultsByTest] = useState({})
   const [saving, setSaving] = useState(false)
+  const [note, setNote] = useState(task.notes || '')
+  const [noteDirty, setNoteDirty] = useState(false)
+  const [noteSaving, setNoteSaving] = useState(false)
 
   useEffect(() => {
     let ignore = false
@@ -115,6 +125,10 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
   }, [task.id])
 
   const totalQuestions = useMemo(() => (tests || []).reduce((sum, test) => sum + test.questionCount, 0), [tests])
+  const allLocked = useMemo(
+    () => Boolean(tests?.length) && tests.every((test) => Boolean(resultsByTest[test.id])),
+    [tests, resultsByTest],
+  )
 
   const handleSelect = (testId, orderNo, label) => {
     setAnswersByTest((prev) => {
@@ -137,6 +151,20 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
       setError(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSaveNote = async () => {
+    setNoteSaving(true)
+    setError('')
+    try {
+      const updatedTask = await patchTask(task.id, { notes: note })
+      setNoteDirty(false)
+      onSaved(updatedTask)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setNoteSaving(false)
     }
   }
 
@@ -175,6 +203,33 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
               ))}
             </div>
           )}
+
+          {tests?.length ? (
+            <div className="mt-4 flex flex-col gap-2 rounded-2xl border border-panel-border p-4">
+              <label htmlFor="answer-sheet-note" className="text-sm font-semibold text-panel-text">
+                Notun (opsiyonel)
+              </label>
+              <textarea
+                id="answer-sheet-note"
+                rows={2}
+                value={note}
+                onChange={(event) => {
+                  setNote(event.target.value)
+                  setNoteDirty(true)
+                }}
+                placeholder="Örn: 6. soruyu yanlış yuvarlamışım, aslında B yapmıştım."
+                className="w-full resize-none rounded-xl border border-panel-border bg-panel-surface px-3 py-2 text-sm text-panel-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
+              />
+              <button
+                type="button"
+                onClick={handleSaveNote}
+                disabled={noteSaving || !noteDirty}
+                className="self-end rounded-lg border border-student-theme-primary px-3 py-1.5 text-xs font-semibold text-student-theme-text hover:bg-student-theme-soft disabled:opacity-50"
+              >
+                {noteSaving ? 'Kaydediliyor...' : 'Notu Kaydet'}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {tests?.length ? (
@@ -182,10 +237,10 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || allLocked}
               className="w-full rounded-xl bg-student-theme-primary px-4 py-3 text-sm font-semibold text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary disabled:opacity-60"
             >
-              {saving ? 'Kaydediliyor...' : `Kaydet (${totalQuestions} soru)`}
+              {saving ? 'Kaydediliyor...' : allLocked ? 'Tüm testler değerlendirildi' : `Kaydet (${totalQuestions} soru)`}
             </button>
           </div>
         ) : null}

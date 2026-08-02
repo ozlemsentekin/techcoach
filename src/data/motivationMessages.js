@@ -42,8 +42,8 @@ export const MOTIVATION_MESSAGES = [
   {
     id: 'start-easy-01',
     category: 'start_easy',
-    title: 'İlk adımı küçük tutabilirsin.',
-    body: 'Sadece 10 dakika başlamak bile bugünün yönünü değiştirebilir.',
+    title: 'Bugün attığın her adım, seni hedefindeki liseye yaklaştırıyor.',
+    body: 'Mükemmel olmak zorunda değilsin; sadece başlayıp devam etmen yeterli.',
     isActive: true,
   },
   {

@@ -155,9 +155,13 @@ async function enterStudentHandler(request) {
       parentId: { type: sql.UniqueIdentifier, value: parentId },
     })
     const result = await requestDb.query(`
-      SELECT TOP 1 id, full_name, email, role, last_login_at, created_at
-      FROM dbo.Users
-      WHERE id = @studentId AND parent_id = @parentId;
+      SELECT TOP 1
+        u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at,
+        e.status AS entitlement_status, e.source AS entitlement_source,
+        e.current_period_end AS entitlement_current_period_end
+      FROM dbo.Users u
+      LEFT JOIN dbo.Entitlements e ON e.parent_id = @parentId
+      WHERE u.id = @studentId AND u.parent_id = @parentId;
     `)
     const record = result.recordset[0]
     if (!record) {
@@ -178,7 +182,15 @@ async function enterStudentHandler(request) {
       actingParentName: parentFullName,
     })
 
-    const user = { ...student, actingParent: { id: parentId, fullName: parentFullName } }
+    const user = {
+      ...student,
+      actingParent: { id: parentId, fullName: parentFullName },
+      entitlement: {
+        status: record.entitlement_status || 'none',
+        source: record.entitlement_source || null,
+        currentPeriodEnd: record.entitlement_current_period_end || null,
+      },
+    }
     return json(200, { user }, createSessionHeaders(token))
   } catch (error) {
     if (isConfigError(error)) {
@@ -210,8 +222,13 @@ async function exitStudentHandler(request) {
       id: { type: sql.UniqueIdentifier, value: session.actingParentId },
     })
     const result = await requestDb.query(`
-      SELECT TOP 1 id, full_name, email, role, is_admin, last_login_at, created_at
-      FROM dbo.Users WHERE id = @id;
+      SELECT TOP 1
+        u.id, u.full_name, u.email, u.role, u.is_admin, u.last_login_at, u.created_at,
+        e.status AS entitlement_status, e.source AS entitlement_source,
+        e.current_period_end AS entitlement_current_period_end
+      FROM dbo.Users u
+      LEFT JOIN dbo.Entitlements e ON e.parent_id = u.id
+      WHERE u.id = @id;
     `)
     const record = result.recordset[0]
     if (!record || record.role !== 'ebeveyn') {
@@ -219,6 +236,11 @@ async function exitStudentHandler(request) {
     }
 
     const user = sanitizeUser(record)
+    user.entitlement = {
+      status: record.entitlement_status || 'none',
+      source: record.entitlement_source || null,
+      currentPeriodEnd: record.entitlement_current_period_end || null,
+    }
     const newToken = createSessionToken(user)
     return json(200, { user }, createSessionHeaders(newToken))
   } catch (error) {

@@ -1,0 +1,14 @@
+{
+  "appId": "com.zlm.techcoach.turkey",
+  "appName": "TechCoach",
+  "webDir": "dist",
+  "server": {
+    "url": "https://delightful-ground-04b9ac510.1.azurestaticapps.net",
+    "cleartext": false
+  },
+  "plugins": {
+    "StatusBar": {
+      "overlaysWebView": false
+    }
+  }
+}

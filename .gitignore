@@ -23,3 +23,16 @@ api/local.settings.json
 *.njsproj
 *.sln
 *.sw?
+
+# Capacitor native build output (ios/ and android/ project folders themselves are committed)
+ios/App/Pods
+ios/App/output
+android/app/build
+android/build
+android/.gradle
+android/local.properties
+android/app/release
+android/captures
+android/.idea
+*.keystore
+!debug.keystore

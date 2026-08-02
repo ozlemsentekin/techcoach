@@ -344,8 +344,15 @@ export default function AddHomeworkModal({ onSave, onClose }) {
                                 checked={selectedTestIds.has(test.id)}
                                 onChange={() => toggleTest(test.id)}
                               />
-                              <span className="text-panel-text-muted">
-                                {test.name} · s.{test.pageStart}-{test.pageEnd} · {test.questionCount} soru
+                              <span className="flex min-w-0 items-center gap-1.5 text-panel-text-muted">
+                                {test.topicName ? (
+                                  <Badge tone="slate" className="shrink-0">
+                                    {test.topicName}
+                                  </Badge>
+                                ) : null}
+                                <span className="truncate">
+                                  {test.name} · s.{test.pageStart}-{test.pageEnd} · {test.questionCount} soru
+                                </span>
                               </span>
                             </label>
                           ))}
