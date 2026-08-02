@@ -65,25 +65,32 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
         ) : null}
 
         {details.kaynak ? (
-          <p className="mt-2 flex items-start gap-1.5 text-sm text-panel-text-muted">
-            <span className="font-semibold text-panel-text">Kaynak:</span>{' '}
+          <p className="mt-2 break-words text-xs font-bold text-panel-text">
             {task.publisherName ? `${task.publisherName} - ` : ''}
             {details.kaynak}
           </p>
         ) : null}
         {details.rawText ? <p className="mt-2 text-sm text-panel-text-muted">{details.rawText}</p> : null}
 
+        {details.testGroups.length ? (
+          <ul className="mt-2 ml-5 flex list-disc flex-col gap-1 text-xs italic text-panel-text-muted">
+            {details.testGroups.map((item, index) => (
+              <li key={`${item.topic}-${item.testName || 'topic'}-${index}`} className="break-words pl-1">
+                {item.topic}
+                {item.testName ? ` - ${item.testName}` : ''}
+              </li>
+            ))}
+          </ul>
+        ) : details.testTopic || details.testName ? (
+          <ul className="mt-2 ml-5 list-disc text-xs italic text-panel-text-muted">
+            <li className="break-words pl-1">
+              {details.testTopic}
+              {details.testTopic && details.testName ? ` - ${details.testName}` : details.testName}
+            </li>
+          </ul>
+        ) : null}
+
         <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm text-panel-text-muted">
-          {details.testTopic ? (
-            <span className="break-words">
-              <span className="font-semibold text-panel-text">Test Konusu:</span> {details.testTopic}
-            </span>
-          ) : null}
-          {details.testName ? (
-            <span className="break-words">
-              <span className="font-semibold text-panel-text">Test Adı:</span> {details.testName}
-            </span>
-          ) : null}
           {total > 0 ? (
             <span>
               <span className="font-semibold text-panel-text">{isReading ? 'Toplam Sayfa Sayısı' : 'Toplam Soru Sayısı'}:</span> {total} {unit}

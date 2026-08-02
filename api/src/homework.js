@@ -22,7 +22,7 @@ function sanitizeHomework(record) {
     title: record.title,
     description: record.description || '',
     assignedDate: toISODate(record.assigned_date),
-    dueDate: toISODate(record.due_date),
+    dueDate: record.has_task ? toISODate(record.due_date) : null,
     totalQuestionCount: record.total_question_count,
     completedQuestionCount: record.completed_question_count,
     totalPageCount: record.total_page_count,
@@ -81,12 +81,17 @@ async function createTaskForHomework(studentId, homework, taskDate, resourceBook
   }
 }
 
+// h.due_date is always populated (falls back to assigned_date when the parent
+// doesn't pick a day), so it alone can't tell an actually-scheduled homework
+// apart from one that only lives in this list. Whether a dbo.Tasks row is
+// linked back via homework_id is the real signal of "assigned to a day".
 const SELECT_HOMEWORK = `
   SELECT h.id, h.student_id, h.subject_id, s.name AS subject_name, h.resource_book_id, rb.name AS resource_book_name,
          rb.resource_type AS resource_book_type, p.name AS publisher_name,
          h.title, h.description, h.assigned_date, h.due_date, h.total_question_count, h.completed_question_count,
          h.total_page_count,
-         h.priority, h.status, h.is_split, h.day_plans_json, h.created_at, h.updated_at
+         h.priority, h.status, h.is_split, h.day_plans_json, h.created_at, h.updated_at,
+         CASE WHEN EXISTS (SELECT 1 FROM dbo.Tasks t WHERE t.homework_id = h.id) THEN 1 ELSE 0 END AS has_task
   FROM dbo.Homeworks h
   INNER JOIN dbo.Subjects s ON s.id = h.subject_id
   LEFT JOIN dbo.ResourceBooks rb ON rb.id = h.resource_book_id
@@ -305,6 +310,27 @@ async function deleteHomeworkHandler(request) {
     if (error) {
       return error
     }
+
+    // Ödev silindiğinde eşlik eden dbo.Tasks satırı FK_Tasks_Homeworks (ON DELETE SET NULL)
+    // yüzünden otomatik silinmiyor, sadece homework_id NULL'a çekiliyor; bu da görevin öğrenci
+    // panelinde ödev silinmiş olsa bile görünmeye devam etmesine yol açıyordu. Bu yüzden bağlı
+    // görevi (ve ona referans veren yanlış soru/çalışma kaydı gibi satırları) burada elle temizliyoruz.
+    const cleanupDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: homeworkId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    await cleanupDb.query(`
+      DECLARE @taskId UNIQUEIDENTIFIER;
+      SELECT @taskId = id FROM dbo.Tasks WHERE homework_id = @id AND student_id = @studentId;
+
+      IF @taskId IS NOT NULL
+      BEGIN
+        UPDATE dbo.WrongQuestions SET task_id = NULL WHERE task_id = @taskId;
+        UPDATE dbo.StudySessions SET task_id = NULL WHERE task_id = @taskId;
+        UPDATE dbo.ParentMotivationMessages SET linked_task_id = NULL WHERE linked_task_id = @taskId;
+        DELETE FROM dbo.Tasks WHERE id = @taskId;
+      END
+    `)
 
     const requestDb = await withRequest({
       id: { type: sql.UniqueIdentifier, value: homeworkId },

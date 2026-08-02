@@ -31,6 +31,8 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
   const seedStartTime = seed.startTime || '16:00'
   const seedEndTime = seed.endTime || (seed.durationMinutes ? addMinutesToTime(seedStartTime, seed.durationMinutes) : '16:45')
 
+  const isReadingTask = initialTask?.resourceType === 'okuma_kitabi'
+
   const [form, setForm] = useState(() => ({
     title: seed.title || '',
     taskType: seed.taskType || 'odev',
@@ -40,6 +42,7 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
     startTime: seedStartTime,
     endTime: seedEndTime,
     targetQuestionCount: seed.targetQuestionCount || '',
+    targetPageCount: seed.targetPageCount || '',
     priority: seed.priority || 'orta',
     description: seed.description || '',
     parentNote: seed.parentNote || '',
@@ -115,6 +118,7 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
       endTime: form.endTime,
       durationMinutes,
       targetQuestionCount: form.targetQuestionCount ? Number(form.targetQuestionCount) : undefined,
+      targetPageCount: isReadingTask && form.targetPageCount ? Number(form.targetPageCount) : undefined,
       priority: form.priority,
       description: form.description.trim() || undefined,
       parentNote: form.parentNote.trim() || undefined,
@@ -236,16 +240,29 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
         </div>
         <p className="text-sm text-panel-text-muted">Süre: {durationMinutes > 0 ? `${durationMinutes} dakika` : '—'}</p>
 
-        <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-panel-text-muted">Hedef soru sayısı (isteğe bağlı)</span>
-          <input
-            type="number"
-            min="0"
-            value={form.targetQuestionCount}
-            onChange={handleChange('targetQuestionCount')}
-            className="rounded-xl border border-panel-border p-3 text-base text-panel-text"
-          />
-        </label>
+        {isReadingTask ? (
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-panel-text-muted">Hedef sayfa sayısı</span>
+            <input
+              type="number"
+              min="0"
+              value={form.targetPageCount}
+              onChange={handleChange('targetPageCount')}
+              className="rounded-xl border border-panel-border p-3 text-base text-panel-text"
+            />
+          </label>
+        ) : (
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-panel-text-muted">Hedef soru sayısı (isteğe bağlı)</span>
+            <input
+              type="number"
+              min="0"
+              value={form.targetQuestionCount}
+              onChange={handleChange('targetQuestionCount')}
+              className="rounded-xl border border-panel-border p-3 text-base text-panel-text"
+            />
+          </label>
+        )}
 
         <div>
           <p className="mb-2 text-sm font-medium text-panel-text-muted">Öncelik</p>

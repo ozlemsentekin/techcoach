@@ -237,7 +237,7 @@ export default function WeeklyPlanPage() {
           <WeeklyPlannerGrid
             weekDates={weekDates}
             tasksByDate={tasksByDate}
-            onAddTask={(date) => setDrawerState({ defaultDate: date })}
+            onAddTask={(date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}
             onEditTask={(task) => setDrawerState({ initialTask: task })}
           />
 
@@ -251,6 +251,7 @@ export default function WeeklyPlanPage() {
           {drawerState ? (
             <AddTaskDrawer
               initialTask={drawerState.initialTask}
+              initialTemplate={drawerState.initialTemplate}
               defaultDate={drawerState.defaultDate}
               getExistingTasksForDate={(date) => tasksByDate[date] || getDraftTasksForDate(date)}
               onSave={handleSaveDrawerTask}

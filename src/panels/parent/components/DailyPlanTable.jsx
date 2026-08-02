@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ArrowRightLeft,
   BookOpen,
@@ -17,7 +18,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { getPendingTasks, getSortedTasks } from '../../../utils/taskSelectors'
-import TaskStatusBadge from '../../shared/TaskStatusBadge'
+import { STATUS_LABELS } from '../../../data/taskTypes'
 
 const SUBJECT_BADGES = {
   Türkçe: { icon: BookOpen, text: 'text-panel-slate', soft: 'bg-panel-slate-soft' },
@@ -71,6 +72,20 @@ function TimeChip({ task }) {
   )
 }
 
+function StatusIcon({ status }) {
+  const completed = status === 'tamamlandi'
+  const Icon = completed ? CheckCircle2 : Clock
+  return (
+    <span
+      className={`inline-flex items-center justify-center ${completed ? 'text-panel-sage' : 'text-panel-text-muted'}`}
+      title={STATUS_LABELS[status] || status}
+    >
+      <Icon size={20} aria-hidden="true" />
+      <span className="sr-only">{STATUS_LABELS[status] || status}</span>
+    </span>
+  )
+}
+
 function SubjectBadge({ task }) {
   const { icon: Icon, text, soft } = getSubjectBadge(task)
   return (
@@ -109,26 +124,66 @@ function TaskDetail({ task }) {
 
 const ACTION_BUTTON_CLASS =
   'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] border border-panel-blue/30 bg-white px-3 text-sm font-medium text-panel-blue transition-colors hover:bg-panel-blue-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-blue active:bg-panel-blue-soft'
+const ACTION_MENU_WIDTH = 176
+const ACTION_MENU_ESTIMATED_HEIGHT = 188
+const ACTION_MENU_VIEWPORT_PADDING = 8
+const ACTION_MENU_GAP = 6
+
+function getActionMenuPosition(buttonRect, menuHeight = ACTION_MENU_ESTIMATED_HEIGHT) {
+  const left = Math.min(
+    Math.max(ACTION_MENU_VIEWPORT_PADDING, buttonRect.right - ACTION_MENU_WIDTH),
+    window.innerWidth - ACTION_MENU_WIDTH - ACTION_MENU_VIEWPORT_PADDING,
+  )
+  const hasRoomBelow = window.innerHeight - buttonRect.bottom >= menuHeight + ACTION_MENU_GAP
+  const top = hasRoomBelow
+    ? buttonRect.bottom + ACTION_MENU_GAP
+    : Math.max(ACTION_MENU_VIEWPORT_PADDING, buttonRect.top - menuHeight - ACTION_MENU_GAP)
+
+  return { left, top }
+}
 
 function TaskActionsMenu({ isOpen, onToggle, onClose, onView, onEdit, onMove, onNote, onDelete }) {
-  const containerRef = useRef(null)
+  const buttonRef = useRef(null)
+  const menuRef = useRef(null)
+  const [menuPosition, setMenuPosition] = useState(null)
+
+  useLayoutEffect(() => {
+    if (!isOpen) return undefined
+
+    const updateMenuPosition = () => {
+      const buttonRect = buttonRef.current?.getBoundingClientRect()
+      if (!buttonRect) return
+
+      const menuHeight = menuRef.current?.offsetHeight || ACTION_MENU_ESTIMATED_HEIGHT
+      setMenuPosition(getActionMenuPosition(buttonRect, menuHeight))
+    }
+
+    const frameId = window.requestAnimationFrame(updateMenuPosition)
+    window.addEventListener('resize', updateMenuPosition)
+    window.addEventListener('scroll', updateMenuPosition, true)
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      window.removeEventListener('resize', updateMenuPosition)
+      window.removeEventListener('scroll', updateMenuPosition, true)
+    }
+  }, [isOpen])
 
   useEffect(() => {
     if (!isOpen) return undefined
 
     function handlePointerDown(event) {
-      if (containerRef.current && !containerRef.current.contains(event.target)) {
-        onClose()
-      }
+      if (buttonRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return
+      onClose()
     }
+
     function handleKeyDown(event) {
       if (event.key === 'Escape') onClose()
     }
 
-    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
     return () => {
-      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('pointerdown', handlePointerDown)
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [isOpen, onClose])
@@ -142,10 +197,19 @@ function TaskActionsMenu({ isOpen, onToggle, onClose, onView, onEdit, onMove, on
   ]
 
   return (
-    <div className="relative inline-block text-left" ref={containerRef}>
+    <div className="relative inline-block text-left">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={onToggle}
+        onClick={(event) => {
+          event.stopPropagation()
+          if (isOpen) {
+            setMenuPosition(null)
+          } else if (buttonRef.current) {
+            setMenuPosition(getActionMenuPosition(buttonRef.current.getBoundingClientRect()))
+          }
+          onToggle()
+        }}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         className={ACTION_BUTTON_CLASS}
@@ -154,30 +218,42 @@ function TaskActionsMenu({ isOpen, onToggle, onClose, onView, onEdit, onMove, on
         <ChevronDown size={14} className={`shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
 
-      {isOpen ? (
-        <div
-          role="menu"
-          className="absolute right-0 bottom-full z-20 mb-1.5 w-44 overflow-hidden rounded-xl border border-panel-border bg-white py-1 shadow-[0_10px_28px_rgba(37,30,60,0.14)]"
-        >
-          {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                item.onClick()
-                onClose()
+      {isOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="menu"
+              style={{
+                left: menuPosition?.left ?? 0,
+                top: menuPosition?.top ?? 0,
+                width: ACTION_MENU_WIDTH,
               }}
-              className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm focus-visible:outline-none focus-visible:bg-panel-surface-soft ${
-                item.danger ? 'text-panel-red hover:bg-panel-red-soft' : 'text-panel-text hover:bg-panel-surface-soft'
+              className={`fixed z-[70] overflow-hidden rounded-xl border border-panel-border bg-white py-1 shadow-[0_10px_28px_rgba(37,30,60,0.14)] ${
+                menuPosition ? 'opacity-100' : 'pointer-events-none opacity-0'
               }`}
             >
-              <item.icon size={14} className="shrink-0" aria-hidden="true" />
-              {item.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+              {items.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  role="menuitem"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onClose()
+                    item.onClick()
+                  }}
+                  className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm focus-visible:outline-none focus-visible:bg-panel-surface-soft ${
+                    item.danger ? 'text-panel-red hover:bg-panel-red-soft' : 'text-panel-text hover:bg-panel-surface-soft'
+                  }`}
+                >
+                  <item.icon size={14} className="shrink-0" aria-hidden="true" />
+                  {item.label}
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }
@@ -236,7 +312,7 @@ export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSave
               <colgroup>
                 <col className="w-[130px]" />
                 <col className="w-[190px]" />
-                <col className="w-[150px]" />
+                <col className="w-[56px]" />
                 <col />
                 <col className="w-[130px]" />
               </colgroup>
@@ -244,7 +320,9 @@ export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSave
                 <tr className="bg-panel-blue-soft text-[13px] font-semibold text-panel-blue">
                   <th className="py-2.5 pl-5 pr-3">Saat</th>
                   <th className="py-2.5 pr-3">Görev</th>
-                  <th className="py-2.5 pr-3">Durum</th>
+                  <th className="py-2.5 pr-3 text-center">
+                    <span className="sr-only">Durum</span>
+                  </th>
                   <th className="py-2.5 pr-3">Görev Detayı</th>
                   <th className="py-2.5 pr-5">İşlemler</th>
                 </tr>
@@ -259,8 +337,8 @@ export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSave
                       <td className="py-3 pr-3 align-top">
                         <SubjectBadge task={task} />
                       </td>
-                      <td className="py-3 pr-3 align-top">
-                        <TaskStatusBadge status={task.status} />
+                      <td className="py-3 pr-3 align-top text-center">
+                        <StatusIcon status={task.status} />
                       </td>
                       <td className="py-3 pr-3 align-top">
                         <TaskDetail task={task} />
@@ -318,7 +396,7 @@ export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSave
               <div key={task.id} className="rounded-2xl border border-panel-border bg-white p-3.5 shadow-[0_1px_4px_rgba(20,25,40,0.04)]">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <TimeChip task={task} />
-                  <TaskStatusBadge status={task.status} />
+                  <StatusIcon status={task.status} />
                 </div>
                 <div className="mt-2.5">
                   <SubjectBadge task={task} />

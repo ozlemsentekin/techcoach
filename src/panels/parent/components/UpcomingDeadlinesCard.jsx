@@ -10,7 +10,7 @@ function daysUntil(dateISO) {
 
 export default function UpcomingDeadlinesCard({ homeworks }) {
   const upcoming = [...homeworks]
-    .filter((homework) => homework.status !== 'tamamlandi')
+    .filter((homework) => homework.status !== 'tamamlandi' && homework.dueDate)
     .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
     .slice(0, 3)
 

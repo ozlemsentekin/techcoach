@@ -43,28 +43,36 @@ export function isHomeworkCompleted(homework) {
   return false
 }
 
+function buildDateGroup(dueDate, subjectGroups) {
+  const subjects = Array.from(subjectGroups.entries())
+    .map(([subject, items]) => ({ subject, items }))
+    .sort((a, b) => getSubjectOrderIndex(a.subject) - getSubjectOrderIndex(b.subject))
+  const totalHomeworkCount = subjects.reduce((total, subjectGroup) => total + subjectGroup.items.length, 0)
+  const completedHomeworkCount = subjects.reduce(
+    (total, subjectGroup) => total + subjectGroup.items.filter(isHomeworkCompleted).length,
+    0,
+  )
+  const completionPercentage =
+    totalHomeworkCount === 0 ? 0 : Math.round((completedHomeworkCount / totalHomeworkCount) * 100)
+  return { dueDate, subjects, totalHomeworkCount, completedHomeworkCount, completionPercentage }
+}
+
 export function groupHomeworksByDate(homeworks) {
   if (!homeworks) return []
   const dateGroups = new Map()
+  const unassignedSubjectGroups = new Map()
   homeworks.forEach((homework) => {
-    if (!dateGroups.has(homework.dueDate)) dateGroups.set(homework.dueDate, new Map())
-    const subjectGroups = dateGroups.get(homework.dueDate)
+    const subjectGroups = homework.dueDate
+      ? dateGroups.get(homework.dueDate) || dateGroups.set(homework.dueDate, new Map()).get(homework.dueDate)
+      : unassignedSubjectGroups
     if (!subjectGroups.has(homework.subject)) subjectGroups.set(homework.subject, [])
     subjectGroups.get(homework.subject).push(homework)
   })
-  return Array.from(dateGroups.entries())
+  const groups = Array.from(dateGroups.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([dueDate, subjectGroups]) => {
-      const subjects = Array.from(subjectGroups.entries())
-        .map(([subject, items]) => ({ subject, items }))
-        .sort((a, b) => getSubjectOrderIndex(a.subject) - getSubjectOrderIndex(b.subject))
-      const totalHomeworkCount = subjects.reduce((total, subjectGroup) => total + subjectGroup.items.length, 0)
-      const completedHomeworkCount = subjects.reduce(
-        (total, subjectGroup) => total + subjectGroup.items.filter(isHomeworkCompleted).length,
-        0,
-      )
-      const completionPercentage =
-        totalHomeworkCount === 0 ? 0 : Math.round((completedHomeworkCount / totalHomeworkCount) * 100)
-      return { dueDate, subjects, totalHomeworkCount, completedHomeworkCount, completionPercentage }
-    })
+    .map(([dueDate, subjectGroups]) => buildDateGroup(dueDate, subjectGroups))
+  if (unassignedSubjectGroups.size) {
+    groups.push(buildDateGroup(null, unassignedSubjectGroups))
+  }
+  return groups
 }

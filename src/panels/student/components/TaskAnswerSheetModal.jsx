@@ -35,7 +35,7 @@ function TestSection({ test, answers, result, onSelect }) {
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-panel-border p-4">
       <h3
-        className="truncate text-sm font-bold text-panel-text"
+        className="truncate text-xs font-semibold text-panel-text"
         title={test.topicName ? `${test.name} · ${test.topicName}` : test.name}
       >
         {test.name}

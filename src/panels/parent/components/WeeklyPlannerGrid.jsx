@@ -1,6 +1,42 @@
-import { BookOpen, Calculator, Coffee, FlaskConical, NotebookPen, Plus, Star } from 'lucide-react'
+import { useState } from 'react'
+import { BookOpen, Calculator, ChevronDown, Coffee, FlaskConical, NotebookPen, Plus, Star } from 'lucide-react'
+import { todayISODate } from '../../../utils/time'
 
 const DAY_LABELS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar']
+
+const QUICK_ADD_TEMPLATES = {
+  lesson: {
+    label: 'Ders',
+    task: {
+      title: 'Ders',
+      taskType: 'ders-calisma',
+      startTime: '15:00',
+      endTime: '16:00',
+      durationMinutes: 60,
+      description: 'Online veya yüz yüze ders.',
+    },
+  },
+  break: {
+    label: 'Mola',
+    task: {
+      title: 'Mola',
+      taskType: 'mola',
+      startTime: '11:00',
+      endTime: '11:30',
+      durationMinutes: 30,
+    },
+  },
+  activity: {
+    label: 'Serbest Zaman',
+    task: {
+      title: 'Serbest Zaman',
+      taskType: 'serbest-zaman',
+      startTime: '18:00',
+      endTime: '19:00',
+      durationMinutes: 60,
+    },
+  },
+}
 
 const TASK_STYLES = {
   turkish: {
@@ -21,6 +57,13 @@ const TASK_STYLES = {
     icon: FlaskConical,
     card: 'border-teal-100 bg-teal-50/75',
     iconClassName: 'bg-teal-100 text-teal-600',
+    timeClassName: 'text-panel-blue',
+    titleClassName: 'text-panel-text',
+  },
+  lesson: {
+    icon: BookOpen,
+    card: 'border-violet-100 bg-violet-50/70',
+    iconClassName: 'bg-violet-100 text-panel-blue',
     timeClassName: 'text-panel-blue',
     titleClassName: 'text-panel-text',
   },
@@ -63,6 +106,7 @@ function getTaskStyle(task) {
   if (searchText.includes('matematik')) return TASK_STYLES.math
   if (searchText.includes('fen')) return TASK_STYLES.science
   if (searchText.includes('türkçe') || searchText.includes('turkce')) return TASK_STYLES.turkish
+  if (task.taskType === 'ders-calisma' && searchText.includes('ders')) return TASK_STYLES.lesson
 
   return TASK_STYLES.default
 }
@@ -98,10 +142,21 @@ function TaskCard({ task, onEditTask }) {
 }
 
 export default function WeeklyPlannerGrid({ weekDates, tasksByDate, onAddTask, onEditTask }) {
+  const [expandedActionDate, setExpandedActionDate] = useState(null)
+  const currentDate = todayISODate()
+
+  const handleAddTask = (date, initialTemplate) => {
+    if (date < currentDate) return
+    setExpandedActionDate(null)
+    onAddTask(date, initialTemplate)
+  }
+
   return (
     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7">
       {weekDates.map((date, index) => {
         const tasks = [...(tasksByDate[date] || [])].sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+        const isPastDay = date < currentDate
+        const isActionsExpanded = expandedActionDate === date && !isPastDay
 
         return (
           <div
@@ -120,14 +175,63 @@ export default function WeeklyPlannerGrid({ weekDates, tasksByDate, onAddTask, o
                 ))}
               </div>
 
-              <button
-                type="button"
-                onClick={() => onAddTask(date)}
-                className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-panel-blue-soft bg-panel-surface px-3 text-sm font-bold text-panel-blue shadow-sm transition-colors duration-150 hover:bg-panel-blue-soft/60"
-              >
-                <Plus size={18} aria-hidden="true" />
-                Görev Ekle
-              </button>
+              <div className="mt-4 grid gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleAddTask(date)}
+                  disabled={isPastDay}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-panel-blue-soft bg-panel-surface px-3 text-sm font-bold text-panel-blue shadow-sm transition-colors duration-150 hover:bg-panel-blue-soft/60 disabled:cursor-not-allowed disabled:border-panel-border disabled:bg-panel-surface-soft disabled:text-panel-text-muted disabled:shadow-none disabled:hover:bg-panel-surface-soft"
+                >
+                  <Plus size={18} aria-hidden="true" />
+                  Görev Ekle
+                </button>
+
+                <button
+                  type="button"
+                  aria-expanded={isActionsExpanded}
+                  onClick={() => setExpandedActionDate(isActionsExpanded ? null : date)}
+                  disabled={isPastDay}
+                  className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3 text-xs font-bold text-panel-text shadow-sm transition-colors duration-150 hover:bg-panel-surface-soft disabled:cursor-not-allowed disabled:bg-panel-surface-soft disabled:text-panel-text-muted disabled:shadow-none"
+                >
+                  Diğer
+                  <ChevronDown
+                    size={16}
+                    className={`transition-transform duration-150 ${isActionsExpanded ? 'rotate-180' : ''}`}
+                    aria-hidden="true"
+                  />
+                </button>
+
+                {isActionsExpanded ? (
+                  <div className="grid gap-2 rounded-xl border border-panel-border bg-panel-surface-soft p-2">
+                    <button
+                      type="button"
+                      onClick={() => handleAddTask(date, QUICK_ADD_TEMPLATES.lesson)}
+                      className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-violet-100 bg-violet-50/80 px-3 text-xs font-bold text-panel-blue transition-colors duration-150 hover:bg-violet-100/70"
+                    >
+                      <BookOpen size={16} aria-hidden="true" />
+                      <span className="min-w-0 truncate">Ders Ekle</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleAddTask(date, QUICK_ADD_TEMPLATES.break)}
+                      className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-amber-100 bg-amber-50/70 px-3 text-xs font-bold text-panel-warm transition-colors duration-150 hover:bg-amber-100/70"
+                    >
+                      <Coffee size={16} aria-hidden="true" />
+                      <span className="min-w-0 truncate">Mola Ekle</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleAddTask(date, QUICK_ADD_TEMPLATES.activity)}
+                      className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-emerald-100 bg-emerald-50/80 px-3 text-xs font-bold text-emerald-700 transition-colors duration-150 hover:bg-emerald-100/70"
+                    >
+                      <Star size={16} aria-hidden="true" />
+                      <span className="min-w-0 truncate">Aktivite Ekle</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         )

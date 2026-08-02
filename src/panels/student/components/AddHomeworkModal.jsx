@@ -1,17 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Loader2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { todayISODate } from '../../../utils/time'
 import Badge from '../../ui/Badge'
 
-function buildNote(resourceBookName, topics, selectedTopicIds, selectedTestIds) {
+function buildNote(resourceBookName, topics, selectedTestIds) {
   const lines = []
   topics?.forEach((topic) => {
     const selectedTests = topic.tests.filter((test) => selectedTestIds.has(test.id))
-    if (selectedTopicIds.has(topic.id) || selectedTests.length) {
-      lines.push(
-        selectedTests.length ? `${topic.name}: ${selectedTests.map((test) => test.name).join(', ')}` : topic.name,
-      )
+    if (selectedTests.length) {
+      lines.push(`${topic.name}: ${selectedTests.map((test) => test.name).join(', ')}`)
     }
   })
 
@@ -120,8 +118,10 @@ export default function AddHomeworkModal({ onSave, onClose }) {
   const [resourceBooksError, setResourceBooksError] = useState('')
   const [topics, setTopics] = useState(null)
   const [topicsError, setTopicsError] = useState('')
-  const [selectedTopicIds, setSelectedTopicIds] = useState(new Set())
   const [selectedTestIds, setSelectedTestIds] = useState(new Set())
+  const [collapsedTopicIds, setCollapsedTopicIds] = useState(new Set())
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   useEffect(() => {
     let ignore = false
@@ -186,10 +186,10 @@ export default function AddHomeworkModal({ onSave, onClose }) {
   useEffect(() => {
     if (isReadingBook) return
     const resourceBookName = resourceBooks?.find((book) => book.id === resourceBookId)?.name || ''
-    setNote(buildNote(resourceBookName, topics, selectedTopicIds, selectedTestIds))
+    setNote(buildNote(resourceBookName, topics, selectedTestIds))
     setTotalQuestionCount(sumSelectedQuestions(topics, selectedTestIds))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTopicIds, selectedTestIds, topics, isReadingBook])
+  }, [selectedTestIds, topics, isReadingBook])
 
   useEffect(() => {
     if (!isReadingBook) return
@@ -204,20 +204,20 @@ export default function AddHomeworkModal({ onSave, onClose }) {
     setResourceBookId('')
     setResourceBooks(null)
     setTopics(null)
-    setSelectedTopicIds(new Set())
     setSelectedTestIds(new Set())
+    setCollapsedTopicIds(new Set())
   }
 
   const handleResourceBookChange = (event) => {
     setResourceBookId(event.target.value)
     setTopics(null)
-    setSelectedTopicIds(new Set())
     setSelectedTestIds(new Set())
+    setCollapsedTopicIds(new Set())
     setTotalPageCount(0)
   }
 
-  const toggleTopic = (topicId) => {
-    setSelectedTopicIds((prev) => {
+  const toggleTopicCollapsed = (topicId) => {
+    setCollapsedTopicIds((prev) => {
       const next = new Set(prev)
       if (next.has(topicId)) next.delete(topicId)
       else next.add(topicId)
@@ -234,26 +234,35 @@ export default function AddHomeworkModal({ onSave, onClose }) {
     })
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
+    if (saving) return
     const trimmedNote = note.trim()
     if (!subject.trim() || !trimmedNote) return
 
     const assignedDate = todayISODate()
 
-    onSave({
-      subject: subject.trim(),
-      subjectId: subjectId || undefined,
-      resourceBookId: resourceBookId || undefined,
-      testIds: resourceBookId ? Array.from(selectedTestIds) : undefined,
-      title: trimmedNote.slice(0, 200),
-      description: trimmedNote,
-      assignedDate,
-      dueDate: taskDate || assignedDate,
-      totalQuestionCount: Number(totalQuestionCount) || 0,
-      totalPageCount: isReadingBook ? Number(totalPageCount) || 0 : undefined,
-      taskDate: taskDate || undefined,
-    })
+    setSaving(true)
+    setSaveError('')
+    try {
+      await onSave({
+        subject: subject.trim(),
+        subjectId: subjectId || undefined,
+        resourceBookId: resourceBookId || undefined,
+        testIds: resourceBookId ? Array.from(selectedTestIds) : undefined,
+        title: trimmedNote.slice(0, 200),
+        description: trimmedNote,
+        assignedDate,
+        dueDate: taskDate || assignedDate,
+        totalQuestionCount: Number(totalQuestionCount) || 0,
+        totalPageCount: isReadingBook ? Number(totalPageCount) || 0 : undefined,
+        taskDate: taskDate || undefined,
+      })
+    } catch (err) {
+      setSaveError(err.message || 'Bir hata oluştu, tekrar deneyin.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -320,17 +329,23 @@ export default function AddHomeworkModal({ onSave, onClose }) {
                 ) : topics.length === 0 ? (
                   <p className="p-2 text-xs text-panel-text-muted">Bu kaynağa ait içerik yok</p>
                 ) : (
-                  topics.map((topic) => (
+                  topics.map((topic) => {
+                    const isCollapsed = collapsedTopicIds.has(topic.id)
+                    return (
                     <div key={topic.id} className="py-0.5">
-                      <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-panel-blue-soft">
-                        <input
-                          type="checkbox"
-                          checked={selectedTopicIds.has(topic.id)}
-                          onChange={() => toggleTopic(topic.id)}
-                        />
+                      <button
+                        type="button"
+                        onClick={() => toggleTopicCollapsed(topic.id)}
+                        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-panel-blue-soft"
+                      >
+                        {isCollapsed ? (
+                          <ChevronRight size={14} className="shrink-0 text-panel-text-muted" />
+                        ) : (
+                          <ChevronDown size={14} className="shrink-0 text-panel-text-muted" />
+                        )}
                         <span className="font-medium text-panel-text">{topic.name}</span>
-                      </label>
-                      {topic.tests.length ? (
+                      </button>
+                      {topic.tests.length && !isCollapsed ? (
                         <div className="ml-6 flex flex-col">
                           {topic.tests.map((test) => (
                             <label
@@ -357,7 +372,8 @@ export default function AddHomeworkModal({ onSave, onClose }) {
                         </div>
                       ) : null}
                     </div>
-                  ))
+                    )
+                  })
                 )}
               </div>
               {topicsError ? <span className="text-xs text-panel-warm">{topicsError}</span> : null}
@@ -415,8 +431,15 @@ export default function AddHomeworkModal({ onSave, onClose }) {
             )}
           </div>
 
-          <button type="submit" className="rounded-xl bg-panel-blue px-4 py-3 text-sm font-semibold text-white">
-            Ödevi Kaydet
+          {saveError ? <span className="text-xs text-panel-warm">{saveError}</span> : null}
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex items-center justify-center gap-2 rounded-xl bg-panel-blue px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {saving ? <Loader2 size={16} className="animate-spin" /> : null}
+            {saving ? 'Kaydediliyor...' : 'Ödevi Kaydet'}
           </button>
         </div>
       </form>

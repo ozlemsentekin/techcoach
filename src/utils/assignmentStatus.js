@@ -16,7 +16,7 @@ export function getAssignmentStatus(task) {
     return { filterKey: 'done', label: 'Tamamlandı', tone: 'sage', icon: 'CheckCircle2' }
   }
   if (task.status === 'kismen-tamamlandi') {
-    return { filterKey: 'done', label: 'Kontrol Bekleniyor', tone: 'yellow', icon: 'Eye' }
+    return { filterKey: 'pending', label: 'Kontrol Bekleniyor', tone: 'yellow', icon: 'Eye' }
   }
   if (task.status === 'yeniden-planlandi') {
     return { filterKey: null, label: 'Yeniden planlandı', tone: 'slate', icon: 'RotateCcw' }

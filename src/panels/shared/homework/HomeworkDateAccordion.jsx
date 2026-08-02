@@ -1,10 +1,11 @@
-import { Calendar, ChevronDown } from 'lucide-react'
+import { Calendar, CalendarOff, ChevronDown } from 'lucide-react'
 import { cn } from '../../ui/utils'
 import { formatGroupDate } from './homeworkDisplay'
 import HomeworkSubjectGroup from './HomeworkSubjectGroup'
 
 export default function HomeworkDateAccordion({ dateGroup, isOpen, onToggle, onDeleteRequest }) {
-  const contentId = `homework-date-${dateGroup.dueDate.replace(/[^a-zA-Z0-9-]/g, '-')}`
+  const isUnassigned = !dateGroup.dueDate
+  const contentId = `homework-date-${isUnassigned ? 'unassigned' : dateGroup.dueDate.replace(/[^a-zA-Z0-9-]/g, '-')}`
 
   return (
     <div className="overflow-hidden rounded-[14px] border border-[#E6E8ED] bg-white shadow-[0_2px_8px_rgba(20,25,40,0.04)]">
@@ -17,9 +18,11 @@ export default function HomeworkDateAccordion({ dateGroup, isOpen, onToggle, onD
       >
         <span className="flex items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#F1EEFA] text-[#6F63A8]">
-            <Calendar size={18} aria-hidden="true" />
+            {isUnassigned ? <CalendarOff size={18} aria-hidden="true" /> : <Calendar size={18} aria-hidden="true" />}
           </span>
-          <span className="text-[16px] font-bold text-[#222737]">{formatGroupDate(dateGroup.dueDate)}</span>
+          <span className="text-[16px] font-bold text-[#222737]">
+            {isUnassigned ? 'Atama yapılmadı' : formatGroupDate(dateGroup.dueDate)}
+          </span>
         </span>
 
         <span className="flex flex-wrap items-center gap-3 sm:flex-nowrap">

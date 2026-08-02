@@ -35,14 +35,16 @@ export default function HomeworkPage() {
   const groupedByDate = useMemo(() => groupHomeworksByDate(homeworks), [homeworks])
 
   const isDateOpen = (dueDate, index) => {
-    if (Object.prototype.hasOwnProperty.call(expandedDateOverrides, dueDate)) {
-      return expandedDateOverrides[dueDate]
+    const key = dueDate || 'unassigned'
+    if (Object.prototype.hasOwnProperty.call(expandedDateOverrides, key)) {
+      return expandedDateOverrides[key]
     }
     return index === 0
   }
 
   const toggleDate = (dueDate, index) => {
-    setExpandedDateOverrides((prev) => ({ ...prev, [dueDate]: !isDateOpen(dueDate, index) }))
+    const key = dueDate || 'unassigned'
+    setExpandedDateOverrides((prev) => ({ ...prev, [key]: !isDateOpen(dueDate, index) }))
   }
 
   const handleSave = async (payload) => {
@@ -92,7 +94,7 @@ export default function HomeworkPage() {
         <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-4">
           {groupedByDate.map((dateGroup, index) => (
             <HomeworkDateAccordion
-              key={dateGroup.dueDate}
+              key={dateGroup.dueDate || 'unassigned'}
               dateGroup={dateGroup}
               isOpen={isDateOpen(dateGroup.dueDate, index)}
               onToggle={() => toggleDate(dateGroup.dueDate, index)}
