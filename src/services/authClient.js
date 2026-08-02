@@ -1,4 +1,4 @@
-const DEFAULT_AUTH_TIMEOUT_MS = 8000
+const DEFAULT_AUTH_TIMEOUT_MS = 25000
 
 export async function authRequest(path, options = {}) {
   const { headers, timeoutMs = DEFAULT_AUTH_TIMEOUT_MS, ...fetchOptions } = options
