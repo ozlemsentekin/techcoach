@@ -30,7 +30,7 @@ export default function StudyTimer({ onElapsedChange }) {
           <button
             type="button"
             onClick={() => setIsRunning(true)}
-            className="rounded-xl bg-panel-blue px-6 py-3 text-base font-semibold text-white"
+            className="rounded-xl bg-student-theme-primary px-6 py-3 text-base font-semibold text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
           >
             {elapsedSeconds === 0 ? 'Başlat' : 'Devam Et'}
           </button>

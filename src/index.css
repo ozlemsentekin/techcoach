@@ -11,7 +11,7 @@
    * Panel design tokens — öğrenci/ebeveyn panelleri için sakin palet (brief bölüm 19).
    * Bu, ebeveyn panelinin de kullandığı değişmeyen taban palettir. Öğrenci panelinde
    * ThemeProvider bir data-theme özniteliği ekler ("pink" | "blue" | "neutral" | "purple" |
-   * "green" | "orange") ve aşağıdaki [data-theme="..."] blokları bu custom property'leri
+   * "green" | "orange" | "black") ve aşağıdaki [data-theme="..."] blokları bu custom property'leri
    * geçersiz kılar. Her bileşen bu token'ları kullandığı için tema değişimi hiçbir bileşen
    * kodu değiştirilmeden tüm arayüze yayılır; ebeveyn paneli data-theme almadığından
    * bu taban palette sabit kalır.
@@ -104,6 +104,12 @@ body {
   --color-panel-accent: #b8894f;
   --color-panel-accent-soft: #f3e7d8;
   --color-panel-warm: #8f6a3c;
+  --color-student-theme-primary: #7a6758;
+  --color-student-theme-hover: color-mix(in srgb, #7a6758 82%, black);
+  --color-student-theme-soft: #ece4da;
+  --color-student-theme-border: #7a6758;
+  --color-student-theme-text: #7a6758;
+  --color-student-theme-button-text: #ffffff;
 }
 
 [data-theme='pink'] {
@@ -123,6 +129,12 @@ body {
   --color-panel-accent: #d98a4e;
   --color-panel-accent-soft: #fdead9;
   --color-panel-warm: #a8632f;
+  --color-student-theme-primary: #a85d73;
+  --color-student-theme-hover: color-mix(in srgb, #a85d73 82%, black);
+  --color-student-theme-soft: #f8dfe5;
+  --color-student-theme-border: #a85d73;
+  --color-student-theme-text: #a85d73;
+  --color-student-theme-button-text: #ffffff;
 }
 
 [data-theme='blue'] {
@@ -142,6 +154,12 @@ body {
   --color-panel-accent: #d68a4a;
   --color-panel-accent-soft: #fdecd9;
   --color-panel-warm: #a8642c;
+  --color-student-theme-primary: #4f78a8;
+  --color-student-theme-hover: color-mix(in srgb, #4f78a8 82%, black);
+  --color-student-theme-soft: #dfeeff;
+  --color-student-theme-border: #4f78a8;
+  --color-student-theme-text: #4f78a8;
+  --color-student-theme-button-text: #ffffff;
 }
 
 [data-theme='purple'] {
@@ -161,6 +179,12 @@ body {
   --color-panel-accent: #d68a4a;
   --color-panel-accent-soft: #fbeddb;
   --color-panel-warm: #b4703a;
+  --color-student-theme-primary: #7c5cbf;
+  --color-student-theme-hover: color-mix(in srgb, #7c5cbf 82%, black);
+  --color-student-theme-soft: #ece4fa;
+  --color-student-theme-border: #7c5cbf;
+  --color-student-theme-text: #7c5cbf;
+  --color-student-theme-button-text: #ffffff;
 }
 
 [data-theme='green'] {
@@ -180,6 +204,12 @@ body {
   --color-panel-accent: #d6a34a;
   --color-panel-accent-soft: #faf0d9;
   --color-panel-warm: #a87d2c;
+  --color-student-theme-primary: #3f7a4f;
+  --color-student-theme-hover: color-mix(in srgb, #3f7a4f 82%, black);
+  --color-student-theme-soft: #e1f0e4;
+  --color-student-theme-border: #3f7a4f;
+  --color-student-theme-text: #3f7a4f;
+  --color-student-theme-button-text: #ffffff;
 }
 
 [data-theme='orange'] {
@@ -199,6 +229,37 @@ body {
   --color-panel-accent: #cf9a3a;
   --color-panel-accent-soft: #faf0d9;
   --color-panel-warm: #a8642c;
+  --color-student-theme-primary: #b85f22;
+  --color-student-theme-hover: color-mix(in srgb, #b85f22 82%, black);
+  --color-student-theme-soft: #f8e3d0;
+  --color-student-theme-border: #b85f22;
+  --color-student-theme-text: #b85f22;
+  --color-student-theme-button-text: #ffffff;
+}
+
+[data-theme='black'] {
+  --color-panel-bg: #ffffff;
+  --color-panel-surface: #ffffff;
+  --color-panel-surface-soft: #f2f3f5;
+  --color-panel-border: #d9dde3;
+  --color-panel-border-strong: #b9c0cb;
+  --color-panel-text: #24262b;
+  --color-panel-text-muted: #616773;
+  --color-panel-blue: #222831;
+  --color-panel-blue-soft: #e5e7eb;
+  --color-panel-sage: #536a60;
+  --color-panel-sage-soft: #e8eee9;
+  --color-panel-lilac: #6f5f78;
+  --color-panel-lilac-soft: #ece8ef;
+  --color-panel-accent: #8d6b36;
+  --color-panel-accent-soft: #f1eadf;
+  --color-panel-warm: #7c5c33;
+  --color-student-theme-primary: #222831;
+  --color-student-theme-hover: color-mix(in srgb, #222831 82%, black);
+  --color-student-theme-soft: #e5e7eb;
+  --color-student-theme-border: #222831;
+  --color-student-theme-text: #222831;
+  --color-student-theme-button-text: #ffffff;
 }
 
 .panel-card {
@@ -206,6 +267,97 @@ body {
   border: 1px solid color-mix(in srgb, var(--color-panel-border) 60%, transparent);
   background: var(--color-panel-surface);
   box-shadow: var(--shadow-panel-1);
+}
+
+.student-theme-banner {
+  background: var(--color-student-theme-soft);
+}
+
+.student-theme-section-header {
+  background: color-mix(in srgb, var(--color-student-theme-primary) 15%, var(--color-panel-surface));
+}
+
+[data-theme='black'] .student-theme-banner,
+[data-theme='black'] .student-theme-section-header {
+  border-color: #111827;
+  background: #222831;
+  color: #ffffff;
+}
+
+[data-theme='black'] .student-theme-banner-text,
+[data-theme='black'] .student-theme-section-title {
+  color: #ffffff;
+}
+
+[data-theme='black'] .student-theme-banner-muted,
+[data-theme='black'] .student-theme-section-muted {
+  color: #d1d5db;
+}
+
+[data-theme='black'] .student-theme-banner-pill {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+[data-theme='black'] .student-theme-banner-accent {
+  color: #ffffff;
+}
+
+[data-theme='black'] .student-theme-lgs-card {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: #111827;
+  color: #ffffff;
+}
+
+[data-theme='black'] .student-theme-lgs-card .student-theme-lgs-label {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+[data-theme='black'] .student-theme-lgs-card .student-theme-lgs-title,
+[data-theme='black'] .student-theme-lgs-card .student-theme-lgs-accent {
+  color: #ffffff;
+}
+
+[data-theme='black'] .student-theme-lgs-card .student-theme-lgs-muted {
+  color: #d1d5db;
+}
+
+[data-theme='black'] .student-theme-lgs-card .student-theme-lgs-visual-bg {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme='black'] .student-theme-banner-progress {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='black'] .student-theme-banner-progress-track {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+[data-theme='black'] .student-theme-banner-progress-fill {
+  background: #ffffff;
+}
+
+[data-theme='black'] .student-theme-section-icon {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+[data-theme='black'] .student-theme-control-group {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='black'] .student-theme-control-button {
+  color: #d1d5db;
+}
+
+[data-theme='black'] .student-theme-control-button[aria-pressed='true'] {
+  background: #ffffff;
+  color: #222831;
 }
 
 /* Tema değişiminde renkler yumuşak geçsin; sert flash olmasın. */

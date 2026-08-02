@@ -20,9 +20,9 @@ export default function BreathingExercise({ onClose }) {
   const scale = phase.phase === 'Nefes al' ? 'scale-110' : phase.phase === 'Nefes ver' ? 'scale-90' : 'scale-100'
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 bg-panel-blue-soft p-6">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 bg-student-theme-soft p-6">
       <div
-        className={`flex h-40 w-40 items-center justify-center rounded-full bg-panel-blue text-white transition-transform duration-1000 ease-in-out ${scale}`}
+        className={`flex h-40 w-40 items-center justify-center rounded-full bg-student-theme-primary text-student-theme-button-text transition-transform duration-1000 ease-in-out ${scale}`}
       >
         <span className="text-2xl font-semibold">{secondsLeft}</span>
       </div>

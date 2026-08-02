@@ -19,8 +19,8 @@ export default function MobileBottomNavigation({ primaryItems, moreItems = [] })
             key={item.to}
             to={item.to}
             className={({ isActive }) =>
-              `flex flex-1 flex-col items-center gap-1 py-2.5 text-xs font-medium ${
-                isActive ? 'text-panel-blue' : 'text-panel-text-muted'
+              `mx-1 my-1 flex flex-1 flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium ${
+                isActive ? 'bg-student-theme-primary text-student-theme-button-text' : 'text-panel-text-muted'
               }`
             }
           >
@@ -34,8 +34,8 @@ export default function MobileBottomNavigation({ primaryItems, moreItems = [] })
             onClick={() => setShowMore(true)}
             aria-haspopup="true"
             aria-expanded={showMore}
-            className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-xs font-medium ${
-              isMoreActive ? 'text-panel-blue' : 'text-panel-text-muted'
+            className={`mx-1 my-1 flex flex-1 flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium ${
+              isMoreActive ? 'bg-student-theme-primary text-student-theme-button-text' : 'text-panel-text-muted'
             }`}
           >
             <NavIcon name="MoreHorizontal" size={20} />
@@ -70,7 +70,7 @@ export default function MobileBottomNavigation({ primaryItems, moreItems = [] })
                   onClick={() => setShowMore(false)}
                   className={() =>
                     `flex items-center gap-3 rounded-xl px-3 py-3 text-base font-medium ${
-                      isNavItemActive(item.to, location) ? 'bg-panel-blue-soft text-panel-blue' : 'text-panel-text'
+                      isNavItemActive(item.to, location) ? 'bg-student-theme-primary text-student-theme-button-text' : 'text-panel-text'
                     }`
                   }
                 >

@@ -45,7 +45,7 @@ export default function TaskFocusScreen({
           <button
             type="button"
             onClick={() => onSubmitReflection(reflectionAnswers)}
-            className="mt-5 w-full rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white"
+            className="mt-5 w-full rounded-xl bg-student-theme-primary px-4 py-3 text-base font-semibold text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
           >
             Değerlendirmeyi Tamamla
           </button>
@@ -72,9 +72,9 @@ export default function TaskFocusScreen({
         </div>
 
         {task.focusMessage ? (
-          <p className="rounded-xl bg-panel-blue-soft px-4 py-3 text-base text-panel-text">{task.focusMessage}</p>
+          <p className="rounded-xl bg-student-theme-soft px-4 py-3 text-base text-panel-text">{task.focusMessage}</p>
         ) : (
-          <p className="rounded-xl bg-panel-blue-soft px-4 py-3 text-base text-panel-text">
+          <p className="rounded-xl bg-student-theme-soft px-4 py-3 text-base text-panel-text">
             Şu an yalnızca bu {task.durationMinutes} dakikaya odaklan. Geri kalanını TechCoach takip ediyor.
           </p>
         )}
@@ -154,7 +154,7 @@ export default function TaskFocusScreen({
                 stuckNote,
               })
             }
-            className="flex-1 rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white"
+            className="flex-1 rounded-xl bg-student-theme-primary px-4 py-3 text-base font-semibold text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
           >
             Çalışmayı Bitir
           </button>

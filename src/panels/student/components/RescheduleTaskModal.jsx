@@ -57,8 +57,8 @@ export default function RescheduleTaskModal({ task, onConfirm, onClose }) {
                   onClick={() => setReason(option)}
                   className={`rounded-full border px-3 py-1.5 text-sm font-medium ${
                     reason === option
-                      ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
-                      : 'border-panel-border text-panel-text'
+                      ? 'border-student-theme-primary bg-student-theme-soft text-student-theme-text'
+                      : 'border-panel-border text-panel-text hover:border-student-theme-primary hover:bg-student-theme-soft hover:text-student-theme-text'
                   }`}
                 >
                   {option}
@@ -70,7 +70,7 @@ export default function RescheduleTaskModal({ task, onConfirm, onClose }) {
           <button
             type="button"
             onClick={() => onConfirm({ newDate, newTime, reason })}
-            className="rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white"
+            className="rounded-xl bg-student-theme-primary px-4 py-3 text-base font-semibold text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
           >
             Taşı
           </button>

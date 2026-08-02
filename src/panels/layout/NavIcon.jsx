@@ -19,6 +19,7 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
+  Clock,
 } from 'lucide-react'
 
 const ICONS = {
@@ -42,6 +43,7 @@ const ICONS = {
   Building2,
   ChevronDown,
   ChevronRight,
+  Clock,
 }
 
 export default function NavIcon({ name, size = 20, className }) {

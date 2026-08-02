@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { HelpCircle, LifeBuoy } from 'lucide-react'
 import { useAuth } from '../../../context/useAuth'
 import { getTasksForDate, updateTask, toggleSubGoal, rescheduleTask } from '../../../services/taskService'
 import { getCheckIn, saveCheckIn } from '../../../services/checkInService'
@@ -20,6 +21,30 @@ import BreathingExercise from '../components/BreathingExercise'
 import LoadingState from '../../shared/LoadingState'
 
 const date = todayISODate()
+
+function SupportCard({ onOpenSupport }) {
+  return (
+    <section className="panel-card p-5">
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-student-theme-soft text-student-theme-text">
+          <LifeBuoy size={18} aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-panel-text">Destek</h2>
+          <p className="mt-1 text-sm text-panel-text-muted">Zorlandığında planı küçültebilir veya destek isteyebilirsin.</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onOpenSupport}
+        className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-student-theme-primary/25 px-4 text-sm font-semibold text-student-theme-text hover:bg-student-theme-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
+      >
+        <HelpCircle size={16} aria-hidden="true" />
+        Destek Al
+      </button>
+    </section>
+  )
+}
 
 export default function TodayPage() {
   const { authUser } = useAuth()
@@ -291,7 +316,7 @@ export default function TodayPage() {
   }
 
   return (
-    <div className="flex w-full flex-col gap-5">
+    <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
       <StudentWelcomeBanner studentName={authUser?.fullName || ''} tasks={tasks} checkIn={checkIn} />
 
       {loadError ? (
@@ -299,23 +324,30 @@ export default function TodayPage() {
       ) : null}
 
       {banner ? (
-        <div className="rounded-xl bg-panel-sage-soft px-4 py-3 text-base text-panel-text" role="status">
+        <div className="rounded-xl border border-student-theme-primary/20 bg-student-theme-soft px-4 py-3 text-base text-panel-text" role="status">
           {banner}
         </div>
       ) : null}
 
-      <TaskListSection
-        tasks={listTasks}
-        onComplete={handleCompleteInline}
-        onPartialComplete={handlePartialComplete}
-        onReschedule={(task) => setReschedulingTask(task)}
-        onHelp={handleHelp}
-        onAnswerSheetSaved={handleAnswerSheetSaved}
-        onSaveReadingProgress={handleSaveReadingProgress}
-        onSaveQuestionCount={handleSaveQuestionCount}
-      />
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0">
+          <TaskListSection
+            tasks={listTasks}
+            onComplete={handleCompleteInline}
+            onPartialComplete={handlePartialComplete}
+            onReschedule={(task) => setReschedulingTask(task)}
+            onHelp={handleHelp}
+            onAnswerSheetSaved={handleAnswerSheetSaved}
+            onSaveReadingProgress={handleSaveReadingProgress}
+            onSaveQuestionCount={handleSaveQuestionCount}
+          />
+        </div>
 
-      <EnergyCheckIn selectedLevel={checkIn?.energyLevel} onSelect={handleEnergySelect} />
+        <div className="flex min-w-0 flex-col gap-5">
+          <EnergyCheckIn selectedLevel={checkIn?.energyLevel} onSelect={handleEnergySelect} />
+          <SupportCard onOpenSupport={() => setShowStressModal(true)} />
+        </div>
+      </div>
 
       {focusTask ? (
         <TaskFocusScreen

@@ -43,6 +43,7 @@ export async function addHomework({
   totalPageCount,
   priority,
   taskDate,
+  taskTime,
 }) {
   const data = await authRequest('/api/panel/homeworks', {
     method: 'POST',
@@ -58,6 +59,7 @@ export async function addHomework({
       totalPageCount: totalPageCount !== undefined ? Number(totalPageCount) || 0 : undefined,
       priority,
       taskDate,
+      taskTime,
     }),
   })
   return data.homework

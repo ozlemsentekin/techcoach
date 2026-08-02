@@ -13,14 +13,14 @@ export default function HomeworkProgress({ homework, completed }) {
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={percentage}
-          className="h-[5px] w-[90px] shrink-0 overflow-hidden rounded-full bg-[#EDF0F2] sm:w-[110px]"
+          className="h-[5px] w-[90px] shrink-0 overflow-hidden rounded-full bg-panel-surface-soft sm:w-[110px]"
         >
           <div
-            className={cn('h-full rounded-full', completed ? 'bg-emerald-500' : 'bg-[#A18BDE]')}
+            className={cn('h-full rounded-full', completed ? 'bg-emerald-500' : 'bg-student-theme-primary')}
             style={{ width: `${percentage}%` }}
           />
         </div>
-        <span className={cn('w-[46px] shrink-0 text-[11px] font-medium', completed ? 'text-emerald-600' : 'text-[#5D6472]')}>
+        <span className={cn('w-[46px] shrink-0 text-[11px] font-medium', completed ? 'text-emerald-600' : 'text-panel-text-muted')}>
           {homework.completedQuestionCount}/{homework.totalQuestionCount}
         </span>
       </div>
@@ -28,8 +28,8 @@ export default function HomeworkProgress({ homework, completed }) {
   }
 
   if (isReading && homework.totalPageCount > 0) {
-    return <span className="text-[11px] text-[#5D6472]">{homework.totalPageCount} sayfa</span>
+    return <span className="text-[11px] text-panel-text-muted">{homework.totalPageCount} sayfa</span>
   }
 
-  return <span className="text-[11px] text-[#5D6472]">—</span>
+  return <span className="text-[11px] text-panel-text-muted">—</span>
 }

@@ -79,7 +79,7 @@ function ResourceBookSelect({ resourceBooks, value, onChange, disabled, placehol
           <button
             type="button"
             onClick={() => selectOption('')}
-            className="flex w-full items-center rounded-lg px-2 py-1.5 text-left text-sm text-panel-text-muted hover:bg-panel-blue-soft"
+            className="flex w-full items-center rounded-lg px-2 py-1.5 text-left text-sm text-panel-text-muted hover:bg-student-theme-soft hover:text-student-theme-text"
           >
             {placeholder}
           </button>
@@ -88,7 +88,7 @@ function ResourceBookSelect({ resourceBooks, value, onChange, disabled, placehol
               key={book.id}
               type="button"
               onClick={() => selectOption(book.id)}
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-panel-blue-soft"
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-student-theme-soft"
             >
               {book.publisherName ? (
                 <Badge tone="lilac" className="shrink-0">
@@ -104,14 +104,15 @@ function ResourceBookSelect({ resourceBooks, value, onChange, disabled, placehol
   )
 }
 
-export default function AddHomeworkModal({ onSave, onClose }) {
+export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate }) {
   const [subject, setSubject] = useState('')
   const [subjectId, setSubjectId] = useState('')
   const [resourceBookId, setResourceBookId] = useState('')
   const [note, setNote] = useState('')
   const [totalQuestionCount, setTotalQuestionCount] = useState(0)
   const [totalPageCount, setTotalPageCount] = useState(0)
-  const [taskDate, setTaskDate] = useState('')
+  const [taskDate, setTaskDate] = useState(defaultTaskDate || '')
+  const [taskTime, setTaskTime] = useState('')
   const [subjects, setSubjects] = useState(null)
   const [subjectsError, setSubjectsError] = useState('')
   const [resourceBooks, setResourceBooks] = useState(null)
@@ -257,6 +258,7 @@ export default function AddHomeworkModal({ onSave, onClose }) {
         totalQuestionCount: Number(totalQuestionCount) || 0,
         totalPageCount: isReadingBook ? Number(totalPageCount) || 0 : undefined,
         taskDate: taskDate || undefined,
+        taskTime: taskDate ? taskTime || '00:00' : undefined,
       })
     } catch (err) {
       setSaveError(err.message || 'Bir hata oluştu, tekrar deneyin.')
@@ -336,7 +338,7 @@ export default function AddHomeworkModal({ onSave, onClose }) {
                       <button
                         type="button"
                         onClick={() => toggleTopicCollapsed(topic.id)}
-                        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-panel-blue-soft"
+                        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-student-theme-soft"
                       >
                         {isCollapsed ? (
                           <ChevronRight size={14} className="shrink-0 text-panel-text-muted" />
@@ -350,7 +352,7 @@ export default function AddHomeworkModal({ onSave, onClose }) {
                           {topic.tests.map((test) => (
                             <label
                               key={test.id}
-                              className="flex items-center gap-2 rounded-lg px-2 py-1 text-xs hover:bg-panel-blue-soft"
+                              className="flex items-center gap-2 rounded-lg px-2 py-1 text-xs hover:bg-student-theme-soft"
                             >
                               <input
                                 type="checkbox"
@@ -395,14 +397,23 @@ export default function AddHomeworkModal({ onSave, onClose }) {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-panel-text-muted">Tarih (isteğe bağlı)</span>
-              <input
-                type="date"
-                value={taskDate}
-                onChange={(event) => setTaskDate(event.target.value)}
-                className="rounded-xl border border-panel-border p-3 text-sm text-panel-text"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={taskDate}
+                  onChange={(event) => setTaskDate(event.target.value)}
+                  className="min-w-0 flex-1 rounded-xl border border-panel-border p-3 text-sm text-panel-text"
+                />
+                <input
+                  type="time"
+                  value={taskTime}
+                  onChange={(event) => setTaskTime(event.target.value)}
+                  disabled={!taskDate}
+                  className="w-28 shrink-0 rounded-xl border border-panel-border p-3 text-sm text-panel-text disabled:opacity-60"
+                />
+              </div>
               <span className="text-xs text-panel-text-muted">
-                Seçilirse o gün için görev oluşturulur, seçilmezse ödev yalnızca listede görünür.
+                Seçilirse o gün için görev oluşturulur, seçilmezse ödev yalnızca listede görünür. Saat seçilmezse 00:00 olarak eklenir.
               </span>
             </label>
 
@@ -436,7 +447,7 @@ export default function AddHomeworkModal({ onSave, onClose }) {
           <button
             type="submit"
             disabled={saving}
-            className="flex items-center justify-center gap-2 rounded-xl bg-panel-blue px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex items-center justify-center gap-2 rounded-xl bg-student-theme-primary px-4 py-3 text-sm font-semibold text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary disabled:cursor-not-allowed disabled:opacity-70"
           >
             {saving ? <Loader2 size={16} className="animate-spin" /> : null}
             {saving ? 'Kaydediliyor...' : 'Ödevi Kaydet'}

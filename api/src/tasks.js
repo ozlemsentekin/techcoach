@@ -59,7 +59,10 @@ function sanitizeTask(record) {
 
 // Ödevden oluşturulmuş bir görevin (bkz. homework.js createTaskForHomework) ilerleme/durumu
 // değiştiğinde, aynı bilgiyi bağlı olduğu dbo.Homeworks satırına da yazar; aksi halde Ödevler
-// sayfası hep atama anındaki (genelde 0/bekliyor) donuk değerleri gösterir.
+// sayfası hep atama anındaki (genelde 0/bekliyor) donuk değerleri gösterir. due_date'i de
+// senkronize ediyoruz çünkü RescheduleTaskModal görevi başka bir güne taşıdığında sadece
+// dbo.Tasks.date güncelleniyordu; bu da ödevin Ödevlerim'de hâlâ eski günün altında görünüp
+// Bugün planındaki yeni günden kopmasına yol açıyordu.
 async function syncHomeworkCompletion(taskRecord) {
   if (!taskRecord?.homework_id) return
 
@@ -67,10 +70,11 @@ async function syncHomeworkCompletion(taskRecord) {
     id: { type: sql.UniqueIdentifier, value: taskRecord.homework_id },
     completedQuestionCount: { type: sql.Int, value: taskRecord.completed_question_count ?? 0 },
     status: { type: sql.NVarChar(20), value: taskRecord.status },
+    dueDate: { type: sql.Date, value: taskRecord.date },
   })
   await homeworkDb.query(`
     UPDATE dbo.Homeworks
-    SET completed_question_count = @completedQuestionCount, status = @status
+    SET completed_question_count = @completedQuestionCount, status = @status, due_date = @dueDate
     WHERE id = @id;
   `)
 }

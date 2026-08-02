@@ -41,11 +41,22 @@ export function formatTime(date = new Date()) {
   return new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit' }).format(date)
 }
 
-/** Saate göre karşılama metni ve ikon anahtarı döner: 0-11 günaydın, 12-16 tünaydın, 17-23 iyi akşamlar. */
+const DEFAULT_GREETING_RULES = [
+  { label: 'Günaydın', endHour: 12 },
+  { label: 'Tünaydın', endHour: 17 },
+  { label: 'İyi akşamlar', endHour: 24 },
+]
+
+/** Verilen kurallardan (end_hour artan sırada) saate uyan ilkini, yoksa son kuralı döner. */
+export function pickGreeting(rules, hour) {
+  const sorted = [...rules].sort((a, b) => a.endHour - b.endHour)
+  const match = sorted.find((rule) => hour < rule.endHour)
+  return match || sorted[sorted.length - 1] || null
+}
+
+/** Admin panelinden yönetilen selamlama kuralları yüklenene kadar kullanılacak varsayılan. */
 export function getGreetingByHour(hour) {
-  if (hour < 12) return { text: 'Günaydın', icon: 'sunrise' }
-  if (hour < 17) return { text: 'Tünaydın', icon: 'sun' }
-  return { text: 'İyi akşamlar', icon: 'moon' }
+  return pickGreeting(DEFAULT_GREETING_RULES, hour)
 }
 
 /** Gün başlangıcına normalize ederek hedef tarihe kalan gün sayısını döner (0=bugün, negatif=geçti). */

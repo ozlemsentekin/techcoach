@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
+import Badge from '../../ui/Badge'
 import { TASK_TYPES } from '../../../data/taskTypes'
 import { TASK_TEMPLATES } from '../../../data/taskTemplates'
 import { hasOverlap } from '../../../services/weeklyPlanService'
@@ -174,20 +175,28 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
           />
         </label>
 
-        <label className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5">
           <span className="text-sm font-medium text-panel-text-muted">Görev türü</span>
-          <select
-            value={form.taskType}
-            onChange={handleChange('taskType')}
-            className="rounded-xl border border-panel-border p-3 text-base text-panel-text"
-          >
-            {TASK_TYPE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+          {initialTask ? (
+            <div>
+              <Badge tone={TASK_TYPES[form.taskType]?.color || 'neutral'}>
+                {TASK_TYPES[form.taskType]?.label || form.taskType}
+              </Badge>
+            </div>
+          ) : (
+            <select
+              value={form.taskType}
+              onChange={handleChange('taskType')}
+              className="rounded-xl border border-panel-border p-3 text-base text-panel-text"
+            >
+              {TASK_TYPE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1.5">

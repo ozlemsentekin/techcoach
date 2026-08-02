@@ -1,7 +1,7 @@
 import { authRequest } from './authClient'
 import { addDaysISO } from '../utils/time'
 import { calculateProgress } from '../utils/progress'
-import { getMessagesByCategory } from '../data/motivationMessages'
+import { getPublicMotivationMessagePool } from './contentService'
 
 /**
  * @typedef {Object} ParentMotivationMessage
@@ -121,8 +121,9 @@ export function determineMessageCategory(context) {
   return 'general'
 }
 
-function pickRandomMessage(category, excludeId) {
-  const eligible = getMessagesByCategory(category)
+async function pickRandomMessage(category, excludeId) {
+  const messagePool = await getPublicMotivationMessagePool()
+  const eligible = messagePool.filter((message) => message.category === category)
   const pool = eligible.length > 1 ? eligible.filter((message) => message.id !== excludeId) : eligible
   const source = pool.length > 0 ? pool : eligible
   return source[Math.floor(Math.random() * source.length)] || null
@@ -185,14 +186,15 @@ export async function resolveDisplayedMotivationMessage(dateISO, { tasks, checkI
 
   const cached = await getDailySelection(dateISO)
   if (cached && cached.category === category) {
-    const cachedMessage = getMessagesByCategory(category).find((message) => message.id === cached.messageId)
+    const messagePool = await getPublicMotivationMessagePool()
+    const cachedMessage = messagePool.find((message) => message.id === cached.messageId)
     if (cachedMessage) {
       return toDisplayedSystemMessage(cachedMessage)
     }
   }
 
   const previousSelection = await getDailySelection(addDaysISO(dateISO, -1))
-  const picked = pickRandomMessage(category, previousSelection?.messageId)
+  const picked = await pickRandomMessage(category, previousSelection?.messageId)
   if (!picked) return null
 
   await saveDailySelection(dateISO, { messageId: picked.id, category, source: 'system' })
@@ -208,7 +210,7 @@ export async function requestAnotherMessage(dateISO, { tasks, checkIn }) {
 
   const context = getMotivationContext({ tasks, checkIn })
   const category = determineMessageCategory(context)
-  const picked = pickRandomMessage(category, cached?.messageId)
+  const picked = await pickRandomMessage(category, cached?.messageId)
   if (!picked) {
     return { message: null, switchesLeft: MAX_MANUAL_SWITCHES - usedCount }
   }

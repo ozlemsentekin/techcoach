@@ -830,6 +830,10 @@ async function createResourceBookTopicTestHandler(request) {
       return json(400, { error: 'Seçilen içerik bulunamadı.' })
     }
 
+    if (error.number === 2601 || error.number === 2627) {
+      return json(400, { error: 'Bu konuda aynı isimde bir test zaten var.' })
+    }
+
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
@@ -896,6 +900,10 @@ async function updateResourceBookTopicTestHandler(request) {
 
     return json(200, { test: sanitizeResourceBookTopicTest(record) })
   } catch (error) {
+    if (error.number === 2601 || error.number === 2627) {
+      return json(400, { error: 'Bu konuda aynı isimde bir test zaten var.' })
+    }
+
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }

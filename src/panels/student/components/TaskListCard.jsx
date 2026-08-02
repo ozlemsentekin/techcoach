@@ -15,6 +15,26 @@ const STATUS_TONE_CLASSES = {
   red: 'bg-panel-red-soft text-panel-red',
 }
 
+function getPrimaryText(task, details) {
+  if (details.kaynak) {
+    return `${task.publisherName ? `${task.publisherName} - ` : ''}${details.kaynak}`
+  }
+  return details.rawText || task.title || 'Görev'
+}
+
+function getSecondaryItems(details) {
+  if (details.testGroups.length) {
+    return details.testGroups.slice(0, 3).map((item) => {
+      if (item.topic && item.testName) return `${item.topic}: ${item.testName}`
+      return item.topic || item.testName
+    })
+  }
+  if (details.testTopic || details.testName) {
+    return [`${details.testTopic || ''}${details.testTopic && details.testName ? ': ' : ''}${details.testName || ''}`]
+  }
+  return []
+}
+
 export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLessonLabel = true, emphasizeTime = false }) {
   const subjectStyle = SUBJECT_STYLES[task.subject] || DEFAULT_SUBJECT_STYLE
   const details = parseAssignmentDetails(task)
@@ -33,67 +53,57 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
   const unit = isReading ? 'sayfa' : 'soru'
   const showProgress = total > 0
   const progressPct = task.status === 'tamamlandi' ? 100 : total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0
+  const secondaryItems = getSecondaryItems(details)
 
   return (
-    <div className={`flex flex-col gap-4 rounded-2xl border border-panel-border border-l-4 ${subjectStyle.border} bg-panel-surface p-4 shadow-panel-1 transition-shadow hover:shadow-panel-2 sm:p-5 lg:flex-row lg:items-center lg:gap-6`}>
-      <div className="min-w-0 flex-1">
-        {emphasizeTime && task.startTime ? (
-          <div className="mb-2.5 flex w-fit items-center gap-1.5 rounded-lg bg-student-theme-primary px-3 py-1.5 text-base font-bold text-student-theme-button-text">
-            <Clock size={18} aria-hidden="true" />
-            {task.startTime}
+    <article
+      className={`grid gap-4 border-l-4 ${subjectStyle.border} bg-panel-surface px-4 py-4 transition-colors hover:bg-panel-surface-soft/70 sm:px-5 lg:grid-cols-[minmax(0,1fr)_180px_auto] lg:items-center`}
+    >
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          {emphasizeTime && task.startTime ? (
+            <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-student-theme-primary px-3 text-sm font-bold text-student-theme-button-text">
+              <Clock size={15} aria-hidden="true" />
+              {task.startTime}
+            </span>
+          ) : null}
+
+          {showLessonLabel ? (
+            <span className={`inline-flex max-w-full items-center rounded-full px-3 py-1 text-xs font-bold ${subjectStyle.soft} ${subjectStyle.text}`}>
+              <span className="truncate">{lessonLabel}</span>
+            </span>
+          ) : null}
+
+          <span className={`inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ${STATUS_TONE_CLASSES[status.tone]}`}>
+            {StatusIcon ? <StatusIcon size={13} aria-hidden="true" /> : null}
+            {status.label}
+          </span>
+
+          {task.date && !emphasizeTime ? (
+            <span className="inline-flex items-center text-xs font-medium text-panel-text-muted">
+              {formatDateShort(task.date)}
+              {task.startTime ? ` - ${task.startTime}` : ''}
+            </span>
+          ) : null}
+        </div>
+
+        <p className="mt-3 line-clamp-2 text-base font-bold text-panel-text">{getPrimaryText(task, details)}</p>
+
+        {secondaryItems.length > 0 ? (
+          <div className="mt-1.5 space-y-0.5">
+            {secondaryItems.map((item, index) => (
+              <p key={`${task.id}-detail-${index}`} className="line-clamp-1 text-sm text-panel-text-muted">
+                {item}
+                {details.testGroups.length > 3 && index === secondaryItems.length - 1 ? '...' : ''}
+              </p>
+            ))}
           </div>
         ) : null}
 
-        {showLessonLabel ? (
-          <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold tracking-wide ${subjectStyle.soft} ${subjectStyle.text}`}>
-            {lessonLabel}
-          </span>
-        ) : null}
-
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${showLessonLabel ? 'ml-2' : ''} ${STATUS_TONE_CLASSES[status.tone]}`}
-        >
-          {StatusIcon ? <StatusIcon size={13} aria-hidden="true" /> : null}
-          {status.label}
-        </span>
-
-        {task.date && !emphasizeTime ? (
-          <span className="ml-2 inline-flex items-center text-xs font-medium text-panel-text-muted">
-            {formatDateShort(task.date)}
-            {task.startTime ? ` · ${task.startTime}` : ''}
-          </span>
-        ) : null}
-
-        {details.kaynak ? (
-          <p className="mt-2 break-words text-xs font-bold text-panel-text">
-            {task.publisherName ? `${task.publisherName} - ` : ''}
-            {details.kaynak}
-          </p>
-        ) : null}
-        {details.rawText ? <p className="mt-2 text-sm text-panel-text-muted">{details.rawText}</p> : null}
-
-        {details.testGroups.length ? (
-          <ul className="mt-2 ml-5 flex list-disc flex-col gap-1 text-xs italic text-panel-text-muted">
-            {details.testGroups.map((item, index) => (
-              <li key={`${item.topic}-${item.testName || 'topic'}-${index}`} className="break-words pl-1">
-                {item.topic}
-                {item.testName ? ` - ${item.testName}` : ''}
-              </li>
-            ))}
-          </ul>
-        ) : details.testTopic || details.testName ? (
-          <ul className="mt-2 ml-5 list-disc text-xs italic text-panel-text-muted">
-            <li className="break-words pl-1">
-              {details.testTopic}
-              {details.testTopic && details.testName ? ` - ${details.testName}` : details.testName}
-            </li>
-          </ul>
-        ) : null}
-
-        <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm text-panel-text-muted">
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-panel-text-muted">
           {total > 0 ? (
             <span>
-              <span className="font-semibold text-panel-text">{isReading ? 'Toplam Sayfa Sayısı' : 'Toplam Soru Sayısı'}:</span> {total} {unit}
+              <span className="font-semibold text-panel-text">{isReading ? 'Sayfa' : 'Soru'}:</span> {total} {unit}
             </span>
           ) : null}
           {isReading && task.currentPageNumber ? (
@@ -101,17 +111,14 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
               <span className="font-semibold text-panel-text">Kaldığı Sayfa:</span> {task.currentPageNumber}
             </span>
           ) : null}
+          {isActive && overdueDays > 0 ? <span className="font-semibold text-panel-red">{overdueDays} gün gecikme</span> : null}
         </div>
-
-        {isActive && overdueDays > 0 ? (
-          <p className="mt-2 text-sm font-semibold text-panel-red">{overdueDays} gün gecikme var</p>
-        ) : null}
       </div>
 
       {showProgress ? (
-        <div className="flex w-full flex-col gap-1.5 lg:w-48 lg:shrink-0">
-          <span className="text-sm font-medium text-panel-text">
-            {completed} / {total} {unit} {isReading ? 'okundu' : 'tamamlandı'}
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-sm font-semibold text-panel-text">
+            {completed} / {total} {unit}
           </span>
           <div className="h-2.5 w-full overflow-hidden rounded-full bg-panel-surface-soft">
             <div
@@ -119,21 +126,21 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <span className="self-end text-xs font-semibold text-student-theme-text">%{progressPct}</span>
+          <span className="self-end text-xs font-bold text-student-theme-text">%{progressPct}</span>
         </div>
-      ) : null}
+      ) : (
+        <div className="hidden lg:block" />
+      )}
 
-      <div className="flex shrink-0 flex-col items-start gap-2 lg:items-end">
-        <button
-          type="button"
-          onClick={() => onOpenDetails(task)}
-          aria-label={`${task.title} — İşlem Yap`}
-          className="inline-flex min-h-[50px] min-w-[160px] items-center justify-center gap-1.5 rounded-xl border border-student-theme-primary bg-student-theme-primary px-5 text-sm font-semibold text-student-theme-button-text shadow-panel-1 transition-all duration-150 hover:bg-student-theme-hover hover:border-student-theme-hover hover:shadow-panel-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary active:scale-[0.98]"
-        >
-          İşlem Yap
-          <ArrowRight size={16} aria-hidden="true" />
-        </button>
-      </div>
-    </div>
+      <button
+        type="button"
+        onClick={() => onOpenDetails(task)}
+        aria-label={`${task.title} - İşlem Yap`}
+        className="inline-flex h-10 min-w-32 shrink-0 items-center justify-center gap-2 rounded-xl border border-student-theme-primary bg-student-theme-primary px-4 text-sm font-semibold text-student-theme-button-text shadow-sm transition-colors hover:border-student-theme-hover hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary active:scale-[0.98]"
+      >
+        İşlem Yap
+        <ArrowRight size={16} aria-hidden="true" />
+      </button>
+    </article>
   )
 }

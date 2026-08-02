@@ -14,7 +14,7 @@ export const SUBJECT_ICONS = {
 export const DEFAULT_SUBJECT_ICON = BookOpen
 
 export const SUBJECT_ICON_TONE_CLASSES = {
-  blue: 'bg-panel-blue-soft text-panel-blue',
+  blue: 'bg-student-theme-soft text-student-theme-text',
   lilac: 'bg-panel-lilac-soft text-panel-lilac',
   sage: 'bg-panel-sage-soft text-panel-sage',
   slate: 'bg-panel-slate-soft text-panel-slate',

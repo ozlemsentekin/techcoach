@@ -57,7 +57,7 @@ export default function SessionCompletionModal({ task, initialCompletedQuestionC
           <button
             type="button"
             onClick={onClose}
-            className="mt-5 w-full rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white"
+            className="mt-5 w-full rounded-xl bg-student-theme-primary px-4 py-3 text-base font-semibold text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
           >
             Kapat
           </button>
@@ -137,8 +137,8 @@ export default function SessionCompletionModal({ task, initialCompletedQuestionC
                   onClick={() => setDifficulty(option)}
                   className={`rounded-full border px-3 py-1.5 text-sm font-medium ${
                     difficulty === option
-                      ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
-                      : 'border-panel-border text-panel-text'
+                      ? 'border-student-theme-primary bg-student-theme-soft text-student-theme-text'
+                      : 'border-panel-border text-panel-text hover:border-student-theme-primary hover:bg-student-theme-soft hover:text-student-theme-text'
                   }`}
                 >
                   {option}
@@ -157,8 +157,8 @@ export default function SessionCompletionModal({ task, initialCompletedQuestionC
                   onClick={() => setEmotion(option)}
                   className={`rounded-full border px-3 py-1.5 text-sm font-medium ${
                     emotion === option
-                      ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
-                      : 'border-panel-border text-panel-text'
+                      ? 'border-student-theme-primary bg-student-theme-soft text-student-theme-text'
+                      : 'border-panel-border text-panel-text hover:border-student-theme-primary hover:bg-student-theme-soft hover:text-student-theme-text'
                   }`}
                 >
                   {option}
@@ -181,7 +181,7 @@ export default function SessionCompletionModal({ task, initialCompletedQuestionC
             <button
               type="button"
               onClick={() => handleSubmit('tamamlandi')}
-              className="flex-1 rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white"
+              className="flex-1 rounded-xl bg-student-theme-primary px-4 py-3 text-base font-semibold text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
             >
               Tamamladım
             </button>

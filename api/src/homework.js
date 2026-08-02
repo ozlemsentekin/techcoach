@@ -39,11 +39,13 @@ function sanitizeHomework(record) {
 // dbo.Homeworks satırına eşlik eden bir dbo.Tasks satırı oluşturur (taslak değil, canlı).
 // resourceBookId + testIds burada aktarılır ki soru bankası görevlerinde dijital cevap kağıdı
 // (bkz. tasks.js getTaskAnswerSheetHandler) gerçek test/soru sayısına ve cevap anahtarına erişebilsin.
-async function createTaskForHomework(studentId, homework, taskDate, resourceBookId, testIds) {
+async function createTaskForHomework(studentId, homework, taskDate, resourceBookId, testIds, taskTime) {
   try {
     const durationMinutes = Math.min(60, Math.max(20, homework.totalQuestionCount || 20))
-    const startMinutes = 16 * 60
-    const endMinutes = startMinutes + durationMinutes
+    const startTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(taskTime || '') ? taskTime : '00:00'
+    const [startHour, startMinute] = startTime.split(':').map(Number)
+    const startMinutes = startHour * 60 + startMinute
+    const endMinutes = (startMinutes + durationMinutes) % (24 * 60)
     const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`
     const sanitizedTestIds = Array.isArray(testIds) ? testIds.filter((id) => typeof id === 'string' && id) : []
 
@@ -54,7 +56,7 @@ async function createTaskForHomework(studentId, homework, taskDate, resourceBook
       description: { type: sql.NVarChar(1000), value: homework.title },
       subject: { type: sql.NVarChar(100), value: homework.subject },
       taskType: { type: sql.NVarChar(40), value: 'odev' },
-      startTime: { type: sql.Char(5), value: '16:00' },
+      startTime: { type: sql.Char(5), value: startTime },
       endTime: { type: sql.Char(5), value: endTime },
       durationMinutes: { type: sql.Int, value: durationMinutes },
       targetQuestionCount: { type: sql.Int, value: homework.totalQuestionCount || null },
@@ -98,6 +100,62 @@ const SELECT_HOMEWORK = `
   LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
 `
 
+// task_type = 'odev' olup hiçbir Homeworks kaydına bağlı olmayan (homework_id NULL) canlı
+// görevler: örn. "Geçen Haftayı Kopyala" ile çoğaltılmış bir görev, kopyalama sırasında
+// homework_id alanını taşımadığı için sahipsiz kalır (bkz. weeklyPlanService.js
+// copyPreviousWeek); benzer şekilde resource_book_id de kopyalanan görevde zaten boşsa
+// (örn. zincirleme kopyalarda) sahipsiz kalmaya devam eder. Bu yüzden resource_book_id
+// şartı aranmıyor: task_type = 'odev' tek başına yeterli sinyal. Bu görevler öğrencinin
+// Bugün planında görünmeye devam eder ama aksi halde Ödevlerim listesinde hiç görünmez;
+// burada onları ödev benzeri bir kayıt olarak listeye ekliyoruz.
+const SELECT_ORPHAN_TASK_HOMEWORK = `
+  SELECT t.id, t.student_id, t.subject, rb.name AS resource_book_name, rb.resource_type AS resource_book_type,
+         p.name AS publisher_name, t.title, t.description, t.date, t.target_question_count,
+         t.completed_question_count, t.target_page_count, t.priority, t.status, t.created_at, t.updated_at
+  FROM dbo.Tasks t
+  LEFT JOIN dbo.ResourceBooks rb ON rb.id = t.resource_book_id
+  LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+  WHERE t.student_id = @studentId AND t.task_type = 'odev' AND t.homework_id IS NULL AND t.is_draft = 0
+`
+
+// createTaskForHomework, görev listesinde kısa görünsün diye Tasks.title alanına hep
+// "{ders} Ödevi" gibi genel bir başlık yazar; asıl ödev başlığı (kaynak/test adları) ise
+// Tasks.description'a konur. homework_id bağlantısı koptuğunda (bkz. yukarıdaki sorgu)
+// h.title artık okunamadığı için, bu genel kalıba denk gelen görevlerde description'ı
+// başlık olarak kullanıyoruz; aksi halde Ödevlerim'de anlamsız "Fen Bilimleri Ödevi" gibi
+// bir satır görünür. Elle eklenmiş (AddTaskDrawer) 'odev' görevlerinde başlık zaten
+// anlamlı olduğundan bu kalıba denk gelmez ve dokunulmaz.
+function sanitizeOrphanTaskAsHomework(record) {
+  const genericTaskTitle = record.subject ? `${record.subject} Ödevi` : null
+  const isGenericTitle = genericTaskTitle && record.title === genericTaskTitle && record.description
+  const title = isGenericTitle ? record.description : record.title
+
+  return {
+    id: record.id,
+    studentId: record.student_id,
+    subjectId: null,
+    subject: record.subject,
+    resourceBookId: null,
+    resourceBookName: record.resource_book_name || null,
+    resourceType: record.resource_book_type || null,
+    publisherName: record.publisher_name || null,
+    title,
+    description: isGenericTitle ? '' : record.description || '',
+    assignedDate: toISODate(record.date),
+    dueDate: toISODate(record.date),
+    totalQuestionCount: record.target_question_count || 0,
+    completedQuestionCount: record.completed_question_count || 0,
+    totalPageCount: record.target_page_count,
+    priority: record.priority,
+    status: record.status,
+    isSplit: false,
+    dayPlans: [],
+    createdAt: record.created_at,
+    updatedAt: record.updated_at,
+    isTaskOnly: true,
+  }
+}
+
 async function listHomeworksHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
@@ -105,16 +163,25 @@ async function listHomeworksHandler(request) {
       return error
     }
 
-    const requestDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-    })
-    const result = await requestDb.query(`
-      ${SELECT_HOMEWORK}
-      WHERE h.student_id = @studentId
-      ORDER BY h.due_date ASC;
-    `)
+    const [result, orphanTaskResult] = await Promise.all([
+      withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } }).then((requestDb) =>
+        requestDb.query(`
+          ${SELECT_HOMEWORK}
+          WHERE h.student_id = @studentId
+          ORDER BY h.due_date ASC;
+        `),
+      ),
+      withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } }).then((requestDb) =>
+        requestDb.query(SELECT_ORPHAN_TASK_HOMEWORK),
+      ),
+    ])
 
-    return json(200, { homeworks: result.recordset.map(sanitizeHomework) })
+    const homeworks = [
+      ...result.recordset.map(sanitizeHomework),
+      ...orphanTaskResult.recordset.map(sanitizeOrphanTaskAsHomework),
+    ].sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''))
+
+    return json(200, { homeworks })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -148,6 +215,7 @@ async function createHomeworkHandler(request) {
     const priority = payload?.priority || 'orta'
     const dayPlans = Array.isArray(payload?.dayPlans) ? payload.dayPlans : []
     const taskDate = payload?.taskDate || null
+    const taskTime = payload?.taskTime || null
 
     if (!subjectId) {
       return json(400, { error: 'Ders seçilmeli.' })
@@ -219,7 +287,7 @@ async function createHomeworkHandler(request) {
 
     const homework = sanitizeHomework(fetchResult.recordset[0])
     if (taskDate) {
-      await createTaskForHomework(studentId, homework, taskDate, resourceBookId, testIds)
+      await createTaskForHomework(studentId, homework, taskDate, resourceBookId, testIds, taskTime)
     }
 
     return json(201, { homework })

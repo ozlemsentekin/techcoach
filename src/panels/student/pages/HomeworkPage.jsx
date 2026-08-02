@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { NotebookPen } from 'lucide-react'
 import { getHomeworks, addHomework } from '../../../services/homeworkService'
+import { todayISODate } from '../../../utils/time'
 import PageHeader from '../../layout/PageHeader'
 import AddHomeworkModal from '../components/AddHomeworkModal'
 import LoadingState from '../../shared/LoadingState'
@@ -10,11 +11,17 @@ import { MotionDiv } from '../../ui/motion'
 import { groupHomeworksByDate } from '../../shared/homework/homeworkDisplay'
 import HomeworkDateAccordion from '../../shared/homework/HomeworkDateAccordion'
 
+const FILTER_TABS = [
+  { key: 'active', label: 'Aktif' },
+  { key: 'all', label: 'Tümü' },
+]
+
 export default function HomeworkPage() {
   const [homeworks, setHomeworks] = useState(null)
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [expandedDateOverrides, setExpandedDateOverrides] = useState({})
+  const [filter, setFilter] = useState('active')
 
   useEffect(() => {
     let ignore = false
@@ -31,6 +38,12 @@ export default function HomeworkPage() {
   }, [])
 
   const groupedByDate = useMemo(() => groupHomeworksByDate(homeworks), [homeworks])
+
+  const today = todayISODate()
+  const visibleGroups = useMemo(() => {
+    if (filter === 'all') return groupedByDate
+    return groupedByDate.filter((dateGroup) => !dateGroup.dueDate || dateGroup.dueDate >= today)
+  }, [groupedByDate, filter, today])
 
   const isDateOpen = (dueDate, index) => {
     const key = dueDate || 'unassigned'
@@ -62,7 +75,7 @@ export default function HomeworkPage() {
         actions={
           <Button
             onClick={() => setShowModal(true)}
-            className="h-10 rounded-[10px] bg-[#655e94] px-4 text-sm font-medium text-white hover:opacity-90"
+            className="h-10 rounded-[10px] bg-student-theme-primary px-4 text-sm font-medium text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline-student-theme-primary"
           >
             + Ödev Ekle
           </Button>
@@ -80,16 +93,45 @@ export default function HomeworkPage() {
           description="Bugünkü planlama görevinden veya buradan yeni bir ödev ekleyebilirsin."
         />
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-4">
-          {groupedByDate.map((dateGroup, index) => (
-            <HomeworkDateAccordion
-              key={dateGroup.dueDate || 'unassigned'}
-              dateGroup={dateGroup}
-              isOpen={isDateOpen(dateGroup.dueDate, index)}
-              onToggle={() => toggleDate(dateGroup.dueDate, index)}
+        <>
+          <div className="flex gap-2">
+            {FILTER_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                aria-pressed={filter === tab.key}
+                onClick={() => setFilter(tab.key)}
+                className={`rounded-[10px] px-4 py-2 text-sm font-semibold transition-colors ${
+                  filter === tab.key
+                    ? 'bg-student-theme-primary text-student-theme-button-text shadow-sm'
+                    : 'bg-student-theme-soft text-student-theme-text hover:bg-student-theme-primary hover:text-student-theme-button-text'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {visibleGroups.length === 0 ? (
+            <EmptyState
+              icon={NotebookPen}
+              title="Aktif ödev yok"
+              description="Geçmiş ödevleri görmek için Tümü filtresini seçebilirsin."
             />
-          ))}
-        </MotionDiv>
+          ) : (
+            <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-4">
+              {visibleGroups.map((dateGroup, index) => (
+                <HomeworkDateAccordion
+                  key={dateGroup.dueDate || 'unassigned'}
+                  dateGroup={dateGroup}
+                  isOpen={isDateOpen(dateGroup.dueDate, index)}
+                  onToggle={() => toggleDate(dateGroup.dueDate, index)}
+                  isPast={Boolean(dateGroup.dueDate) && dateGroup.dueDate < today}
+                />
+              ))}
+            </MotionDiv>
+          )}
+        </>
       )}
 
       {showModal ? <AddHomeworkModal onSave={handleSave} onClose={() => setShowModal(false)} /> : null}

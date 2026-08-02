@@ -72,6 +72,17 @@ const {
   incrementSwitchCountHandler,
 } = require('./motivation')
 const { revenuecatWebhookHandler } = require('./entitlements')
+const {
+  listMotivationMessagesHandler,
+  createMotivationMessageHandler,
+  updateMotivationMessageHandler,
+  listMotivationMessagePoolForPanelHandler,
+  listGreetingRulesHandler,
+  createGreetingRuleHandler,
+  updateGreetingRuleHandler,
+  deleteGreetingRuleHandler,
+  listGreetingRulesForPanelHandler,
+} = require('./content')
 
 app.http('auth-register', {
   authLevel: 'anonymous',
@@ -169,6 +180,69 @@ app.http('panel-admin-publishers-create', {
   methods: ['POST'],
   route: 'panel-admin/publishers',
   handler: createPublisherHandler,
+})
+
+app.http('panel-admin-motivation-messages-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-admin/motivation-messages',
+  handler: listMotivationMessagesHandler,
+})
+
+app.http('panel-admin-motivation-messages-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-admin/motivation-messages',
+  handler: createMotivationMessageHandler,
+})
+
+app.http('panel-admin-motivation-messages-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-admin/motivation-messages/{messageId}',
+  handler: updateMotivationMessageHandler,
+})
+
+app.http('panel-motivation-message-pool', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/motivation-message-pool',
+  handler: listMotivationMessagePoolForPanelHandler,
+})
+
+app.http('panel-admin-greeting-rules-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-admin/greeting-rules',
+  handler: listGreetingRulesHandler,
+})
+
+app.http('panel-admin-greeting-rules-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-admin/greeting-rules',
+  handler: createGreetingRuleHandler,
+})
+
+app.http('panel-admin-greeting-rules-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-admin/greeting-rules/{ruleId}',
+  handler: updateGreetingRuleHandler,
+})
+
+app.http('panel-admin-greeting-rules-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-admin/greeting-rules/{ruleId}',
+  handler: deleteGreetingRuleHandler,
+})
+
+app.http('panel-greeting-rules', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/greeting-rules',
+  handler: listGreetingRulesForPanelHandler,
 })
 
 app.http('panel-admin-resource-books-list', {

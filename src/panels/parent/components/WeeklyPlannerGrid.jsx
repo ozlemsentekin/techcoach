@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BookOpen, Calculator, ChevronDown, Coffee, FlaskConical, NotebookPen, Plus, Star } from 'lucide-react'
+import { BookOpen, Calculator, ChevronDown, Coffee, FlaskConical, NotebookPen, Plus, Star, UploadCloud } from 'lucide-react'
 import { todayISODate } from '../../../utils/time'
 
 const DAY_LABELS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar']
@@ -141,14 +141,25 @@ function TaskCard({ task, onEditTask }) {
   )
 }
 
-export default function WeeklyPlannerGrid({ weekDates, tasksByDate, onAddTask, onEditTask }) {
+export default function WeeklyPlannerGrid({ weekDates, tasksByDate, dayStatusByDate, onAddHomework, onAddTask, onEditTask, onPublishDay }) {
   const [expandedActionDate, setExpandedActionDate] = useState(null)
   const currentDate = todayISODate()
+
+  const handleAddHomework = (date) => {
+    if (date < currentDate) return
+    setExpandedActionDate(null)
+    onAddHomework(date)
+  }
 
   const handleAddTask = (date, initialTemplate) => {
     if (date < currentDate) return
     setExpandedActionDate(null)
     onAddTask(date, initialTemplate)
+  }
+
+  const handlePublishDay = (date) => {
+    setExpandedActionDate(null)
+    onPublishDay(date)
   }
 
   return (
@@ -157,6 +168,8 @@ export default function WeeklyPlannerGrid({ weekDates, tasksByDate, onAddTask, o
         const tasks = [...(tasksByDate[date] || [])].sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
         const isPastDay = date < currentDate
         const isActionsExpanded = expandedActionDate === date && !isPastDay
+        const dayStatus = dayStatusByDate?.[date]
+        const hasPendingDraft = dayStatus === 'taslak'
 
         return (
           <div
@@ -166,6 +179,11 @@ export default function WeeklyPlannerGrid({ weekDates, tasksByDate, onAddTask, o
             <div className="border-b border-panel-blue-soft bg-panel-blue-soft px-3 py-4 text-center">
               <p className="break-words text-base font-extrabold leading-tight text-panel-text">{DAY_LABELS[index]}</p>
               <p className="mt-1 break-words text-sm font-bold leading-tight text-panel-blue">{formatDayDate(date)}</p>
+              {hasPendingDraft ? (
+                <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-700">
+                  Taslak · Yayınlanmadı
+                </span>
+              ) : null}
             </div>
 
             <div className="flex flex-1 flex-col px-3 py-4">
@@ -178,12 +196,12 @@ export default function WeeklyPlannerGrid({ weekDates, tasksByDate, onAddTask, o
               <div className="mt-4 grid gap-2">
                 <button
                   type="button"
-                  onClick={() => handleAddTask(date)}
+                  onClick={() => handleAddHomework(date)}
                   disabled={isPastDay}
                   className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-panel-blue-soft bg-panel-surface px-3 text-sm font-bold text-panel-blue shadow-sm transition-colors duration-150 hover:bg-panel-blue-soft/60 disabled:cursor-not-allowed disabled:border-panel-border disabled:bg-panel-surface-soft disabled:text-panel-text-muted disabled:shadow-none disabled:hover:bg-panel-surface-soft"
                 >
                   <Plus size={18} aria-hidden="true" />
-                  Görev Ekle
+                  Ödev Ekle
                 </button>
 
                 <button
@@ -203,6 +221,17 @@ export default function WeeklyPlannerGrid({ weekDates, tasksByDate, onAddTask, o
 
                 {isActionsExpanded ? (
                   <div className="grid gap-2 rounded-xl border border-panel-border bg-panel-surface-soft p-2">
+                    {hasPendingDraft ? (
+                      <button
+                        type="button"
+                        onClick={() => handlePublishDay(date)}
+                        className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-panel-blue-soft bg-panel-blue-soft/60 px-3 text-xs font-bold text-panel-blue transition-colors duration-150 hover:bg-panel-blue-soft"
+                      >
+                        <UploadCloud size={16} aria-hidden="true" />
+                        <span className="min-w-0 truncate">Bu Günü Yayımla</span>
+                      </button>
+                    ) : null}
+
                     <button
                       type="button"
                       onClick={() => handleAddTask(date, QUICK_ADD_TEMPLATES.lesson)}

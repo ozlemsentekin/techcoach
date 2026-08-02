@@ -28,11 +28,73 @@ export async function setPlanStatus(weekStartDateISO, status) {
   return data.status
 }
 
-/** Taslak varsa taslağı, yoksa canlı planı (başlangıç noktası olarak) döner. */
+async function fetchDayTasks(date) {
+  const [draftTasks, liveTasks] = await Promise.all([
+    getTasksForDate(date, { isDraft: true }),
+    getTasksForDate(date, { isDraft: false }),
+  ])
+  return { draftTasks, liveTasks }
+}
+
+/** Bir günün canlı görevlerini, varsa bekleyen taslak eklemeleriyle birlikte döner (taslak canlıyı gizlemez). */
 export async function getDraftTasksForDate(date) {
-  const draft = await getTasksForDate(date, { isDraft: true })
-  if (draft.length > 0) return draft
-  return getTasksForDate(date, { isDraft: false })
+  const { draftTasks, liveTasks } = await fetchDayTasks(date)
+  return [...liveTasks, ...draftTasks]
+}
+
+/**
+ * Bir günün gösterilecek görevlerini (canlı + bekleyen taslak) ve yayın durumunu döner:
+ * 'taslak' (yayınlanmamış bekleyen ekleme/değişiklik var), 'yayinlandi' (tüm görevler canlı),
+ * 'bos' (o gün için hiç görev yok).
+ */
+export async function getDayPlan(date) {
+  const { draftTasks, liveTasks } = await fetchDayTasks(date)
+  const status = draftTasks.length > 0 ? 'taslak' : liveTasks.length > 0 ? 'yayinlandi' : 'bos'
+  return { tasks: [...liveTasks, ...draftTasks], status }
+}
+
+export async function cleanupUnlinkedHomeworkTasksForWeek(weekStartDateISO) {
+  const weekDates = getWeekDates(weekStartDateISO)
+
+  for (const date of weekDates) {
+    const { draftTasks, liveTasks } = await fetchDayTasks(date)
+    const unlinkedHomeworkTasks = [...draftTasks, ...liveTasks].filter((task) => task.taskType === 'odev' && !task.homeworkId)
+    await Promise.all(unlinkedHomeworkTasks.map((task) => removeTask(task.id)))
+  }
+}
+
+/**
+ * Bir günün taslak görevlerini canlıya taşır. Var olan canlı görevlere DOKUNMAZ, silmez —
+ * sadece taslakları canlıya ekleyerek senkronize eder (taslak yoksa hiçbir şey yapmaz).
+ */
+async function publishDayTasks(date) {
+  const draftTasks = await getTasksForDate(date, { isDraft: true })
+  if (draftTasks.length === 0) return
+  await Promise.all(draftTasks.map((task) => patchTask(task.id, { isDraft: false })))
+}
+
+/** Tek bir günü yayınlar ve o günün güncel (canlı) halini döner. */
+export async function publishDay(date) {
+  await publishDayTasks(date)
+  return getDayPlan(date)
+}
+
+/**
+ * Bir gün için yeni görev kaydeder: gün zaten yayındaysa doğrudan canlıya yazar
+ * (yayınlanmış bir günde yapılan değişiklik anında plana yansır), aksi halde taslağa yazar.
+ */
+export async function saveTaskForDay(date, taskData, dayStatus) {
+  if (dayStatus === 'yayinlandi') {
+    return postTask({
+      status: 'bekliyor',
+      createdBy: 'ebeveyn',
+      priority: 'orta',
+      ...taskData,
+      date,
+      isDraft: false,
+    })
+  }
+  return saveDraftTask(date, taskData)
 }
 
 export async function saveDraftTask(date, taskData) {
@@ -61,12 +123,7 @@ export async function publishWeek(weekStartDateISO) {
   const weekDates = getWeekDates(weekStartDateISO)
 
   for (const date of weekDates) {
-    const draftTasks = await getTasksForDate(date, { isDraft: true })
-    if (draftTasks.length === 0) continue
-
-    const liveTasks = await getTasksForDate(date, { isDraft: false })
-    await Promise.all(liveTasks.map((task) => removeTask(task.id)))
-    await Promise.all(draftTasks.map((task) => patchTask(task.id, { isDraft: false })))
+    await publishDayTasks(date)
   }
 
   return setPlanStatus(weekStartDateISO, 'yayinlandi')
@@ -93,8 +150,27 @@ export async function copyPreviousWeek(weekStartDateISO) {
           date: targetDate,
           isDraft: true,
           status: 'bekliyor',
+          // Kopyalanan görev yeni bir haftanın taze kaydı: geçen haftaya ait tüm
+          // ilerleme/teslim verisi (cevaplar, notlar, sonuçlar, eski ödev bağlantısı)
+          // sıfırlanmalı — aksi halde soru bankası testleri "zaten değerlendirilmiş"
+          // görünüp öğrenci bu haftaki testi bir daha çözemez (bkz. tasks.js
+          // saveTaskAnswersHandler: `if (results[testId]) return`).
+          homeworkId: undefined,
           completedAt: null,
           completedQuestionCount: task.targetQuestionCount ? 0 : undefined,
+          completedPageCount: task.targetPageCount ? 0 : undefined,
+          currentPageNumber: undefined,
+          correctCount: undefined,
+          wrongCount: undefined,
+          blankCount: undefined,
+          difficulty: undefined,
+          emotion: undefined,
+          notes: undefined,
+          parentNote: undefined,
+          reflectionAnswers: undefined,
+          completedSubGoals: undefined,
+          answers: undefined,
+          testResults: undefined,
           rescheduledFrom: null,
           rescheduledTo: null,
           rescheduleReason: null,

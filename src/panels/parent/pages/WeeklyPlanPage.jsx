@@ -4,19 +4,23 @@ import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Clock3, Coffee,
 import {
   getWeekDates,
   getDraftTasksForDate,
-  saveDraftTask,
-  updateDraftTask,
-  deleteDraftTask,
+  getDayPlan,
+  cleanupUnlinkedHomeworkTasksForWeek,
+  saveTaskForDay,
+  publishDay,
+  publishWeek,
   getPlanStatus,
-  setPlanStatus,
   copyPreviousWeek,
   totalAcademicMinutes,
 } from '../../../services/weeklyPlanService'
+import { addHomework } from '../../../services/homeworkService'
+import { patchTask, removeTask } from '../../../services/taskService'
 import { addDaysISO, getMondayOfWeek, todayISODate } from '../../../utils/time'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
 import WeeklyPlannerGrid from '../components/WeeklyPlannerGrid'
 import AddTaskDrawer from '../components/AddTaskDrawer'
+import AddHomeworkModal from '../../student/components/AddHomeworkModal'
 
 const currentWeekStart = getMondayOfWeek(todayISODate())
 
@@ -84,16 +88,20 @@ export default function WeeklyPlanPage() {
   const weekDates = getWeekDates(weekStart)
 
   const [tasksByDate, setTasksByDate] = useState({})
+  const [dayStatusByDate, setDayStatusByDate] = useState({})
   const [status, setStatus] = useState('taslak')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [drawerState, setDrawerState] = useState(null)
+  const [homeworkModalDate, setHomeworkModalDate] = useState('')
   const [banner, setBanner] = useState('')
 
   const refresh = async (nextWeekStart = weekStart) => {
     const days = getWeekDates(nextWeekStart)
-    const lists = await Promise.all(days.map((date) => getDraftTasksForDate(date)))
-    setTasksByDate(Object.fromEntries(days.map((date, index) => [date, lists[index]])))
+    await cleanupUnlinkedHomeworkTasksForWeek(nextWeekStart)
+    const dayPlans = await Promise.all(days.map((date) => getDayPlan(date)))
+    setTasksByDate(Object.fromEntries(days.map((date, index) => [date, dayPlans[index].tasks])))
+    setDayStatusByDate(Object.fromEntries(days.map((date, index) => [date, dayPlans[index].status])))
     setStatus(await getPlanStatus(nextWeekStart))
   }
 
@@ -126,27 +134,47 @@ export default function WeeklyPlanPage() {
     window.setTimeout(() => setBanner(''), 4000)
   }
 
-  const markUpdatedIfPublished = async () => {
-    if (status === 'yayinlandi') {
-      await setPlanStatus(weekStart, 'guncellendi')
-      setStatus('guncellendi')
-    }
-  }
-
   const handleSaveDrawerTask = async (taskData) => {
     const initialTask = drawerState?.initialTask
+    const targetStatus = dayStatusByDate[taskData.date]
+
     if (initialTask && taskData.date === initialTask.date) {
-      await updateDraftTask(initialTask.date, initialTask.id, taskData)
+      // Aynı gün içinde düzenleme: görev zaten hangi durumdaysa (taslak/canlı) o durumda kalır.
+      await patchTask(initialTask.id, taskData)
     } else if (initialTask) {
-      await deleteDraftTask(initialTask.date, initialTask.id)
-      await saveDraftTask(taskData.date, taskData)
+      await removeTask(initialTask.id)
+      await saveTaskForDay(taskData.date, taskData, targetStatus)
     } else {
-      await saveDraftTask(taskData.date, taskData)
+      await saveTaskForDay(taskData.date, taskData, targetStatus)
     }
+
     await refresh()
-    await markUpdatedIfPublished()
     setDrawerState(null)
-    showBanner('Görev taslağa kaydedildi.')
+    showBanner(targetStatus === 'yayinlandi' ? 'Görev plana kaydedildi.' : 'Görev taslağa kaydedildi.')
+  }
+
+  const handleSaveHomework = async (payload) => {
+    const scheduledDate = payload.taskDate || homeworkModalDate
+    await addHomework({
+      ...payload,
+      dueDate: scheduledDate || payload.dueDate,
+      taskDate: scheduledDate,
+    })
+    await refresh()
+    setHomeworkModalDate('')
+    showBanner('Ödev eklendi ve haftalık plana kaydedildi.')
+  }
+
+  const handlePublishDay = async (date) => {
+    await publishDay(date)
+    await refresh()
+    showBanner('Gün yayınlandı.')
+  }
+
+  const handlePublishWeek = async () => {
+    await publishWeek(weekStart)
+    await refresh()
+    showBanner('Plan yayınlandı.')
   }
 
   const allTasks = weekDates.flatMap((date) => tasksByDate[date] || [])
@@ -218,6 +246,11 @@ export default function WeeklyPlanPage() {
           <Copy size={18} aria-hidden="true" />
           Geçen Haftayı Kopyala
         </Button>
+
+        <Button type="button" onClick={handlePublishWeek} className="h-11 px-4 text-sm font-semibold">
+          <CalendarCheck size={18} aria-hidden="true" />
+          {status === 'yayinlandi' ? 'Yeniden Yayımla' : 'Tüm Değişiklikleri Yayımla'}
+        </Button>
       </div>
 
       {loadError ? (
@@ -237,8 +270,11 @@ export default function WeeklyPlanPage() {
           <WeeklyPlannerGrid
             weekDates={weekDates}
             tasksByDate={tasksByDate}
+            dayStatusByDate={dayStatusByDate}
+            onAddHomework={(date) => setHomeworkModalDate(date)}
             onAddTask={(date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}
             onEditTask={(task) => setDrawerState({ initialTask: task })}
+            onPublishDay={handlePublishDay}
           />
 
           <div className="flex items-center gap-3 rounded-2xl bg-panel-blue-soft px-5 py-4 text-sm font-semibold text-panel-blue">
@@ -256,6 +292,14 @@ export default function WeeklyPlanPage() {
               getExistingTasksForDate={(date) => tasksByDate[date] || getDraftTasksForDate(date)}
               onSave={handleSaveDrawerTask}
               onClose={() => setDrawerState(null)}
+            />
+          ) : null}
+
+          {homeworkModalDate ? (
+            <AddHomeworkModal
+              defaultTaskDate={homeworkModalDate}
+              onSave={handleSaveHomework}
+              onClose={() => setHomeworkModalDate('')}
             />
           ) : null}
         </>

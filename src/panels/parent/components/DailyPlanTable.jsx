@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ArrowRightLeft,
@@ -6,26 +6,40 @@ import {
   Calculator,
   CalendarDays,
   CheckCircle2,
-  ChevronDown,
   Clock,
   Eye,
   FlaskConical,
-  Info,
-  ListChecks,
+  MoreHorizontal,
   NotebookPen,
   Pencil,
+  Plus,
   Printer,
   Trash2,
 } from 'lucide-react'
-import { getPendingTasks, getSortedTasks } from '../../../utils/taskSelectors'
+import { getSortedTasks } from '../../../utils/taskSelectors'
+import { parseTimeToMinutes } from '../../../utils/time'
 import { STATUS_LABELS } from '../../../data/taskTypes'
 
 const SUBJECT_BADGES = {
-  Türkçe: { icon: BookOpen, text: 'text-panel-slate', soft: 'bg-panel-slate-soft' },
-  Matematik: { icon: Calculator, text: 'text-panel-warm', soft: 'bg-panel-warm-soft' },
-  'Fen Bilimleri': { icon: FlaskConical, text: 'text-panel-sage', soft: 'bg-panel-sage-soft' },
+  Türkçe: { icon: BookOpen, text: 'text-panel-slate', soft: 'bg-panel-slate-soft', border: 'border-panel-slate/25' },
+  Matematik: { icon: Calculator, text: 'text-panel-warm', soft: 'bg-panel-warm-soft', border: 'border-panel-warm/25' },
+  'Fen Bilimleri': { icon: FlaskConical, text: 'text-panel-sage', soft: 'bg-panel-sage-soft', border: 'border-panel-sage/25' },
 }
-const DEFAULT_SUBJECT_BADGE = { icon: BookOpen, text: 'text-panel-blue', soft: 'bg-panel-blue-soft' }
+const DEFAULT_SUBJECT_BADGE = {
+  icon: BookOpen,
+  text: 'text-panel-blue',
+  soft: 'bg-panel-blue-soft',
+  border: 'border-panel-blue/25',
+}
+
+const STATUS_STYLES = {
+  bekliyor: { icon: Clock, className: 'bg-panel-blue-soft text-panel-blue' },
+  'devam-ediyor': { icon: Clock, className: 'bg-panel-warm-soft text-panel-warm' },
+  tamamlandi: { icon: CheckCircle2, className: 'bg-panel-sage-soft text-panel-sage' },
+  'kismen-tamamlandi': { icon: CheckCircle2, className: 'bg-panel-sage-soft text-panel-sage' },
+  'yeniden-planlandi': { icon: ArrowRightLeft, className: 'bg-panel-lilac-soft text-panel-lilac' },
+  'yardim-bekliyor': { icon: NotebookPen, className: 'bg-panel-warm-soft text-panel-warm' },
+}
 
 function getSubjectBadge(task) {
   if (task.subject && SUBJECT_BADGES[task.subject]) return SUBJECT_BADGES[task.subject]
@@ -34,7 +48,16 @@ function getSubjectBadge(task) {
   return inferredSubject ? SUBJECT_BADGES[inferredSubject] : DEFAULT_SUBJECT_BADGE
 }
 
-function formatRemainingDuration(minutes) {
+function getDescriptionLines(task) {
+  return (task.description || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+function formatDuration(task) {
+  const minutes =
+    task.durationMinutes || Math.max(0, parseTimeToMinutes(task.endTime) - parseTimeToMinutes(task.startTime))
   if (!minutes) return '0dk'
   const hours = Math.floor(minutes / 60)
   const mins = minutes % 60
@@ -43,88 +66,86 @@ function formatRemainingDuration(minutes) {
   return `${hours}sa ${mins}dk`
 }
 
-function StatCard({ icon, label, value }) {
-  const Icon = icon
+function TimeBlock({ task }) {
   return (
-    <div className="flex w-[168px] shrink-0 items-center gap-3 rounded-2xl border border-panel-border bg-white px-4 py-3 shadow-[0_1px_4px_rgba(20,25,40,0.04)]">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-panel-blue-soft text-panel-blue">
-        <Icon size={18} aria-hidden="true" />
-      </span>
-      <div className="flex min-w-0 flex-col">
-        <span className="truncate text-xs text-panel-text-muted">{label}</span>
-        <span className="truncate text-lg font-bold text-panel-text">{value}</span>
+    <div className="flex min-w-0 items-center gap-3 rounded-xl bg-panel-surface-soft px-3 py-2 sm:block sm:bg-transparent sm:p-0">
+      <div className="min-w-0">
+        <p className="whitespace-nowrap text-sm font-bold text-panel-text">{task.startTime}</p>
+        <p className="whitespace-nowrap text-xs font-medium text-panel-text-muted">{task.endTime}</p>
       </div>
+      <span className="inline-flex h-7 shrink-0 items-center rounded-full bg-white px-2.5 text-xs font-semibold text-panel-text-muted shadow-sm sm:mt-2">
+        {formatDuration(task)}
+      </span>
     </div>
   )
 }
 
-function TimeChip({ task }) {
-  const completed = task.status === 'tamamlandi'
+function StatusPill({ status }) {
+  const { icon: Icon, className } = STATUS_STYLES[status] || STATUS_STYLES.bekliyor
+
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${
-        completed ? 'bg-panel-sage-soft text-panel-sage' : 'bg-panel-surface-soft text-panel-text-muted'
-      }`}
-    >
-      <Clock size={12} className="shrink-0" aria-hidden="true" />
-      {task.startTime} – {task.endTime}
+    <span className={`inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ${className}`}>
+      <Icon size={13} className="shrink-0" aria-hidden="true" />
+      {STATUS_LABELS[status] || status}
     </span>
   )
 }
 
-function StatusIcon({ status }) {
+function TimelineDot({ status, isFirst, isLast }) {
   const completed = status === 'tamamlandi'
-  const Icon = completed ? CheckCircle2 : Clock
+
   return (
-    <span
-      className={`inline-flex items-center justify-center ${completed ? 'text-panel-sage' : 'text-panel-text-muted'}`}
-      title={STATUS_LABELS[status] || status}
-    >
-      <Icon size={20} aria-hidden="true" />
-      <span className="sr-only">{STATUS_LABELS[status] || status}</span>
-    </span>
+    <div className="relative hidden justify-center sm:flex">
+      {!isFirst ? <span className="absolute top-0 h-5 w-px bg-panel-border" aria-hidden="true" /> : null}
+      {!isLast ? <span className="absolute bottom-0 top-5 w-px bg-panel-border" aria-hidden="true" /> : null}
+      <span
+        className={`relative mt-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 bg-panel-surface ${
+          completed ? 'border-panel-sage text-panel-sage' : 'border-panel-blue-soft text-panel-blue'
+        }`}
+      >
+        {completed ? <CheckCircle2 size={13} aria-hidden="true" /> : <span className="h-2 w-2 rounded-full bg-current" />}
+      </span>
+    </div>
   )
 }
 
 function SubjectBadge({ task }) {
-  const { icon: Icon, text, soft } = getSubjectBadge(task)
+  const { icon: Icon, text, soft, border } = getSubjectBadge(task)
   return (
-    <span className={`inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${text} ${soft}`}>
+    <span className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${text} ${soft} ${border}`}>
       <Icon size={13} className="shrink-0" aria-hidden="true" />
-      <span className="truncate">{task.title}</span>
+      <span className="truncate">{task.title || task.subject || 'Görev'}</span>
     </span>
   )
 }
 
-function TaskDetail({ task }) {
-  if (!task.description) {
-    return <span className="text-sm text-panel-text-muted">—</span>
-  }
-  const lines = task.description
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-  const visible = lines.slice(0, 3)
-  const truncated = lines.length > 3
+function TaskDetail({ task, expanded }) {
+  const lines = getDescriptionLines(task)
+  const primary = lines[0] || task.title || 'Görev detayı eklenmemiş.'
+  const secondary = expanded ? lines.slice(1) : lines.slice(1, 3)
+  const hasHiddenLines = !expanded && lines.length > 3
 
   return (
-    <div className="max-w-[320px]" title={task.description}>
-      {visible.map((line, index) => (
-        <p
-          key={index}
-          className={`truncate text-sm ${index === 0 ? 'font-semibold text-panel-text' : 'text-panel-text-muted'}`}
-        >
-          {line}
-          {truncated && index === visible.length - 1 ? '…' : ''}
-        </p>
-      ))}
+    <div className="min-w-0">
+      <p className="line-clamp-2 text-base font-bold text-panel-text">{primary}</p>
+      {secondary.length > 0 ? (
+        <div className="mt-1 space-y-0.5">
+          {secondary.map((line, index) => (
+            <p key={`${task.id}-detail-${index}`} className="line-clamp-1 text-sm text-panel-text-muted">
+              {line}
+              {hasHiddenLines && index === secondary.length - 1 ? '...' : ''}
+            </p>
+          ))}
+        </div>
+      ) : null}
+      {expanded && task.notes ? (
+        <p className="mt-3 rounded-xl bg-panel-surface-soft px-3 py-2 text-sm text-panel-text">Not: {task.notes}</p>
+      ) : null}
     </div>
   )
 }
 
-const ACTION_BUTTON_CLASS =
-  'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] border border-panel-blue/30 bg-white px-3 text-sm font-medium text-panel-blue transition-colors hover:bg-panel-blue-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-blue active:bg-panel-blue-soft'
-const ACTION_MENU_WIDTH = 176
+const ACTION_MENU_WIDTH = 180
 const ACTION_MENU_ESTIMATED_HEIGHT = 188
 const ACTION_MENU_VIEWPORT_PADDING = 8
 const ACTION_MENU_GAP = 6
@@ -189,7 +210,7 @@ function TaskActionsMenu({ isOpen, onToggle, onClose, onView, onEdit, onMove, on
   }, [isOpen, onClose])
 
   const items = [
-    { label: 'Görüntüle', icon: Eye, onClick: onView },
+    { label: 'Detay', icon: Eye, onClick: onView },
     { label: 'Düzenle', icon: Pencil, onClick: onEdit },
     { label: 'Taşı', icon: ArrowRightLeft, onClick: onMove },
     { label: 'Not Ekle', icon: NotebookPen, onClick: onNote },
@@ -210,12 +231,13 @@ function TaskActionsMenu({ isOpen, onToggle, onClose, onView, onEdit, onMove, on
           }
           onToggle()
         }}
+        aria-label="Görev işlemleri"
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        className={ACTION_BUTTON_CLASS}
+        title="Görev işlemleri"
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-panel-border bg-panel-surface text-panel-text-muted transition-colors hover:bg-panel-surface-soft hover:text-panel-text"
       >
-        İşlemler
-        <ChevronDown size={14} className={`shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+        <MoreHorizontal size={18} aria-hidden="true" />
       </button>
 
       {isOpen && typeof document !== 'undefined'
@@ -258,6 +280,108 @@ function TaskActionsMenu({ isOpen, onToggle, onClose, onView, onEdit, onMove, on
   )
 }
 
+function NoteEditor({ task, noteText, onChange, onSave, onCancel }) {
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault()
+        onSave(task)
+      }}
+      className="mt-4 flex flex-col gap-2 rounded-xl border border-panel-border bg-panel-surface-soft p-3 sm:flex-row"
+    >
+      <input
+        value={noteText}
+        onChange={(event) => onChange(event.target.value)}
+        className="min-h-9 flex-1 rounded-xl border border-panel-border bg-panel-surface px-3 text-sm text-panel-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-blue"
+        placeholder="Bu görevle ilgili bir not yaz"
+      />
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          className="inline-flex h-9 items-center justify-center rounded-xl bg-panel-blue px-3 text-sm font-semibold text-white hover:opacity-90"
+        >
+          Kaydet
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="inline-flex h-9 items-center justify-center rounded-xl border border-panel-border px-3 text-sm font-medium text-panel-text hover:bg-panel-surface"
+        >
+          Vazgeç
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function TaskAgendaItem({
+  task,
+  isFirst,
+  isLast,
+  expanded,
+  isMenuOpen,
+  noteDraftActive,
+  noteText,
+  onToggleMenu,
+  onCloseMenu,
+  onToggleExpanded,
+  onEdit,
+  onMove,
+  onDelete,
+  onStartNote,
+  onNoteChange,
+  onSaveNote,
+  onCancelNote,
+}) {
+  const completed = task.status === 'tamamlandi'
+
+  return (
+    <article
+      className={`grid grid-cols-[minmax(0,1fr)_2.5rem] gap-3 px-4 py-4 transition-colors sm:grid-cols-[7rem_2rem_minmax(0,1fr)_2.5rem] sm:gap-4 sm:px-5 ${
+        completed ? 'bg-panel-sage-soft/30' : 'bg-panel-surface hover:bg-panel-surface-soft/60'
+      }`}
+    >
+      <div className="col-start-1 row-start-1 min-w-0 sm:col-start-1 sm:row-start-1">
+        <TimeBlock task={task} />
+      </div>
+
+      <TimelineDot status={task.status} isFirst={isFirst} isLast={isLast} />
+
+      <div className="col-span-2 col-start-1 row-start-2 min-w-0 sm:col-span-1 sm:col-start-3 sm:row-start-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <SubjectBadge task={task} />
+          <StatusPill status={task.status} />
+        </div>
+        <div className="mt-3">
+          <TaskDetail task={task} expanded={expanded} />
+        </div>
+        {noteDraftActive ? (
+          <NoteEditor
+            task={task}
+            noteText={noteText}
+            onChange={onNoteChange}
+            onSave={onSaveNote}
+            onCancel={onCancelNote}
+          />
+        ) : null}
+      </div>
+
+      <div className="col-start-2 row-start-1 justify-self-end sm:col-start-4 sm:row-start-1">
+        <TaskActionsMenu
+          isOpen={isMenuOpen}
+          onToggle={onToggleMenu}
+          onClose={onCloseMenu}
+          onView={onToggleExpanded}
+          onEdit={onEdit}
+          onMove={onMove}
+          onNote={onStartNote}
+          onDelete={onDelete}
+        />
+      </div>
+    </article>
+  )
+}
+
 export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSaveNote, onAddTask }) {
   const [expandedId, setExpandedId] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
@@ -265,8 +389,6 @@ export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSave
   const [noteText, setNoteText] = useState('')
 
   const sorted = getSortedTasks(tasks)
-  const completedCount = sorted.filter((task) => task.status === 'tamamlandi').length
-  const remainingMinutes = getPendingTasks(tasks).reduce((sum, task) => sum + (task.durationMinutes || 0), 0)
 
   const startNoteDraft = (task) => {
     setNoteDraftId(task.id)
@@ -279,188 +401,70 @@ export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSave
   }
 
   return (
-    <div className="rounded-2xl border border-panel-border bg-white shadow-[0_4px_16px_rgba(37,61,62,0.06)]">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-panel-border p-5">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-panel-blue-soft text-panel-blue">
-            <CalendarDays size={18} aria-hidden="true" />
+    <section className="panel-card overflow-hidden">
+      <div className="flex flex-col gap-4 border-b border-panel-border p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
+            <CalendarDays size={19} aria-hidden="true" />
           </span>
-          <h2 className="text-xl font-bold text-panel-text">Bugünün Planı</h2>
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold text-panel-text">Günün Akışı</h2>
+            <p className="mt-0.5 text-sm text-panel-text-muted">{sorted.length} görev planlandı</p>
+          </div>
         </div>
 
-        <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
-          <StatCard icon={ListChecks} label="Toplam Görev" value={sorted.length} />
-          <StatCard icon={CheckCircle2} label="Tamamlanan" value={completedCount} />
-          <StatCard icon={Clock} label="Kalan Süre" value={formatRemainingDuration(remainingMinutes)} />
-
-          <button
-            type="button"
-            onClick={onAddTask}
-            className="h-10 shrink-0 rounded-[10px] bg-panel-blue px-4 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-blue active:opacity-90"
-          >
-            + Görev Ekle
-          </button>
-        </div>
-      </div>
-
-      {sorted.length === 0 ? (
-        <p className="px-5 py-8 text-center text-sm text-panel-text-muted">Bugün için planlanmış görev yok.</p>
-      ) : (
-        <>
-          <div className="hidden md:block">
-            <table className="w-full table-fixed text-left text-sm">
-              <colgroup>
-                <col className="w-[130px]" />
-                <col className="w-[190px]" />
-                <col className="w-[56px]" />
-                <col />
-                <col className="w-[130px]" />
-              </colgroup>
-              <thead>
-                <tr className="bg-panel-blue-soft text-[13px] font-semibold text-panel-blue">
-                  <th className="py-2.5 pl-5 pr-3">Saat</th>
-                  <th className="py-2.5 pr-3">Görev</th>
-                  <th className="py-2.5 pr-3 text-center">
-                    <span className="sr-only">Durum</span>
-                  </th>
-                  <th className="py-2.5 pr-3">Görev Detayı</th>
-                  <th className="py-2.5 pr-5">İşlemler</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((task) => (
-                  <Fragment key={task.id}>
-                    <tr className="border-b border-panel-border last:border-0 hover:bg-panel-surface-soft">
-                      <td className="py-3 pl-5 pr-3 align-top">
-                        <TimeChip task={task} />
-                      </td>
-                      <td className="py-3 pr-3 align-top">
-                        <SubjectBadge task={task} />
-                      </td>
-                      <td className="py-3 pr-3 align-top text-center">
-                        <StatusIcon status={task.status} />
-                      </td>
-                      <td className="py-3 pr-3 align-top">
-                        <TaskDetail task={task} />
-                      </td>
-                      <td className="py-3 pr-5 align-top">
-                        <TaskActionsMenu
-                          isOpen={openMenuId === task.id}
-                          onToggle={() => setOpenMenuId(openMenuId === task.id ? null : task.id)}
-                          onClose={() => setOpenMenuId(null)}
-                          onView={() => setExpandedId(expandedId === task.id ? null : task.id)}
-                          onEdit={() => onEdit(task)}
-                          onMove={() => onMove(task)}
-                          onNote={() => startNoteDraft(task)}
-                          onDelete={() => onDelete(task)}
-                        />
-                      </td>
-                    </tr>
-                    {expandedId === task.id ? (
-                      <tr className="border-b border-panel-border bg-panel-surface-soft">
-                        <td colSpan={5} className="px-5 py-3 text-sm text-panel-text-muted">
-                          {task.description || 'Açıklama eklenmemiş.'}
-                          {task.notes ? <p className="mt-1 text-panel-text">Not: {task.notes}</p> : null}
-                        </td>
-                      </tr>
-                    ) : null}
-                    {noteDraftId === task.id ? (
-                      <tr className="border-b border-panel-border">
-                        <td colSpan={5} className="px-5 py-3">
-                          <div className="flex gap-2">
-                            <input
-                              value={noteText}
-                              onChange={(event) => setNoteText(event.target.value)}
-                              className="flex-1 rounded-xl border border-panel-border p-2 text-sm text-panel-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-blue"
-                              placeholder="Bu görevle ilgili bir not yaz"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => saveNote(task)}
-                              className="rounded-[10px] bg-panel-blue px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
-                            >
-                              Kaydet
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex flex-col gap-3 p-4 md:hidden">
-            {sorted.map((task) => (
-              <div key={task.id} className="rounded-2xl border border-panel-border bg-white p-3.5 shadow-[0_1px_4px_rgba(20,25,40,0.04)]">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <TimeChip task={task} />
-                  <StatusIcon status={task.status} />
-                </div>
-                <div className="mt-2.5">
-                  <SubjectBadge task={task} />
-                </div>
-                <div className="mt-2.5">
-                  <TaskDetail task={task} />
-                </div>
-                {expandedId === task.id ? (
-                  <div className="mt-2.5 rounded-xl bg-panel-surface-soft p-2.5 text-sm text-panel-text-muted">
-                    {task.description || 'Açıklama eklenmemiş.'}
-                    {task.notes ? <p className="mt-1 text-panel-text">Not: {task.notes}</p> : null}
-                  </div>
-                ) : null}
-                {noteDraftId === task.id ? (
-                  <div className="mt-2.5 flex gap-2">
-                    <input
-                      value={noteText}
-                      onChange={(event) => setNoteText(event.target.value)}
-                      className="flex-1 rounded-xl border border-panel-border p-2 text-sm text-panel-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-blue"
-                      placeholder="Bu görevle ilgili bir not yaz"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => saveNote(task)}
-                      className="rounded-[10px] bg-panel-blue px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
-                    >
-                      Kaydet
-                    </button>
-                  </div>
-                ) : null}
-                <div className="mt-3 flex justify-end">
-                  <TaskActionsMenu
-                    isOpen={openMenuId === task.id}
-                    onToggle={() => setOpenMenuId(openMenuId === task.id ? null : task.id)}
-                    onClose={() => setOpenMenuId(null)}
-                    onView={() => setExpandedId(expandedId === task.id ? null : task.id)}
-                    onEdit={() => onEdit(task)}
-                    onMove={() => onMove(task)}
-                    onNote={() => startNoteDraft(task)}
-                    onDelete={() => onDelete(task)}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-panel-border px-5 py-3.5">
-        <p className="flex items-center gap-1.5 text-xs text-panel-text-muted">
-          <Info size={13} className="shrink-0" aria-hidden="true" />
-          <span>
-            <span className="font-medium text-panel-text">İpucu:</span> Görevleri tamamladıkça plan otomatik güncellenir.
-          </span>
-        </p>
         <button
           type="button"
           onClick={() => window.print()}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] border border-panel-blue/30 bg-white px-3.5 text-sm font-medium text-panel-blue transition-colors hover:bg-panel-blue-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-blue active:bg-panel-blue-soft"
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3.5 text-sm font-medium text-panel-text transition-colors hover:bg-panel-surface-soft"
         >
-          <Printer size={14} className="shrink-0" aria-hidden="true" />
-          Planı Yazdır
+          <Printer size={16} aria-hidden="true" />
+          Yazdır
         </button>
       </div>
-    </div>
+
+      {sorted.length === 0 ? (
+        <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
+            <CalendarDays size={22} aria-hidden="true" />
+          </span>
+          <h3 className="mt-4 text-lg font-semibold text-panel-text">Bugün plan boş</h3>
+          <p className="mt-1 max-w-sm text-sm text-panel-text-muted">Aylin için ilk görevi ekleyebilirsin.</p>
+          <button
+            type="button"
+            onClick={onAddTask}
+            className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-panel-blue px-4 text-sm font-semibold text-white hover:opacity-90"
+          >
+            <Plus size={17} aria-hidden="true" />
+            Görev Ekle
+          </button>
+        </div>
+      ) : (
+        <div className="divide-y divide-panel-border">
+          {sorted.map((task, index) => (
+            <TaskAgendaItem
+              key={task.id}
+              task={task}
+              isFirst={index === 0}
+              isLast={index === sorted.length - 1}
+              expanded={expandedId === task.id}
+              isMenuOpen={openMenuId === task.id}
+              noteDraftActive={noteDraftId === task.id}
+              noteText={noteText}
+              onToggleMenu={() => setOpenMenuId(openMenuId === task.id ? null : task.id)}
+              onCloseMenu={() => setOpenMenuId(null)}
+              onToggleExpanded={() => setExpandedId(expandedId === task.id ? null : task.id)}
+              onEdit={() => onEdit(task)}
+              onMove={() => onMove(task)}
+              onDelete={() => onDelete(task)}
+              onStartNote={() => startNoteDraft(task)}
+              onNoteChange={setNoteText}
+              onSaveNote={saveNote}
+              onCancelNote={() => setNoteDraftId(null)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   )
 }

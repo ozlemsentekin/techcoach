@@ -40,6 +40,12 @@ export const THEMES = [
     description: 'Sıcak ve motive edici, canlı turuncu tonlar.',
     swatches: ['#fffaf5', '#f8e3d0', '#b85f22', '#cf9a3a'],
   },
+  {
+    id: 'black',
+    label: 'Siyah Tema',
+    description: 'Net, modern ve yüksek kontrastlı nötr tonlar.',
+    swatches: ['#f6f7f8', '#e5e7eb', '#222831', '#6b7280'],
+  },
 ]
 
 export const THEME_IDS = THEMES.map((theme) => theme.id)

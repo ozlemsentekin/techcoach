@@ -16,7 +16,7 @@ export default function TaskGroupSection({
   const style = SUBJECT_STYLES[subject] || DEFAULT_SUBJECT_STYLE
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-panel-border bg-panel-surface shadow-panel-1">
+    <section className="border-t border-panel-border first:border-t-0">
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
@@ -37,7 +37,7 @@ export default function TaskGroupSection({
       </button>
 
       {expanded ? (
-        <div className="flex flex-col gap-4 border-t border-panel-border px-4 pb-4 pt-4 sm:px-5">
+        <div className="divide-y divide-panel-border border-t border-panel-border">
           {tasks.map((task) => (
             <TaskListCard
               key={task.id}
@@ -50,6 +50,6 @@ export default function TaskGroupSection({
           ))}
         </div>
       ) : null}
-    </div>
+    </section>
   )
 }

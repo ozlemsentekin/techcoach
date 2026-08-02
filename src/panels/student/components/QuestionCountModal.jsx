@@ -37,7 +37,7 @@ export default function QuestionCountModal({ task, onSave, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="mt-5 w-full rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white"
+            className="mt-5 w-full rounded-xl bg-student-theme-primary px-4 py-3 text-base font-semibold text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
           >
             Kapat
           </button>
@@ -75,7 +75,7 @@ export default function QuestionCountModal({ task, onSave, onClose }) {
             <button
               type="button"
               onClick={() => handleSubmit('tamamlandi')}
-              className="flex-1 rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white"
+              className="flex-1 rounded-xl bg-student-theme-primary px-4 py-3 text-base font-semibold text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
             >
               Tamamladım
             </button>

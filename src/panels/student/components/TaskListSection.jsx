@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ListChecks } from 'lucide-react'
 import { getSortedTasks } from '../../../utils/taskSelectors'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { TASK_TYPES } from '../../../data/taskTypes'
@@ -9,7 +9,6 @@ import TaskDetailsDrawer from './TaskDetailsDrawer'
 import TaskAnswerSheetModal from './TaskAnswerSheetModal'
 import ReadingProgressModal from './ReadingProgressModal'
 import QuestionCountModal from './QuestionCountModal'
-import EmptyState from '../../shared/EmptyState'
 
 function isQuestionBankTask(task) {
   return task.resourceType === 'soru_bankasi' && Boolean(task.selectedTestIds?.length)
@@ -30,7 +29,7 @@ const VIEW_MODES = [
   { key: 'subject', label: 'Derse Göre' },
 ]
 
-const SUBJECTS = ['Tüm Dersler', 'Türkçe', 'Matematik', 'Fen Bilimleri', 'T.C. İnkılap Tarihi', 'İngilizce', 'Din Kültürü']
+const SUBJECT_ORDER = ['Türkçe', 'Matematik', 'Fen Bilimleri', 'T.C. İnkılap Tarihi', 'İngilizce', 'Din Kültürü']
 
 function lessonLabelFor(task) {
   return task.subject || TASK_TYPES[task.taskType]?.label || 'Genel'
@@ -56,7 +55,6 @@ export default function TaskListSection({
   onSaveQuestionCount,
 }) {
   const [filter, setFilter] = useState('pending')
-  const [subject, setSubject] = useState('Tüm Dersler')
   const [viewMode, setViewMode] = useState('time')
   const [detailsTask, setDetailsTask] = useState(null)
   const [answerSheetTask, setAnswerSheetTask] = useState(null)
@@ -74,7 +72,6 @@ export default function TaskListSection({
   const sorted = useMemo(() => getSortedTasks(tasks), [tasks])
 
   const filtered = sorted.filter((task) => {
-    if (subject !== 'Tüm Dersler' && task.subject !== subject) return false
     if (filter === 'all') return true
     return getAssignmentStatus(task).filterKey === filter
   })
@@ -86,7 +83,7 @@ export default function TaskListSection({
       if (!byLabel.has(label)) byLabel.set(label, [])
       byLabel.get(label).push(task)
     })
-    const knownOrder = SUBJECTS.filter((item) => item !== 'Tüm Dersler' && byLabel.has(item))
+    const knownOrder = SUBJECT_ORDER.filter((item) => byLabel.has(item))
     const extraOrder = [...byLabel.keys()].filter((label) => !knownOrder.includes(label))
     return [...knownOrder, ...extraOrder].map((label) => ({ label, tasks: byLabel.get(label) }))
   }, [filtered])
@@ -108,73 +105,68 @@ export default function TaskListSection({
   const visibleGroups = viewMode === 'subject' ? grouped : groupedByDate
 
   return (
-    <div className="panel-card flex flex-col gap-5 bg-panel-surface p-5 sm:p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-bold text-panel-text sm:text-2xl">Görevlerim</h2>
-
-        <div className="flex gap-2 overflow-x-auto pb-1 sm:overflow-visible sm:pb-0">
-          {VIEW_MODES.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              aria-pressed={viewMode === item.key}
-              onClick={() => setViewMode(item.key)}
-              className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
-                viewMode === item.key
-                  ? 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text'
-                  : 'border-panel-border bg-panel-surface text-panel-text-muted hover:border-student-theme-primary hover:bg-student-theme-soft hover:text-student-theme-text'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-        <div className="flex gap-2 overflow-x-auto pb-1 sm:overflow-visible sm:pb-0">
-          {FILTERS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              aria-pressed={filter === item.key}
-              onClick={() => setFilter(item.key)}
-              className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
-                filter === item.key
-                  ? 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text'
-                  : 'border-panel-border bg-panel-surface text-panel-text-muted hover:border-student-theme-primary hover:bg-student-theme-soft hover:text-student-theme-text'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
+    <section className="panel-card overflow-hidden bg-panel-surface">
+      <div className="student-theme-section-header flex flex-col gap-4 border-b border-student-theme-primary/20 bg-student-theme-primary/15 p-5 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="student-theme-section-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-panel-surface/80 text-student-theme-text shadow-sm">
+            <ListChecks size={19} aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="student-theme-section-title text-xl font-bold text-panel-text">Görev Akışı</h2>
+            <p className="student-theme-section-muted mt-0.5 text-sm text-panel-text-muted">{filtered.length} görev görüntüleniyor</p>
+          </div>
         </div>
 
-        <div className="relative">
-          <select
-            value={subject}
-            onChange={(event) => setSubject(event.target.value)}
-            aria-label="Derse göre filtrele"
-            className="w-full appearance-none rounded-full border border-panel-border bg-panel-surface py-2 pl-4 pr-9 text-sm font-medium text-panel-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary sm:w-auto"
-          >
-            {SUBJECTS.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
+        <div className="flex min-w-0 flex-col gap-2 md:flex-row md:flex-wrap md:items-center xl:justify-end">
+          <div className="student-theme-control-group flex w-full gap-1 overflow-x-auto rounded-xl border border-student-theme-primary/20 bg-panel-surface/85 p-1 shadow-sm md:w-auto md:overflow-visible" aria-label="Görev görünümü">
+            {VIEW_MODES.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                aria-pressed={viewMode === item.key}
+                onClick={() => setViewMode(item.key)}
+                className={`student-theme-control-button h-9 shrink-0 rounded-lg px-3 text-sm font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
+                  viewMode === item.key
+                    ? 'bg-student-theme-primary text-student-theme-button-text shadow-sm'
+                    : 'text-panel-text-muted hover:bg-student-theme-soft hover:text-student-theme-text'
+                }`}
+              >
+                {item.label}
+              </button>
             ))}
-          </select>
-          <ChevronDown
-            size={16}
-            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-panel-text-muted"
-            aria-hidden="true"
-          />
+          </div>
+
+          <div className="student-theme-control-group flex w-full gap-1 overflow-x-auto rounded-xl border border-student-theme-primary/20 bg-panel-surface/85 p-1 shadow-sm md:w-auto md:overflow-visible" aria-label="Görev durumu">
+            {FILTERS.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                aria-pressed={filter === item.key}
+                onClick={() => setFilter(item.key)}
+                className={`student-theme-control-button h-9 shrink-0 rounded-lg px-3 text-sm font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
+                  filter === item.key
+                    ? 'bg-student-theme-primary text-student-theme-button-text shadow-sm'
+                    : 'text-panel-text-muted hover:bg-student-theme-soft hover:text-student-theme-text'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
         </div>
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState title="Bu filtrede görev yok" description="Farklı bir filtre veya ders seçmeyi deneyebilirsin." />
+        <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-student-theme-soft text-student-theme-text">
+            <ListChecks size={22} aria-hidden="true" />
+          </span>
+          <h3 className="mt-4 text-lg font-semibold text-panel-text">Bu filtrede görev yok</h3>
+          <p className="mt-1 max-w-sm text-sm text-panel-text-muted">Farklı bir filtre veya ders seçmeyi deneyebilirsin.</p>
+        </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="border-t border-panel-border">
           {visibleGroups.map((group, index) => (
             <TaskGroupSection
               key={`${viewMode}-${filter}-${group.label}`}
@@ -245,6 +237,6 @@ export default function TaskListSection({
           }}
         />
       ) : null}
-    </div>
+    </section>
   )
 }

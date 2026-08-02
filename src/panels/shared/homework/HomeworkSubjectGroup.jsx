@@ -8,7 +8,7 @@ export default function HomeworkSubjectGroup({ subject, items, onDeleteRequest }
   const Icon = SUBJECT_ICONS[subject] || DEFAULT_SUBJECT_ICON
 
   return (
-    <div className="rounded-xl border border-[#ECEEF2] bg-[#FAFAFC] p-3">
+    <div className="rounded-xl border border-panel-border bg-panel-surface-soft/45 p-3">
       <div className="flex items-center gap-3 px-1 py-1">
         <span
           className={cn(
@@ -18,8 +18,8 @@ export default function HomeworkSubjectGroup({ subject, items, onDeleteRequest }
         >
           <Icon size={18} aria-hidden="true" />
         </span>
-        <span className="text-[15px] font-bold text-[#263A39]">{subject}</span>
-        <span className="text-xs text-[#7B8190]">{items.length} ödev</span>
+        <span className="text-[15px] font-bold text-panel-text">{subject}</span>
+        <span className="text-xs text-panel-text-muted">{items.length} ödev</span>
       </div>
 
       <div className="mt-1 flex flex-col gap-2.5 pl-4 sm:pl-[26px]">
@@ -27,12 +27,12 @@ export default function HomeworkSubjectGroup({ subject, items, onDeleteRequest }
           <div key={homework.id} className="relative pl-5 sm:pl-6">
             <span
               aria-hidden="true"
-              className="absolute left-0 top-0 border-l-[1.5px] border-dashed border-[#CFC6EE]"
+              className="absolute left-0 top-0 border-l-[1.5px] border-dashed border-student-theme-primary/25"
               style={{ height: index === items.length - 1 ? '20px' : '100%' }}
             />
             <span
               aria-hidden="true"
-              className="absolute left-0 top-5 w-3 border-t-[1.5px] border-dashed border-[#CFC6EE] sm:w-4"
+              className="absolute left-0 top-5 w-3 border-t-[1.5px] border-dashed border-student-theme-primary/25 sm:w-4"
             />
             <HomeworkItemCard homework={homework} onDeleteRequest={onDeleteRequest} />
           </div>
