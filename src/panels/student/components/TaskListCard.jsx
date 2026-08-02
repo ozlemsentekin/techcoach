@@ -54,6 +54,7 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
   const showProgress = total > 0
   const progressPct = task.status === 'tamamlandi' ? 100 : total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0
   const secondaryItems = getSecondaryItems(details)
+  const displayLessonLabel = String(lessonLabel || '').toLocaleUpperCase('tr-TR')
 
   return (
     <article
@@ -69,8 +70,8 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
           ) : null}
 
           {showLessonLabel ? (
-            <span className={`inline-flex max-w-full items-center rounded-full px-3 py-1 text-xs font-bold ${subjectStyle.soft} ${subjectStyle.text}`}>
-              <span className="truncate">{lessonLabel}</span>
+            <span className={`inline-flex min-h-8 max-w-full items-center rounded-full px-3.5 py-1 text-sm font-extrabold leading-none ${subjectStyle.soft} ${subjectStyle.text}`}>
+              <span className="truncate">{displayLessonLabel}</span>
             </span>
           ) : null}
 
