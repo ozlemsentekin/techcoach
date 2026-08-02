@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Clock3, Coffee, Copy, Info, Star } from 'lucide-react'
 import {
   getWeekDates,
   getDraftTasksForDate,
@@ -9,32 +10,72 @@ import {
   getPlanStatus,
   setPlanStatus,
   copyPreviousWeek,
-  suggestWeekPlan,
-  publishWeek,
+  totalAcademicMinutes,
 } from '../../../services/weeklyPlanService'
-import { evaluateDayBalance } from '../../../utils/planInsights'
 import { addDaysISO, getMondayOfWeek, todayISODate } from '../../../utils/time'
-import PageHeader from '../../layout/PageHeader'
+import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
-import PlanBalanceCard from '../components/PlanBalanceCard'
 import WeeklyPlannerGrid from '../components/WeeklyPlannerGrid'
 import AddTaskDrawer from '../components/AddTaskDrawer'
 
-const STATUS_LABELS = {
-  taslak: 'Taslak',
-  yayinlandi: 'Yayınlandı',
-  guncellendi: 'Güncellendi',
-  arsivlendi: 'Arşivlendi',
-}
-
-const STATUS_CLASSES = {
-  taslak: 'bg-panel-lilac-soft text-panel-lilac',
-  yayinlandi: 'bg-panel-sage-soft text-panel-sage',
-  guncellendi: 'bg-panel-accent-soft text-panel-warm',
-  arsivlendi: 'bg-panel-blue-soft text-panel-blue',
-}
-
 const currentWeekStart = getMondayOfWeek(todayISODate())
+
+const SUMMARY_ITEMS = {
+  study: {
+    icon: Clock3,
+    label: 'Toplam çalışma süresi',
+    iconClassName: 'bg-panel-blue-soft text-panel-blue',
+  },
+  break: {
+    icon: Coffee,
+    label: 'Planlanan mola',
+    iconClassName: 'bg-panel-accent-soft text-panel-warm',
+  },
+  free: {
+    icon: Star,
+    label: 'Serbest zaman',
+    iconClassName: 'bg-emerald-50 text-emerald-600',
+  },
+}
+
+function formatSummaryDuration(totalMinutes) {
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+
+  if (hours > 0 && minutes > 0) return `${hours}sa ${minutes}dk`
+  if (hours > 0) return `${hours}sa`
+  return `${minutes}dk`
+}
+
+function getWeekSummary(tasks) {
+  const breakCount = tasks.filter((task) => ['mola', 'dinlenme'].includes(task.taskType)).length
+  const freeMinutes = tasks
+    .filter((task) => task.taskType === 'serbest-zaman')
+    .reduce((sum, task) => sum + (task.durationMinutes || 0), 0)
+
+  return {
+    studyDuration: formatSummaryDuration(totalAcademicMinutes(tasks)),
+    breakCount: `${breakCount} mola`,
+    freeDuration: formatSummaryDuration(freeMinutes),
+  }
+}
+
+function SummaryItem({ type, value }) {
+  const item = SUMMARY_ITEMS[type]
+  const Icon = item.icon
+
+  return (
+    <div className="flex min-w-0 items-center gap-4">
+      <span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${item.iconClassName}`}>
+        <Icon size={28} strokeWidth={2.1} aria-hidden="true" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-panel-blue">{item.label}</span>
+        <span className="mt-1 block break-words text-2xl font-bold text-panel-text">{value}</span>
+      </span>
+    </div>
+  )
+}
 
 export default function WeeklyPlanPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -109,19 +150,23 @@ export default function WeeklyPlanPage() {
   }
 
   const allTasks = weekDates.flatMap((date) => tasksByDate[date] || [])
-  const todaysBalance = evaluateDayBalance(tasksByDate[todayISODate()] || [])
+  const weekSummary = getWeekSummary(allTasks)
 
   return (
     <div className="flex w-full flex-col gap-5">
-      <PageHeader
-        title="Aylin'in Haftasını Planla"
-        subtitle="Dersleri, ödevleri, molaları ve serbest zamanı dengeli şekilde planla."
-        actions={
-          <span className={`rounded-full px-3 py-1.5 text-sm font-medium ${STATUS_CLASSES[status]}`}>
-            {STATUS_LABELS[status]}
-          </span>
-        }
-      />
+      <div className="flex min-w-0 items-start gap-4">
+        <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-panel-blue-soft text-panel-blue shadow-sm">
+          <CalendarCheck size={34} strokeWidth={2.1} aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h1 className="break-words text-3xl font-bold leading-tight text-panel-text">
+            Aylin'in Haftasını Planla
+          </h1>
+          <p className="mt-1 text-base font-medium text-panel-blue">
+            Dersleri, ödevleri, molaları ve serbest zamanı dengeli şekilde planla.
+          </p>
+        </div>
+      </div>
 
       {banner ? (
         <div className="rounded-xl bg-panel-sage-soft px-4 py-3 text-base text-panel-text" role="status">
@@ -129,71 +174,50 @@ export default function WeeklyPlanPage() {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <button
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
           type="button"
+          variant="secondary"
           onClick={() => setWeekOffset((current) => current - 1)}
-          className="rounded-xl border border-panel-border px-3 py-2 text-sm font-medium text-panel-text"
+          className="h-11 border-panel-blue-soft px-4 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50"
         >
+          <ChevronLeft size={18} aria-hidden="true" />
           Önceki Hafta
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="secondary"
           onClick={() => setWeekOffset(0)}
-          className="rounded-xl border border-panel-border px-3 py-2 text-sm font-medium text-panel-text"
+          className="h-11 border-panel-blue-soft px-4 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50"
         >
+          <CalendarDays size={18} aria-hidden="true" />
           Bu Hafta
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="secondary"
           onClick={() => setWeekOffset((current) => current + 1)}
-          className="rounded-xl border border-panel-border px-3 py-2 text-sm font-medium text-panel-text"
+          className="h-11 border-panel-blue-soft px-4 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50"
         >
           Sonraki Hafta
-        </button>
+          <ChevronRight size={18} aria-hidden="true" />
+        </Button>
 
-        <span className="mx-2 h-6 w-px bg-panel-border" aria-hidden="true" />
+        <span className="mx-1 hidden h-9 w-px bg-panel-border sm:block" aria-hidden="true" />
 
-        <button
+        <Button
           type="button"
+          variant="secondary"
           onClick={async () => {
             await copyPreviousWeek(weekStart)
             await refresh()
             showBanner('Geçen hafta bu haftanın taslağına kopyalandı.')
           }}
-          className="rounded-xl border border-panel-border px-3 py-2 text-sm font-medium text-panel-text"
+          className="h-11 border-panel-blue-soft px-4 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50"
         >
+          <Copy size={18} aria-hidden="true" />
           Geçen Haftayı Kopyala
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            await suggestWeekPlan(weekStart)
-            await refresh()
-            showBanner('Basit bir plan önerisi oluşturuldu, dilediğin gibi düzenleyebilirsin.')
-          }}
-          className="rounded-xl border border-panel-border px-3 py-2 text-sm font-medium text-panel-text"
-        >
-          Otomatik Plan Öner
-        </button>
-        <button
-          type="button"
-          onClick={() => showBanner('Taslak kaydedildi.')}
-          className="rounded-xl border border-panel-border px-3 py-2 text-sm font-medium text-panel-text"
-        >
-          Taslağı Kaydet
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            await publishWeek(weekStart)
-            await refresh()
-            showBanner('Plan yayınlandı. Aylin\'in ekranında yeni haftalık planın hazır.')
-          }}
-          className="rounded-xl bg-panel-blue px-3 py-2 text-sm font-semibold text-white"
-        >
-          Planı Yayınla
-        </button>
+        </Button>
       </div>
 
       {loadError ? (
@@ -204,24 +228,35 @@ export default function WeeklyPlanPage() {
         <LoadingState label="Haftalık plan yükleniyor..." />
       ) : (
         <>
-      <WeeklyPlannerGrid
-        weekDates={weekDates}
-        tasksByDate={tasksByDate}
-        onAddTask={(date) => setDrawerState({ defaultDate: date })}
-        onEditTask={(task) => setDrawerState({ initialTask: task })}
-      />
+          <div className="grid gap-5 rounded-2xl border border-panel-border bg-panel-surface px-5 py-4 shadow-sm sm:grid-cols-3 lg:px-10">
+            <SummaryItem type="study" value={weekSummary.studyDuration} />
+            <SummaryItem type="break" value={weekSummary.breakCount} />
+            <SummaryItem type="free" value={weekSummary.freeDuration} />
+          </div>
 
-      {allTasks.length > 0 ? <PlanBalanceCard warnings={todaysBalance.warnings} /> : null}
+          <WeeklyPlannerGrid
+            weekDates={weekDates}
+            tasksByDate={tasksByDate}
+            onAddTask={(date) => setDrawerState({ defaultDate: date })}
+            onEditTask={(task) => setDrawerState({ initialTask: task })}
+          />
 
-      {drawerState ? (
-        <AddTaskDrawer
-          initialTask={drawerState.initialTask}
-          defaultDate={drawerState.defaultDate}
-          getExistingTasksForDate={(date) => tasksByDate[date] || getDraftTasksForDate(date)}
-          onSave={handleSaveDrawerTask}
-          onClose={() => setDrawerState(null)}
-        />
-      ) : null}
+          <div className="flex items-center gap-3 rounded-2xl bg-panel-blue-soft px-5 py-4 text-sm font-semibold text-panel-blue">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-panel-blue/30">
+              <Info size={17} aria-hidden="true" />
+            </span>
+            <span>Görevler tamamlandıkça plan otomatik güncellenir.</span>
+          </div>
+
+          {drawerState ? (
+            <AddTaskDrawer
+              initialTask={drawerState.initialTask}
+              defaultDate={drawerState.defaultDate}
+              getExistingTasksForDate={(date) => tasksByDate[date] || getDraftTasksForDate(date)}
+              onSave={handleSaveDrawerTask}
+              onClose={() => setDrawerState(null)}
+            />
+          ) : null}
         </>
       )}
     </div>
