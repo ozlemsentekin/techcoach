@@ -7,6 +7,7 @@ import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
 import DataTable from '../../ui/DataTable'
+import ResourceImageField from '../components/ResourceImageField'
 
 const RESOURCE_BOOK_TYPES = [
   { value: 'konu_anlatimi', label: 'Konu Anlatımı' },
@@ -155,15 +156,7 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
             />
           </label>
 
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">Kapak / Profil Görseli URL</span>
-            <input
-              value={imageUrl}
-              onChange={(event) => setImageUrl(event.target.value)}
-              placeholder="https://..."
-              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-            />
-          </label>
+          <ResourceImageField value={imageUrl} onChange={setImageUrl} />
 
           {type === 'soru_bankasi' ? (
             <label className="flex items-center gap-2.5">

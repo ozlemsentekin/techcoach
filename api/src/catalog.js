@@ -22,6 +22,27 @@ function sanitizePublisher(record) {
 }
 
 const RESOURCE_BOOK_TYPES = ['konu_anlatimi', 'soru_bankasi', 'okuma_kitabi']
+const MAX_RESOURCE_IMAGE_LENGTH = 350000
+const RESOURCE_IMAGE_DATA_URL_PATTERN = /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\s]+$/i
+
+function sanitizeResourceBookImageUrl(value) {
+  const imageUrl = value?.trim() || null
+  if (!imageUrl) return { value: null }
+
+  if (imageUrl.length > MAX_RESOURCE_IMAGE_LENGTH) {
+    return { error: 'Görsel dosyası çok büyük. Daha küçük bir görsel yükleyin.' }
+  }
+
+  if (
+    imageUrl.startsWith('https://') ||
+    imageUrl.startsWith('http://') ||
+    RESOURCE_IMAGE_DATA_URL_PATTERN.test(imageUrl)
+  ) {
+    return { value: imageUrl }
+  }
+
+  return { error: 'Görsel için geçerli bir URL veya JPG/PNG/WEBP dosyası kullanılmalı.' }
+}
 
 function sanitizeResourceBook(record) {
   return {
@@ -278,7 +299,7 @@ async function createResourceBookHandler(request) {
     const isActive = payload?.isActive !== false
     const type = payload?.type
     const hasAnswerKey = payload?.hasAnswerKey !== false
-    const imageUrl = payload?.imageUrl?.trim() || null
+    const imageResult = sanitizeResourceBookImageUrl(payload?.imageUrl)
 
     if (!publisherId) {
       return json(400, { error: 'Yayın evi seçilmeli.' })
@@ -292,8 +313,8 @@ async function createResourceBookHandler(request) {
     if (!RESOURCE_BOOK_TYPES.includes(type)) {
       return json(400, { error: 'Kaynak tipi seçilmeli.' })
     }
-    if (imageUrl && imageUrl.length > 1000) {
-      return json(400, { error: 'Görsel adresi en fazla 1000 karakter olmalı.' })
+    if (imageResult.error) {
+      return json(400, { error: imageResult.error })
     }
 
     const requestDb = await withRequest({
@@ -304,7 +325,7 @@ async function createResourceBookHandler(request) {
       isActive: { type: sql.Bit, value: isActive },
       resourceType: { type: sql.NVarChar(30), value: type },
       hasAnswerKey: { type: sql.Bit, value: hasAnswerKey },
-      imageUrl: { type: sql.NVarChar(1000), value: imageUrl },
+      imageUrl: { type: sql.NVarChar(sql.MAX), value: imageResult.value },
     })
 
     const result = await requestDb.query(`
@@ -344,7 +365,7 @@ async function updateResourceBookHandler(request) {
     const isActive = payload?.isActive !== false
     const type = payload?.type
     const hasAnswerKey = payload?.hasAnswerKey !== false
-    const imageUrl = payload?.imageUrl?.trim() || null
+    const imageResult = sanitizeResourceBookImageUrl(payload?.imageUrl)
 
     if (!publisherId) {
       return json(400, { error: 'Yayın evi seçilmeli.' })
@@ -358,8 +379,8 @@ async function updateResourceBookHandler(request) {
     if (!RESOURCE_BOOK_TYPES.includes(type)) {
       return json(400, { error: 'Kaynak tipi seçilmeli.' })
     }
-    if (imageUrl && imageUrl.length > 1000) {
-      return json(400, { error: 'Görsel adresi en fazla 1000 karakter olmalı.' })
+    if (imageResult.error) {
+      return json(400, { error: imageResult.error })
     }
 
     const requestDb = await withRequest({
@@ -371,7 +392,7 @@ async function updateResourceBookHandler(request) {
       isActive: { type: sql.Bit, value: isActive },
       resourceType: { type: sql.NVarChar(30), value: type },
       hasAnswerKey: { type: sql.Bit, value: hasAnswerKey },
-      imageUrl: { type: sql.NVarChar(1000), value: imageUrl },
+      imageUrl: { type: sql.NVarChar(sql.MAX), value: imageResult.value },
     })
 
     const result = await requestDb.query(`

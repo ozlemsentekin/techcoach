@@ -1,0 +1,2 @@
+ALTER TABLE dbo.ResourceBooks ALTER COLUMN image_url NVARCHAR(MAX) NULL;
+GO
