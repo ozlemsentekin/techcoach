@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../../context/useAuth'
 import { getTasksForDate, updateTask, toggleSubGoal, rescheduleTask } from '../../../services/taskService'
 import { getCheckIn, saveCheckIn } from '../../../services/checkInService'
 import { addSession } from '../../../services/studySessionService'
 import { addHomework } from '../../../services/homeworkService'
 import { sendMessage, addCoachNote } from '../../../services/messageService'
-import { todayISODate } from '../../../utils/time'
+import { todayISODate, getMonthDates } from '../../../utils/time'
 import { getNextTask } from '../../../utils/taskSelectors'
 import { FOCUS_TASK_TYPES } from '../../../data/taskTypes'
 import StudentWelcomeBanner from '../components/StudentWelcomeBanner'
@@ -34,6 +34,9 @@ export default function TodayPage() {
   const [showStressModal, setShowStressModal] = useState(false)
   const [showBreathing, setShowBreathing] = useState(false)
   const [banner, setBanner] = useState('')
+  const [historyTasks, setHistoryTasks] = useState({})
+
+  const historyDays = useMemo(() => getMonthDates(date).filter((day) => day < date), [])
 
   useEffect(() => {
     let ignore = false
@@ -53,6 +56,43 @@ export default function TodayPage() {
       ignore = true
     }
   }, [])
+
+  useEffect(() => {
+    if (historyDays.length === 0) return undefined
+    let ignore = false
+    Promise.all(historyDays.map((day) => getTasksForDate(day)))
+      .then((results) => {
+        if (ignore) return
+        const map = {}
+        historyDays.forEach((day, index) => {
+          map[day] = results[index]
+        })
+        setHistoryTasks(map)
+      })
+      .catch((err) => {
+        if (!ignore) setLoadError(err.message)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [historyDays])
+
+  /** Bir günün API sonucunu, o gün 'tasks' (bugün) ya da 'historyTasks' (ayın geçmiş günleri) neredeyse oraya yazar. */
+  const applyDayResult = (dayDate, dayTasks) => {
+    if (dayDate === date) {
+      setTasks(dayTasks)
+      return
+    }
+    setHistoryTasks((current) => {
+      if (!historyDays.includes(dayDate)) return current
+      return { ...current, [dayDate]: dayTasks }
+    })
+  }
+
+  const listTasks = useMemo(
+    () => [...historyDays.flatMap((day) => historyTasks[day] || []), ...tasks],
+    [historyDays, historyTasks, tasks],
+  )
 
   useEffect(() => {
     if (!banner) return undefined
@@ -81,25 +121,34 @@ export default function TodayPage() {
   }
 
   const handleCompleteInline = async (task) => {
-    setTasks(await updateTask(date, task.id, { status: 'tamamlandi', completedAt: new Date().toISOString() }))
+    applyDayResult(task.date, await updateTask(task.date, task.id, { status: 'tamamlandi', completedAt: new Date().toISOString() }))
   }
 
   const handlePartialComplete = async (task) => {
-    setTasks(await updateTask(date, task.id, { status: 'kismen-tamamlandi', completedAt: new Date().toISOString() }))
+    applyDayResult(task.date, await updateTask(task.date, task.id, { status: 'kismen-tamamlandi', completedAt: new Date().toISOString() }))
   }
 
   const handleHelp = async (task) => {
-    setTasks(await updateTask(date, task.id, { status: 'yardim-bekliyor' }))
+    applyDayResult(task.date, await updateTask(task.date, task.id, { status: 'yardim-bekliyor' }))
     setShowStressModal(true)
   }
 
   const handleAnswerSheetSaved = (updatedTask) => {
-    setTasks((current) => current.map((task) => (task.id === updatedTask.id ? updatedTask : task)))
+    const replace = (list) => list.map((task) => (task.id === updatedTask.id ? updatedTask : task))
+    if (updatedTask.date === date) {
+      setTasks(replace)
+      return
+    }
+    setHistoryTasks((current) => {
+      if (!historyDays.includes(updatedTask.date)) return current
+      return { ...current, [updatedTask.date]: replace(current[updatedTask.date] || []) }
+    })
   }
 
   const handleSaveReadingProgress = async (task, payload) => {
-    setTasks(
-      await updateTask(date, task.id, {
+    applyDayResult(
+      task.date,
+      await updateTask(task.date, task.id, {
         completedPageCount: payload.completedPageCount,
         currentPageNumber: payload.currentPageNumber,
         status: payload.status,
@@ -109,8 +158,9 @@ export default function TodayPage() {
   }
 
   const handleSaveQuestionCount = async (task, payload) => {
-    setTasks(
-      await updateTask(date, task.id, {
+    applyDayResult(
+      task.date,
+      await updateTask(task.date, task.id, {
         completedQuestionCount: payload.completedQuestionCount,
         status: payload.status,
         completedAt: new Date().toISOString(),
@@ -119,8 +169,10 @@ export default function TodayPage() {
   }
 
   const handleConfirmReschedule = async ({ newDate, newTime, reason }) => {
-    const { sourceTasks } = await rescheduleTask(date, reschedulingTask.id, { newDate, newTime, reason })
-    setTasks(sourceTasks)
+    const sourceDate = reschedulingTask.date
+    const { sourceTasks, targetTasks } = await rescheduleTask(sourceDate, reschedulingTask.id, { newDate, newTime, reason })
+    applyDayResult(sourceDate, sourceTasks)
+    if (newDate !== sourceDate) applyDayResult(newDate, targetTasks)
     setReschedulingTask(null)
     setBanner('Görev taşındı. Kaybolmadı, yeni zamanında seni bekliyor.')
   }
@@ -253,7 +305,7 @@ export default function TodayPage() {
       ) : null}
 
       <TaskListSection
-        tasks={tasks}
+        tasks={listTasks}
         onComplete={handleCompleteInline}
         onPartialComplete={handlePartialComplete}
         onReschedule={(task) => setReschedulingTask(task)}
