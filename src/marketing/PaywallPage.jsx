@@ -23,13 +23,22 @@ export default function PaywallPage() {
           Abonelik satın almak için techcoach mobil uygulamasını indirin.
         </p>
       )}
-      <button
-        type="button"
-        onClick={logout}
-        className="rounded-md border border-panel-border px-4 py-2 text-sm text-panel-text-muted hover:text-panel-text"
-      >
-        Oturumu kapat
-      </button>
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="rounded-md bg-panel-blue px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+        >
+          Tekrar Dene
+        </button>
+        <button
+          type="button"
+          onClick={logout}
+          className="rounded-md border border-panel-border px-4 py-2 text-sm text-panel-text-muted hover:text-panel-text"
+        >
+          Oturumu kapat
+        </button>
+      </div>
     </div>
   )
 }
