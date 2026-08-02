@@ -3,7 +3,7 @@ import { X, CheckCircle2, XCircle, MinusCircle } from 'lucide-react'
 import { getTaskAnswerSheet, saveTaskAnswers } from '../../../services/taskService'
 import LoadingState from '../../shared/LoadingState'
 
-const OPTIONS = ['A', 'B', 'C', 'D', 'E']
+const OPTIONS = ['A', 'B', 'C', 'D']
 
 function buildInitialAnswers(tests) {
   const initial = {}
@@ -40,30 +40,45 @@ function TestSection({ test, answers, result, onSelect }) {
 
       <ResultBadge result={result} />
 
-      <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-y-2">
         {Array.from({ length: test.questionCount }, (_, index) => index + 1).map((orderNo) => {
           const key = String(orderNo)
           const selected = answers[key]
+          const correctLabel = result?.correctLabels?.[key]
+          const isWrong = Boolean(result) && Boolean(selected) && Boolean(correctLabel) && selected !== correctLabel
           return (
-            <div key={key} className="flex items-center gap-2">
-              <span className="w-6 shrink-0 text-right text-sm font-medium text-panel-text-muted">{orderNo}.</span>
+            <div
+              key={key}
+              className={`flex items-center gap-2 rounded-lg px-2 py-1 transition-colors ${
+                isWrong ? 'bg-panel-red-soft' : ''
+              }`}
+            >
+              <span className="w-6 shrink-0 text-right text-sm font-bold text-panel-text-muted">{orderNo}.</span>
               <div className="flex gap-1.5">
-                {OPTIONS.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    aria-pressed={selected === option}
-                    aria-label={`${orderNo}. soru için ${option} şıkkı`}
-                    onClick={() => onSelect(orderNo, selected === option ? null : option)}
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
-                      selected === option
-                        ? 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text'
-                        : 'border-panel-border text-panel-text-muted hover:border-student-theme-primary hover:text-student-theme-text'
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))}
+                {OPTIONS.map((option) => {
+                  const isSelected = selected === option
+                  const isCorrectReveal = isWrong && !isSelected && option === correctLabel
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      aria-pressed={isSelected}
+                      aria-label={`${orderNo}. soru için ${option} şıkkı`}
+                      onClick={() => onSelect(orderNo, isSelected ? null : option)}
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
+                        isSelected
+                          ? isWrong
+                            ? 'border-panel-red bg-panel-red text-white'
+                            : 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text'
+                          : isCorrectReveal
+                            ? 'border-panel-yellow bg-panel-yellow text-white'
+                            : 'border-panel-border text-panel-text-muted hover:border-student-theme-primary hover:text-student-theme-text'
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )
@@ -127,7 +142,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 md:items-center">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-t-3xl border border-panel-border bg-panel-surface md:max-h-[85vh] md:rounded-2xl">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-t-3xl border border-panel-border bg-panel-surface md:max-h-[85vh] md:max-w-4xl md:rounded-2xl xl:max-w-6xl">
         <div className="flex items-center justify-between border-b border-panel-border p-5">
           <div>
             <h2 className="text-lg font-semibold text-panel-text">Cevap Kağıdı</h2>
@@ -148,7 +163,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
           ) : tests.length === 0 ? (
             <p className="text-sm text-panel-text-muted">Bu göreve bağlı test bulunamadı.</p>
           ) : (
-            <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {tests.map((test) => (
                 <TestSection
                   key={test.id}

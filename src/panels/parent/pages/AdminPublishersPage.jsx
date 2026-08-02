@@ -808,7 +808,7 @@ function AnswerKeyModal({ test, onClose }) {
                       className="w-full rounded-lg border border-panel-border p-1.5 text-center text-sm text-panel-text"
                     >
                       <option value="">—</option>
-                      {['A', 'B', 'C', 'D', 'E'].map((option) => (
+                      {['A', 'B', 'C', 'D'].map((option) => (
                         <option key={option} value={option}>
                           {option}
                         </option>

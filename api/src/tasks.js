@@ -432,7 +432,7 @@ async function saveTaskAnswersHandler(request) {
       const sanitizedAnswers = {}
       Object.entries(entry?.answers || {}).forEach(([orderNo, label]) => {
         const normalizedLabel = typeof label === 'string' ? label.trim().toUpperCase() : ''
-        if (['A', 'B', 'C', 'D', 'E'].includes(normalizedLabel)) {
+        if (['A', 'B', 'C', 'D'].includes(normalizedLabel)) {
           sanitizedAnswers[orderNo] = normalizedLabel
         }
       })
@@ -471,14 +471,17 @@ async function saveTaskAnswersHandler(request) {
         if (keyResult.recordset.length === questionCount) {
           let correct = 0
           let wrong = 0
+          const correctLabels = {}
           keyResult.recordset.forEach((row) => {
+            const correctLabel = row.correct_label.trim()
+            correctLabels[String(row.order_no)] = correctLabel
             const studentLabel = testAnswers[String(row.order_no)]
             if (!studentLabel) return
-            if (studentLabel === row.correct_label.trim()) correct += 1
+            if (studentLabel === correctLabel) correct += 1
             else wrong += 1
           })
           const blank = questionCount - correct - wrong
-          results[testId] = { correct, wrong, blank, gradedAt: new Date().toISOString() }
+          results[testId] = { correct, wrong, blank, gradedAt: new Date().toISOString(), correctLabels }
           totalCorrect += correct
           totalWrong += wrong
           totalBlank += blank

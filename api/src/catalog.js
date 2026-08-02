@@ -991,8 +991,8 @@ async function setTestAnswerKeyHandler(request) {
       if (!Number.isInteger(orderNo) || orderNo <= 0) {
         return json(400, { error: 'Soru sırası pozitif bir tam sayı olmalı.' })
       }
-      if (!['A', 'B', 'C', 'D', 'E'].includes(correctLabel)) {
-        return json(400, { error: `${orderNo}. sorunun cevabı A-E arasında olmalı.` })
+      if (!['A', 'B', 'C', 'D'].includes(correctLabel)) {
+        return json(400, { error: `${orderNo}. sorunun cevabı A-D arasında olmalı.` })
       }
       if (seenOrderNos.has(orderNo)) {
         return json(400, { error: `${orderNo}. soru için birden fazla cevap girilmiş.` })
