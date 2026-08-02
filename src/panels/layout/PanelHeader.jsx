@@ -38,15 +38,6 @@ export default function PanelHeader() {
       .catch(() => setStudents([]))
   }, [open, isParent, students])
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        window.location.reload()
-      }
-    }, 60000)
-    return () => clearInterval(interval)
-  }, [])
-
   const handleEnterStudent = async (studentId) => {
     setSwitching(true)
     try {
