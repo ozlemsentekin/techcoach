@@ -89,6 +89,7 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
   const [type, setType] = useState(book?.type || '')
   const [isActive, setIsActive] = useState(book ? book.isActive : true)
   const [hasAnswerKey, setHasAnswerKey] = useState(book ? book.hasAnswerKey : true)
+  const [imageUrl, setImageUrl] = useState(book?.imageUrl || '')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -124,6 +125,7 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
         isActive,
         type,
         hasAnswerKey: type === 'soru_bankasi' ? hasAnswerKey : true,
+        imageUrl: imageUrl.trim() || null,
       }
       const data = isEdit
         ? await authRequest(`/api/panel-admin/resource-books/${book.id}`, {
@@ -221,6 +223,24 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
               className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
             />
           </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-panel-text-muted">Kapak / Profil Görseli URL</span>
+            <input
+              value={imageUrl}
+              onChange={(event) => setImageUrl(event.target.value)}
+              placeholder="https://..."
+              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+            />
+          </label>
+
+          {imageUrl.trim() ? (
+            <img
+              src={imageUrl.trim()}
+              alt={`${name || 'Kaynak'} görseli`}
+              className="h-28 w-full rounded-xl border border-[#e5e8e9] object-cover"
+            />
+          ) : null}
 
           <label className="flex items-center gap-2.5">
             <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} className="h-4 w-4" />
@@ -1092,9 +1112,17 @@ function BookBlock({ book, subjectsById, topics, tests, onAddTopic, onAddTest, o
           >
             {expanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
           </button>
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#f5f2fb] text-[#6f63a8]">
-            <BookOpen size={16} aria-hidden="true" />
-          </span>
+          {book.imageUrl ? (
+            <img
+              src={book.imageUrl}
+              alt={`${book.name} görseli`}
+              className="h-11 w-11 shrink-0 rounded-[10px] border border-[#e4e5ec] object-cover"
+            />
+          ) : (
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#f5f2fb] text-[#6f63a8]">
+              <BookOpen size={16} aria-hidden="true" />
+            </span>
+          )}
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-[15px] font-bold text-[#263a39]">{book.name}</span>
@@ -1327,6 +1355,7 @@ export default function AdminPublishersPage() {
           isActive: !book.isActive,
           type: book.type,
           hasAnswerKey: book.hasAnswerKey,
+          imageUrl: book.imageUrl,
         }),
       })
       handleBookSaved(data.resourceBook)

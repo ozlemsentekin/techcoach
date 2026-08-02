@@ -35,6 +35,25 @@ function sanitizeHomework(record) {
   }
 }
 
+async function validateAssignedResourceBook(studentId, subjectId, resourceBookId) {
+  const requestDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+    resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+  })
+  const result = await requestDb.query(`
+    SELECT TOP 1 rb.id
+    FROM dbo.StudentResourceBooks srb
+    INNER JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id
+    WHERE srb.student_id = @studentId
+      AND srb.resource_book_id = @resourceBookId
+      AND rb.subject_id = @subjectId
+      AND rb.is_active = 1;
+  `)
+
+  return Boolean(result.recordset[0])
+}
+
 // Parent bir tarih seçtiyse, öğrencinin o güne ait canlı plan görev listesinde de görünmesi için
 // dbo.Homeworks satırına eşlik eden bir dbo.Tasks satırı oluşturur (taslak değil, canlı).
 // resourceBookId + testIds burada aktarılır ki soru bankası görevlerinde dijital cevap kağıdı
@@ -220,11 +239,19 @@ async function createHomeworkHandler(request) {
     if (!subjectId) {
       return json(400, { error: 'Ders seçilmeli.' })
     }
+    if (!resourceBookId) {
+      return json(400, { error: 'Ödev için öğrenciye atanmış bir kaynak seçilmeli.' })
+    }
     if (!title || title.length < 2) {
       return json(400, { error: 'Ödev başlığı en az 2 karakter olmalı.' })
     }
     if (!assignedDate || !dueDate) {
       return json(400, { error: 'Tarih bilgileri zorunludur.' })
+    }
+
+    const isAssignedResource = await validateAssignedResourceBook(studentId, subjectId, resourceBookId)
+    if (!isAssignedResource) {
+      return json(400, { error: 'Seçilen kaynak bu öğrenciye bu ders için atanmamış.' })
     }
 
     const duplicateCheckDb = await withRequest({

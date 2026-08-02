@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Loader2, X } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, Loader2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { todayISODate } from '../../../utils/time'
 import Badge from '../../ui/Badge'
@@ -61,6 +61,7 @@ function ResourceBookSelect({ resourceBooks, value, onChange, disabled, placehol
       >
         {selected ? (
           <span className="flex min-w-0 items-center gap-2">
+            <ResourceBookAvatar book={selected} />
             {selected.publisherName ? (
               <Badge tone="lilac" className="shrink-0">
                 {selected.publisherName}
@@ -90,6 +91,7 @@ function ResourceBookSelect({ resourceBooks, value, onChange, disabled, placehol
               onClick={() => selectOption(book.id)}
               className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-student-theme-soft"
             >
+              <ResourceBookAvatar book={book} />
               {book.publisherName ? (
                 <Badge tone="lilac" className="shrink-0">
                   {book.publisherName}
@@ -101,6 +103,24 @@ function ResourceBookSelect({ resourceBooks, value, onChange, disabled, placehol
         </div>
       ) : null}
     </div>
+  )
+}
+
+function ResourceBookAvatar({ book }) {
+  if (book?.imageUrl) {
+    return (
+      <img
+        src={book.imageUrl}
+        alt={`${book.name} görseli`}
+        className="h-8 w-8 shrink-0 rounded-lg border border-panel-border object-cover"
+      />
+    )
+  }
+
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-student-theme-soft text-student-theme-text">
+      <BookOpen size={15} aria-hidden="true" />
+    </span>
   )
 }
 
@@ -149,6 +169,8 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate }) {
     if (!subjectId) return undefined
 
     let ignore = false
+    setResourceBooks(null)
+    setResourceBooksError('')
 
     authRequest(`/api/panel/resource-books?subjectId=${subjectId}`, { method: 'GET' })
       .then((data) => {
@@ -239,6 +261,10 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate }) {
     event.preventDefault()
     if (saving) return
     const trimmedNote = note.trim()
+    if (!resourceBookId) {
+      setSaveError('Ödev için öğrenciye atanmış bir kaynak seçmelisiniz.')
+      return
+    }
     if (!subject.trim() || !trimmedNote) return
 
     const assignedDate = todayISODate()
@@ -303,7 +329,7 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate }) {
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-panel-text-muted">Kaynak (isteğe bağlı)</span>
+            <span className="text-xs font-medium text-panel-text-muted">Kaynak</span>
             <ResourceBookSelect
               resourceBooks={resourceBooks}
               value={resourceBookId}
@@ -315,8 +341,8 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate }) {
                   : resourceBooks === null
                     ? 'Kaynaklar yükleniyor...'
                     : resourceBooks.length === 0
-                      ? 'Bu derse ait aktif kaynak yok'
-                      : 'Kaynak seçin (isteğe bağlı)'
+                      ? 'Bu derse atanmış kaynak yok'
+                      : 'Kaynak seçin'
               }
             />
             {resourceBooksError ? <span className="text-xs text-panel-warm">{resourceBooksError}</span> : null}
@@ -446,7 +472,7 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate }) {
 
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || !resourceBookId}
             className="flex items-center justify-center gap-2 rounded-xl bg-student-theme-primary px-4 py-3 text-sm font-semibold text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary disabled:cursor-not-allowed disabled:opacity-70"
           >
             {saving ? <Loader2 size={16} className="animate-spin" /> : null}

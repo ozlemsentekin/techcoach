@@ -19,6 +19,25 @@ function sanitizeStudent(record) {
     email: record.email,
     role: record.role,
     createdAt: record.created_at,
+    resourceCount: Number(record.resource_count) || 0,
+  }
+}
+
+function sanitizeStudentResourceBook(record) {
+  return {
+    id: record.id,
+    publisherId: record.publisher_id,
+    publisherName: record.publisher_name || null,
+    subjectId: record.subject_id,
+    subjectName: record.subject_name || null,
+    name: record.name,
+    pageCount: record.page_count,
+    isActive: Boolean(record.is_active),
+    type: record.resource_type,
+    hasAnswerKey: Boolean(record.has_answer_key),
+    imageUrl: record.image_url || null,
+    assigned: Boolean(record.assigned),
+    assignedAt: record.assigned_at || null,
   }
 }
 
@@ -48,6 +67,38 @@ async function requireParentSession(request) {
   return { parentId: session.sub }
 }
 
+async function verifyParentOwnsStudent(parentId, studentId) {
+  const ownershipDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    parentId: { type: sql.UniqueIdentifier, value: parentId },
+  })
+  const ownershipResult = await ownershipDb.query(`
+    SELECT TOP 1 id FROM dbo.Users WHERE id = @studentId AND parent_id = @parentId;
+  `)
+  return Boolean(ownershipResult.recordset[0])
+}
+
+async function fetchStudentResourceBooks(studentId) {
+  const requestDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+  })
+  const result = await requestDb.query(`
+    SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
+           rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url,
+           CASE WHEN srb.resource_book_id IS NULL THEN 0 ELSE 1 END AS assigned,
+           srb.assigned_at
+    FROM dbo.ResourceBooks rb
+    LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+    LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
+    LEFT JOIN dbo.StudentResourceBooks srb
+      ON srb.resource_book_id = rb.id AND srb.student_id = @studentId
+    WHERE rb.is_active = 1
+    ORDER BY s.name ASC, p.name ASC, rb.name ASC;
+  `)
+
+  return result.recordset.map(sanitizeStudentResourceBook)
+}
+
 async function listStudentsHandler(request) {
   try {
     const { error, parentId } = await requireParentSession(request)
@@ -59,10 +110,14 @@ async function listStudentsHandler(request) {
       parentId: { type: sql.UniqueIdentifier, value: parentId },
     })
     const result = await requestDb.query(`
-      SELECT id, full_name, email, role, last_login_at, created_at
-      FROM dbo.Users
-      WHERE parent_id = @parentId
-      ORDER BY created_at ASC;
+      SELECT u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at,
+             COUNT(rb.id) AS resource_count
+      FROM dbo.Users u
+      LEFT JOIN dbo.StudentResourceBooks srb ON srb.student_id = u.id
+      LEFT JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id AND rb.is_active = 1
+      WHERE u.parent_id = @parentId
+      GROUP BY u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at
+      ORDER BY u.created_at ASC;
     `)
 
     return json(200, {
@@ -122,7 +177,7 @@ async function createStudentHandler(request) {
 
     const result = await requestDb.query(`
       INSERT INTO dbo.Users (full_name, email, password_hash, role, parent_id, aydinlatma_accepted_at, kvkk_accepted_at)
-      OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.role, inserted.created_at
+      OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.role, inserted.created_at, 0 AS resource_count
       VALUES (@fullName, @email, @passwordHash, @role, @parentId, @consentAt, @consentAt);
     `)
 
@@ -257,9 +312,129 @@ async function exitStudentHandler(request) {
   }
 }
 
+async function listStudentResourceBooksHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const studentId = request.params.studentId
+    const ownsStudent = await verifyParentOwnsStudent(parentId, studentId)
+    if (!ownsStudent) {
+      return json(404, { error: 'Öğrenci bulunamadı.' })
+    }
+
+    const resourceBooks = await fetchStudentResourceBooks(studentId)
+    return json(200, { resourceBooks })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('listStudentResourceBooksHandler failed', error)
+    return json(500, { error: 'Kaynaklar yüklenemedi.' })
+  }
+}
+
+async function updateStudentResourceBooksHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const studentId = request.params.studentId
+    const ownsStudent = await verifyParentOwnsStudent(parentId, studentId)
+    if (!ownsStudent) {
+      return json(404, { error: 'Öğrenci bulunamadı.' })
+    }
+
+    const payload = await request.json().catch(() => null)
+    if (!payload || !Array.isArray(payload.resourceBookIds)) {
+      return json(400, { error: 'Kaynak listesi geçersiz.' })
+    }
+
+    const resourceBookIds = Array.from(
+      new Set(payload.resourceBookIds.filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim())),
+    )
+
+    if (resourceBookIds.length) {
+      const placeholders = resourceBookIds.map((_, index) => `@resourceBookId${index}`)
+      const validationDb = await withRequest(
+        Object.fromEntries(resourceBookIds.map((id, index) => [`resourceBookId${index}`, { type: sql.UniqueIdentifier, value: id }])),
+      )
+      const validationResult = await validationDb.query(`
+        SELECT id FROM dbo.ResourceBooks WHERE is_active = 1 AND id IN (${placeholders.join(', ')});
+      `)
+      if (validationResult.recordset.length !== resourceBookIds.length) {
+        return json(400, { error: 'Seçilen kaynaklardan biri bulunamadı veya aktif değil.' })
+      }
+    }
+
+    const bindings = {
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      ...Object.fromEntries(resourceBookIds.map((id, index) => [`resourceBookId${index}`, { type: sql.UniqueIdentifier, value: id }])),
+    }
+    const placeholders = resourceBookIds.map((_, index) => `@resourceBookId${index}`)
+    const insertStatements = resourceBookIds
+      .map(
+        (_, index) => `
+          INSERT INTO dbo.StudentResourceBooks (student_id, resource_book_id)
+          SELECT @studentId, @resourceBookId${index}
+          WHERE NOT EXISTS (
+            SELECT 1 FROM dbo.StudentResourceBooks
+            WHERE student_id = @studentId AND resource_book_id = @resourceBookId${index}
+          );
+        `,
+      )
+      .join('\n')
+
+    const requestDb = await withRequest(bindings)
+    await requestDb.query(`
+      BEGIN TRY
+        BEGIN TRANSACTION;
+
+        DELETE FROM dbo.StudentResourceBooks
+        WHERE student_id = @studentId
+          ${placeholders.length ? `AND resource_book_id NOT IN (${placeholders.join(', ')})` : ''};
+
+        ${insertStatements}
+
+        COMMIT TRANSACTION;
+      END TRY
+      BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        THROW;
+      END CATCH
+    `)
+
+    const resourceBooks = await fetchStudentResourceBooks(studentId)
+    const resourceCount = resourceBooks.filter((book) => book.assigned).length
+    return json(200, { resourceBooks, resourceCount })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('updateStudentResourceBooksHandler failed', error)
+    return json(500, { error: 'Kaynak atamaları kaydedilemedi.' })
+  }
+}
+
 module.exports = {
   listStudentsHandler,
   createStudentHandler,
   enterStudentHandler,
   exitStudentHandler,
+  listStudentResourceBooksHandler,
+  updateStudentResourceBooksHandler,
 }

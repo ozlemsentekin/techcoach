@@ -8,13 +8,22 @@ import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
 import DataTable from '../../ui/DataTable'
 
+const RESOURCE_BOOK_TYPES = [
+  { value: 'konu_anlatimi', label: 'Konu Anlatımı' },
+  { value: 'soru_bankasi', label: 'Soru Bankası' },
+  { value: 'okuma_kitabi', label: 'Okuma Kitabı' },
+]
+
 function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
   const isEdit = Boolean(book)
   const effectiveSubjectId = book?.subjectId || subject?.id
   const [name, setName] = useState(book?.name || '')
   const [pageCount, setPageCount] = useState(book ? String(book.pageCount) : '')
   const [publisherId, setPublisherId] = useState(book?.publisherId || '')
+  const [type, setType] = useState(book?.type || '')
   const [isActive, setIsActive] = useState(book ? book.isActive : true)
+  const [hasAnswerKey, setHasAnswerKey] = useState(book ? book.hasAnswerKey : true)
+  const [imageUrl, setImageUrl] = useState(book?.imageUrl || '')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -34,6 +43,10 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
       setError('Sayfa sayısı pozitif bir tam sayı olmalı.')
       return
     }
+    if (!type) {
+      setError('Kaynak tipi seçilmeli.')
+      return
+    }
 
     setError('')
     setLoading(true)
@@ -44,6 +57,9 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
         name: name.trim(),
         pageCount: pageCountNumber,
         isActive,
+        type,
+        hasAnswerKey: type === 'soru_bankasi' ? hasAnswerKey : true,
+        imageUrl: imageUrl.trim() || null,
       }
       const data = isEdit
         ? await authRequest(`/api/panel-admin/resource-books/${book.id}`, {
@@ -111,6 +127,24 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
           </label>
 
           <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-panel-text-muted">Tip</span>
+            <select
+              value={type}
+              onChange={(event) => setType(event.target.value)}
+              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+            >
+              <option value="" disabled>
+                Tip seçin
+              </option>
+              {RESOURCE_BOOK_TYPES.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-panel-text-muted">Sayfa Sayısı</span>
             <input
               type="number"
@@ -120,6 +154,28 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
               className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
             />
           </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-panel-text-muted">Kapak / Profil Görseli URL</span>
+            <input
+              value={imageUrl}
+              onChange={(event) => setImageUrl(event.target.value)}
+              placeholder="https://..."
+              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+            />
+          </label>
+
+          {type === 'soru_bankasi' ? (
+            <label className="flex items-center gap-2.5">
+              <input
+                type="checkbox"
+                checked={hasAnswerKey}
+                onChange={(event) => setHasAnswerKey(event.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="text-sm font-medium text-panel-text">Cevap Anahtarı Var</span>
+            </label>
+          ) : null}
 
           <label className="flex items-center gap-2.5">
             <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} className="h-4 w-4" />
@@ -139,6 +195,9 @@ function BookRow({ book, publishersById, onEditBook, onToggleActive }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#edf0f1] px-4 py-2.5">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
+        {book.imageUrl ? (
+          <img src={book.imageUrl} alt={`${book.name} görseli`} className="h-8 w-8 rounded-lg object-cover" />
+        ) : null}
         <span className="truncate text-sm font-medium text-[#253d3e]">{book.name}</span>
         <button
           type="button"
@@ -258,6 +317,9 @@ export default function AdminSubjectsPage() {
           name: book.name,
           pageCount: book.pageCount,
           isActive: !book.isActive,
+          type: book.type,
+          hasAnswerKey: book.hasAnswerKey,
+          imageUrl: book.imageUrl,
         }),
       })
       handleBookSaved(data.resourceBook)

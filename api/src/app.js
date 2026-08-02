@@ -6,6 +6,8 @@ const {
   createStudentHandler,
   enterStudentHandler,
   exitStudentHandler,
+  listStudentResourceBooksHandler,
+  updateStudentResourceBooksHandler,
 } = require('./students')
 const {
   listSubjectsHandler,
@@ -145,6 +147,20 @@ app.http('parent-students-enter', {
   methods: ['POST'],
   route: 'parent/students/{studentId}/enter',
   handler: enterStudentHandler,
+})
+
+app.http('parent-student-resource-books-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'parent/students/{studentId}/resource-books',
+  handler: listStudentResourceBooksHandler,
+})
+
+app.http('parent-student-resource-books-update', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'parent/students/{studentId}/resource-books',
+  handler: updateStudentResourceBooksHandler,
 })
 
 app.http('parent-return', {
