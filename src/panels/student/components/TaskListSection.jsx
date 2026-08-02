@@ -44,6 +44,12 @@ function dateGroupLabel(dateISO) {
   return formatDateLong(new Date(dateISO))
 }
 
+function shouldExpandGroup({ filter, viewMode, group, index }) {
+  if (viewMode === 'time' && filter === 'all') return group.date === todayISODate()
+  if (viewMode === 'time' && filter === 'done') return index === 0
+  return true
+}
+
 export default function TaskListSection({
   tasks,
   onComplete,
@@ -97,12 +103,12 @@ export default function TaskListSection({
     })
     let entries = [...byDate.entries()]
     if (filter === 'all') {
-      entries = entries.reverse()
+      entries = entries.reverse().map(([date, dateTasks]) => [date, [...dateTasks].reverse()])
     }
     if (filter === 'done') {
       entries = entries.reverse().map(([date, dateTasks]) => [date, [...dateTasks].reverse()])
     }
-    return entries.map(([date, dateTasks]) => ({ label: dateGroupLabel(date), tasks: dateTasks }))
+    return entries.map(([date, dateTasks]) => ({ label: dateGroupLabel(date), date, tasks: dateTasks }))
   }, [filtered, filter])
 
   const visibleGroups = viewMode === 'subject' ? grouped : groupedByDate
@@ -179,7 +185,7 @@ export default function TaskListSection({
               showLessonLabel={viewMode === 'time'}
               getLessonLabel={viewMode === 'time' ? lessonLabelFor : undefined}
               emphasizeTime={viewMode === 'time'}
-              defaultExpanded={viewMode === 'time' && filter === 'done' ? index === 0 : true}
+              defaultExpanded={shouldExpandGroup({ filter, viewMode, group, index })}
             />
           ))}
         </div>
