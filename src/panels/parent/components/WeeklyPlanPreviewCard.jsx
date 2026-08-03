@@ -14,7 +14,7 @@ export default function WeeklyPlanPreviewCard({ weekDates, tasksByDate, onCopyPr
         </Link>
       </div>
 
-      <div className="grid grid-cols-7 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
         {weekDates.map((date, index) => (
           <div key={date} className="rounded-xl border border-panel-border p-2 text-center">
             <p className="text-xs font-medium text-panel-text-muted">{DAY_LABELS[index]}</p>

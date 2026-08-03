@@ -344,7 +344,7 @@ export default function PanelHeader({ role }) {
         </button>
 
         {open ? (
-          <div className="absolute right-0 top-12 z-50 min-w-[220px] rounded-xl border border-panel-border bg-panel-surface py-1 shadow-panel-2">
+          <div className="fixed inset-x-4 top-16 z-50 rounded-xl border border-panel-border bg-panel-surface py-1 shadow-panel-2 sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:min-w-[220px]">
             {isParent ? (
               <>
                 <div className="px-4 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-panel-text-muted">
