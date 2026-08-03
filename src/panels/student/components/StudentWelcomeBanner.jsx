@@ -71,66 +71,67 @@ export default function StudentWelcomeBanner({ studentName, tasks = [], checkIn 
 
   return (
     <div className="flex flex-col gap-3">
-      <section className="student-theme-banner overflow-hidden rounded-2xl border border-student-theme-primary/25 shadow-panel-2">
-        <div className="grid gap-3 p-3 sm:p-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-center">
+      <section className="panel-card overflow-hidden">
+        <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="student-theme-banner-pill inline-flex h-8 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 text-xs font-semibold text-white sm:text-sm">
+              <span className="inline-flex items-center gap-2 rounded-full bg-panel-sage-soft px-3 py-1 text-sm font-medium text-panel-sage">
                 <CalendarDays size={14} aria-hidden="true" />
                 {formatDateLong(currentDate)}
               </span>
-              <span className="student-theme-banner-pill inline-flex h-8 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 text-xs font-semibold text-white sm:text-sm">
+              <span className="inline-flex items-center gap-2 rounded-full bg-panel-blue-soft px-3 py-1 text-sm font-medium text-panel-blue">
                 <Clock size={14} aria-hidden="true" />
                 {formatTime(currentDate)}
               </span>
             </div>
 
-            <h1 className="student-theme-banner-text mt-3 text-2xl font-bold leading-tight text-white sm:text-3xl">
-              {greeting.label}, {firstName || 'Aylin'}
-            </h1>
-            <p className="student-theme-banner-muted mt-2 flex max-w-4xl items-start gap-2 text-sm font-semibold leading-relaxed text-white/80 sm:text-base">
-              <Sparkles className="student-theme-banner-accent mt-0.5 shrink-0 text-white" size={16} aria-hidden="true" />
-              <span className="line-clamp-2">{bannerLead}</span>
-            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <h1 className="text-2xl font-bold leading-tight text-panel-text sm:text-3xl">
+                {greeting.label}, {firstName || 'Aylin'}
+              </h1>
+              <p className="flex max-w-3xl items-start gap-2 text-base font-medium leading-relaxed text-panel-text-muted">
+                <Sparkles className="mt-0.5 shrink-0 text-panel-blue" size={17} aria-hidden="true" />
+                <span className="line-clamp-2">{bannerLead}</span>
+              </p>
+            </div>
           </div>
 
-          <div className="student-theme-lgs-card flex min-w-0 items-center gap-3 rounded-[14px] border border-white/15 bg-white/10 px-3 py-3 shadow-sm">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-white/10 text-white">
+          <div className="flex min-w-0 items-center gap-3 rounded-xl border border-panel-border bg-panel-surface px-4 py-3 shadow-sm">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
               <CalendarDays size={18} aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <p className="student-theme-lgs-label text-xs font-bold text-white">LGS 2027</p>
-                <p className="student-theme-lgs-muted text-xs font-semibold text-white/70">13 Haziran 2027</p>
+                <p className="text-xs font-medium text-panel-text-muted">LGS 2027</p>
+                <p className="text-xs font-semibold text-panel-text-muted">13 Haziran 2027</p>
               </div>
               <div className="mt-1 flex items-end gap-2">
-                <p className="student-theme-lgs-title text-3xl font-bold leading-none text-white">{lgsText}</p>
+                <p className="text-3xl font-bold leading-none text-panel-text">{lgsText}</p>
                 {lgsRemainingDays > 0 ? (
-                  <p className="student-theme-lgs-accent pb-0.5 text-sm font-bold text-white/80">kaldı</p>
+                  <p className="pb-0.5 text-sm font-bold text-panel-blue">kaldı</p>
                 ) : null}
               </div>
             </div>
           </div>
         </div>
 
-      </section>
-
-      <section className="student-theme-progress-card rounded-[14px] border border-student-theme-primary/15 bg-panel-surface px-3 py-3 shadow-panel-1 sm:px-4">
-        <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-          <span className="font-semibold text-panel-text">Gün ilerlemesi</span>
-          <span className="font-bold text-student-theme-text">
-            %{progress} · {completed} / {total}
-          </span>
-        </div>
-        <div
-          className="student-theme-banner-progress-track h-3 overflow-hidden rounded-full border border-student-theme-primary/10 bg-panel-surface-soft"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={progress}
-          aria-label="Bugünkü görev ilerlemesi"
-        >
-          <div className="student-theme-banner-progress-fill h-full rounded-full shadow-sm" style={{ width: `${progress}%` }} />
+        <div className="border-t border-panel-border bg-panel-surface-soft/60 p-4 sm:p-5">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium text-panel-text">Gün ilerlemesi</span>
+            <span className="font-bold text-panel-blue">
+              %{progress} · {completed} / {total}
+            </span>
+          </div>
+          <div
+            className="h-2 overflow-hidden rounded-full bg-panel-border"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress}
+            aria-label="Bugünkü görev ilerlemesi"
+          >
+            <div className="h-full rounded-full bg-panel-blue" style={{ width: `${progress}%` }} />
+          </div>
         </div>
       </section>
 

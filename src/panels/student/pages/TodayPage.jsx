@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { HelpCircle, LifeBuoy } from 'lucide-react'
 import { useAuth } from '../../../context/useAuth'
 import { getTasksForDate, updateTask, patchTask, toggleSubGoal, rescheduleTask } from '../../../services/taskService'
-import { getCheckIn, saveCheckIn } from '../../../services/checkInService'
+import { getCheckIn } from '../../../services/checkInService'
 import { addSession } from '../../../services/studySessionService'
 import { addHomework } from '../../../services/homeworkService'
 import { sendMessage, addCoachNote } from '../../../services/messageService'
@@ -11,7 +10,6 @@ import { getNextTask } from '../../../utils/taskSelectors'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { FOCUS_TASK_TYPES } from '../../../data/taskTypes'
 import StudentWelcomeBanner from '../components/StudentWelcomeBanner'
-import EnergyCheckIn from '../components/EnergyCheckIn'
 import TaskListSection from '../components/TaskListSection'
 import TaskFocusScreen from '../components/TaskFocusScreen'
 import SessionCompletionModal from '../components/SessionCompletionModal'
@@ -22,30 +20,9 @@ import BreathingExercise from '../components/BreathingExercise'
 import LoadingState from '../../shared/LoadingState'
 
 const date = todayISODate()
-
-function SupportCard({ onOpenSupport }) {
-  return (
-    <section className="panel-card p-5">
-      <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-student-theme-soft text-student-theme-text">
-          <LifeBuoy size={18} aria-hidden="true" />
-        </span>
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold text-panel-text">Destek</h2>
-          <p className="mt-1 text-sm text-panel-text-muted">Zorlandığında planı küçültebilir veya destek isteyebilirsin.</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={onOpenSupport}
-        className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-student-theme-primary/25 px-4 text-sm font-semibold text-student-theme-text hover:bg-student-theme-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
-      >
-        <HelpCircle size={16} aria-hidden="true" />
-        Destek Al
-      </button>
-    </section>
-  )
-}
+const STUDENT_SUPPORT_EVENT = 'student-support-requested'
+const STUDENT_ENERGY_UPDATED_EVENT = 'student-energy-updated'
+const PENDING_SUPPORT_KEY = 'student_support_pending'
 
 const TIMER_STOP_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
 
@@ -134,6 +111,28 @@ export default function TodayPage() {
     }
   }, [historyDays])
 
+  useEffect(() => {
+    const handleSupportRequested = () => setShowStressModal(true)
+    const handleEnergyUpdated = (event) => {
+      if (event.detail?.checkIn) setCheckIn(event.detail.checkIn)
+    }
+
+    window.addEventListener(STUDENT_SUPPORT_EVENT, handleSupportRequested)
+    window.addEventListener(STUDENT_ENERGY_UPDATED_EVENT, handleEnergyUpdated)
+
+    let pendingSupportTimeout
+    if (window.sessionStorage.getItem(PENDING_SUPPORT_KEY) === '1') {
+      window.sessionStorage.removeItem(PENDING_SUPPORT_KEY)
+      pendingSupportTimeout = window.setTimeout(handleSupportRequested, 0)
+    }
+
+    return () => {
+      if (pendingSupportTimeout) window.clearTimeout(pendingSupportTimeout)
+      window.removeEventListener(STUDENT_SUPPORT_EVENT, handleSupportRequested)
+      window.removeEventListener(STUDENT_ENERGY_UPDATED_EVENT, handleEnergyUpdated)
+    }
+  }, [])
+
   /** Bir günün API sonucunu, o gün 'tasks' (bugün) ya da 'historyTasks' (ayın geçmiş günleri) neredeyse oraya yazar. */
   const applyDayResult = (dayDate, dayTasks) => {
     if (dayDate === date) {
@@ -164,10 +163,6 @@ export default function TodayPage() {
   const nextTask = getNextTask(tasks)
 
   const isFocusType = (task) => FOCUS_TASK_TYPES.has(task.taskType) || task.taskType === 'gunluk-degerlendirme'
-
-  const handleEnergySelect = async (levelId) => {
-    setCheckIn(await saveCheckIn(date, { energyLevel: levelId, note: checkIn?.note }))
-  }
 
   const handleStart = async (task) => {
     if (isFocusType(task)) {
@@ -433,28 +428,19 @@ export default function TodayPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="min-w-0">
-          <TaskListSection
-            tasks={listTasks}
-            onStartTimer={handleStartTimer}
-            onComplete={handleCompleteInline}
-            onUndoComplete={handleUndoComplete}
-            onPartialComplete={handlePartialComplete}
-            onReschedule={(task) => setReschedulingTask(task)}
-            onHelp={handleHelp}
-            onAnswerSheetSaved={handleAnswerSheetSaved}
-            onSaveReadingProgress={handleSaveReadingProgress}
-            onSaveQuestionCount={handleSaveQuestionCount}
-            onSaveNotes={handleSaveNotes}
-          />
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-5">
-          <EnergyCheckIn selectedLevel={checkIn?.energyLevel} onSelect={handleEnergySelect} />
-          <SupportCard onOpenSupport={() => setShowStressModal(true)} />
-        </div>
-      </div>
+      <TaskListSection
+        tasks={listTasks}
+        onStartTimer={handleStartTimer}
+        onComplete={handleCompleteInline}
+        onUndoComplete={handleUndoComplete}
+        onPartialComplete={handlePartialComplete}
+        onReschedule={(task) => setReschedulingTask(task)}
+        onHelp={handleHelp}
+        onAnswerSheetSaved={handleAnswerSheetSaved}
+        onSaveReadingProgress={handleSaveReadingProgress}
+        onSaveQuestionCount={handleSaveQuestionCount}
+        onSaveNotes={handleSaveNotes}
+      />
 
       {focusTask ? (
         <TaskFocusScreen

@@ -26,7 +26,7 @@ export default function PanelLayout({ role }) {
       <div className="flex">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
-          <PanelHeader />
+          <PanelHeader role={role} />
           <main className="min-w-0 flex-1 px-4 pb-24 pt-5 md:px-6 md:pb-6">
             <Outlet />
           </main>
