@@ -72,6 +72,14 @@ export function parseTimeToMinutes(time) {
   return hours * 60 + minutes
 }
 
+/** "HH:MM" formatındaki saate dakika ekler/çıkarır, sonucu yine "HH:MM" olarak döner (24 saati taşırmaz). */
+export function addMinutesToTime(time, minutesToAdd) {
+  const totalMinutes = Math.max(0, parseTimeToMinutes(time) + minutesToAdd) % (24 * 60)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
 export function nowMinutes() {
   const now = new Date()
   return now.getHours() * 60 + now.getMinutes()

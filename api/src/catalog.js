@@ -77,7 +77,7 @@ function sanitizeResourceBookTopic(record) {
   }
 }
 
-function sanitizeResourceBookTopicTest(record) {
+function sanitizeResourceBookTopicTest(record, completedTestIds) {
   return {
     id: record.id,
     topicId: record.topic_id,
@@ -88,6 +88,7 @@ function sanitizeResourceBookTopicTest(record) {
     pageCount: record.page_count,
     questionCount: record.question_count,
     createdAt: record.created_at,
+    completed: completedTestIds ? completedTestIds.has(record.id) : false,
   }
 }
 
@@ -538,6 +539,11 @@ async function updateResourceBookTopicHandler(request) {
   }
 }
 
+function extractWeekNumber(name) {
+  const match = /^(\d+)\s*\./.exec(name || '')
+  return match ? parseInt(match[1], 10) : null
+}
+
 async function listResourceBookTopicsForPanelHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
@@ -588,6 +594,26 @@ async function listResourceBookTopicsForPanelHandler(request) {
       ORDER BY tt.page_start ASC;
     `)
 
+    const completedTestsDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+    })
+    const completedTestsResult = await completedTestsDb.query(`
+      SELECT test_results_json
+      FROM dbo.Tasks
+      WHERE student_id = @studentId AND resource_book_id = @resourceBookId AND test_results_json IS NOT NULL;
+    `)
+    const completedTestIds = new Set()
+    completedTestsResult.recordset.forEach((row) => {
+      let results
+      try {
+        results = JSON.parse(row.test_results_json)
+      } catch {
+        return
+      }
+      Object.keys(results || {}).forEach((testId) => completedTestIds.add(testId))
+    })
+
     const testsByTopicId = new Map()
     testsResult.recordset.forEach((test) => {
       const list = testsByTopicId.get(test.topic_id) || []
@@ -616,7 +642,19 @@ async function listResourceBookTopicsForPanelHandler(request) {
       })
       .map(({ topic, topicTests }) => ({
         ...sanitizeResourceBookTopic(topic),
-        tests: topicTests.map(sanitizeResourceBookTopicTest),
+        // Weekly tests are independently paginated (each often starting at page 1), so they tie
+        // on page_start — sort by the week number embedded in the name (e.g. "05. Hafta - ...")
+        // instead, falling back to page_start when a name has no leading week number.
+        tests: [...topicTests]
+          .sort((a, b) => {
+            const weekA = extractWeekNumber(a.name)
+            const weekB = extractWeekNumber(b.name)
+            if (weekA !== null && weekB !== null && weekA !== weekB) return weekA - weekB
+            if (weekA !== null && weekB === null) return -1
+            if (weekA === null && weekB !== null) return 1
+            return a.page_start - b.page_start
+          })
+          .map((test) => sanitizeResourceBookTopicTest(test, completedTestIds)),
       }))
 
     return json(200, { topics })

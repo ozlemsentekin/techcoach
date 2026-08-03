@@ -112,26 +112,26 @@ body {
 
 [data-theme='pink'] {
   --color-panel-bg: #ffffff;
-  --color-panel-surface: #fffdfd;
-  --color-panel-surface-soft: #fff4f6;
-  --color-panel-border: #f1d9df;
-  --color-panel-border-strong: #e8c3cd;
-  --color-panel-text: #5b3745;
-  --color-panel-text-muted: #8a6170;
-  --color-panel-blue: #a85d73;
-  --color-panel-blue-soft: #f8dfe5;
-  --color-panel-sage: #6f9c7f;
-  --color-panel-sage-soft: #e6f1ea;
+  --color-panel-surface: #fffefc;
+  --color-panel-surface-soft: #f6f3ee;
+  --color-panel-border: #ece2dc;
+  --color-panel-border-strong: #ddccc0;
+  --color-panel-text: #503b3c;
+  --color-panel-text-muted: #8a7071;
+  --color-panel-blue: #c98a9c;
+  --color-panel-blue-soft: #f6e6e9;
+  --color-panel-sage: #8fb08f;
+  --color-panel-sage-soft: #e6f0e3;
   --color-panel-lilac: #8e61ae;
   --color-panel-lilac-soft: #eee7f3;
-  --color-panel-accent: #d98a4e;
-  --color-panel-accent-soft: #fdead9;
-  --color-panel-warm: #a8632f;
-  --color-student-theme-primary: #a85d73;
-  --color-student-theme-hover: color-mix(in srgb, #a85d73 82%, black);
-  --color-student-theme-soft: #f8dfe5;
-  --color-student-theme-border: #a85d73;
-  --color-student-theme-text: #a85d73;
+  --color-panel-accent: #b98f6a;
+  --color-panel-accent-soft: #f3e8db;
+  --color-panel-warm: #8a6a4a;
+  --color-student-theme-primary: #c98a9c;
+  --color-student-theme-hover: color-mix(in srgb, #c98a9c 82%, black);
+  --color-student-theme-soft: #f6e6e9;
+  --color-student-theme-border: #c98a9c;
+  --color-student-theme-text: #c98a9c;
   --color-student-theme-button-text: #ffffff;
 }
 
@@ -168,8 +168,8 @@ body {
   --color-panel-border-strong: #d4c9ea;
   --color-panel-text: #362f4d;
   --color-panel-text-muted: #6b6284;
-  --color-panel-blue: #7c5cbf;
-  --color-panel-blue-soft: #ece4fa;
+  --color-panel-blue: #6f63a8;
+  --color-panel-blue-soft: #f1eefa;
   --color-panel-sage: #6fa08a;
   --color-panel-sage-soft: #e5f1ec;
   --color-panel-lilac: #b36b8f;
@@ -177,36 +177,36 @@ body {
   --color-panel-accent: #d68a4a;
   --color-panel-accent-soft: #fbeddb;
   --color-panel-warm: #b4703a;
-  --color-student-theme-primary: #7c5cbf;
-  --color-student-theme-hover: color-mix(in srgb, #7c5cbf 82%, black);
-  --color-student-theme-soft: #ece4fa;
-  --color-student-theme-border: #7c5cbf;
-  --color-student-theme-text: #7c5cbf;
+  --color-student-theme-primary: #6f63a8;
+  --color-student-theme-hover: color-mix(in srgb, #6f63a8 82%, black);
+  --color-student-theme-soft: #f1eefa;
+  --color-student-theme-border: #6f63a8;
+  --color-student-theme-text: #6f63a8;
   --color-student-theme-button-text: #ffffff;
 }
 
 [data-theme='green'] {
   --color-panel-bg: #ffffff;
-  --color-panel-surface: #ffffff;
-  --color-panel-surface-soft: #eef6ee;
-  --color-panel-border: #dcebdc;
-  --color-panel-border-strong: #c3dcc4;
-  --color-panel-text: #24382a;
-  --color-panel-text-muted: #56705a;
-  --color-panel-blue: #3f7a4f;
-  --color-panel-blue-soft: #e1f0e4;
-  --color-panel-sage: #6f9c7f;
-  --color-panel-sage-soft: #e3f3ee;
+  --color-panel-surface: #fffefb;
+  --color-panel-surface-soft: #f3f1e6;
+  --color-panel-border: #e1ddc9;
+  --color-panel-border-strong: #cec7ab;
+  --color-panel-text: #33392a;
+  --color-panel-text-muted: #6d715c;
+  --color-panel-blue: #71815c;
+  --color-panel-blue-soft: #e7e9d9;
+  --color-panel-sage: #93a17b;
+  --color-panel-sage-soft: #eef0e3;
   --color-panel-lilac: #bd7f9e;
   --color-panel-lilac-soft: #f3e7ed;
-  --color-panel-accent: #d6a34a;
-  --color-panel-accent-soft: #faf0d9;
-  --color-panel-warm: #a87d2c;
-  --color-student-theme-primary: #3f7a4f;
-  --color-student-theme-hover: color-mix(in srgb, #3f7a4f 82%, black);
-  --color-student-theme-soft: #e1f0e4;
-  --color-student-theme-border: #3f7a4f;
-  --color-student-theme-text: #3f7a4f;
+  --color-panel-accent: #b3924a;
+  --color-panel-accent-soft: #f6efda;
+  --color-panel-warm: #93783a;
+  --color-student-theme-primary: #71815c;
+  --color-student-theme-hover: color-mix(in srgb, #71815c 82%, black);
+  --color-student-theme-soft: #e7e9d9;
+  --color-student-theme-border: #71815c;
+  --color-student-theme-text: #71815c;
   --color-student-theme-button-text: #ffffff;
 }
 

@@ -8,14 +8,12 @@ import {
   cleanupUnlinkedHomeworkTasksForWeek,
   saveTaskForDay,
   publishDay,
-  publishWeek,
-  getPlanStatus,
   copyPreviousWeek,
   totalAcademicMinutes,
 } from '../../../services/weeklyPlanService'
 import { addHomework } from '../../../services/homeworkService'
 import { patchTask, removeTask } from '../../../services/taskService'
-import { addDaysISO, getMondayOfWeek, todayISODate } from '../../../utils/time'
+import { addDaysISO, addMinutesToTime, getMondayOfWeek, parseTimeToMinutes, todayISODate } from '../../../utils/time'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
 import WeeklyPlannerGrid from '../components/WeeklyPlannerGrid'
@@ -89,7 +87,6 @@ export default function WeeklyPlanPage() {
 
   const [tasksByDate, setTasksByDate] = useState({})
   const [dayStatusByDate, setDayStatusByDate] = useState({})
-  const [status, setStatus] = useState('taslak')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [drawerState, setDrawerState] = useState(null)
@@ -102,7 +99,6 @@ export default function WeeklyPlanPage() {
     const dayPlans = await Promise.all(days.map((date) => getDayPlan(date)))
     setTasksByDate(Object.fromEntries(days.map((date, index) => [date, dayPlans[index].tasks])))
     setDayStatusByDate(Object.fromEntries(days.map((date, index) => [date, dayPlans[index].status])))
-    setStatus(await getPlanStatus(nextWeekStart))
   }
 
   useEffect(() => {
@@ -134,6 +130,22 @@ export default function WeeklyPlanPage() {
     window.setTimeout(() => setBanner(''), 4000)
   }
 
+  /** Bir tarihteki, verilen görev hariç, `fromTime`'da veya sonrasında başlayan tüm görevleri `minutesDelta` kadar öteler. */
+  const shiftTasksFrom = async (date, fromTime, minutesDelta, excludeTaskId) => {
+    if (!fromTime || !minutesDelta) return
+
+    const tasksToShift = (tasksByDate[date] || [])
+      .filter((task) => task.id !== excludeTaskId && (task.startTime || '') >= fromTime)
+      .sort((a, b) => (minutesDelta > 0 ? (b.startTime || '').localeCompare(a.startTime || '') : (a.startTime || '').localeCompare(b.startTime || '')))
+
+    for (const task of tasksToShift) {
+      await patchTask(task.id, {
+        startTime: addMinutesToTime(task.startTime, minutesDelta),
+        endTime: addMinutesToTime(task.endTime, minutesDelta),
+      })
+    }
+  }
+
   const handleSaveDrawerTask = async (taskData) => {
     const initialTask = drawerState?.initialTask
     const targetStatus = dayStatusByDate[taskData.date]
@@ -141,6 +153,9 @@ export default function WeeklyPlanPage() {
     if (initialTask && taskData.date === initialTask.date) {
       // Aynı gün içinde düzenleme: görev zaten hangi durumdaysa (taslak/canlı) o durumda kalır.
       await patchTask(initialTask.id, taskData)
+
+      const endTimeDelta = parseTimeToMinutes(taskData.endTime) - parseTimeToMinutes(initialTask.endTime)
+      await shiftTasksFrom(taskData.date, initialTask.endTime, endTimeDelta, initialTask.id)
     } else if (initialTask) {
       await removeTask(initialTask.id)
       await saveTaskForDay(taskData.date, taskData, targetStatus)
@@ -171,10 +186,27 @@ export default function WeeklyPlanPage() {
     showBanner('Gün yayınlandı.')
   }
 
-  const handlePublishWeek = async () => {
-    await publishWeek(weekStart)
+  const handleQuickAddBreak = async (date, afterTask, minutes) => {
+    const breakStart = afterTask.endTime
+    const breakEnd = addMinutesToTime(breakStart, minutes)
+    const targetStatus = dayStatusByDate[date]
+
+    await shiftTasksFrom(date, breakStart, minutes, afterTask.id)
+
+    await saveTaskForDay(
+      date,
+      {
+        title: 'Mola',
+        taskType: 'mola',
+        startTime: breakStart,
+        endTime: breakEnd,
+        durationMinutes: minutes,
+      },
+      targetStatus,
+    )
+
     await refresh()
-    showBanner('Plan yayınlandı.')
+    showBanner(`${minutes} dakikalık mola eklendi, sonraki görevler kaydırıldı.`)
   }
 
   const allTasks = weekDates.flatMap((date) => tasksByDate[date] || [])
@@ -246,11 +278,6 @@ export default function WeeklyPlanPage() {
           <Copy size={18} aria-hidden="true" />
           Geçen Haftayı Kopyala
         </Button>
-
-        <Button type="button" onClick={handlePublishWeek} className="h-11 px-4 text-sm font-semibold">
-          <CalendarCheck size={18} aria-hidden="true" />
-          {status === 'yayinlandi' ? 'Yeniden Yayımla' : 'Tüm Değişiklikleri Yayımla'}
-        </Button>
       </div>
 
       {loadError ? (
@@ -275,6 +302,7 @@ export default function WeeklyPlanPage() {
             onAddTask={(date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}
             onEditTask={(task) => setDrawerState({ initialTask: task })}
             onPublishDay={handlePublishDay}
+            onQuickAddBreak={handleQuickAddBreak}
           />
 
           <div className="flex items-center gap-3 rounded-2xl bg-panel-blue-soft px-5 py-4 text-sm font-semibold text-panel-blue">

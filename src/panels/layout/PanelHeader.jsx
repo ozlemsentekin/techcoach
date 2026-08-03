@@ -222,7 +222,7 @@ export default function PanelHeader({ role }) {
           className="flex items-center gap-1.5 rounded-lg bg-student-theme-soft px-2.5 py-1 text-xs font-medium text-student-theme-text hover:opacity-80 disabled:opacity-60"
         >
           <Undo2 size={13} aria-hidden="true" />
-          {actingParent.fullName} olarak devam ediyorsunuz · Ebeveyn Paneline Dön
+          Ebeveyn Paneline Dön
         </button>
       ) : null}
 

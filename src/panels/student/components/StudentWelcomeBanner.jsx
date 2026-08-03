@@ -72,7 +72,8 @@ export default function StudentWelcomeBanner({ studentName, tasks = [], checkIn 
   return (
     <div className="flex flex-col gap-3">
       <section className="panel-card overflow-hidden">
-        <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+        <div className="h-2 w-full bg-student-theme-primary" aria-hidden="true" />
+        <div className="grid gap-5 bg-gradient-to-br from-student-theme-soft/50 via-transparent to-transparent p-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-2 rounded-full bg-panel-sage-soft px-3 py-1 text-sm font-medium text-panel-sage">

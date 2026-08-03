@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, ChevronDown, ChevronRight, Loader2, X } from 'lucide-react'
+import { BookOpen, Check, ChevronDown, ChevronRight, Loader2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { todayISODate } from '../../../utils/time'
 import Badge from '../../ui/Badge'
@@ -378,13 +378,23 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate }) {
                           {topic.tests.map((test) => (
                             <label
                               key={test.id}
-                              className="flex items-center gap-2 rounded-lg px-2 py-1 text-xs hover:bg-student-theme-soft"
+                              className={`flex items-center gap-2 rounded-lg px-2 py-1 text-xs ${
+                                test.completed
+                                  ? 'cursor-not-allowed opacity-50'
+                                  : 'hover:bg-student-theme-soft'
+                              }`}
                             >
-                              <input
-                                type="checkbox"
-                                checked={selectedTestIds.has(test.id)}
-                                onChange={() => toggleTest(test.id)}
-                              />
+                              {test.completed ? (
+                                <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm bg-student-theme-primary text-student-theme-button-text">
+                                  <Check size={10} strokeWidth={3} />
+                                </span>
+                              ) : (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedTestIds.has(test.id)}
+                                  onChange={() => toggleTest(test.id)}
+                                />
+                              )}
                               <span className="flex min-w-0 items-center gap-1.5 text-panel-text-muted">
                                 {test.topicName ? (
                                   <Badge tone="slate" className="shrink-0">

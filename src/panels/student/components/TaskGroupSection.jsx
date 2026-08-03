@@ -1,7 +1,12 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { AlertTriangle, BookOpen, CalendarDays, ChevronDown } from 'lucide-react'
 import TaskListCard from './TaskListCard'
 import { SUBJECT_STYLES, DEFAULT_SUBJECT_STYLE } from './subjectStyles'
+import { daysLate } from '../../../utils/time'
+
+function isTaskOverdue(task) {
+  return daysLate(task.date) > 0 && !['tamamlandi', 'yeniden-planlandi'].includes(task.status)
+}
 
 export default function TaskGroupSection({
   subject,
@@ -19,35 +24,41 @@ export default function TaskGroupSection({
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const style = SUBJECT_STYLES[subject] || DEFAULT_SUBJECT_STYLE
+  const isKnownSubject = Boolean(SUBJECT_STYLES[subject])
+  const hasOverdueTask = tasks.some(isTaskOverdue)
+  const HeaderIcon = hasOverdueTask ? AlertTriangle : isKnownSubject ? BookOpen : CalendarDays
+  const accentBorderClass = hasOverdueTask ? 'border-l-panel-red/60' : style.border
+  const accentChipClass = hasOverdueTask ? 'bg-panel-red-soft text-panel-red' : `${style.soft} ${style.text}`
+  const accentTextClass = hasOverdueTask ? 'text-panel-red' : style.text
 
   return (
-    <section className="border-t border-panel-border bg-panel-surface first:border-t-0">
+    <section className={`border-t-2 border-l-4 border-panel-border-strong bg-panel-surface first:border-t-0 ${accentBorderClass}`}>
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
-        className="flex w-full items-center gap-3 bg-panel-surface-soft/45 px-3 py-3 text-left transition-colors hover:bg-panel-surface-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary sm:px-4"
+        className="group flex w-full items-center gap-3 bg-panel-surface px-3 py-3.5 text-left transition-colors hover:bg-panel-surface-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary sm:px-4"
       >
-        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${style.dot}`} aria-hidden="true" />
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] ${accentChipClass}`}>
+          <HeaderIcon size={17} aria-hidden="true" />
+        </span>
         <span className="min-w-0 flex-1">
-          <span className={`inline-flex max-w-full items-center rounded-[10px] px-2.5 py-1 text-sm font-bold ${style.soft} ${style.text}`}>
-            <span className="truncate">{subject.toLocaleUpperCase('tr-TR')}</span>
+          <span className={`block truncate text-sm font-bold tracking-wide sm:text-base ${accentTextClass}`}>
+            {subject.toLocaleUpperCase('tr-TR')}
           </span>
+          <span className="block text-xs font-medium text-panel-text-muted">{tasks.length} görev</span>
         </span>
-        <span className="inline-flex shrink-0 items-center rounded-[10px] bg-panel-surface px-2.5 py-1 text-xs font-semibold text-panel-text-muted">
-          {tasks.length} görev
-        </span>
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-panel-text-muted">
-          {expanded ? (
-            <ChevronDown size={17} aria-hidden="true" />
-          ) : (
-            <ChevronRight size={17} aria-hidden="true" />
-          )}
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-panel-text-muted transition-colors group-hover:bg-panel-surface-soft">
+          <ChevronDown
+            size={17}
+            className={`transition-transform duration-200 ${expanded ? '' : '-rotate-90'}`}
+            aria-hidden="true"
+          />
         </span>
       </button>
 
       {expanded ? (
-        <div className={timeline ? 'border-t border-panel-border' : 'divide-y divide-panel-border/80 border-t border-panel-border'}>
+        <div className="divide-y divide-panel-border border-t-2 border-panel-border-strong">
           {tasks.map((task, index) => (
             <TaskListCard
               key={task.id}

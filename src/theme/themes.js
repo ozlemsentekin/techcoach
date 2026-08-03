@@ -8,7 +8,7 @@ export const THEMES = [
     id: 'pink',
     label: 'Pembe Tema',
     description: 'Yumuşak, sıcak ve ilham veren pastel pembeler.',
-    swatches: ['#fff4f6', '#f8dfe5', '#a85d73', '#d98a4e'],
+    swatches: ['#f6f3ee', '#f6e6e9', '#c98a9c', '#b98f6a'],
   },
   {
     id: 'blue',
@@ -26,13 +26,13 @@ export const THEMES = [
     id: 'purple',
     label: 'Mor Tema',
     description: 'Enerjik ve odaklanmayı destekleyen mor tonlar.',
-    swatches: ['#faf8ff', '#ece4fa', '#7c5cbf', '#d68a4a'],
+    swatches: ['#faf8ff', '#f1eefa', '#6f63a8', '#d68a4a'],
   },
   {
     id: 'green',
     label: 'Yeşil Tema',
     description: 'Doğal ve dinlendirici, huzur veren yeşil tonlar.',
-    swatches: ['#f7fbf7', '#e1f0e4', '#3f7a4f', '#d6a34a'],
+    swatches: ['#f3f1e6', '#e7e9d9', '#71815c', '#b3924a'],
   },
   {
     id: 'orange',

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   ArrowRight,
+  BookOpen,
   Circle,
   Timer,
   CheckCircle2,
@@ -267,6 +268,8 @@ export default function TaskListCard({
           ? 'lg:grid-cols-[minmax(0,1fr)_156px]'
           : 'lg:grid-cols-[minmax(0,1fr)]'
 
+  const isCompactBreakRow = timeline && isBreakTask
+
   const cardSurfaceClass = isActivityTask
     ? 'bg-panel-sage-soft/15 hover:bg-panel-sage-soft/25'
     : isBreakTask
@@ -276,7 +279,7 @@ export default function TaskListCard({
   const progressNode = showProgress ? (
     <div className="min-w-0 rounded-[12px] bg-panel-surface-soft/70 p-2 sm:p-3 lg:bg-transparent lg:p-0">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[10px] font-semibold text-panel-text-muted sm:text-[11px]">İlerleme</span>
+        <span className="text-[10px] font-semibold text-panel-text-muted sm:text-[11px]">İlerleme (%{progressPct})</span>
         <span className="text-xs font-bold text-panel-text sm:text-sm">
           {completed} / {total} {unit}
         </span>
@@ -287,7 +290,6 @@ export default function TaskListCard({
           style={{ width: `${progressPct}%` }}
         />
       </div>
-      <span className="mt-0.5 block text-right text-[11px] font-bold text-student-theme-text sm:mt-1 sm:text-xs">%{progressPct}</span>
     </div>
   ) : null
 
@@ -366,8 +368,19 @@ export default function TaskListCard({
 
         {showLessonLabel ? (
           <span className={`inline-flex min-h-6 max-w-full items-center gap-1.5 rounded-[10px] px-2 py-0.5 text-xs font-bold leading-none sm:min-h-8 sm:px-3 sm:py-1 sm:text-sm ${subjectStyle.soft} ${subjectStyle.text}`}>
-            {isBreakTask ? <BreakTypeIcon taskType={task.taskType} size={15} /> : null}
+            {isBreakTask ? (
+              <BreakTypeIcon taskType={task.taskType} size={15} />
+            ) : !isActivityTask ? (
+              <BookOpen size={15} aria-hidden="true" />
+            ) : null}
             <span className="truncate">{displayLessonLabel}</span>
+          </span>
+        ) : null}
+
+        {showLessonLabel && task.durationMinutes ? (
+          <span className="inline-flex min-h-6 items-center gap-1 rounded-[10px] bg-panel-surface-soft px-2 py-0.5 text-xs font-semibold text-panel-text-muted sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-sm">
+            <Clock size={13} aria-hidden="true" />
+            {task.durationMinutes} dk
           </span>
         ) : null}
 
@@ -388,43 +401,42 @@ export default function TaskListCard({
         ) : null}
       </div>
 
-      <p className={`mt-2 line-clamp-2 text-sm font-semibold leading-snug sm:mt-3 sm:text-base ${isOverdueIncomplete ? 'text-panel-red' : 'text-panel-text'}`}>
-        {getPrimaryText(task, details)}
-      </p>
+      {isCompactBreakRow ? null : (
+        <>
+          <p className={`mt-2 line-clamp-2 text-sm font-semibold leading-snug sm:mt-3 sm:text-base ${isOverdueIncomplete ? 'text-panel-red' : 'text-panel-text'}`}>
+            {getPrimaryText(task, details)}
+          </p>
 
-      {secondaryItems.length > 0 ? (
-        <div className="mt-1.5 space-y-0.5 sm:mt-2 sm:space-y-1">
-          {secondaryItems.map((item, index) => (
-            <p key={`${task.id}-detail-${index}`} className="line-clamp-1 text-xs leading-snug text-panel-text-muted sm:text-sm sm:leading-relaxed">
-              {item}
-              {details.testGroups.length > 3 && index === secondaryItems.length - 1 ? '...' : ''}
-            </p>
-          ))}
-        </div>
-      ) : null}
+          {secondaryItems.length > 0 ? (
+            <div className="mt-1.5 space-y-0.5 sm:mt-2 sm:space-y-1">
+              {secondaryItems.map((item, index) => (
+                <p key={`${task.id}-detail-${index}`} className="line-clamp-1 text-xs leading-snug text-panel-text-muted sm:text-sm sm:leading-relaxed">
+                  {item}
+                  {details.testGroups.length > 3 && index === secondaryItems.length - 1 ? '...' : ''}
+                </p>
+              ))}
+            </div>
+          ) : null}
 
-      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-panel-text-muted sm:mt-3 sm:gap-2 sm:text-xs">
-        {isBreakTask && task.durationMinutes ? (
-          <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-surface/70 px-2 py-0.5 font-medium sm:min-h-8 sm:px-2.5 sm:py-1">
-            <span className="font-semibold text-panel-text">Dinlenme:</span>&nbsp;{task.durationMinutes} dk
-          </span>
-        ) : null}
-        {total > 0 ? (
-          <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-surface-soft px-2 py-0.5 font-medium sm:min-h-8 sm:px-2.5 sm:py-1">
-            <span className="font-semibold text-panel-text">{isReading ? 'Sayfa' : 'Soru'}:</span>&nbsp;{total} {unit}
-          </span>
-        ) : null}
-        {isReading && task.currentPageNumber ? (
-          <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-surface-soft px-2 py-0.5 font-medium sm:min-h-8 sm:px-2.5 sm:py-1">
-            <span className="font-semibold text-panel-text">Kaldığı Sayfa:</span>&nbsp;{task.currentPageNumber}
-          </span>
-        ) : null}
-        {isOverdueIncomplete ? (
-          <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-red-soft px-2 py-0.5 font-semibold text-panel-red sm:min-h-8 sm:px-2.5 sm:py-1">
-            {overdueDays} gün gecikme
-          </span>
-        ) : null}
-      </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-panel-text-muted sm:mt-3 sm:gap-2 sm:text-xs">
+            {total > 0 ? (
+              <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-surface-soft px-2 py-0.5 font-medium sm:min-h-8 sm:px-2.5 sm:py-1">
+                <span className="font-semibold text-panel-text">{isReading ? 'Sayfa' : 'Soru'}:</span>&nbsp;{total} {unit}
+              </span>
+            ) : null}
+            {isReading && task.currentPageNumber ? (
+              <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-surface-soft px-2 py-0.5 font-medium sm:min-h-8 sm:px-2.5 sm:py-1">
+                <span className="font-semibold text-panel-text">Kaldığı Sayfa:</span>&nbsp;{task.currentPageNumber}
+              </span>
+            ) : null}
+            {isOverdueIncomplete ? (
+              <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-red-soft px-2 py-0.5 font-semibold text-panel-red sm:min-h-8 sm:px-2.5 sm:py-1">
+                {overdueDays} gün gecikme
+              </span>
+            ) : null}
+          </div>
+        </>
+      )}
     </div>
   )
 
@@ -436,7 +448,9 @@ export default function TaskListCard({
         onClick={isFreeTimeTask ? () => onOpenDetails(task) : undefined}
         onKeyDown={handleCardKeyDown}
         aria-label={isFreeTimeTask ? `${task.title} detayını aç` : undefined}
-        className={`grid grid-cols-[4.5rem_1.25rem_minmax(0,1fr)] gap-x-2 px-2.5 py-2.5 transition-colors sm:px-4 sm:py-4 sm:grid-cols-[4.9rem_1.5rem_minmax(0,1fr)] sm:gap-x-3 lg:grid-cols-[5.15rem_1.5rem_minmax(0,1fr)_minmax(170px,220px)_156px] lg:items-center ${
+        className={`grid grid-cols-[4.5rem_1.25rem_minmax(0,1fr)] gap-x-2 transition-colors sm:grid-cols-[4.9rem_1.5rem_minmax(0,1fr)] sm:gap-x-3 lg:grid-cols-[5.15rem_1.5rem_minmax(0,1fr)_minmax(170px,220px)_156px] lg:items-center ${
+          isCompactBreakRow ? 'px-2.5 py-1.5 sm:px-4 sm:py-2' : 'px-2.5 py-2.5 sm:px-4 sm:py-4'
+        } ${
           highlight ? 'bg-student-theme-soft/55' : cardSurfaceClass
         } ${
           isFreeTimeTask ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-accent' : ''
