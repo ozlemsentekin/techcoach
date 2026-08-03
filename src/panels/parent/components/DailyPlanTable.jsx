@@ -210,16 +210,13 @@ function TimeBlock({ task, visual }) {
         <p className="whitespace-nowrap text-sm font-bold text-panel-text">{task.startTime}</p>
         <p className="whitespace-nowrap text-xs font-medium text-panel-text-muted">{task.endTime}</p>
       </div>
-      <div className="flex flex-nowrap items-center gap-1.5 sm:mt-2">
-        <span className={`inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-xs font-semibold shadow-sm ${visual.durationChip}`}>
-          {formatDuration(task)}
-        </span>
-        {questionCount > 0 ? (
+      {questionCount > 0 ? (
+        <div className="flex flex-nowrap items-center gap-1.5 sm:mt-2">
           <span className={`inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-xs font-semibold shadow-sm ${visual.questionChip}`}>
             {questionCount} soru
           </span>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -300,6 +297,14 @@ function TaskKindBadge({ task, visual }) {
         <Icon size={14} className="shrink-0" aria-hidden="true" />
       </span>
       <span className="truncate px-2.5 tracking-wide">{label}</span>
+    </span>
+  )
+}
+
+function DurationBadge({ task, visual }) {
+  return (
+    <span className={`inline-flex h-7 shrink-0 items-center rounded-lg border px-2.5 text-xs font-bold ${visual.typeBadge}`}>
+      {formatDuration(task)}
     </span>
   )
 }
@@ -554,6 +559,7 @@ function TaskAgendaItem({
       <div className="col-span-2 col-start-1 row-start-2 min-w-0 sm:col-span-1 sm:col-start-3 sm:row-start-1">
         <div className="flex flex-wrap items-center gap-2">
           <TaskKindBadge task={task} visual={visual} />
+          <DurationBadge task={task} visual={visual} />
           <SubjectChip task={task} />
           {showStatus ? <StatusPill status={task.status} /> : null}
         </div>
