@@ -3,7 +3,7 @@
   "appName": "TechCoach",
   "webDir": "dist",
   "server": {
-    "url": "https://delightful-ground-04b9ac510.1.azurestaticapps.net",
+    "url": "https://techcoach.com.tr",
     "cleartext": false
   },
   "plugins": {

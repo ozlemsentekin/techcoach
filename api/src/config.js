@@ -67,7 +67,7 @@ function getRuntimeConfig() {
     cookieName: process.env.AUTH_COOKIE_NAME || DEFAULT_COOKIE_NAME,
     cookieSecure:
       (process.env.AUTH_COOKIE_SECURE || '').toLowerCase() === 'true' || isProductionLike(),
-    tokenTtlSeconds: 60 * 60 * 24 * 7,
+    tokenTtlSeconds: 60 * 60 * 24 * 365,
   }
 }
 

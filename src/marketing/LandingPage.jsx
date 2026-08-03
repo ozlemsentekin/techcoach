@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
 import { useAuth } from '../context/useAuth'
 import './LandingPage.css'
 
@@ -212,7 +213,7 @@ export default function LandingPage() {
   } = useAuth()
 
   const [activeSection, setActiveSection] = useState('nasil')
-  const [showLogin, setShowLogin] = useState(false)
+  const [showLogin, setShowLogin] = useState(() => Capacitor.isNativePlatform())
   const [authMode, setAuthMode] = useState('login')
   const [infoModal, setInfoModal] = useState(null)
   const [authForm, setAuthForm] = useState(INITIAL_AUTH_FORM)
