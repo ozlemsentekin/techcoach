@@ -125,6 +125,7 @@ function sanitizeProgressSession(record) {
     taskTitle: record.task_title || undefined,
     taskType: record.task_type || undefined,
     homeworkId: record.homework_id || undefined,
+    taskDurationMinutes: record.task_duration_minutes ?? undefined,
     subject: record.subject || undefined,
     topic: record.topic || undefined,
     resourceBookId: record.resource_book_id || undefined,
@@ -478,7 +479,8 @@ async function getProgressOverviewHandler(request) {
           SELECT ss.id, ss.student_id, ss.task_id, ss.started_at, ss.ended_at, ss.duration_minutes,
                  ss.completed_question_count, ss.correct_count, ss.wrong_count, ss.blank_count,
                  ss.difficulty_rating, ss.emotion, ss.note, ss.created_at, t.date AS task_date,
-                 t.title AS task_title, t.task_type, t.homework_id, t.subject, t.topic, t.resource_book_id,
+                 t.title AS task_title, t.task_type, t.homework_id, t.duration_minutes AS task_duration_minutes,
+                 t.subject, t.topic, t.resource_book_id,
                  t.selected_test_ids_json, t.test_results_json, rb.name AS resource_book_name,
                  rb.resource_type, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
                  s.name AS resource_subject_name

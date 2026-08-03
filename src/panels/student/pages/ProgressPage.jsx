@@ -77,6 +77,10 @@ function contentLabel(item) {
   return item?.topic || item?.taskTitle || item?.title || item?.description || 'Genel çalışma'
 }
 
+function testTopicLabel(test, item) {
+  return test?.topicName || item?.topic || contentLabel(item)
+}
+
 function dateInRange(dateKey, rangeId, today) {
   if (!dateKey) return false
   if (rangeId === 'all') return true
@@ -126,31 +130,41 @@ function formatDateLabel(dateKey, rangeId) {
   return new Date(`${dateKey}T00:00:00`).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })
 }
 
-function splitTaskTestResults(task, testsById) {
-  return Object.entries(task.testResults || {})
+function splitTestResults(item, testsById, { idPrefix, minutes, source }) {
+  const entries = Object.entries(item.testResults || {})
     .map(([testId, result]) => {
       const test = testsById.get(testId)
       const correct = asNumber(result?.correct)
       const wrong = asNumber(result?.wrong)
       const blank = asNumber(result?.blank)
       const questions = correct + wrong
+      const topic = testTopicLabel(test, item)
+      const testName = test?.name
       return {
-        id: `task-test-${task.id}-${testId}`,
-        taskId: task.id,
-        homeworkId: task.homeworkId,
-        date: toDateKey(task.completedAt || task.date),
-        subject: subjectLabel(task),
-        content: [test?.topicName || task.topic, test?.name].filter(Boolean).join(' · ') || contentLabel(task),
-        resource: resourceLabel(task),
+        id: `${idPrefix}-${testId}`,
+        taskId: item.taskId || item.id,
+        sessionId: item.sessionId,
+        homeworkId: item.homeworkId,
+        date: toDateKey(item.startedAt || item.completedAt || item.date),
+        subject: subjectLabel(item),
+        content: testName ? `${topic} · ${testName}` : topic,
+        contentGroup: topic,
+        resource: resourceLabel(item),
         questions,
         correct,
         wrong,
         blank,
-        minutes: 0,
-        source: 'task',
+        weight: questions + blank || asNumber(test?.questionCount) || 1,
+        source,
       }
     })
     .filter((record) => record.questions > 0 || record.blank > 0)
+
+  const totalWeight = entries.reduce((sum, entry) => sum + entry.weight, 0)
+  return entries.map(({ weight, ...entry }) => ({
+    ...entry,
+    minutes: totalWeight > 0 ? (asNumber(minutes) * weight) / totalWeight : 0,
+  }))
 }
 
 function buildActivityRecords(overview, testsById) {
@@ -159,19 +173,36 @@ function buildActivityRecords(overview, testsById) {
 
   ;(overview.sessions || []).forEach((session) => {
     if (session.taskId) taskIdsWithSessions.add(session.taskId)
+
+    const detailedRecords = splitTestResults(
+      { ...session, sessionId: session.id },
+      testsById,
+      {
+        idPrefix: `session-test-${session.id}`,
+        minutes: asNumber(session.durationMinutes) || asNumber(session.taskDurationMinutes),
+        source: 'session',
+      },
+    )
+    if (detailedRecords.length) {
+      records.push(...detailedRecords)
+      return
+    }
+
     records.push({
       id: `session-${session.id}`,
+      sessionId: session.id,
       taskId: session.taskId,
       homeworkId: session.homeworkId,
       date: toDateKey(session.startedAt),
       subject: subjectLabel(session),
       content: contentLabel(session),
+      contentGroup: contentLabel(session),
       resource: resourceLabel(session),
       questions: asNumber(session.completedQuestionCount),
       correct: asNumber(session.correctCount),
       wrong: asNumber(session.wrongCount),
       blank: asNumber(session.blankCount),
-      minutes: asNumber(session.durationMinutes),
+      minutes: asNumber(session.durationMinutes) || asNumber(session.taskDurationMinutes),
       source: 'session',
     })
   })
@@ -179,7 +210,11 @@ function buildActivityRecords(overview, testsById) {
   ;(overview.tasks || []).forEach((task) => {
     if (taskIdsWithSessions.has(task.id)) return
 
-    const detailedRecords = splitTaskTestResults(task, testsById)
+    const detailedRecords = splitTestResults(task, testsById, {
+      idPrefix: `task-test-${task.id}`,
+      minutes: task.durationMinutes,
+      source: 'task',
+    })
     if (detailedRecords.length) {
       records.push(...detailedRecords)
       return
@@ -202,12 +237,13 @@ function buildActivityRecords(overview, testsById) {
       date: toDateKey(task.completedAt || task.date),
       subject: subjectLabel(task),
       content: contentLabel(task),
+      contentGroup: contentLabel(task),
       resource: resourceLabel(task),
       questions,
       correct: asNumber(task.correctCount),
       wrong: asNumber(task.wrongCount),
       blank: asNumber(task.blankCount),
-      minutes: 0,
+      minutes: asNumber(task.durationMinutes),
       source: 'task',
     })
   })
@@ -225,6 +261,7 @@ function buildActivityRecords(overview, testsById) {
       date: toDateKey(homework.updatedAt || homework.dueDate || homework.assignedDate),
       subject: subjectLabel(homework),
       content: homework.title || contentLabel(homework),
+      contentGroup: homework.title || contentLabel(homework),
       resource: resourceLabel(homework),
       questions,
       correct: 0,
@@ -616,7 +653,7 @@ export default function ProgressPage() {
   const [overview, setOverview] = useState(null)
   const [error, setError] = useState('')
   const [selectedSubjectKey, setSelectedSubjectKey] = useState('')
-  const [selectedRange, setSelectedRange] = useState('today')
+  const [selectedRange, setSelectedRange] = useState('month')
   const today = useMemo(() => todayISODate(), [])
 
   useEffect(() => {
@@ -685,7 +722,7 @@ export default function ProgressPage() {
   )
 
   const stats = useMemo(() => sumRecords(filteredRecords), [filteredRecords])
-  const contentRows = useMemo(() => aggregateBy(filteredRecords, (record) => record.content), [filteredRecords])
+  const contentRows = useMemo(() => aggregateBy(filteredRecords, (record) => record.contentGroup || record.content), [filteredRecords])
   const bookRows = useMemo(() => aggregateBy(filteredRecords, (record) => record.resource), [filteredRecords])
   const timelineRows = useMemo(() => buildTimeline(filteredRecords, selectedRange, today), [filteredRecords, selectedRange, today])
 
@@ -696,6 +733,8 @@ export default function ProgressPage() {
   const pendingWrongCount = filteredWrongRows.filter((item) => item.reviewStatus !== 'ogrenildi').length
   const completedHomeworkQuestions = filteredHomeworks.reduce((sum, homework) => sum + asNumber(homework.completedQuestionCount), 0)
   const totalHomeworkQuestions = filteredHomeworks.reduce((sum, homework) => sum + asNumber(homework.totalQuestionCount), 0)
+  const sessionCount = new Set(filteredRecords.map((record) => record.sessionId).filter(Boolean)).size
+  const hasTaskDurationFallback = filteredRecords.some((record) => !record.sessionId && record.minutes > 0)
   const insights = buildInsights({ stats, contentRows, wrongRows: filteredWrongRows })
 
   if (error) {
@@ -735,7 +774,13 @@ export default function ProgressPage() {
           icon={Clock3}
           title="Çalışma Süresi"
           value={`${formatNumber(stats.minutes)} dk`}
-          description={`${formatNumber(filteredRecords.filter((record) => record.source === 'session').length)} oturum kaydı`}
+          description={
+            sessionCount > 0
+              ? `${formatNumber(sessionCount)} oturum · görev süreleri dahil`
+              : hasTaskDurationFallback
+                ? 'Test çözme görev süreleri dahil'
+                : 'Süre kaydı bekleniyor'
+          }
         />
         <SummaryMetric
           icon={BarChart3}
@@ -754,7 +799,7 @@ export default function ProgressPage() {
         <BreakdownPanel
           icon={Layers3}
           title="İçerik Kırılımı"
-          subtitle="Konu, test ve görev bazında"
+          subtitle="Test konusu bazında"
           rows={contentRows}
           emptyLabel="Bu filtrede içerik kırılımı oluşmadı."
         />
@@ -778,6 +823,7 @@ export default function ProgressPage() {
               date: toDateKey(item.createdAt),
               subject: item.subject,
               content: item.topic || item.errorType || 'Hata defteri',
+              contentGroup: item.topic || item.errorType || 'Hata defteri',
               resource: 'Hata defteri',
               questions: 1,
               correct: item.reviewStatus === 'ogrenildi' ? 1 : 0,
