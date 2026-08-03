@@ -42,7 +42,7 @@ function StudentWellbeingMenu({
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-12 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-panel-border bg-panel-surface p-2 shadow-panel-2">
+        <div className="fixed inset-x-4 top-16 z-50 rounded-2xl border border-panel-border bg-panel-surface p-2 shadow-panel-2 sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-80">
           <div className="flex items-center justify-between gap-3 px-2 pb-2 pt-1">
             <span className="text-xs font-bold uppercase tracking-wide text-panel-text-muted">Durumum</span>
             {selectedEnergy ? (
@@ -259,7 +259,7 @@ export default function PanelHeader({ role }) {
           </button>
 
           {themeOpen ? (
-            <div className="absolute right-0 top-12 z-50 w-96 max-w-[calc(100vw-2rem)] rounded-2xl border border-panel-border bg-panel-surface p-2 shadow-panel-2">
+            <div className="fixed inset-x-4 top-16 z-50 rounded-2xl border border-panel-border bg-panel-surface p-2 shadow-panel-2 sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-96">
               <div className="px-2 pb-2 pt-1 text-xs font-bold uppercase tracking-wide text-panel-text-muted">
                 Tema Seç
               </div>
