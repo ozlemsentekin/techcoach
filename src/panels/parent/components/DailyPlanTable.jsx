@@ -9,8 +9,8 @@ import {
   Clock,
   Coffee,
   Dumbbell,
-  Eye,
   FlaskConical,
+  MinusCircle,
   Moon,
   MoreHorizontal,
   Music,
@@ -22,7 +22,9 @@ import {
   Trash2,
   Users,
   Utensils,
+  XCircle,
 } from 'lucide-react'
+import { calculateNet } from '../../../utils/netCalculator'
 import { getSortedTasks } from '../../../utils/taskSelectors'
 import { parseTimeToMinutes } from '../../../utils/time'
 import { STATUS_LABELS, TASK_TYPES } from '../../../data/taskTypes'
@@ -188,6 +190,45 @@ function getQuestionBankHomeworkCount(task) {
   return Number(task.targetQuestionCount) || 0
 }
 
+function hasCountValue(value) {
+  return value !== undefined && value !== null
+}
+
+function formatResultNumber(value) {
+  return Number(value).toLocaleString('tr-TR', { maximumFractionDigits: 2 })
+}
+
+function getOpticalResult(task) {
+  if (getTaskKind(task) !== 'homework' || task.status !== 'tamamlandi') return null
+
+  const testResults = Object.values(task.testResults || {}).filter(Boolean)
+  const hasAggregateResult = [task.correctCount, task.wrongCount, task.blankCount].some(hasCountValue)
+
+  if (!hasAggregateResult && testResults.length === 0) return null
+
+  const totalsFromTests = testResults.reduce(
+    (totals, result) => ({
+      correct: totals.correct + (Number(result.correct) || 0),
+      wrong: totals.wrong + (Number(result.wrong) || 0),
+      blank: totals.blank + (Number(result.blank) || 0),
+    }),
+    { correct: 0, wrong: 0, blank: 0 },
+  )
+
+  const correct = hasAggregateResult ? Number(task.correctCount) || 0 : totalsFromTests.correct
+  const wrong = hasAggregateResult ? Number(task.wrongCount) || 0 : totalsFromTests.wrong
+  const blank = hasAggregateResult ? Number(task.blankCount) || 0 : totalsFromTests.blank
+  const totalQuestions = Number(task.completedQuestionCount) || correct + wrong + blank || Number(task.targetQuestionCount) || 0
+
+  return {
+    correct,
+    wrong,
+    blank,
+    totalQuestions,
+    net: calculateNet(correct, wrong),
+  }
+}
+
 function getDailyFlowFilterKey(task) {
   if (task.status === 'tamamlandi') return 'done'
   if (task.status === 'yeniden-planlandi') return null
@@ -323,11 +364,11 @@ function SubjectChip({ task }) {
   )
 }
 
-function TaskDetail({ task, expanded }) {
+function TaskDetail({ task }) {
   const lines = getDescriptionLines(task)
   const primary = lines[0] || task.title || 'Görev detayı eklenmemiş.'
-  const secondary = expanded ? lines.slice(1) : lines.slice(1, 3)
-  const hasHiddenLines = !expanded && lines.length > 3
+  const secondary = lines.slice(1, 3)
+  const hasHiddenLines = lines.length > 3
 
   return (
     <div className="min-w-0">
@@ -342,15 +383,53 @@ function TaskDetail({ task, expanded }) {
           ))}
         </div>
       ) : null}
-      {expanded && task.notes ? (
-        <p className="mt-3 rounded-xl bg-panel-surface-soft px-3 py-2 text-sm text-panel-text">Not: {task.notes}</p>
-      ) : null}
+    </div>
+  )
+}
+
+function OpticalResultSummary({ task, className = '' }) {
+  const result = getOpticalResult(task)
+  if (!result) return null
+
+  const items = [
+    { label: 'Doğru', value: result.correct, icon: CheckCircle2, className: 'text-panel-sage' },
+    { label: 'Yanlış', value: result.wrong, icon: XCircle, className: 'text-panel-red' },
+    { label: 'Boş', value: result.blank, icon: MinusCircle, className: 'text-panel-text-muted' },
+  ]
+
+  return (
+    <div className={`${className} rounded-xl border border-panel-border bg-white px-3 py-2.5 shadow-sm`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-bold uppercase tracking-wide text-panel-sage">Optik sonucu</span>
+        {result.totalQuestions > 0 ? (
+          <span className="rounded-full bg-panel-surface px-2 py-0.5 text-[11px] font-semibold text-panel-text-muted">
+            {result.totalQuestions} soru
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {items.map((item) => {
+          const Icon = item.icon
+          return (
+            <span
+              key={item.label}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-lg bg-panel-surface px-2.5 text-xs font-bold ${item.className}`}
+            >
+              <Icon size={14} className="shrink-0" aria-hidden="true" />
+              {formatResultNumber(item.value)} {item.label}
+            </span>
+          )
+        })}
+        <span className="inline-flex h-8 items-center rounded-lg bg-panel-blue-soft px-2.5 text-xs font-bold text-panel-blue">
+          {formatResultNumber(result.net)} net
+        </span>
+      </div>
     </div>
   )
 }
 
 const ACTION_MENU_WIDTH = 180
-const ACTION_MENU_ESTIMATED_HEIGHT = 188
+const ACTION_MENU_ESTIMATED_HEIGHT = 92
 const ACTION_MENU_VIEWPORT_PADDING = 8
 const ACTION_MENU_GAP = 6
 
@@ -367,7 +446,7 @@ function getActionMenuPosition(buttonRect, menuHeight = ACTION_MENU_ESTIMATED_HE
   return { left, top }
 }
 
-function TaskActionsMenu({ isOpen, onToggle, onClose, onView, onEdit, onMove, onNote, onDelete }) {
+function TaskActionsMenu({ isOpen, onToggle, onClose, onEdit, onDelete }) {
   const buttonRef = useRef(null)
   const menuRef = useRef(null)
   const [menuPosition, setMenuPosition] = useState(null)
@@ -414,10 +493,7 @@ function TaskActionsMenu({ isOpen, onToggle, onClose, onView, onEdit, onMove, on
   }, [isOpen, onClose])
 
   const items = [
-    { label: 'Detay', icon: Eye, onClick: onView },
     { label: 'Düzenle', icon: Pencil, onClick: onEdit },
-    { label: 'Taşı', icon: ArrowRightLeft, onClick: onMove },
-    { label: 'Not Ekle', icon: NotebookPen, onClick: onNote },
     { label: 'Sil', icon: Trash2, onClick: onDelete, danger: true },
   ]
 
@@ -484,58 +560,15 @@ function TaskActionsMenu({ isOpen, onToggle, onClose, onView, onEdit, onMove, on
   )
 }
 
-function NoteEditor({ task, noteText, onChange, onSave, onCancel }) {
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault()
-        onSave(task)
-      }}
-      className="mt-4 flex flex-col gap-2 rounded-xl border border-panel-border bg-panel-surface-soft p-3 sm:flex-row"
-    >
-      <input
-        value={noteText}
-        onChange={(event) => onChange(event.target.value)}
-        className="min-h-9 flex-1 rounded-xl border border-panel-border bg-panel-surface px-3 text-sm text-panel-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-blue"
-        placeholder="Bu görevle ilgili bir not yaz"
-      />
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          className="inline-flex h-9 items-center justify-center rounded-xl bg-panel-blue px-3 text-sm font-semibold text-white hover:opacity-90"
-        >
-          Kaydet
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="inline-flex h-9 items-center justify-center rounded-xl border border-panel-border px-3 text-sm font-medium text-panel-text hover:bg-panel-surface"
-        >
-          Vazgeç
-        </button>
-      </div>
-    </form>
-  )
-}
-
 function TaskAgendaItem({
   task,
   isFirst,
   isLast,
-  expanded,
   isMenuOpen,
-  noteDraftActive,
-  noteText,
   onToggleMenu,
   onCloseMenu,
-  onToggleExpanded,
   onEdit,
-  onMove,
   onDelete,
-  onStartNote,
-  onNoteChange,
-  onSaveNote,
-  onCancelNote,
 }) {
   const completed = task.status === 'tamamlandi'
   const visual = getTaskKindStyle(task)
@@ -564,17 +597,8 @@ function TaskAgendaItem({
           {showStatus ? <StatusPill status={task.status} /> : null}
         </div>
         <div className="mt-3">
-          <TaskDetail task={task} expanded={expanded} />
+          <TaskDetail task={task} />
         </div>
-        {noteDraftActive ? (
-          <NoteEditor
-            task={task}
-            noteText={noteText}
-            onChange={onNoteChange}
-            onSave={onSaveNote}
-            onCancel={onCancelNote}
-          />
-        ) : null}
       </div>
 
       <div className="col-start-2 row-start-1 justify-self-end sm:col-start-4 sm:row-start-1">
@@ -582,22 +606,21 @@ function TaskAgendaItem({
           isOpen={isMenuOpen}
           onToggle={onToggleMenu}
           onClose={onCloseMenu}
-          onView={onToggleExpanded}
           onEdit={onEdit}
-          onMove={onMove}
-          onNote={onStartNote}
           onDelete={onDelete}
         />
       </div>
+
+      <OpticalResultSummary
+        task={task}
+        className="col-span-2 col-start-1 row-start-3 sm:col-span-4 sm:col-start-1 sm:row-start-2"
+      />
     </article>
   )
 }
 
-export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSaveNote, onAddTask }) {
-  const [expandedId, setExpandedId] = useState(null)
+export default function DailyPlanTable({ tasks, onEdit, onDelete, onAddTask }) {
   const [openMenuId, setOpenMenuId] = useState(null)
-  const [noteDraftId, setNoteDraftId] = useState(null)
-  const [noteText, setNoteText] = useState('')
   const [agendaFilter, setAgendaFilter] = useState('pending')
 
   const sorted = getSortedTasks(tasks)
@@ -618,19 +641,7 @@ export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSave
 
   const selectAgendaFilter = (filter) => {
     setAgendaFilter(filter)
-    setExpandedId(null)
     setOpenMenuId(null)
-    setNoteDraftId(null)
-  }
-
-  const startNoteDraft = (task) => {
-    setNoteDraftId(task.id)
-    setNoteText(task.notes || '')
-  }
-
-  const saveNote = (task) => {
-    onSaveNote(task, noteText)
-    setNoteDraftId(null)
   }
 
   return (
@@ -694,20 +705,11 @@ export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSave
               task={task}
               isFirst={index === 0}
               isLast={index === visibleTasks.length - 1}
-              expanded={expandedId === task.id}
               isMenuOpen={openMenuId === task.id}
-              noteDraftActive={noteDraftId === task.id}
-              noteText={noteText}
               onToggleMenu={() => setOpenMenuId(openMenuId === task.id ? null : task.id)}
               onCloseMenu={() => setOpenMenuId(null)}
-              onToggleExpanded={() => setExpandedId(expandedId === task.id ? null : task.id)}
               onEdit={() => onEdit(task)}
-              onMove={() => onMove(task)}
               onDelete={() => onDelete(task)}
-              onStartNote={() => startNoteDraft(task)}
-              onNoteChange={setNoteText}
-              onSaveNote={saveNote}
-              onCancelNote={() => setNoteDraftId(null)}
             />
           ))}
         </div>

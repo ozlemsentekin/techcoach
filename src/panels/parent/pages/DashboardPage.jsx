@@ -16,7 +16,7 @@ import {
   Timer,
   TrendingUp,
 } from 'lucide-react'
-import { getTaskActivityLogs, getTasksForDate, updateTask, createTask, deleteTask, rescheduleTask } from '../../../services/taskService'
+import { getTaskActivityLogs, getTasksForDate, updateTask, createTask, deleteTask } from '../../../services/taskService'
 import { getWrongQuestions } from '../../../services/wrongQuestionService'
 import { sendMessage, getMessages } from '../../../services/messageService'
 import { getRequests, updateRequestStatus } from '../../../services/studentRequestService'
@@ -31,9 +31,9 @@ import DailyPlanTable from '../components/DailyPlanTable'
 import StudentRequestsCard from '../components/StudentRequestsCard'
 import PlanBalanceCard from '../components/PlanBalanceCard'
 import AddTaskDrawer from '../components/AddTaskDrawer'
-import RescheduleTaskModal from '../../student/components/RescheduleTaskModal'
 
 const date = todayISODate()
+const HOMEWORK_TASK_TYPE = 'odev'
 
 function formatDuration(minutes) {
   if (!minutes) return '0dk'
@@ -81,12 +81,12 @@ function DashboardMetric({ icon, label, value, tone = 'blue' }) {
 }
 
 function TodayOverview({ tasks, onAddTask }) {
-  const sortedTasks = getSortedTasks(tasks)
-  const pendingTasks = getPendingTasks(tasks)
-  const completedCount = sortedTasks.filter((task) => task.status === 'tamamlandi').length
-  const incompleteCount = Math.max(0, sortedTasks.length - completedCount)
-  const remainingMinutes = pendingTasks.reduce((sum, task) => sum + (task.durationMinutes || 0), 0)
-  const completionRate = sortedTasks.length > 0 ? Math.round((completedCount / sortedTasks.length) * 100) : 0
+  const homeworkTasks = getSortedTasks(tasks.filter((task) => task.taskType === HOMEWORK_TASK_TYPE))
+  const pendingHomeworkTasks = getPendingTasks(homeworkTasks)
+  const completedCount = homeworkTasks.filter((task) => task.status === 'tamamlandi').length
+  const incompleteCount = Math.max(0, homeworkTasks.length - completedCount)
+  const remainingMinutes = pendingHomeworkTasks.reduce((sum, task) => sum + (task.durationMinutes || 0), 0)
+  const completionRate = homeworkTasks.length > 0 ? Math.round((completedCount / homeworkTasks.length) * 100) : 0
 
   return (
     <section className="panel-card overflow-hidden">
@@ -116,7 +116,7 @@ function TodayOverview({ tasks, onAddTask }) {
 
       <div className="border-t border-panel-border bg-panel-surface-soft/60 p-5">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <DashboardMetric icon={ListChecks} label="Toplam Görev" value={sortedTasks.length} />
+          <DashboardMetric icon={ListChecks} label="Toplam Görev" value={homeworkTasks.length} />
           <DashboardMetric icon={CheckCircle2} label="Tamamlanan" value={completedCount} tone="sage" />
           <DashboardMetric icon={Clock3} label="Kalan Süre" value={formatDuration(remainingMinutes)} tone="warm" />
           <DashboardMetric icon={AlertTriangle} label="Tamamlanmamış" value={incompleteCount} tone="lilac" />
@@ -136,7 +136,7 @@ function TodayOverview({ tasks, onAddTask }) {
   )
 }
 
-function FocusTaskCard({ task, onEdit, onMove }) {
+function FocusTaskCard({ task, onEdit }) {
   if (!task) {
     return (
       <section className="panel-card p-5">
@@ -176,14 +176,6 @@ function FocusTaskCard({ task, onEdit, onMove }) {
         >
           <Pencil size={15} aria-hidden="true" />
           Düzenle
-        </button>
-        <button
-          type="button"
-          onClick={() => onMove(task)}
-          className="inline-flex h-9 items-center gap-2 rounded-xl border border-panel-border px-3 text-sm font-medium text-panel-text hover:bg-panel-surface-soft"
-        >
-          <Clock3 size={15} aria-hidden="true" />
-          Taşı
         </button>
       </div>
     </section>
@@ -399,7 +391,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [drawerState, setDrawerState] = useState(null)
-  const [reschedulingTask, setReschedulingTask] = useState(null)
   const [deletingTask, setDeletingTask] = useState(null)
   const [banner, setBanner] = useState('')
 
@@ -480,17 +471,6 @@ export default function DashboardPage() {
     setDeletingTask(null)
   }
 
-  const handleSaveNote = async (task, note) => {
-    setTasks(await updateTask(date, task.id, { notes: note }))
-  }
-
-  const handleConfirmReschedule = async ({ newDate, newTime, reason }) => {
-    const { sourceTasks } = await rescheduleTask(date, reschedulingTask.id, { newDate, newTime, reason })
-    setTasks(sourceTasks)
-    setReschedulingTask(null)
-    showBanner('Görev taşındı.')
-  }
-
   const handleApproveRequest = async (request) => {
     setRequests(await updateRequestStatus(request.id, 'onaylandi'))
     await sendMessage({ from: 'ebeveyn', text: 'İsteğini onayladım, planına yansıttım.' })
@@ -537,9 +517,7 @@ export default function DashboardPage() {
             tasks={tasks}
             onAddTask={() => setDrawerState({ defaultDate: date })}
             onEdit={(task) => setDrawerState({ initialTask: task })}
-            onMove={(task) => setReschedulingTask(task)}
             onDelete={(task) => setDeletingTask(task)}
-            onSaveNote={handleSaveNote}
           />
 
           <div className="grid gap-5 lg:grid-cols-2">
@@ -559,7 +537,6 @@ export default function DashboardPage() {
           <FocusTaskCard
             task={focusTask}
             onEdit={(task) => setDrawerState({ initialTask: task })}
-            onMove={(task) => setReschedulingTask(task)}
           />
           <TaskFlowLogPanel tasks={tasks} activityLogs={activityLogs} />
           <LearningSignalCard topic={strugglingTopic} />
@@ -575,14 +552,6 @@ export default function DashboardPage() {
           getExistingTasksForDate={(d) => (d === date ? tasks : getTasksForDate(d))}
           onSave={handleSaveDrawerTask}
           onClose={() => setDrawerState(null)}
-        />
-      ) : null}
-
-      {reschedulingTask ? (
-        <RescheduleTaskModal
-          task={reschedulingTask}
-          onConfirm={handleConfirmReschedule}
-          onClose={() => setReschedulingTask(null)}
         />
       ) : null}
 

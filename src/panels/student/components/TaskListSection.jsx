@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ListChecks } from 'lucide-react'
+import { BookOpen, CheckCircle2, Circle, Clock, ListChecks, SlidersHorizontal } from 'lucide-react'
 import { getSortedTasks } from '../../../utils/taskSelectors'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { TASK_TYPES } from '../../../data/taskTypes'
@@ -19,14 +19,13 @@ function isReadingTask(task) {
 }
 
 const FILTERS = [
-  { key: 'all', label: 'Tümü' },
-  { key: 'pending', label: 'Bekleyen' },
-  { key: 'done', label: 'Tamamlanan' },
+  { key: 'pending', label: 'Bekleyen', icon: Circle },
+  { key: 'done', label: 'Tamamlanan', icon: CheckCircle2 },
 ]
 
 const VIEW_MODES = [
-  { key: 'time', label: 'Zamana Göre' },
-  { key: 'subject', label: 'Derse Göre' },
+  { key: 'time', label: 'Zamana Göre', icon: Clock },
+  { key: 'subject', label: 'Derse Göre', icon: BookOpen },
 ]
 
 const SUBJECT_ORDER = ['Türkçe', 'Matematik', 'Fen Bilimleri', 'T.C. İnkılap Tarihi', 'İngilizce', 'Din Kültürü']
@@ -44,10 +43,88 @@ function dateGroupLabel(dateISO) {
   return formatDateLong(new Date(dateISO))
 }
 
-function shouldExpandGroup({ filter, viewMode, group, index }) {
-  if (viewMode === 'time' && filter === 'all') return group.date === todayISODate()
+function shouldExpandGroup({ filter, viewMode, index }) {
   if (viewMode === 'time' && filter === 'done') return index === 0
   return true
+}
+
+function SegmentedControl({ items, value, onChange, ariaLabel }) {
+  return (
+    <div className="student-theme-control-group flex min-w-0 gap-1 rounded-[12px] border border-white/15 bg-white/10 p-1" aria-label={ariaLabel}>
+      {items.map((item) => {
+        const Icon = item.icon
+        const selected = value === item.key
+
+        return (
+          <button
+            key={item.key}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(item.key)}
+            className={`student-theme-control-button inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-[9px] px-2.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary sm:px-3 ${
+              selected
+                ? 'bg-panel-surface text-student-theme-text shadow-sm'
+                : 'text-white/80 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <Icon size={14} aria-hidden="true" />
+            <span className="truncate">{item.label}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function ViewModeMenu({ value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const selected = VIEW_MODES.find((item) => item.key === value) || VIEW_MODES[0]
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        title={`Gösterim şekli: ${selected.label}`}
+        className="inline-flex h-10 w-10 items-center justify-center rounded-[12px] border border-white/15 bg-white/10 text-white/85 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+      >
+        <SlidersHorizontal size={17} aria-hidden="true" />
+        <span className="sr-only">Gösterim şekli: {selected.label}</span>
+      </button>
+
+      {open ? (
+        <div className="absolute right-0 z-20 mt-2 w-44 rounded-[12px] border border-panel-border bg-panel-surface p-1 shadow-panel-2" role="menu">
+          {VIEW_MODES.map((item) => {
+            const Icon = item.icon
+            const selectedItem = value === item.key
+
+            return (
+              <button
+                key={item.key}
+                type="button"
+                role="menuitemradio"
+                aria-checked={selectedItem}
+                onClick={() => {
+                  onChange(item.key)
+                  setOpen(false)
+                }}
+                className={`flex h-9 w-full items-center gap-2 rounded-[9px] px-3 text-left text-sm font-semibold transition-colors ${
+                  selectedItem
+                    ? 'bg-student-theme-soft text-student-theme-text'
+                    : 'text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-text'
+                }`}
+              >
+                <Icon size={15} aria-hidden="true" />
+                {item.label}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export default function TaskListSection({
@@ -81,7 +158,6 @@ export default function TaskListSection({
   const sorted = useMemo(() => getSortedTasks(tasks), [tasks])
 
   const filtered = sorted.filter((task) => {
-    if (filter === 'all') return true
     return getAssignmentStatus(task).filterKey === filter
   })
 
@@ -105,9 +181,6 @@ export default function TaskListSection({
       byDate.get(key).push(task)
     })
     let entries = [...byDate.entries()]
-    if (filter === 'all') {
-      entries = entries.reverse().map(([date, dateTasks]) => [date, [...dateTasks].reverse()])
-    }
     if (filter === 'done') {
       entries = entries.reverse().map(([date, dateTasks]) => [date, [...dateTasks].reverse()])
     }
@@ -115,70 +188,39 @@ export default function TaskListSection({
   }, [filtered, filter])
 
   const visibleGroups = viewMode === 'subject' ? grouped : groupedByDate
+  const highlightTaskId = viewMode === 'time' && filter === 'pending' ? filtered[0]?.id : null
 
   return (
     <section className="panel-card overflow-hidden bg-panel-surface">
-      <div className="student-theme-section-header flex flex-col gap-4 border-b border-student-theme-primary/20 bg-student-theme-primary/15 p-5 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="student-theme-section-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-panel-surface/80 text-student-theme-text shadow-sm">
-            <ListChecks size={19} aria-hidden="true" />
+      <div className="student-theme-flow-header px-3 py-3 sm:px-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <span className="student-theme-section-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-white/10 text-white">
+            <ListChecks size={18} aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <h2 className="student-theme-section-title text-xl font-bold text-panel-text">Görev Akışı</h2>
-            <p className="student-theme-section-muted mt-0.5 text-sm text-panel-text-muted">{filtered.length} görev görüntüleniyor</p>
-          </div>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-2 md:flex-row md:flex-wrap md:items-center xl:justify-end">
-          <div className="student-theme-control-group flex w-full gap-1 overflow-x-auto rounded-xl border border-student-theme-primary/20 bg-panel-surface/85 p-1 shadow-sm md:w-auto md:overflow-visible" aria-label="Görev görünümü">
-            {VIEW_MODES.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                aria-pressed={viewMode === item.key}
-                onClick={() => setViewMode(item.key)}
-                className={`student-theme-control-button h-9 shrink-0 rounded-lg px-3 text-sm font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
-                  viewMode === item.key
-                    ? 'bg-student-theme-primary text-student-theme-button-text shadow-sm'
-                    : 'text-panel-text-muted hover:bg-student-theme-soft hover:text-student-theme-text'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
+            <h2 className="student-theme-section-title text-lg font-bold leading-tight text-white sm:text-xl">Görev Akışı</h2>
+            <p className="student-theme-section-muted text-xs font-medium text-white/70 sm:text-sm">
+              {filtered.length} görev
+            </p>
           </div>
 
-          <div className="student-theme-control-group flex w-full gap-1 overflow-x-auto rounded-xl border border-student-theme-primary/20 bg-panel-surface/85 p-1 shadow-sm md:w-auto md:overflow-visible" aria-label="Görev durumu">
-            {FILTERS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                aria-pressed={filter === item.key}
-                onClick={() => setFilter(item.key)}
-                className={`student-theme-control-button h-9 shrink-0 rounded-lg px-3 text-sm font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
-                  filter === item.key
-                    ? 'bg-student-theme-primary text-student-theme-button-text shadow-sm'
-                    : 'text-panel-text-muted hover:bg-student-theme-soft hover:text-student-theme-text'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
+          <div className="ml-auto flex min-w-0 items-center gap-2">
+            <ViewModeMenu value={viewMode} onChange={setViewMode} />
+            <SegmentedControl items={FILTERS} value={filter} onChange={setFilter} ariaLabel="Görev durumu" />
           </div>
-
         </div>
       </div>
 
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-student-theme-soft text-student-theme-text">
-            <ListChecks size={22} aria-hidden="true" />
+          <span className="flex h-12 w-12 items-center justify-center rounded-[12px] bg-student-theme-soft text-student-theme-text">
+            <ListChecks size={19} aria-hidden="true" />
           </span>
           <h3 className="mt-4 text-lg font-semibold text-panel-text">Bu filtrede görev yok</h3>
           <p className="mt-1 max-w-sm text-sm text-panel-text-muted">Farklı bir filtre veya ders seçmeyi deneyebilirsin.</p>
         </div>
       ) : (
-        <div className="border-t border-panel-border">
+        <div>
           {visibleGroups.map((group, index) => (
             <TaskGroupSection
               key={`${viewMode}-${filter}-${group.label}`}
@@ -191,7 +233,9 @@ export default function TaskListSection({
               showLessonLabel={viewMode === 'time'}
               getLessonLabel={viewMode === 'time' ? lessonLabelFor : undefined}
               emphasizeTime={viewMode === 'time'}
-              defaultExpanded={shouldExpandGroup({ filter, viewMode, group, index })}
+              timeline={viewMode === 'time'}
+              highlightTaskId={highlightTaskId}
+              defaultExpanded={shouldExpandGroup({ filter, viewMode, index })}
             />
           ))}
         </div>

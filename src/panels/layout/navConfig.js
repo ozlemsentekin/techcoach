@@ -24,7 +24,7 @@ export const PARENT_MORE_NAV = [
   { to: '/parent/tests', label: 'Test ve Denemeler', icon: 'FileCheck2' },
   { to: '/parent/progress', label: 'Gelişim', icon: 'TrendingUp' },
   { to: '/parent/mistakes', label: 'Yanlışlar', icon: 'AlertCircle' },
-  { to: '/parent/students', label: 'Öğrenci Profillerim', icon: 'Users' },
+  { to: '/parent/students', label: 'Öğrenciler', icon: 'Users' },
   { to: '/parent/teachers', label: 'Öğretmenler', icon: 'GraduationCap' },
   { to: '/parent/settings', label: 'Ayarlar', icon: 'Settings' },
 ]

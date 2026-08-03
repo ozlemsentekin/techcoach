@@ -284,7 +284,23 @@ body {
 }
 
 .student-theme-banner {
-  background: var(--color-student-theme-soft);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-student-theme-primary) 72%, #2b2a33) 0%,
+      color-mix(in srgb, var(--color-student-theme-primary) 56%, #1f2937) 100%
+    );
+  color: #ffffff;
+}
+
+.student-theme-flow-header {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-student-theme-primary) 76%, #2b2a33) 0%,
+      color-mix(in srgb, var(--color-student-theme-primary) 58%, #1f2937) 100%
+    );
+  color: #ffffff;
 }
 
 .student-theme-section-header {
@@ -292,9 +308,10 @@ body {
 }
 
 [data-theme='black'] .student-theme-banner,
-[data-theme='black'] .student-theme-section-header {
+[data-theme='black'] .student-theme-section-header,
+[data-theme='black'] .student-theme-flow-header {
   border-color: #111827;
-  background: #222831;
+  background: linear-gradient(135deg, #222831 0%, #111827 100%);
   color: #ffffff;
 }
 
@@ -348,11 +365,29 @@ body {
 }
 
 [data-theme='black'] .student-theme-banner-progress-track {
-  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 [data-theme='black'] .student-theme-banner-progress-fill {
   background: #ffffff;
+}
+
+.student-theme-banner-progress-fill {
+  background: color-mix(in srgb, var(--color-student-theme-primary) 84%, #1f2937);
+}
+
+.student-theme-progress-card {
+  background: color-mix(in srgb, var(--color-student-theme-primary) 4%, var(--color-panel-surface));
+}
+
+[data-theme='black'] .student-theme-progress-card .student-theme-banner-progress-fill {
+  background: #222831;
+}
+
+[data-theme='black'] .student-theme-progress-card .student-theme-banner-progress-track {
+  border-color: #d9dde3;
+  background: #f2f3f5;
 }
 
 [data-theme='black'] .student-theme-section-icon {
