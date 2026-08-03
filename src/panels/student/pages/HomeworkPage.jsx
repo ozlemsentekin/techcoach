@@ -8,7 +8,7 @@ import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
 import { MotionDiv } from '../../ui/motion'
-import { groupHomeworksByDate } from '../../shared/homework/homeworkDisplay'
+import { groupHomeworksByDate, isHomeworkCompleted } from '../../shared/homework/homeworkDisplay'
 import HomeworkDateAccordion from '../../shared/homework/HomeworkDateAccordion'
 
 const FILTER_TABS = [
@@ -37,13 +37,15 @@ export default function HomeworkPage() {
     }
   }, [])
 
-  const groupedByDate = useMemo(() => groupHomeworksByDate(homeworks), [homeworks])
-
   const today = todayISODate()
-  const visibleGroups = useMemo(() => {
-    if (filter === 'all') return groupedByDate
-    return groupedByDate.filter((dateGroup) => !dateGroup.dueDate || dateGroup.dueDate >= today)
-  }, [groupedByDate, filter, today])
+  const visibleHomeworks = useMemo(() => {
+    if (!homeworks) return []
+    if (filter === 'all') return homeworks
+    return homeworks.filter(
+      (homework) => !homework.dueDate || homework.dueDate >= today || !isHomeworkCompleted(homework),
+    )
+  }, [homeworks, filter, today])
+  const visibleGroups = useMemo(() => groupHomeworksByDate(visibleHomeworks), [visibleHomeworks])
 
   const isDateOpen = (dueDate, index) => {
     const key = dueDate || 'unassigned'
@@ -116,7 +118,7 @@ export default function HomeworkPage() {
             <EmptyState
               icon={NotebookPen}
               title="Aktif ödev yok"
-              description="Geçmiş ödevleri görmek için Tümü filtresini seçebilirsin."
+              description="Bugün, gelecek tarihli ya da gecikmiş ödev kalmadı."
             />
           ) : (
             <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-4">

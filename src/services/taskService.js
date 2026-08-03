@@ -38,6 +38,12 @@ export async function removeTask(taskId) {
   await authRequest(`/api/panel/tasks/${taskId}`, { method: 'DELETE' })
 }
 
+/** Öğrencinin görev üzerinde yaptığı sayaç, tamamlama ve ilerleme işlem kayıtları. */
+export async function getTaskActivityLogs(date, { limit = 50 } = {}) {
+  const data = await authRequest(`/api/panel/task-activity?date=${date}&limit=${limit}`, { method: 'GET' })
+  return data.logs || []
+}
+
 /** Soru bankası görevinin dijital cevap kağıdı: testler, soru sayıları, kayıtlı cevaplar/sonuçlar. */
 export async function getTaskAnswerSheet(taskId) {
   const data = await authRequest(`/api/panel/tasks/${taskId}/answer-sheet`, { method: 'GET' })

@@ -1,4 +1,5 @@
 import { Languages, FlaskConical, Sigma, Globe, Landmark, BookHeart, BookOpen } from 'lucide-react'
+import { todayISODate } from '../../../utils/time'
 
 export const SUBJECT_ORDER = ['Türkçe', 'Matematik', 'Fen Bilimleri', 'T.C. İnkılap Tarihi', 'İngilizce', 'Din Kültürü']
 
@@ -41,6 +42,10 @@ export function isHomeworkCompleted(homework) {
   if (homework.status === 'tamamlandi') return true
   if (homework.totalQuestionCount > 0) return homework.completedQuestionCount >= homework.totalQuestionCount
   return false
+}
+
+export function isHomeworkOverdue(homework, today = todayISODate()) {
+  return Boolean(homework.dueDate) && homework.dueDate < today && !isHomeworkCompleted(homework)
 }
 
 function buildDateGroup(dueDate, subjectGroups) {

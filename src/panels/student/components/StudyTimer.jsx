@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { formatSecondsAsTimer } from '../../../utils/time'
 
-export default function StudyTimer({ onElapsedChange }) {
+export default function StudyTimer({ onElapsedChange, onStart }) {
   const [isRunning, setIsRunning] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const intervalRef = useRef(null)
@@ -29,7 +29,10 @@ export default function StudyTimer({ onElapsedChange }) {
         {!isRunning ? (
           <button
             type="button"
-            onClick={() => setIsRunning(true)}
+            onClick={() => {
+              if (elapsedSeconds === 0) onStart?.()
+              setIsRunning(true)
+            }}
             className="rounded-xl bg-student-theme-primary px-6 py-3 text-base font-semibold text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
           >
             {elapsedSeconds === 0 ? 'Başlat' : 'Devam Et'}

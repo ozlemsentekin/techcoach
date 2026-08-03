@@ -16,6 +16,7 @@ const AdminPublishersPage = lazy(() => import('./pages/AdminPublishersPage'))
 const AdminMotivationMessagesPage = lazy(() => import('./pages/AdminMotivationMessagesPage'))
 const AdminGreetingsPage = lazy(() => import('./pages/AdminGreetingsPage'))
 const StudentsPage = lazy(() => import('./pages/StudentsPage'))
+const TeachersPage = lazy(() => import('./pages/TeachersPage'))
 const HomeworkPage = lazy(() => import('./pages/HomeworkPage'))
 const TestsPage = lazy(() => import('./pages/TestsPage'))
 const MistakesPage = lazy(() => import('./pages/MistakesPage'))
@@ -47,6 +48,7 @@ export default function ParentApp() {
           <Route path="tests" element={pageElement(TestsPage)} />
           <Route path="mistakes" element={pageElement(MistakesPage)} />
           <Route path="students" element={pageElement(StudentsPage)} />
+          <Route path="teachers" element={pageElement(TeachersPage)} />
           <Route path="settings" element={pageElement(SettingsPage)} />
           <Route
             path="admin/users"

@@ -1,7 +1,6 @@
 export const STUDENT_PRIMARY_NAV = [
   { to: '/student/today', label: 'Bugün', icon: 'Home' },
   { to: '/student/progress', label: 'Gelişimim', icon: 'TrendingUp' },
-  { to: '/student/weekly-plan', label: 'Haftalık Plan', icon: 'CalendarRange' },
   { to: '/student/courses', label: 'Derslerim', icon: 'BookOpen' },
 ]
 
@@ -26,6 +25,7 @@ export const PARENT_MORE_NAV = [
   { to: '/parent/progress', label: 'Gelişim', icon: 'TrendingUp' },
   { to: '/parent/mistakes', label: 'Yanlışlar', icon: 'AlertCircle' },
   { to: '/parent/students', label: 'Öğrenci Profillerim', icon: 'Users' },
+  { to: '/parent/teachers', label: 'Öğretmenler', icon: 'GraduationCap' },
   { to: '/parent/settings', label: 'Ayarlar', icon: 'Settings' },
 ]
 

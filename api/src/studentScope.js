@@ -27,8 +27,13 @@ async function requireStudentContext(request, { studentId: bodyStudentId } = {})
     return { error: json(401, { error: 'Oturum geçersiz.' }) }
   }
 
+  const actor = {
+    actorId: session.actingParentId || record.id,
+    actorRole: session.actingParentId ? 'ebeveyn' : record.role,
+  }
+
   if (record.role === 'ogrenci') {
-    return { studentId: record.id }
+    return { studentId: record.id, ...actor }
   }
 
   if (record.role !== 'ebeveyn') {
@@ -48,7 +53,7 @@ async function requireStudentContext(request, { studentId: bodyStudentId } = {})
     if (!ownershipResult.recordset[0]) {
       return { error: json(404, { error: 'Öğrenci bulunamadı.' }) }
     }
-    return { studentId: requestedStudentId }
+    return { studentId: requestedStudentId, ...actor }
   }
 
   const firstStudentDb = await withRequest({
@@ -62,7 +67,7 @@ async function requireStudentContext(request, { studentId: bodyStudentId } = {})
     return { error: json(404, { error: 'Bağlı öğrenci bulunamadı.' }) }
   }
 
-  return { studentId: firstStudent.id }
+  return { studentId: firstStudent.id, ...actor }
 }
 
 module.exports = { requireStudentContext }

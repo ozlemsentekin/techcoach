@@ -1,17 +1,22 @@
 import { Trash2 } from 'lucide-react'
 import { cn } from '../../ui/utils'
-import { isHomeworkCompleted } from './homeworkDisplay'
+import { isHomeworkCompleted, isHomeworkOverdue } from './homeworkDisplay'
 import PublisherBadge from './PublisherBadge'
 import HomeworkProgress from './HomeworkProgress'
 
 export default function HomeworkItemCard({ homework, onDeleteRequest }) {
   const completed = isHomeworkCompleted(homework)
+  const overdue = isHomeworkOverdue(homework)
 
   return (
     <div
       className={cn(
         'flex min-h-[52px] flex-col gap-2.5 rounded-[11px] border bg-panel-surface px-3.5 py-2.5 shadow-[0_1px_3px_rgba(20,25,40,0.025)] sm:flex-row sm:items-center sm:gap-3',
-        completed ? 'border-emerald-200 bg-emerald-50/30' : 'border-panel-border',
+        completed
+          ? 'border-emerald-200 bg-emerald-50/30'
+          : overdue
+            ? 'border-panel-red/40 bg-panel-red-soft/25'
+            : 'border-panel-border',
       )}
     >
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -25,6 +30,10 @@ export default function HomeworkItemCard({ homework, onDeleteRequest }) {
         {completed ? (
           <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
             Tamamlandı
+          </span>
+        ) : overdue ? (
+          <span className="shrink-0 rounded-full bg-panel-red-soft px-2 py-0.5 text-[10px] font-semibold text-panel-red">
+            Gecikti
           </span>
         ) : null}
         {homework.isSplit && homework.dayPlans?.length ? (

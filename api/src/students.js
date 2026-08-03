@@ -64,6 +64,24 @@ function sanitizeStudentResourceBook(record) {
   }
 }
 
+function sanitizeTeacherResourceBook(record) {
+  return {
+    id: record.id,
+    publisherId: record.publisher_id,
+    publisherName: record.publisher_name || null,
+    subjectId: record.subject_id,
+    subjectName: record.subject_name || null,
+    name: record.name,
+    pageCount: record.page_count,
+    isActive: Boolean(record.is_active),
+    type: record.resource_type,
+    hasAnswerKey: Boolean(record.has_answer_key),
+    imageUrl: record.image_url || null,
+    assigned: Boolean(record.assigned),
+    assignedAt: record.assigned_at || null,
+  }
+}
+
 function parseScheduleJson(value) {
   if (!value) return []
 
@@ -82,10 +100,14 @@ function sanitizeStudentTeacher(record) {
     subjectId: record.subject_id,
     subjectName: record.subject_name || null,
     fullName: record.teacher_full_name,
+    studentFullName: record.student_full_name || null,
+    studentEmail: record.student_email || null,
     phone: record.phone,
     type: record.teacher_type,
     typeLabel: TEACHER_TYPE_LABELS[record.teacher_type] || record.teacher_type,
     schedule: parseScheduleJson(record.schedule_json),
+    resourceBooks: record.resourceBooks || [],
+    resourceCount: Number(record.resource_count) || 0,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
   }
@@ -185,6 +207,32 @@ function validateTeacherPayload(payload) {
   }
 }
 
+function normalizeResourceBookIds(value) {
+  if (!Array.isArray(value)) {
+    return { error: 'Kaynak listesi geçersiz.' }
+  }
+
+  const ids = []
+  const seen = new Set()
+  for (const rawId of value) {
+    if (typeof rawId !== 'string') {
+      return { error: 'Kaynak listesi geçersiz.' }
+    }
+
+    const id = rawId.trim()
+    if (!isGuid(id)) {
+      return { error: 'Kaynak listesi geçersiz.' }
+    }
+
+    if (!seen.has(id)) {
+      seen.add(id)
+      ids.push(id)
+    }
+  }
+
+  return { resourceBookIds: ids }
+}
+
 async function requireParentSession(request) {
   const token = readSessionToken(request)
   if (!token) {
@@ -220,6 +268,22 @@ async function verifyParentOwnsStudent(parentId, studentId) {
     SELECT TOP 1 id FROM dbo.Users WHERE id = @studentId AND parent_id = @parentId;
   `)
   return Boolean(ownershipResult.recordset[0])
+}
+
+async function verifyParentOwnsTeacher(parentId, studentId, teacherId) {
+  const requestDb = await withRequest({
+    parentId: { type: sql.UniqueIdentifier, value: parentId },
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    teacherId: { type: sql.UniqueIdentifier, value: teacherId },
+  })
+  const result = await requestDb.query(`
+    SELECT TOP 1 st.id
+    FROM dbo.StudentTeachers st
+    INNER JOIN dbo.Users u ON u.id = st.student_id
+    WHERE st.id = @teacherId AND st.student_id = @studentId AND u.parent_id = @parentId;
+  `)
+
+  return Boolean(result.recordset[0])
 }
 
 async function fetchStudentResourceBooks(studentId) {
@@ -258,6 +322,89 @@ async function fetchStudentTeachers(studentId) {
   `)
 
   return result.recordset.map(sanitizeStudentTeacher)
+}
+
+async function attachResourceBooksToTeachers(teachers) {
+  if (!teachers.length) {
+    return teachers
+  }
+
+  const bindings = Object.fromEntries(
+    teachers.map((teacher, index) => [`teacherId${index}`, { type: sql.UniqueIdentifier, value: teacher.id }]),
+  )
+  const placeholders = teachers.map((_, index) => `@teacherId${index}`)
+  const requestDb = await withRequest(bindings)
+  const result = await requestDb.query(`
+    SELECT strb.teacher_id, rb.id, rb.publisher_id, p.name AS publisher_name,
+           rb.subject_id, s.name AS subject_name, rb.name, rb.page_count, rb.is_active,
+           rb.resource_type, rb.has_answer_key, rb.image_url, 1 AS assigned, strb.assigned_at
+    FROM dbo.StudentTeacherResourceBooks strb
+    INNER JOIN dbo.ResourceBooks rb ON rb.id = strb.resource_book_id
+    LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+    LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
+    WHERE strb.teacher_id IN (${placeholders.join(', ')}) AND rb.is_active = 1
+    ORDER BY s.name ASC, p.name ASC, rb.name ASC;
+  `)
+
+  const resourcesByTeacherId = new Map()
+  result.recordset.forEach((record) => {
+    const resource = sanitizeTeacherResourceBook(record)
+    const current = resourcesByTeacherId.get(record.teacher_id) || []
+    current.push(resource)
+    resourcesByTeacherId.set(record.teacher_id, current)
+  })
+
+  return teachers.map((teacher) => {
+    const resourceBooks = resourcesByTeacherId.get(teacher.id) || []
+    return {
+      ...teacher,
+      resourceBooks,
+      resourceCount: resourceBooks.length,
+    }
+  })
+}
+
+async function fetchParentTeachers(parentId) {
+  const requestDb = await withRequest({
+    parentId: { type: sql.UniqueIdentifier, value: parentId },
+  })
+  const result = await requestDb.query(`
+    SELECT st.id, st.student_id, u.full_name AS student_full_name, u.email AS student_email,
+           st.subject_id, s.name AS subject_name, st.teacher_full_name, st.phone,
+           st.teacher_type, st.schedule_json, st.created_at, st.updated_at
+    FROM dbo.StudentTeachers st
+    INNER JOIN dbo.Users u ON u.id = st.student_id
+    LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
+    WHERE u.parent_id = @parentId
+    ORDER BY u.full_name ASC, s.name ASC, st.teacher_full_name ASC;
+  `)
+
+  return attachResourceBooksToTeachers(result.recordset.map(sanitizeStudentTeacher))
+}
+
+async function fetchTeacherResourceBooks(studentId, teacherId) {
+  const requestDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    teacherId: { type: sql.UniqueIdentifier, value: teacherId },
+  })
+  const result = await requestDb.query(`
+    SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
+           rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url,
+           CASE WHEN strb.resource_book_id IS NULL THEN 0 ELSE 1 END AS assigned,
+           strb.assigned_at
+    FROM dbo.StudentResourceBooks srb
+    INNER JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id
+    LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+    LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
+    LEFT JOIN dbo.StudentTeacherResourceBooks strb
+      ON strb.teacher_id = @teacherId
+     AND strb.student_id = @studentId
+     AND strb.resource_book_id = rb.id
+    WHERE srb.student_id = @studentId AND rb.is_active = 1
+    ORDER BY s.name ASC, p.name ASC, rb.name ASC;
+  `)
+
+  return result.recordset.map(sanitizeTeacherResourceBook)
 }
 
 async function verifySubjectExists(subjectId) {
@@ -633,6 +780,29 @@ async function listStudentTeachersForParentHandler(request) {
   }
 }
 
+async function listParentTeachersHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const teachers = await fetchParentTeachers(parentId)
+    return json(200, { teachers })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('listParentTeachersHandler failed', error)
+    return json(500, { error: 'Öğretmenler yüklenemedi.' })
+  }
+}
+
 async function createStudentTeacherHandler(request) {
   try {
     const { error, parentId } = await requireParentSession(request)
@@ -699,6 +869,125 @@ async function createStudentTeacherHandler(request) {
   }
 }
 
+async function listTeacherResourceBooksForParentHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const studentId = request.params.studentId
+    const teacherId = request.params.teacherId
+    const ownsTeacher = await verifyParentOwnsTeacher(parentId, studentId, teacherId)
+    if (!ownsTeacher) {
+      return json(404, { error: 'Öğretmen bulunamadı.' })
+    }
+
+    const resourceBooks = await fetchTeacherResourceBooks(studentId, teacherId)
+    return json(200, { resourceBooks, resourceCount: resourceBooks.filter((book) => book.assigned).length })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('listTeacherResourceBooksForParentHandler failed', error)
+    return json(500, { error: 'Öğretmen kaynakları yüklenemedi.' })
+  }
+}
+
+async function updateTeacherResourceBooksForParentHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const studentId = request.params.studentId
+    const teacherId = request.params.teacherId
+    const ownsTeacher = await verifyParentOwnsTeacher(parentId, studentId, teacherId)
+    if (!ownsTeacher) {
+      return json(404, { error: 'Öğretmen bulunamadı.' })
+    }
+
+    const payload = await request.json().catch(() => null)
+    const normalized = normalizeResourceBookIds(payload?.resourceBookIds)
+    if (normalized.error) {
+      return json(400, { error: normalized.error })
+    }
+
+    const resourceBookIds = normalized.resourceBookIds
+    if (resourceBookIds.length) {
+      const placeholders = resourceBookIds.map((_, index) => `@resourceBookId${index}`)
+      const validationDb = await withRequest({
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        ...Object.fromEntries(resourceBookIds.map((id, index) => [`resourceBookId${index}`, { type: sql.UniqueIdentifier, value: id }])),
+      })
+      const validationResult = await validationDb.query(`
+        SELECT srb.resource_book_id
+        FROM dbo.StudentResourceBooks srb
+        INNER JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id
+        WHERE srb.student_id = @studentId
+          AND rb.is_active = 1
+          AND srb.resource_book_id IN (${placeholders.join(', ')});
+      `)
+
+      if (validationResult.recordset.length !== resourceBookIds.length) {
+        return json(400, { error: 'Seçilen kaynaklardan biri bu öğrenciye atanmış değil.' })
+      }
+    }
+
+    const bindings = {
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      teacherId: { type: sql.UniqueIdentifier, value: teacherId },
+      ...Object.fromEntries(resourceBookIds.map((id, index) => [`resourceBookId${index}`, { type: sql.UniqueIdentifier, value: id }])),
+    }
+    const insertStatements = resourceBookIds
+      .map(
+        (_, index) => `
+          INSERT INTO dbo.StudentTeacherResourceBooks (teacher_id, student_id, resource_book_id)
+          VALUES (@teacherId, @studentId, @resourceBookId${index});
+        `,
+      )
+      .join('\n')
+
+    const requestDb = await withRequest(bindings)
+    await requestDb.query(`
+      BEGIN TRY
+        BEGIN TRANSACTION;
+
+        DELETE FROM dbo.StudentTeacherResourceBooks
+        WHERE teacher_id = @teacherId AND student_id = @studentId;
+
+        ${insertStatements}
+
+        COMMIT TRANSACTION;
+      END TRY
+      BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        THROW;
+      END CATCH
+    `)
+
+    const resourceBooks = await fetchTeacherResourceBooks(studentId, teacherId)
+    return json(200, { resourceBooks, resourceCount: resourceBooks.filter((book) => book.assigned).length })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('updateTeacherResourceBooksForParentHandler failed', error)
+    return json(500, { error: 'Öğretmen kaynakları kaydedilemedi.' })
+  }
+}
+
 async function listStudentTeachersForPanelHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
@@ -730,6 +1019,9 @@ module.exports = {
   listStudentResourceBooksHandler,
   updateStudentResourceBooksHandler,
   listStudentTeachersForParentHandler,
+  listParentTeachersHandler,
   createStudentTeacherHandler,
+  listTeacherResourceBooksForParentHandler,
+  updateTeacherResourceBooksForParentHandler,
   listStudentTeachersForPanelHandler,
 }

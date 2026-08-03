@@ -2,18 +2,21 @@ import { useEffect, useState } from 'react'
 import {
   Activity,
   AlertTriangle,
+  ArrowRightLeft,
   CalendarDays,
   CheckCircle2,
   Clock3,
+  HelpCircle,
   ListChecks,
   MessageCircle,
   Pencil,
   Plus,
+  RotateCcw,
   Sparkles,
   Timer,
   TrendingUp,
 } from 'lucide-react'
-import { getTasksForDate, updateTask, createTask, deleteTask, rescheduleTask } from '../../../services/taskService'
+import { getTaskActivityLogs, getTasksForDate, updateTask, createTask, deleteTask, rescheduleTask } from '../../../services/taskService'
 import { getWrongQuestions } from '../../../services/wrongQuestionService'
 import { sendMessage, getMessages } from '../../../services/messageService'
 import { getRequests, updateRequestStatus } from '../../../services/studentRequestService'
@@ -252,7 +255,28 @@ function formatTimerSeconds(seconds) {
   return `${hours} sa ${minutes} dk`
 }
 
-function buildTaskLogEntries(tasks) {
+const TASK_LOG_ACTIONS = {
+  task_started: { title: 'Göreve başlandı', icon: Activity, tone: 'blue' },
+  timer_started: { title: 'Sayaç başlatıldı', icon: Timer, tone: 'blue' },
+  timer_stopped: { title: 'Sayaç bitirildi', icon: Clock3, tone: 'warm' },
+  task_completed: { title: 'Görev tamamlandı', icon: CheckCircle2, tone: 'sage' },
+  task_partially_completed: { title: 'Görev kısmen tamamlandı', icon: CheckCircle2, tone: 'sage' },
+  task_reopened: { title: 'Görev geri alındı', icon: RotateCcw, tone: 'lilac' },
+  task_rescheduled: { title: 'Görev taşındı', icon: ArrowRightLeft, tone: 'lilac' },
+  help_requested: { title: 'Yardım istedi', icon: HelpCircle, tone: 'warm' },
+  progress_updated: { title: 'İlerleme kaydedildi', icon: ListChecks, tone: 'blue' },
+  answers_saved: { title: 'Cevaplar kaydedildi', icon: ListChecks, tone: 'blue' },
+}
+
+function getTaskLogDetail(entry) {
+  if (entry.detail) return entry.detail
+  if (entry.elapsedSeconds !== undefined) return `Sayaç süresi ${formatTimerSeconds(entry.elapsedSeconds)}`
+  if (entry.completedQuestionCount !== undefined) return `${entry.completedQuestionCount} soru`
+  if (entry.completedPageCount !== undefined) return `${entry.completedPageCount} sayfa`
+  return ''
+}
+
+function buildFallbackTaskLogEntries(tasks) {
   return tasks
     .flatMap((task) => {
       const taskTitle = getTaskSummary(task)
@@ -260,37 +284,66 @@ function buildTaskLogEntries(tasks) {
 
       if (task.timerStartedAt) {
         entries.push({
-          id: `${task.id}-timer-started`,
-          at: task.timerStartedAt,
-          icon: Timer,
-          tone: 'blue',
-          title: 'Sayaç başlatıldı',
+          id: `${task.id}-timer-started-fallback`,
+          taskId: task.id,
+          action: 'timer_started',
+          createdAt: task.timerStartedAt,
           taskTitle,
+          source: 'fallback',
+        })
+      }
+
+      if (task.timerStoppedAt) {
+        entries.push({
+          id: `${task.id}-timer-stopped-fallback`,
+          taskId: task.id,
+          action: 'timer_stopped',
+          createdAt: task.timerStoppedAt,
+          taskTitle,
+          elapsedSeconds: task.timerElapsedSeconds,
+          source: 'fallback',
         })
       }
 
       if (task.completedAt) {
         entries.push({
-          id: `${task.id}-completed`,
-          at: task.completedAt,
-          icon: CheckCircle2,
-          tone: 'sage',
-          title: task.status === 'kismen-tamamlandi' ? 'Görev kısmen tamamlandı' : 'Görev tamamlandı',
+          id: `${task.id}-completed-fallback`,
+          taskId: task.id,
+          action: task.status === 'kismen-tamamlandi' ? 'task_partially_completed' : 'task_completed',
+          createdAt: task.completedAt,
           taskTitle,
-          detail: task.timerElapsedSeconds !== undefined ? `Sayaç süresi ${formatTimerSeconds(task.timerElapsedSeconds)}` : '',
+          elapsedSeconds: task.timerElapsedSeconds,
+          completedQuestionCount: task.completedQuestionCount,
+          completedPageCount: task.completedPageCount,
+          source: 'fallback',
         })
       }
 
       return entries
     })
-    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
 }
 
-function TaskFlowLogPanel({ tasks }) {
-  const entries = buildTaskLogEntries(tasks)
+function buildTaskLogEntries(tasks, activityLogs = []) {
+  const logs = activityLogs.map((log) => ({
+    ...log,
+    taskTitle: log.taskSummary || log.taskTitle || 'Görev',
+    source: 'api',
+  }))
+  const apiKeys = new Set(logs.map((log) => `${log.taskId || ''}:${log.action}`))
+  const fallbackEntries = buildFallbackTaskLogEntries(tasks).filter((entry) => !apiKeys.has(`${entry.taskId || ''}:${entry.action}`))
+
+  return [...logs, ...fallbackEntries]
+    .filter((entry) => entry.createdAt)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+}
+
+function TaskFlowLogPanel({ tasks, activityLogs = [] }) {
+  const entries = buildTaskLogEntries(tasks, activityLogs)
   const toneClasses = {
     blue: 'bg-panel-blue-soft text-panel-blue',
     sage: 'bg-panel-sage-soft text-panel-sage',
+    warm: 'bg-panel-warm-soft text-panel-warm',
+    lilac: 'bg-panel-lilac-soft text-panel-lilac',
   }
 
   return (
@@ -300,31 +353,33 @@ function TaskFlowLogPanel({ tasks }) {
           <Activity size={18} aria-hidden="true" />
         </span>
         <div className="min-w-0">
-          <h2 className="text-base font-semibold text-panel-text">Akış Logları</h2>
-          <p className="mt-0.5 text-sm text-panel-text-muted">Sayaç ve tamamlanma kayıtları</p>
+          <h2 className="text-base font-semibold text-panel-text">Öğrenci İşlem Logları</h2>
+          <p className="mt-0.5 text-sm text-panel-text-muted">Sayaç, bitirme ve tamamlama kayıtları</p>
         </div>
       </div>
 
       {entries.length === 0 ? (
         <p className="mt-4 rounded-xl bg-panel-surface-soft px-4 py-3 text-sm text-panel-text-muted">
-          Bugün için sayaç veya tamamlanma kaydı görünmüyor.
+          Bugün için öğrenci işlem kaydı görünmüyor.
         </p>
       ) : (
         <ol className="mt-4 divide-y divide-panel-border">
-          {entries.slice(0, 8).map((entry) => {
-            const Icon = entry.icon
+          {entries.slice(0, 6).map((entry) => {
+            const action = TASK_LOG_ACTIONS[entry.action] || TASK_LOG_ACTIONS.progress_updated
+            const Icon = action.icon
+            const detail = getTaskLogDetail(entry)
             return (
               <li key={entry.id} className="flex gap-3 py-3 first:pt-0 last:pb-0">
-                <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${toneClasses[entry.tone]}`}>
+                <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${toneClasses[action.tone]}`}>
                   <Icon size={15} aria-hidden="true" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <p className="text-sm font-semibold text-panel-text">{entry.title}</p>
-                    <span className="text-xs font-medium text-panel-text-muted">{formatTime(new Date(entry.at))}</span>
+                    <p className="text-sm font-semibold text-panel-text">{action.title}</p>
+                    <span className="text-xs font-medium text-panel-text-muted">{formatTime(new Date(entry.createdAt))}</span>
                   </div>
                   <p className="mt-0.5 line-clamp-1 text-sm text-panel-text-muted">{entry.taskTitle}</p>
-                  {entry.detail ? <p className="mt-1 text-xs font-semibold text-panel-sage">{entry.detail}</p> : null}
+                  {detail ? <p className="mt-1 text-xs font-semibold text-panel-sage">{detail}</p> : null}
                 </div>
               </li>
             )
@@ -340,6 +395,7 @@ export default function DashboardPage() {
   const [wrongQuestions, setWrongQuestions] = useState([])
   const [requests, setRequests] = useState([])
   const [messages, setMessages] = useState([])
+  const [activityLogs, setActivityLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [drawerState, setDrawerState] = useState(null)
@@ -355,13 +411,15 @@ export default function DashboardPage() {
       getRequests(),
       getMessages(),
       getWrongQuestions(),
+      getTaskActivityLogs(date).catch(() => []),
     ])
-      .then(([tasksData, requestsData, messagesData, wrongQuestionsData]) => {
+      .then(([tasksData, requestsData, messagesData, wrongQuestionsData, activityLogsData]) => {
         if (ignore) return
         setTasks(tasksData)
         setRequests(requestsData)
         setMessages(messagesData)
         setWrongQuestions(wrongQuestionsData)
+        setActivityLogs(activityLogsData)
       })
       .catch((err) => {
         if (!ignore) setLoadError(err.message)
@@ -484,8 +542,6 @@ export default function DashboardPage() {
             onSaveNote={handleSaveNote}
           />
 
-          <TaskFlowLogPanel tasks={tasks} />
-
           <div className="grid gap-5 lg:grid-cols-2">
             <StudentRequestsCard
               requests={requests}
@@ -505,6 +561,7 @@ export default function DashboardPage() {
             onEdit={(task) => setDrawerState({ initialTask: task })}
             onMove={(task) => setReschedulingTask(task)}
           />
+          <TaskFlowLogPanel tasks={tasks} activityLogs={activityLogs} />
           <LearningSignalCard topic={strugglingTopic} />
           <MotivationMessagePanel messages={messages} onSendMessage={handleSendMessage} />
         </div>

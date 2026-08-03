@@ -3,6 +3,7 @@ const { isConfigError } = require('./config')
 const { json } = require('./http')
 const { isSessionError } = require('./security')
 const { requireStudentContext } = require('./studentScope')
+const { recordTaskActivities } = require('./taskActivity')
 
 function toISODate(value) {
   if (!value) return null
@@ -138,6 +139,164 @@ const FIELD_MAP = {
   testResults: (v) => ({ column: 'test_results_json', type: sql.NVarChar(sql.MAX), value: v ? JSON.stringify(v) : null }),
 }
 
+const STUDENT_ACTIVITY_ACTOR_ROLE = 'ogrenci'
+const DONE_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
+
+function hasPayloadField(payload, key) {
+  return Object.prototype.hasOwnProperty.call(payload || {}, key)
+}
+
+function getDescriptionLines(task) {
+  return (task?.description || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+function getTaskSummary(task) {
+  return getDescriptionLines(task)[0] || task?.title || 'Görev'
+}
+
+function valuesDiffer(previousValue, nextValue) {
+  if (previousValue instanceof Date || nextValue instanceof Date) {
+    const previousTime = previousValue ? new Date(previousValue).getTime() : null
+    const nextTime = nextValue ? new Date(nextValue).getTime() : null
+    return previousTime !== nextTime
+  }
+
+  return previousValue !== nextValue
+}
+
+function taskActivityMetadata(task, previousTask, extra = {}) {
+  return {
+    taskTitle: task.title || 'Görev',
+    taskSummary: getTaskSummary(task),
+    taskDate: task.date,
+    startTime: task.startTime,
+    taskType: task.taskType,
+    subject: task.subject,
+    previousStatus: previousTask?.status,
+    nextStatus: task.status,
+    ...extra,
+  }
+}
+
+function buildProgressDetail(task) {
+  if (task.completedQuestionCount !== undefined) {
+    const target = task.targetQuestionCount ? ` / ${task.targetQuestionCount}` : ''
+    return `${task.completedQuestionCount}${target} soru`
+  }
+
+  if (task.completedPageCount !== undefined) {
+    const target = task.targetPageCount ? ` / ${task.targetPageCount}` : ''
+    return `${task.completedPageCount}${target} sayfa`
+  }
+
+  return ''
+}
+
+function buildTaskUpdateActivities(previousTask, nextTask, payload) {
+  const entries = []
+  const timerStarted = hasPayloadField(payload, 'timerStartedAt') && nextTask.timerStartedAt && valuesDiffer(previousTask.timerStartedAt, nextTask.timerStartedAt)
+  const timerStopped = hasPayloadField(payload, 'timerStoppedAt') && nextTask.timerStoppedAt && valuesDiffer(previousTask.timerStoppedAt, nextTask.timerStoppedAt)
+  const statusChanged = previousTask.status !== nextTask.status
+  const completedNow = DONE_STATUSES.has(nextTask.status) && (statusChanged || (!previousTask.completedAt && nextTask.completedAt))
+
+  if (timerStarted) {
+    entries.push({
+      action: 'timer_started',
+      metadata: taskActivityMetadata(nextTask, previousTask),
+    })
+  }
+
+  if (statusChanged && nextTask.status === 'devam-ediyor' && !timerStarted) {
+    entries.push({
+      action: 'task_started',
+      metadata: taskActivityMetadata(nextTask, previousTask),
+    })
+  }
+
+  if (completedNow) {
+    entries.push({
+      action: nextTask.status === 'kismen-tamamlandi' ? 'task_partially_completed' : 'task_completed',
+      metadata: taskActivityMetadata(nextTask, previousTask, {
+        detail: buildProgressDetail(nextTask),
+        completedQuestionCount: nextTask.completedQuestionCount,
+        completedPageCount: nextTask.completedPageCount,
+        elapsedSeconds: nextTask.timerElapsedSeconds,
+      }),
+    })
+  }
+
+  if (timerStopped) {
+    entries.push({
+      action: 'timer_stopped',
+      metadata: taskActivityMetadata(nextTask, previousTask, {
+        elapsedSeconds: nextTask.timerElapsedSeconds,
+      }),
+    })
+  }
+
+  if (statusChanged && nextTask.status === 'bekliyor' && DONE_STATUSES.has(previousTask.status)) {
+    entries.push({
+      action: 'task_reopened',
+      metadata: taskActivityMetadata(nextTask, previousTask),
+    })
+  }
+
+  if (statusChanged && nextTask.status === 'yardim-bekliyor') {
+    entries.push({
+      action: 'help_requested',
+      metadata: taskActivityMetadata(nextTask, previousTask),
+    })
+  }
+
+  if (statusChanged && nextTask.status === 'yeniden-planlandi') {
+    entries.push({
+      action: 'task_rescheduled',
+      metadata: taskActivityMetadata(nextTask, previousTask, {
+        detail: nextTask.rescheduledTo ? `${nextTask.rescheduledTo} zamanına taşındı` : '',
+      }),
+    })
+  }
+
+  const questionProgressChanged =
+    hasPayloadField(payload, 'completedQuestionCount') &&
+    valuesDiffer(previousTask.completedQuestionCount, nextTask.completedQuestionCount)
+  const pageProgressChanged =
+    hasPayloadField(payload, 'completedPageCount') &&
+    valuesDiffer(previousTask.completedPageCount, nextTask.completedPageCount)
+
+  if (!completedNow && (questionProgressChanged || pageProgressChanged)) {
+    entries.push({
+      action: 'progress_updated',
+      metadata: taskActivityMetadata(nextTask, previousTask, {
+        detail: buildProgressDetail(nextTask),
+        completedQuestionCount: nextTask.completedQuestionCount,
+        completedPageCount: nextTask.completedPageCount,
+      }),
+    })
+  }
+
+  return entries
+}
+
+async function recordStudentTaskUpdateActivities({ previousRecord, nextRecord, payload, actorRole, actorId }) {
+  if (actorRole !== STUDENT_ACTIVITY_ACTOR_ROLE || !previousRecord || !nextRecord) return
+
+  const previousTask = sanitizeTask(previousRecord)
+  const nextTask = sanitizeTask(nextRecord)
+  const entries = buildTaskUpdateActivities(previousTask, nextTask, payload)
+
+  await recordTaskActivities({
+    studentId: nextTask.studentId,
+    taskId: nextTask.id,
+    actorRole,
+    actorUserId: actorId,
+    entries,
+  })
+}
+
 async function listTasksHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
@@ -266,9 +425,22 @@ async function updateTaskHandler(request) {
   try {
     const taskId = request.params.taskId
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId, actorRole, actorId } = await requireStudentContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
+    }
+
+    const previousDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const previousResult = await previousDb.query(`
+      ${SELECT_TASK}
+      WHERE t.id = @id AND t.student_id = @studentId;
+    `)
+    const previousRecord = previousResult.recordset[0]
+    if (!previousRecord) {
+      return json(404, { error: 'Görev bulunamadı.' })
     }
 
     const setClauses = []
@@ -302,6 +474,13 @@ async function updateTaskHandler(request) {
     const fetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: taskId } })
     const fetchResult = await fetchDb.query(`${SELECT_TASK} WHERE t.id = @id;`)
     await syncHomeworkCompletion(fetchResult.recordset[0])
+    await recordStudentTaskUpdateActivities({
+      previousRecord,
+      nextRecord: fetchResult.recordset[0],
+      payload,
+      actorRole,
+      actorId,
+    })
 
     return json(200, { task: sanitizeTask(fetchResult.recordset[0]) })
   } catch (error) {
@@ -425,7 +604,7 @@ async function saveTaskAnswersHandler(request) {
   try {
     const taskId = request.params.taskId
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId, actorRole, actorId } = await requireStudentContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }
@@ -440,7 +619,7 @@ async function saveTaskAnswersHandler(request) {
       studentId: { type: sql.UniqueIdentifier, value: studentId },
     })
     const taskResult = await taskDb.query(`
-      SELECT selected_test_ids_json, answers_json, test_results_json
+      SELECT selected_test_ids_json, answers_json, test_results_json, status, completed_at
       FROM dbo.Tasks WHERE id = @id AND student_id = @studentId;
     `)
     const taskRecord = taskResult.recordset[0]
@@ -554,8 +733,28 @@ async function saveTaskAnswersHandler(request) {
     const fetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: taskId } })
     const fetchResult = await fetchDb.query(`${SELECT_TASK} WHERE t.id = @id;`)
     await syncHomeworkCompletion(fetchResult.recordset[0])
+    const finalTask = sanitizeTask(fetchResult.recordset[0])
 
-    return json(200, { task: sanitizeTask(fetchResult.recordset[0]) })
+    if (actorRole === STUDENT_ACTIVITY_ACTOR_ROLE) {
+      const completedNow = allGraded && !DONE_STATUSES.has(taskRecord.status) && !taskRecord.completed_at
+      await recordTaskActivities({
+        studentId: finalTask.studentId,
+        taskId: finalTask.id,
+        actorRole,
+        actorUserId: actorId,
+        entries: [
+          {
+            action: completedNow ? 'task_completed' : 'answers_saved',
+            metadata: taskActivityMetadata(finalTask, null, {
+              detail: buildProgressDetail(finalTask),
+              completedQuestionCount: finalTask.completedQuestionCount,
+            }),
+          },
+        ],
+      })
+    }
+
+    return json(200, { task: finalTask })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })

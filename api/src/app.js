@@ -9,7 +9,10 @@ const {
   listStudentResourceBooksHandler,
   updateStudentResourceBooksHandler,
   listStudentTeachersForParentHandler,
+  listParentTeachersHandler,
   createStudentTeacherHandler,
+  listTeacherResourceBooksForParentHandler,
+  updateTeacherResourceBooksForParentHandler,
   listStudentTeachersForPanelHandler,
 } = require('./students')
 const {
@@ -47,6 +50,7 @@ const {
   getWeeklyPlanStatusHandler,
   setWeeklyPlanStatusHandler,
 } = require('./tasks')
+const { listTaskActivityLogsHandler } = require('./taskActivity')
 const {
   listMessagesHandler,
   sendMessageHandler,
@@ -174,11 +178,32 @@ app.http('parent-student-teachers-list', {
   handler: listStudentTeachersForParentHandler,
 })
 
+app.http('parent-teachers-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'parent/teachers',
+  handler: listParentTeachersHandler,
+})
+
 app.http('parent-student-teachers-create', {
   authLevel: 'anonymous',
   methods: ['POST'],
   route: 'parent/students/{studentId}/teachers',
   handler: createStudentTeacherHandler,
+})
+
+app.http('parent-student-teacher-resource-books-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'parent/students/{studentId}/teachers/{teacherId}/resource-books',
+  handler: listTeacherResourceBooksForParentHandler,
+})
+
+app.http('parent-student-teacher-resource-books-update', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'parent/students/{studentId}/teachers/{teacherId}/resource-books',
+  handler: updateTeacherResourceBooksForParentHandler,
 })
 
 app.http('parent-return', {
@@ -466,6 +491,13 @@ app.http('panel-tasks-delete', {
   methods: ['DELETE'],
   route: 'panel/tasks/{taskId}',
   handler: deleteTaskHandler,
+})
+
+app.http('panel-task-activity-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/task-activity',
+  handler: listTaskActivityLogsHandler,
 })
 
 app.http('panel-tasks-answer-sheet-get', {

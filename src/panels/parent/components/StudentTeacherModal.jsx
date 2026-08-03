@@ -3,6 +3,7 @@ import { BookOpen, CalendarDays, Clock, GraduationCap, Phone, Plus, Trash2, X } 
 import { authRequest } from '../../../services/authClient'
 import LoadingState from '../../shared/LoadingState'
 import Button from '../../ui/Button'
+import TeacherResourceBooksModal from './TeacherResourceBooksModal'
 
 const TEACHER_TYPE_OPTIONS = [
   { value: 'okul_ogretmeni', label: 'Okul Öğretmeni' },
@@ -38,7 +39,7 @@ function scheduleLabel(row) {
   return `Her ${day} ${row.startTime} - ${row.endTime}`
 }
 
-function TeacherCard({ teacher }) {
+function TeacherCard({ teacher, onEditResources }) {
   const isPrivateTeacher = teacher.type === 'ozel_ogretmen'
 
   return (
@@ -82,6 +83,11 @@ function TeacherCard({ teacher }) {
           ))}
         </div>
       ) : null}
+
+      <Button type="button" variant="secondary" size="sm" className="mt-auto w-full" onClick={() => onEditResources(teacher)}>
+        <BookOpen size={14} aria-hidden="true" />
+        Kaynakları Düzenle
+      </Button>
     </article>
   )
 }
@@ -92,6 +98,7 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
   const [form, setForm] = useState(INITIAL_FORM)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [resourceModalTeacher, setResourceModalTeacher] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -207,6 +214,17 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
     }
   }
 
+  const handleTeacherResourcesSaved = (teacherId, resourceBooks, resourceCount) => {
+    setTeachers((current) =>
+      (current || []).map((teacher) =>
+        teacher.id === teacherId
+          ? { ...teacher, resourceBooks: resourceBooks.filter((book) => book.assigned), resourceCount }
+          : teacher,
+      ),
+    )
+    setResourceModalTeacher(null)
+  }
+
   const isLoading = teachers === null || subjects === null
 
   return (
@@ -252,7 +270,7 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
                 ) : (
                   <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                     {teachers.map((teacher) => (
-                      <TeacherCard key={teacher.id} teacher={teacher} />
+                      <TeacherCard key={teacher.id} teacher={teacher} onEditResources={setResourceModalTeacher} />
                     ))}
                   </div>
                 )}
@@ -399,6 +417,14 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
           )}
         </div>
       </div>
+      {resourceModalTeacher ? (
+        <TeacherResourceBooksModal
+          student={student}
+          teacher={resourceModalTeacher}
+          onSaved={handleTeacherResourcesSaved}
+          onClose={() => setResourceModalTeacher(null)}
+        />
+      ) : null}
     </div>
   )
 }

@@ -198,6 +198,25 @@ export default function TodayPage() {
     }
   }
 
+  const handleFocusTimerStart = async (task) => {
+    if (task.timerStartedAt) return
+
+    try {
+      const startedAt = new Date().toISOString()
+      applyDayResult(
+        task.date,
+        await updateTask(task.date, task.id, {
+          status: 'devam-ediyor',
+          timerStartedAt: startedAt,
+          timerStoppedAt: null,
+          timerElapsedSeconds: null,
+        }),
+      )
+    } catch (err) {
+      setLoadError(err.message)
+    }
+  }
+
   const handleCompleteInline = async (task) => {
     applyDayResult(task.date, await updateTask(task.date, task.id, buildCompletionUpdates(task, { status: 'tamamlandi' })))
   }
@@ -367,7 +386,7 @@ export default function TodayPage() {
         setTasks(await updateTask(date, target.id, { targetQuestionCount: reduced }))
         setBanner(`${target.targetQuestionCount} soru yerine önce ${reduced} soruyla başlamak ister misin?`)
       } else {
-        setBanner('Şu an küçültülecek bir hedef bulunamadı, planı Haftalık Plan sayfasından düzenleyebilirsin.')
+        setBanner('Şu an küçültülecek bir hedef bulunamadı. Velinden planını güncellemesini isteyebilirsin.')
       }
       return
     }
@@ -442,6 +461,7 @@ export default function TodayPage() {
           task={focusTask}
           onClose={() => setFocusTaskId(null)}
           onFinishSession={handleFinishSession}
+          onStartTimer={handleFocusTimerStart}
           onToggleSubGoal={handleToggleSubGoal}
           onSubmitReflection={handleSubmitReflection}
           onOpenHomeworkModal={() => setShowHomeworkModal(true)}

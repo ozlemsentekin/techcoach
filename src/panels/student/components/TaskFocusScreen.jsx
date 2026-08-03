@@ -7,6 +7,7 @@ export default function TaskFocusScreen({
   task,
   onClose,
   onFinishSession,
+  onStartTimer,
   onToggleSubGoal,
   onSubmitReflection,
   onOpenHomeworkModal,
@@ -79,7 +80,7 @@ export default function TaskFocusScreen({
           </p>
         )}
 
-        <StudyTimer onElapsedChange={(seconds) => (elapsedRef.current = seconds)} />
+        <StudyTimer onElapsedChange={(seconds) => (elapsedRef.current = seconds)} onStart={() => onStartTimer?.(task)} />
 
         {task.targetQuestionCount ? (
           <QuestionCounter value={questionCount} target={task.targetQuestionCount} onChange={setQuestionCount} />
