@@ -275,6 +275,12 @@ body {
 
 [data-panel-role='parent'] .panel-card {
   border-color: var(--color-panel-border);
+  background-color: var(--color-panel-surface);
+  background-image: none;
+}
+
+[data-panel-role='parent'] .panel-card > :first-child {
+  background-image: none;
 }
 
 .student-theme-banner {
