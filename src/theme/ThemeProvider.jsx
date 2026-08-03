@@ -5,19 +5,19 @@ import ThemeContext from './themeContextObject'
 
 const STORAGE_KEY = 'student_theme'
 
-function getStoredTheme() {
-  const stored = readJSON(STORAGE_KEY, DEFAULT_THEME)
-  return isValidTheme(stored) ? stored : DEFAULT_THEME
+function getStoredTheme(storageKey, defaultTheme) {
+  const stored = readJSON(storageKey, defaultTheme)
+  return isValidTheme(stored) ? stored : defaultTheme
 }
 
-export default function ThemeProvider({ children }) {
-  const [theme, setThemeState] = useState(getStoredTheme)
+export default function ThemeProvider({ children, storageKey = STORAGE_KEY, defaultTheme = DEFAULT_THEME }) {
+  const [theme, setThemeState] = useState(() => getStoredTheme(storageKey, defaultTheme))
 
   const setTheme = useCallback((nextTheme) => {
     if (!isValidTheme(nextTheme)) return
     setThemeState(nextTheme)
-    writeJSON(STORAGE_KEY, nextTheme)
-  }, [])
+    writeJSON(storageKey, nextTheme)
+  }, [storageKey])
 
   const value = useMemo(() => ({ theme, setTheme }), [theme, setTheme])
 

@@ -9,12 +9,11 @@
 
   /*
    * Panel design tokens — öğrenci/ebeveyn panelleri için sakin palet (brief bölüm 19).
-   * Bu, ebeveyn panelinin de kullandığı değişmeyen taban palettir. Öğrenci panelinde
-   * ThemeProvider bir data-theme özniteliği ekler ("pink" | "blue" | "neutral" | "purple" |
+   * Bu, panellerin kullandığı taban palettir. ThemeProvider bir data-theme özniteliği ekler
+   * ("pink" | "blue" | "neutral" | "purple" |
    * "green" | "orange" | "black") ve aşağıdaki [data-theme="..."] blokları bu custom property'leri
    * geçersiz kılar. Her bileşen bu token'ları kullandığı için tema değişimi hiçbir bileşen
-   * kodu değiştirilmeden tüm arayüze yayılır; ebeveyn paneli data-theme almadığından
-   * bu taban palette sabit kalır.
+   * kodu değiştirilmeden tüm arayüze yayılır.
    */
   --color-panel-bg: #ffffff;
   --color-panel-surface: #ffffff;
@@ -84,8 +83,7 @@ body {
 }
 
 /*
- * Tema token geçersiz kılmaları (yalnızca öğrenci paneli — ThemeProvider ile sarılı alan).
- * Ebeveyn paneli data-theme almadığından yukarıdaki taban palette değişmeden kalır.
+ * Tema token geçersiz kılmaları (ThemeProvider ile sarılı panel alanları).
  */
 [data-theme='neutral'] {
   --color-panel-bg: #ffffff;

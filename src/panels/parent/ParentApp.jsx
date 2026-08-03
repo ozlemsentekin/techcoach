@@ -35,7 +35,7 @@ function pageElement(Page) {
 
 export default function ParentApp() {
   return (
-    <ThemeProvider>
+    <ThemeProvider storageKey="parent_theme" defaultTheme="blue">
       <Routes>
         <Route element={<PanelLayout role="parent" />}>
           <Route index element={<Navigate to="dashboard" replace />} />
