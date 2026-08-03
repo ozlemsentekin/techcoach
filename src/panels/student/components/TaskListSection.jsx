@@ -52,7 +52,9 @@ function shouldExpandGroup({ filter, viewMode, group, index }) {
 
 export default function TaskListSection({
   tasks,
+  onStartTimer,
   onComplete,
+  onUndoComplete,
   onPartialComplete,
   onReschedule,
   onHelp,
@@ -183,6 +185,9 @@ export default function TaskListSection({
               subject={group.label}
               tasks={group.tasks}
               onOpenDetails={openTask}
+              onStartTimer={onStartTimer}
+              onCompleteTask={onComplete}
+              onUndoComplete={onUndoComplete}
               showLessonLabel={viewMode === 'time'}
               getLessonLabel={viewMode === 'time' ? lessonLabelFor : undefined}
               emphasizeTime={viewMode === 'time'}

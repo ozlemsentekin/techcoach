@@ -7,18 +7,25 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  Coffee,
+  Dumbbell,
   Eye,
   FlaskConical,
+  Moon,
   MoreHorizontal,
+  Music,
   NotebookPen,
   Pencil,
   Plus,
   Printer,
+  Sun,
   Trash2,
+  Users,
+  Utensils,
 } from 'lucide-react'
 import { getSortedTasks } from '../../../utils/taskSelectors'
 import { parseTimeToMinutes } from '../../../utils/time'
-import { STATUS_LABELS } from '../../../data/taskTypes'
+import { STATUS_LABELS, TASK_TYPES } from '../../../data/taskTypes'
 
 const SUBJECT_BADGES = {
   Türkçe: { icon: BookOpen, text: 'text-panel-slate', soft: 'bg-panel-slate-soft', border: 'border-panel-slate/25' },
@@ -32,6 +39,73 @@ const DEFAULT_SUBJECT_BADGE = {
   border: 'border-panel-blue/25',
 }
 
+const BREAK_TASK_TYPES = new Set(['mola', 'dinlenme', 'yemek', 'yemek-dinlenme'])
+const HOMEWORK_TASK_TYPES = new Set(['odev', 'odev-kontrolu'])
+const ACTIVITY_TASK_TYPES = new Set(['serbest-zaman', 'sosyal-aktivite', 'spor', 'sanat-hobi', 'uyku-hazirligi', 'gunluk-rutin'])
+
+const TASK_KIND_STYLES = {
+  homework: {
+    label: 'Ödev',
+    icon: NotebookPen,
+    rowBorder: 'border-l-panel-warm',
+    rowBackground: 'bg-panel-warm-soft/20 hover:bg-panel-warm-soft/35',
+    typeBadge: 'border-panel-warm/35 bg-panel-warm-soft text-panel-warm',
+    typeIcon: 'bg-white text-panel-warm',
+    timeBlock: 'bg-panel-warm-soft/45',
+    durationChip: 'bg-white text-panel-warm',
+    questionChip: 'bg-panel-blue-soft text-panel-blue',
+    dot: 'border-panel-warm text-panel-warm',
+  },
+  break: {
+    label: 'Mola',
+    icon: Coffee,
+    rowBorder: 'border-l-panel-sage',
+    rowBackground: 'bg-panel-sage-soft/35 hover:bg-panel-sage-soft/55',
+    typeBadge: 'border-panel-sage/35 bg-panel-sage-soft text-panel-sage',
+    typeIcon: 'bg-white text-panel-sage',
+    timeBlock: 'bg-panel-sage-soft/55',
+    durationChip: 'bg-white text-panel-sage',
+    questionChip: 'bg-panel-sage-soft text-panel-sage',
+    dot: 'border-panel-sage text-panel-sage',
+  },
+  activity: {
+    label: 'Aktivite',
+    icon: Sun,
+    rowBorder: 'border-l-panel-accent',
+    rowBackground: 'bg-panel-accent-soft/35 hover:bg-panel-accent-soft/55',
+    typeBadge: 'border-panel-accent/35 bg-panel-accent-soft text-panel-warm',
+    typeIcon: 'bg-white text-panel-accent',
+    timeBlock: 'bg-panel-accent-soft/55',
+    durationChip: 'bg-white text-panel-warm',
+    questionChip: 'bg-panel-accent-soft text-panel-warm',
+    dot: 'border-panel-accent text-panel-accent',
+  },
+  study: {
+    label: 'Ders',
+    icon: BookOpen,
+    rowBorder: 'border-l-panel-blue',
+    rowBackground: 'bg-panel-surface hover:bg-panel-surface-soft/60',
+    typeBadge: 'border-panel-blue/25 bg-panel-blue-soft text-panel-blue',
+    typeIcon: 'bg-white text-panel-blue',
+    timeBlock: 'bg-panel-surface-soft',
+    durationChip: 'bg-white text-panel-text-muted',
+    questionChip: 'bg-panel-blue-soft text-panel-blue',
+    dot: 'border-panel-blue-soft text-panel-blue',
+  },
+}
+
+const TASK_TYPE_ICONS = {
+  mola: Coffee,
+  dinlenme: Coffee,
+  yemek: Utensils,
+  'yemek-dinlenme': Utensils,
+  'serbest-zaman': Sun,
+  'sosyal-aktivite': Users,
+  spor: Dumbbell,
+  'sanat-hobi': Music,
+  'uyku-hazirligi': Moon,
+}
+
 const STATUS_STYLES = {
   bekliyor: { icon: Clock, className: 'bg-panel-blue-soft text-panel-blue' },
   'devam-ediyor': { icon: Clock, className: 'bg-panel-warm-soft text-panel-warm' },
@@ -41,11 +115,54 @@ const STATUS_STYLES = {
   'yardim-bekliyor': { icon: NotebookPen, className: 'bg-panel-warm-soft text-panel-warm' },
 }
 
+const DAILY_FLOW_FILTERS = [
+  { key: 'pending', label: 'Bekleyen' },
+  { key: 'all', label: 'Tümü' },
+  { key: 'done', label: 'Tamamlanan' },
+]
+
+const FILTER_EMPTY_COPY = {
+  pending: {
+    title: 'Bekleyen görev yok',
+    description: 'Bugünün kalan akışı temiz görünüyor.',
+  },
+  done: {
+    title: 'Tamamlanan görev yok',
+    description: 'Görevler tamamlandıkça burada görünecek.',
+  },
+  all: {
+    title: 'Bu filtrede görev yok',
+    description: 'Bugün için görüntülenecek görev bulunmuyor.',
+  },
+}
+
+function normalizeText(value) {
+  return String(value || '').toLocaleLowerCase('tr-TR')
+}
+
+function getTaskKind(task) {
+  if (BREAK_TASK_TYPES.has(task.taskType)) return 'break'
+  if (HOMEWORK_TASK_TYPES.has(task.taskType)) return 'homework'
+  if (ACTIVITY_TASK_TYPES.has(task.taskType)) return 'activity'
+  return 'study'
+}
+
+function getTaskKindStyle(task) {
+  return TASK_KIND_STYLES[getTaskKind(task)]
+}
+
+function getSubjectLabel(task) {
+  if (BREAK_TASK_TYPES.has(task.taskType)) return ''
+  if (task.subject) return task.subject
+
+  const searchText = normalizeText(`${task.title || ''} ${task.description || ''}`)
+  return Object.keys(SUBJECT_BADGES).find((subject) => searchText.includes(normalizeText(subject))) || ''
+}
+
 function getSubjectBadge(task) {
-  if (task.subject && SUBJECT_BADGES[task.subject]) return SUBJECT_BADGES[task.subject]
-  const title = task.title || ''
-  const inferredSubject = Object.keys(SUBJECT_BADGES).find((subject) => title.includes(subject))
-  return inferredSubject ? SUBJECT_BADGES[inferredSubject] : DEFAULT_SUBJECT_BADGE
+  const label = getSubjectLabel(task)
+  if (!label) return null
+  return { label, ...(SUBJECT_BADGES[label] || DEFAULT_SUBJECT_BADGE) }
 }
 
 function getDescriptionLines(task) {
@@ -66,16 +183,43 @@ function formatDuration(task) {
   return `${hours}sa ${mins}dk`
 }
 
-function TimeBlock({ task }) {
+function getQuestionBankHomeworkCount(task) {
+  if (task.taskType !== 'odev' || task.resourceType !== 'soru_bankasi') return 0
+  return Number(task.targetQuestionCount) || 0
+}
+
+function getDailyFlowFilterKey(task) {
+  if (task.status === 'tamamlandi') return 'done'
+  if (task.status === 'yeniden-planlandi') return null
+  return 'pending'
+}
+
+function getDailyFlowSummary(filter, counts) {
+  if (counts.all === 0) return '0 görev planlandı'
+  if (filter === 'all') return `${counts.all} görev planlandı`
+  if (filter === 'done') return `${counts.done} tamamlanan · ${counts.all} planlandı`
+  return `${counts.pending} bekleyen · ${counts.all} planlandı`
+}
+
+function TimeBlock({ task, visual }) {
+  const questionCount = getQuestionBankHomeworkCount(task)
+
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-xl bg-panel-surface-soft px-3 py-2 sm:block sm:bg-transparent sm:p-0">
+    <div className={`flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 sm:block sm:bg-transparent sm:p-0 ${visual.timeBlock}`}>
       <div className="min-w-0">
         <p className="whitespace-nowrap text-sm font-bold text-panel-text">{task.startTime}</p>
         <p className="whitespace-nowrap text-xs font-medium text-panel-text-muted">{task.endTime}</p>
       </div>
-      <span className="inline-flex h-7 shrink-0 items-center rounded-full bg-white px-2.5 text-xs font-semibold text-panel-text-muted shadow-sm sm:mt-2">
-        {formatDuration(task)}
-      </span>
+      <div className="flex flex-nowrap items-center gap-1.5 sm:mt-2">
+        <span className={`inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-xs font-semibold shadow-sm ${visual.durationChip}`}>
+          {formatDuration(task)}
+        </span>
+        {questionCount > 0 ? (
+          <span className={`inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-xs font-semibold shadow-sm ${visual.questionChip}`}>
+            {questionCount} soru
+          </span>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -91,7 +235,43 @@ function StatusPill({ status }) {
   )
 }
 
-function TimelineDot({ status, isFirst, isLast }) {
+function DailyFlowFilter({ activeFilter, counts, onChange }) {
+  return (
+    <div
+      className="flex w-full gap-1 overflow-x-auto rounded-xl border border-panel-border bg-panel-surface-soft/70 p-1 sm:w-auto sm:overflow-visible"
+      aria-label="Günün akışı filtresi"
+    >
+      {DAILY_FLOW_FILTERS.map((filter) => {
+        const selected = activeFilter === filter.key
+
+        return (
+          <button
+            key={filter.key}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(filter.key)}
+            className={`inline-flex h-9 min-w-max flex-1 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-blue sm:flex-none sm:px-3 ${
+              selected
+                ? 'bg-panel-surface text-panel-text shadow-sm'
+                : 'text-panel-text-muted hover:bg-panel-surface/70 hover:text-panel-text'
+            }`}
+          >
+            <span>{filter.label}</span>
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[11px] leading-none ${
+                selected ? 'bg-panel-surface-soft text-panel-text-muted' : 'bg-panel-surface/70 text-panel-text-muted'
+              }`}
+            >
+              {counts[filter.key]}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function TimelineDot({ status, isFirst, isLast, visual }) {
   const completed = status === 'tamamlandi'
 
   return (
@@ -100,7 +280,7 @@ function TimelineDot({ status, isFirst, isLast }) {
       {!isLast ? <span className="absolute bottom-0 top-5 w-px bg-panel-border" aria-hidden="true" /> : null}
       <span
         className={`relative mt-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 bg-panel-surface ${
-          completed ? 'border-panel-sage text-panel-sage' : 'border-panel-blue-soft text-panel-blue'
+          completed ? 'border-panel-sage text-panel-sage' : visual.dot
         }`}
       >
         {completed ? <CheckCircle2 size={13} aria-hidden="true" /> : <span className="h-2 w-2 rounded-full bg-current" />}
@@ -109,12 +289,31 @@ function TimelineDot({ status, isFirst, isLast }) {
   )
 }
 
-function SubjectBadge({ task }) {
-  const { icon: Icon, text, soft, border } = getSubjectBadge(task)
+function TaskKindBadge({ task, visual }) {
+  const kind = getTaskKind(task)
+  const Icon = TASK_TYPE_ICONS[task.taskType] || visual.icon
+  const label = kind === 'study' ? TASK_TYPES[task.taskType]?.label || visual.label : visual.label
+
   return (
-    <span className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${text} ${soft} ${border}`}>
+    <span className={`inline-flex max-w-full items-center overflow-hidden rounded-lg border text-xs font-extrabold ${visual.typeBadge}`}>
+      <span className={`flex h-7 w-7 shrink-0 items-center justify-center ${visual.typeIcon}`}>
+        <Icon size={14} className="shrink-0" aria-hidden="true" />
+      </span>
+      <span className="truncate px-2.5 tracking-wide">{label}</span>
+    </span>
+  )
+}
+
+function SubjectChip({ task }) {
+  const badge = getSubjectBadge(task)
+  if (!badge) return null
+
+  const { icon: Icon, label, text, soft, border } = badge
+
+  return (
+    <span className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold ${text} ${soft} ${border}`}>
       <Icon size={13} className="shrink-0" aria-hidden="true" />
-      <span className="truncate">{task.title || task.subject || 'Görev'}</span>
+      <span className="truncate">{label}</span>
     </span>
   )
 }
@@ -334,23 +533,29 @@ function TaskAgendaItem({
   onCancelNote,
 }) {
   const completed = task.status === 'tamamlandi'
+  const visual = getTaskKindStyle(task)
+  const taskKind = getTaskKind(task)
+  const showStatus = taskKind !== 'break' && taskKind !== 'activity'
 
   return (
     <article
-      className={`grid grid-cols-[minmax(0,1fr)_2.5rem] gap-3 px-4 py-4 transition-colors sm:grid-cols-[7rem_2rem_minmax(0,1fr)_2.5rem] sm:gap-4 sm:px-5 ${
-        completed ? 'bg-panel-sage-soft/30' : 'bg-panel-surface hover:bg-panel-surface-soft/60'
+      className={`grid grid-cols-[minmax(0,1fr)_2.5rem] gap-3 border-l-4 px-4 py-4 transition-colors sm:grid-cols-[10rem_2rem_minmax(0,1fr)_2.5rem] sm:gap-4 sm:px-5 ${
+        visual.rowBorder
+      } ${
+        completed ? 'bg-panel-sage-soft/30' : visual.rowBackground
       }`}
     >
       <div className="col-start-1 row-start-1 min-w-0 sm:col-start-1 sm:row-start-1">
-        <TimeBlock task={task} />
+        <TimeBlock task={task} visual={visual} />
       </div>
 
-      <TimelineDot status={task.status} isFirst={isFirst} isLast={isLast} />
+      <TimelineDot status={task.status} isFirst={isFirst} isLast={isLast} visual={visual} />
 
       <div className="col-span-2 col-start-1 row-start-2 min-w-0 sm:col-span-1 sm:col-start-3 sm:row-start-1">
         <div className="flex flex-wrap items-center gap-2">
-          <SubjectBadge task={task} />
-          <StatusPill status={task.status} />
+          <TaskKindBadge task={task} visual={visual} />
+          <SubjectChip task={task} />
+          {showStatus ? <StatusPill status={task.status} /> : null}
         </div>
         <div className="mt-3">
           <TaskDetail task={task} expanded={expanded} />
@@ -387,8 +592,30 @@ export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSave
   const [openMenuId, setOpenMenuId] = useState(null)
   const [noteDraftId, setNoteDraftId] = useState(null)
   const [noteText, setNoteText] = useState('')
+  const [agendaFilter, setAgendaFilter] = useState('pending')
 
   const sorted = getSortedTasks(tasks)
+  const filterCounts = sorted.reduce(
+    (counts, task) => {
+      const filterKey = getDailyFlowFilterKey(task)
+      counts.all += 1
+      if (filterKey) counts[filterKey] += 1
+      return counts
+    },
+    { all: 0, pending: 0, done: 0 },
+  )
+  const visibleTasks = sorted.filter((task) => {
+    if (agendaFilter === 'all') return true
+    return getDailyFlowFilterKey(task) === agendaFilter
+  })
+  const emptyCopy = FILTER_EMPTY_COPY[agendaFilter] || FILTER_EMPTY_COPY.all
+
+  const selectAgendaFilter = (filter) => {
+    setAgendaFilter(filter)
+    setExpandedId(null)
+    setOpenMenuId(null)
+    setNoteDraftId(null)
+  }
 
   const startNoteDraft = (task) => {
     setNoteDraftId(task.id)
@@ -409,18 +636,24 @@ export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSave
           </span>
           <div className="min-w-0">
             <h2 className="text-xl font-bold text-panel-text">Günün Akışı</h2>
-            <p className="mt-0.5 text-sm text-panel-text-muted">{sorted.length} görev planlandı</p>
+            <p className="mt-0.5 text-sm text-panel-text-muted">{getDailyFlowSummary(agendaFilter, filterCounts)}</p>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3.5 text-sm font-medium text-panel-text transition-colors hover:bg-panel-surface-soft"
-        >
-          <Printer size={16} aria-hidden="true" />
-          Yazdır
-        </button>
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+          {sorted.length > 0 ? (
+            <DailyFlowFilter activeFilter={agendaFilter} counts={filterCounts} onChange={selectAgendaFilter} />
+          ) : null}
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3.5 text-sm font-medium text-panel-text transition-colors hover:bg-panel-surface-soft"
+          >
+            <Printer size={16} aria-hidden="true" />
+            Yazdır
+          </button>
+        </div>
       </div>
 
       {sorted.length === 0 ? (
@@ -439,14 +672,22 @@ export default function DailyPlanTable({ tasks, onEdit, onMove, onDelete, onSave
             Görev Ekle
           </button>
         </div>
+      ) : visibleTasks.length === 0 ? (
+        <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-panel-surface-soft text-panel-text-muted">
+            <CalendarDays size={22} aria-hidden="true" />
+          </span>
+          <h3 className="mt-4 text-lg font-semibold text-panel-text">{emptyCopy.title}</h3>
+          <p className="mt-1 max-w-sm text-sm text-panel-text-muted">{emptyCopy.description}</p>
+        </div>
       ) : (
         <div className="divide-y divide-panel-border">
-          {sorted.map((task, index) => (
+          {visibleTasks.map((task, index) => (
             <TaskAgendaItem
               key={task.id}
               task={task}
               isFirst={index === 0}
-              isLast={index === sorted.length - 1}
+              isLast={index === visibleTasks.length - 1}
               expanded={expandedId === task.id}
               isMenuOpen={openMenuId === task.id}
               noteDraftActive={noteDraftId === task.id}

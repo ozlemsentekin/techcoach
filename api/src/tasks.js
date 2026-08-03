@@ -23,6 +23,9 @@ function sanitizeTask(record) {
     startTime: record.start_time,
     endTime: record.end_time,
     durationMinutes: record.duration_minutes,
+    timerStartedAt: record.timer_started_at,
+    timerStoppedAt: record.timer_stopped_at,
+    timerElapsedSeconds: record.timer_elapsed_seconds ?? undefined,
     targetQuestionCount: record.target_question_count ?? undefined,
     completedQuestionCount: record.completed_question_count ?? undefined,
     targetPageCount: record.target_page_count ?? undefined,
@@ -81,6 +84,7 @@ async function syncHomeworkCompletion(taskRecord) {
 
 const SELECT_TASK = `
   SELECT t.id, t.student_id, t.is_draft, t.date, t.title, t.task_type, t.homework_id, t.subject, t.topic, t.start_time, t.end_time, t.duration_minutes,
+         t.timer_started_at, t.timer_stopped_at, t.timer_elapsed_seconds,
          t.target_question_count, t.completed_question_count, t.target_page_count, t.completed_page_count,
          t.current_page_number, t.priority, t.status, t.description, t.parent_note, t.created_by,
          t.notes, t.completed_at, t.rescheduled_from, t.rescheduled_to, t.reschedule_reason, t.correct_count, t.wrong_count,
@@ -102,6 +106,9 @@ const FIELD_MAP = {
   startTime: (v) => ({ column: 'start_time', type: sql.Char(5), value: v }),
   endTime: (v) => ({ column: 'end_time', type: sql.Char(5), value: v }),
   durationMinutes: (v) => ({ column: 'duration_minutes', type: sql.Int, value: Number(v) || 0 }),
+  timerStartedAt: (v) => ({ column: 'timer_started_at', type: sql.DateTime2, value: v || null }),
+  timerStoppedAt: (v) => ({ column: 'timer_stopped_at', type: sql.DateTime2, value: v || null }),
+  timerElapsedSeconds: (v) => ({ column: 'timer_elapsed_seconds', type: sql.Int, value: v === null ? null : Math.max(0, Number(v) || 0) }),
   targetQuestionCount: (v) => ({ column: 'target_question_count', type: sql.Int, value: v === null ? null : Number(v) }),
   completedQuestionCount: (v) => ({ column: 'completed_question_count', type: sql.Int, value: v === null ? null : Number(v) }),
   targetPageCount: (v) => ({ column: 'target_page_count', type: sql.Int, value: v === null ? null : Number(v) }),

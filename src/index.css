@@ -269,6 +269,16 @@ body {
   box-shadow: var(--shadow-panel-1);
 }
 
+[data-panel-role='parent'] .panel-card,
+[data-panel-role='parent'] .shadow-panel-1,
+[data-panel-role='parent'] .shadow-sm {
+  box-shadow: none;
+}
+
+[data-panel-role='parent'] .panel-card {
+  border-color: var(--color-panel-border);
+}
+
 .student-theme-banner {
   background: var(--color-student-theme-soft);
 }

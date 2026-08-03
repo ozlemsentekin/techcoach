@@ -26,6 +26,7 @@ const RANGE_FILTERS = [
 ]
 
 const COMPLETED_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
+const HIDDEN_SUBJECT_TAB_KEYS = new Set(['genel', 'online fen bilimleri'])
 const collator = new Intl.Collator('tr-TR')
 const numberFormatter = new Intl.NumberFormat('tr-TR')
 
@@ -281,6 +282,7 @@ function buildSubjectTabs(overview) {
     const cleanLabel = (label || '').trim()
     if (!cleanLabel) return
     const key = subjectKey(cleanLabel)
+    if (HIDDEN_SUBJECT_TAB_KEYS.has(key)) return
     if (!subjects.has(key)) subjects.set(key, { key, label: cleanLabel })
   }
 
@@ -290,7 +292,6 @@ function buildSubjectTabs(overview) {
   ;(overview.homeworks || []).forEach((homework) => addSubject(homework.subject))
   ;(overview.wrongQuestions || []).forEach((item) => addSubject(item.subject))
 
-  if (!subjects.size) addSubject('Genel')
   return Array.from(subjects.values()).sort((a, b) => collator.compare(a.label, b.label))
 }
 
@@ -741,8 +742,17 @@ export default function ProgressPage() {
     return <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
   }
 
-  if (overview === null || !selectedSubject) {
+  if (overview === null) {
     return <LoadingState label="Gelişim verileri yükleniyor..." />
+  }
+
+  if (!selectedSubject) {
+    return (
+      <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
+        <PageHeader title="Gelişimim" subtitle="Ders ilerlemen burada görünecek." />
+        <div className="panel-card px-5 py-6 text-sm text-panel-text-muted">Gösterilecek ders bulunamadı.</div>
+      </div>
+    )
   }
 
   return (

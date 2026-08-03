@@ -22,7 +22,7 @@ export default function PanelLayout({ role }) {
       : STUDENT_MORE_NAV
 
   return (
-    <div className="min-h-screen bg-panel-bg">
+    <div className="min-h-screen bg-panel-bg" data-panel-role={role}>
       <div className="flex">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">

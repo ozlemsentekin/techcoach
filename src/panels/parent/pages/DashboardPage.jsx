@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  Activity,
   AlertTriangle,
   CalendarDays,
   CheckCircle2,
@@ -9,6 +10,7 @@ import {
   Pencil,
   Plus,
   Sparkles,
+  Timer,
   TrendingUp,
 } from 'lucide-react'
 import { getTasksForDate, updateTask, createTask, deleteTask, rescheduleTask } from '../../../services/taskService'
@@ -17,7 +19,7 @@ import { sendMessage, getMessages } from '../../../services/messageService'
 import { getRequests, updateRequestStatus } from '../../../services/studentRequestService'
 import { evaluateDayBalance } from '../../../utils/planInsights'
 import { getCurrentTask, getNextTask, getPendingTasks, getSortedTasks } from '../../../utils/taskSelectors'
-import { formatDateLong, todayISODate } from '../../../utils/time'
+import { formatDateLong, formatTime, todayISODate } from '../../../utils/time'
 import { PARENT_MESSAGE_TEMPLATES } from '../../../data/coachMessages'
 import LoadingState from '../../shared/LoadingState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
@@ -237,6 +239,102 @@ function MotivationMessagePanel({ messages, onSendMessage }) {
   )
 }
 
+function formatTimerSeconds(seconds) {
+  if (seconds === undefined || seconds === null) return ''
+  const totalSeconds = Math.max(0, Number(seconds) || 0)
+  if (totalSeconds < 60) return `${totalSeconds} sn`
+
+  const totalMinutes = Math.round(totalSeconds / 60)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours === 0) return `${minutes} dk`
+  if (minutes === 0) return `${hours} sa`
+  return `${hours} sa ${minutes} dk`
+}
+
+function buildTaskLogEntries(tasks) {
+  return tasks
+    .flatMap((task) => {
+      const taskTitle = getTaskSummary(task)
+      const entries = []
+
+      if (task.timerStartedAt) {
+        entries.push({
+          id: `${task.id}-timer-started`,
+          at: task.timerStartedAt,
+          icon: Timer,
+          tone: 'blue',
+          title: 'Sayaç başlatıldı',
+          taskTitle,
+        })
+      }
+
+      if (task.completedAt) {
+        entries.push({
+          id: `${task.id}-completed`,
+          at: task.completedAt,
+          icon: CheckCircle2,
+          tone: 'sage',
+          title: task.status === 'kismen-tamamlandi' ? 'Görev kısmen tamamlandı' : 'Görev tamamlandı',
+          taskTitle,
+          detail: task.timerElapsedSeconds !== undefined ? `Sayaç süresi ${formatTimerSeconds(task.timerElapsedSeconds)}` : '',
+        })
+      }
+
+      return entries
+    })
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+}
+
+function TaskFlowLogPanel({ tasks }) {
+  const entries = buildTaskLogEntries(tasks)
+  const toneClasses = {
+    blue: 'bg-panel-blue-soft text-panel-blue',
+    sage: 'bg-panel-sage-soft text-panel-sage',
+  }
+
+  return (
+    <section className="panel-card p-5">
+      <div className="flex items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
+          <Activity size={18} aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-panel-text">Akış Logları</h2>
+          <p className="mt-0.5 text-sm text-panel-text-muted">Sayaç ve tamamlanma kayıtları</p>
+        </div>
+      </div>
+
+      {entries.length === 0 ? (
+        <p className="mt-4 rounded-xl bg-panel-surface-soft px-4 py-3 text-sm text-panel-text-muted">
+          Bugün için sayaç veya tamamlanma kaydı görünmüyor.
+        </p>
+      ) : (
+        <ol className="mt-4 divide-y divide-panel-border">
+          {entries.slice(0, 8).map((entry) => {
+            const Icon = entry.icon
+            return (
+              <li key={entry.id} className="flex gap-3 py-3 first:pt-0 last:pb-0">
+                <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${toneClasses[entry.tone]}`}>
+                  <Icon size={15} aria-hidden="true" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <p className="text-sm font-semibold text-panel-text">{entry.title}</p>
+                    <span className="text-xs font-medium text-panel-text-muted">{formatTime(new Date(entry.at))}</span>
+                  </div>
+                  <p className="mt-0.5 line-clamp-1 text-sm text-panel-text-muted">{entry.taskTitle}</p>
+                  {entry.detail ? <p className="mt-1 text-xs font-semibold text-panel-sage">{entry.detail}</p> : null}
+                </div>
+              </li>
+            )
+          })}
+        </ol>
+      )}
+    </section>
+  )
+}
+
 export default function DashboardPage() {
   const [tasks, setTasks] = useState([])
   const [wrongQuestions, setWrongQuestions] = useState([])
@@ -385,6 +483,8 @@ export default function DashboardPage() {
             onDelete={(task) => setDeletingTask(task)}
             onSaveNote={handleSaveNote}
           />
+
+          <TaskFlowLogPanel tasks={tasks} />
 
           <div className="grid gap-5 lg:grid-cols-2">
             <StudentRequestsCard

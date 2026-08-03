@@ -96,6 +96,9 @@ function sanitizeProgressTask(record) {
     subject: record.subject || undefined,
     topic: record.topic || undefined,
     durationMinutes: record.duration_minutes,
+    timerStartedAt: record.timer_started_at,
+    timerStoppedAt: record.timer_stopped_at,
+    timerElapsedSeconds: record.timer_elapsed_seconds ?? undefined,
     targetQuestionCount: record.target_question_count ?? undefined,
     completedQuestionCount: record.completed_question_count ?? undefined,
     targetPageCount: record.target_page_count ?? undefined,
@@ -461,6 +464,7 @@ async function getProgressOverviewHandler(request) {
         requestDb.query(`
           SELECT t.id, t.date, t.title, t.task_type, t.homework_id, t.subject, t.topic,
                  t.duration_minutes, t.target_question_count, t.completed_question_count,
+                 t.timer_started_at, t.timer_stopped_at, t.timer_elapsed_seconds,
                  t.target_page_count, t.completed_page_count, t.status, t.completed_at,
                  t.correct_count, t.wrong_count, t.blank_count, t.resource_book_id,
                  t.selected_test_ids_json, t.test_results_json, rb.name AS resource_book_name,

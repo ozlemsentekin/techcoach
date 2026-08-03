@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { HelpCircle, LifeBuoy } from 'lucide-react'
 import { useAuth } from '../../../context/useAuth'
-import { getTasksForDate, updateTask, toggleSubGoal, rescheduleTask } from '../../../services/taskService'
+import { getTasksForDate, updateTask, patchTask, toggleSubGoal, rescheduleTask } from '../../../services/taskService'
 import { getCheckIn, saveCheckIn } from '../../../services/checkInService'
 import { addSession } from '../../../services/studySessionService'
 import { addHomework } from '../../../services/homeworkService'
 import { sendMessage, addCoachNote } from '../../../services/messageService'
 import { todayISODate, getMonthDates } from '../../../utils/time'
 import { getNextTask } from '../../../utils/taskSelectors'
+import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { FOCUS_TASK_TYPES } from '../../../data/taskTypes'
 import StudentWelcomeBanner from '../components/StudentWelcomeBanner'
 import EnergyCheckIn from '../components/EnergyCheckIn'
@@ -44,6 +45,37 @@ function SupportCard({ onOpenSupport }) {
       </button>
     </section>
   )
+}
+
+const TIMER_STOP_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
+
+function buildTimerStopUpdates(task, stoppedAt) {
+  if (!task?.timerStartedAt || task.timerStoppedAt) return {}
+
+  const startedMs = new Date(task.timerStartedAt).getTime()
+  const stoppedMs = new Date(stoppedAt).getTime()
+  const updates = { timerStoppedAt: stoppedAt }
+
+  if (Number.isFinite(startedMs) && Number.isFinite(stoppedMs)) {
+    updates.timerElapsedSeconds = Math.max(0, Math.round((stoppedMs - startedMs) / 1000))
+  }
+
+  return updates
+}
+
+function buildCompletionUpdates(task, updates) {
+  const completedAt = updates.completedAt || new Date().toISOString()
+  const shouldStopTimer = TIMER_STOP_STATUSES.has(updates.status)
+
+  return {
+    ...updates,
+    completedAt,
+    ...(shouldStopTimer ? buildTimerStopUpdates(task, completedAt) : {}),
+  }
+}
+
+function isUnfinishedFlowTask(task) {
+  return getAssignmentStatus(task).filterKey === 'pending'
 }
 
 export default function TodayPage() {
@@ -115,7 +147,10 @@ export default function TodayPage() {
   }
 
   const listTasks = useMemo(
-    () => [...historyDays.flatMap((day) => historyTasks[day] || []), ...tasks],
+    () => [
+      ...historyDays.flatMap((day) => (historyTasks[day] || []).filter(isUnfinishedFlowTask)),
+      ...tasks,
+    ],
     [historyDays, historyTasks, tasks],
   )
 
@@ -145,12 +180,48 @@ export default function TodayPage() {
     }
   }
 
+  const handleStartTimer = async (task) => {
+    try {
+      const startedAt = new Date().toISOString()
+      applyDayResult(
+        task.date,
+        await updateTask(task.date, task.id, {
+          status: 'devam-ediyor',
+          timerStartedAt: startedAt,
+          timerStoppedAt: null,
+          timerElapsedSeconds: null,
+        }),
+      )
+      setBanner('Sayaç başlatıldı.')
+    } catch (err) {
+      setLoadError(err.message)
+    }
+  }
+
   const handleCompleteInline = async (task) => {
-    applyDayResult(task.date, await updateTask(task.date, task.id, { status: 'tamamlandi', completedAt: new Date().toISOString() }))
+    applyDayResult(task.date, await updateTask(task.date, task.id, buildCompletionUpdates(task, { status: 'tamamlandi' })))
+  }
+
+  const handleUndoComplete = async (task) => {
+    try {
+      applyDayResult(
+        task.date,
+        await updateTask(task.date, task.id, {
+          status: 'bekliyor',
+          completedAt: null,
+          timerStartedAt: null,
+          timerStoppedAt: null,
+          timerElapsedSeconds: null,
+        }),
+      )
+      setBanner('Görev tekrar yapılacaklara alındı.')
+    } catch (err) {
+      setLoadError(err.message)
+    }
   }
 
   const handlePartialComplete = async (task) => {
-    applyDayResult(task.date, await updateTask(task.date, task.id, { status: 'kismen-tamamlandi', completedAt: new Date().toISOString() }))
+    applyDayResult(task.date, await updateTask(task.date, task.id, buildCompletionUpdates(task, { status: 'kismen-tamamlandi' })))
   }
 
   const handleHelp = async (task) => {
@@ -158,38 +229,48 @@ export default function TodayPage() {
     setShowStressModal(true)
   }
 
-  const handleAnswerSheetSaved = (updatedTask) => {
-    const replace = (list) => list.map((task) => (task.id === updatedTask.id ? updatedTask : task))
-    if (updatedTask.date === date) {
-      setTasks(replace)
-      return
+  const handleAnswerSheetSaved = async (updatedTask) => {
+    try {
+      let finalTask = updatedTask
+      const timerUpdates = TIMER_STOP_STATUSES.has(updatedTask.status)
+        ? buildTimerStopUpdates(updatedTask, updatedTask.completedAt || new Date().toISOString())
+        : {}
+      if (Object.keys(timerUpdates).length > 0) {
+        finalTask = await patchTask(updatedTask.id, timerUpdates)
+      }
+
+      const replaceWithFinalTask = (list) => list.map((task) => (task.id === finalTask.id ? finalTask : task))
+      if (finalTask.date === date) {
+        setTasks(replaceWithFinalTask)
+        return
+      }
+      setHistoryTasks((current) => {
+        if (!historyDays.includes(finalTask.date)) return current
+        return { ...current, [finalTask.date]: replaceWithFinalTask(current[finalTask.date] || []) }
+      })
+    } catch (err) {
+      setLoadError(err.message)
     }
-    setHistoryTasks((current) => {
-      if (!historyDays.includes(updatedTask.date)) return current
-      return { ...current, [updatedTask.date]: replace(current[updatedTask.date] || []) }
-    })
   }
 
   const handleSaveReadingProgress = async (task, payload) => {
     applyDayResult(
       task.date,
-      await updateTask(task.date, task.id, {
+      await updateTask(task.date, task.id, buildCompletionUpdates(task, {
         completedPageCount: payload.completedPageCount,
         currentPageNumber: payload.currentPageNumber,
         status: payload.status,
-        completedAt: new Date().toISOString(),
-      }),
+      })),
     )
   }
 
   const handleSaveQuestionCount = async (task, payload) => {
     applyDayResult(
       task.date,
-      await updateTask(task.date, task.id, {
+      await updateTask(task.date, task.id, buildCompletionUpdates(task, {
         completedQuestionCount: payload.completedQuestionCount,
         status: payload.status,
-        completedAt: new Date().toISOString(),
-      }),
+      })),
     )
   }
 
@@ -222,7 +303,7 @@ export default function TodayPage() {
   const handleSaveSession = async (payload) => {
     const { task, elapsedSeconds, stuckNote } = pendingSession
     setTasks(
-      await updateTask(date, task.id, {
+      await updateTask(date, task.id, buildCompletionUpdates(task, {
         completedQuestionCount: payload.completedQuestionCount,
         correctCount: payload.correctCount,
         wrongCount: payload.wrongCount,
@@ -231,8 +312,7 @@ export default function TodayPage() {
         emotion: payload.emotion,
         notes: payload.note,
         status: payload.status,
-        completedAt: new Date().toISOString(),
-      }),
+      })),
     )
     await addSession({
       taskId: task.id,
@@ -251,11 +331,10 @@ export default function TodayPage() {
 
   const handleSubmitReflection = async (answers) => {
     setTasks(
-      await updateTask(date, focusTaskId, {
+      await updateTask(date, focusTaskId, buildCompletionUpdates(focusTask, {
         status: 'tamamlandi',
-        completedAt: new Date().toISOString(),
         reflectionAnswers: answers,
-      }),
+      })),
     )
     setFocusTaskId(null)
   }
@@ -339,7 +418,9 @@ export default function TodayPage() {
         <div className="min-w-0">
           <TaskListSection
             tasks={listTasks}
+            onStartTimer={handleStartTimer}
             onComplete={handleCompleteInline}
+            onUndoComplete={handleUndoComplete}
             onPartialComplete={handlePartialComplete}
             onReschedule={(task) => setReschedulingTask(task)}
             onHelp={handleHelp}

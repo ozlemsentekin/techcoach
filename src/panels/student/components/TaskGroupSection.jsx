@@ -7,6 +7,9 @@ export default function TaskGroupSection({
   subject,
   tasks,
   onOpenDetails,
+  onStartTimer,
+  onCompleteTask,
+  onUndoComplete,
   showLessonLabel = false,
   getLessonLabel,
   emphasizeTime = false,
@@ -44,6 +47,9 @@ export default function TaskGroupSection({
               task={task}
               lessonLabel={getLessonLabel ? getLessonLabel(task) : subject}
               onOpenDetails={onOpenDetails}
+              onStartTimer={onStartTimer}
+              onCompleteTask={onCompleteTask}
+              onUndoComplete={onUndoComplete}
               showLessonLabel={showLessonLabel}
               emphasizeTime={emphasizeTime}
             />

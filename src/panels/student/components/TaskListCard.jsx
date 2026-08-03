@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   ArrowRight,
   Circle,
@@ -13,7 +14,7 @@ import {
 } from 'lucide-react'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { parseAssignmentDetails } from '../../../utils/assignmentDetails'
-import { daysLate, formatDateShort } from '../../../utils/time'
+import { daysLate, formatDateShort, formatSecondsAsTimer } from '../../../utils/time'
 import { SUBJECT_STYLES, DEFAULT_SUBJECT_STYLE } from './subjectStyles'
 
 const STATUS_ICONS = { Circle, Timer, CheckCircle2, Eye, HelpCircle, RotateCcw, AlertTriangle }
@@ -28,6 +29,7 @@ const STATUS_TONE_CLASSES = {
 }
 
 const BREAK_TASK_TYPES = new Set(['mola', 'dinlenme', 'yemek', 'yemek-dinlenme'])
+const ACTIVITY_TASK_TYPES = new Set(['serbest-zaman', 'sosyal-aktivite', 'spor'])
 const BREAK_STYLE = { text: 'text-panel-sage', soft: 'bg-panel-sage-soft', border: 'border-l-panel-sage' }
 const FREE_TIME_STYLE = { text: 'text-panel-accent', soft: 'bg-panel-accent-soft', border: 'border-l-panel-accent' }
 
@@ -59,20 +61,49 @@ function getSecondaryItems(details) {
   return []
 }
 
-export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLessonLabel = true, emphasizeTime = false }) {
+function isTimerRunning(task) {
+  return Boolean(task.timerStartedAt) && !task.timerStoppedAt && !['tamamlandi', 'kismen-tamamlandi', 'yeniden-planlandi'].includes(task.status)
+}
+
+function getElapsedSeconds(task, nowMs) {
+  if (task.timerElapsedSeconds !== undefined) return task.timerElapsedSeconds
+  if (!isTimerRunning(task)) return 0
+
+  const startedMs = new Date(task.timerStartedAt).getTime()
+  if (!Number.isFinite(startedMs)) return 0
+
+  return Math.max(0, Math.floor((nowMs - startedMs) / 1000))
+}
+
+function shouldOpenCompletionFlow(task) {
+  return task.resourceType === 'soru_bankasi' || task.resourceType === 'okuma_kitabi'
+}
+
+export default function TaskListCard({
+  task,
+  lessonLabel,
+  onOpenDetails,
+  onStartTimer,
+  onCompleteTask,
+  onUndoComplete,
+  showLessonLabel = true,
+  emphasizeTime = false,
+}) {
   const isBreakTask = BREAK_TASK_TYPES.has(task.taskType)
   const isFreeTimeTask = task.taskType === 'serbest-zaman'
+  const isActivityTask = ACTIVITY_TASK_TYPES.has(task.taskType)
   const subjectStyle = isBreakTask
     ? BREAK_STYLE
-    : isFreeTimeTask
+    : isActivityTask
       ? FREE_TIME_STYLE
       : SUBJECT_STYLES[task.subject] || DEFAULT_SUBJECT_STYLE
   const details = parseAssignmentDetails(task)
   const overdueDays = daysLate(task.date)
   const isActive = task.status === 'bekliyor' || task.status === 'devam-ediyor' || task.status === 'yardim-bekliyor'
+  const isOverdueIncomplete = overdueDays > 0 && !['tamamlandi', 'yeniden-planlandi'].includes(task.status)
 
   let status = getAssignmentStatus(task)
-  if (isActive && overdueDays > 0) {
+  if (isOverdueIncomplete) {
     status = { ...status, label: 'Gecikti', tone: 'red', icon: 'AlertTriangle' }
   }
   const StatusIcon = STATUS_ICONS[status.icon]
@@ -86,7 +117,30 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
   const secondaryItems = getSecondaryItems(details)
   const displayLessonLabel = String(lessonLabel || '').toLocaleUpperCase('tr-TR')
   const isCompletedStatus = status.filterKey === 'done'
-  const actionLabel = isBreakTask ? 'Mola Detayı' : 'İşlem Yap'
+  const showUndoButton = isCompletedStatus && Boolean(onUndoComplete)
+  const showQuickFinishButton = (isBreakTask || isActivityTask) && isActive && !isCompletedStatus && Boolean(onCompleteTask)
+  const showActionButton = !isActivityTask && !isBreakTask
+  const showActionColumn = showActionButton || showUndoButton
+  const showTimerControl =
+    showActionButton &&
+    task.taskType === 'odev' &&
+    task.resourceType === 'soru_bankasi' &&
+    !['tamamlandi', 'yeniden-planlandi'].includes(task.status)
+  const timerRunning = isTimerRunning(task)
+  const [nowMs, setNowMs] = useState(0)
+  const elapsedSeconds = getElapsedSeconds(task, nowMs)
+
+  useEffect(() => {
+    if (!timerRunning) return undefined
+
+    const updateNow = () => setNowMs(Date.now())
+    const timeout = window.setTimeout(updateNow, 0)
+    const interval = window.setInterval(updateNow, 1000)
+    return () => {
+      window.clearTimeout(timeout)
+      window.clearInterval(interval)
+    }
+  }, [timerRunning])
 
   const handleCardKeyDown = (event) => {
     if (!isFreeTimeTask) return
@@ -94,6 +148,25 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
 
     event.preventDefault()
     onOpenDetails(task)
+  }
+
+  const handlePrimaryAction = () => {
+    if (shouldOpenCompletionFlow(task) || !onCompleteTask) {
+      onOpenDetails(task)
+      return
+    }
+
+    onCompleteTask(task)
+  }
+
+  const handleUndoComplete = (event) => {
+    event.stopPropagation()
+    onUndoComplete(task)
+  }
+
+  const handleQuickFinish = (event) => {
+    event.stopPropagation()
+    onCompleteTask(task)
   }
 
   return (
@@ -104,9 +177,17 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
       onKeyDown={handleCardKeyDown}
       aria-label={isFreeTimeTask ? `${task.title} detayını aç` : undefined}
       className={`grid gap-4 border-l-4 ${subjectStyle.border} px-4 py-4 transition-colors sm:px-5 lg:items-center ${
-        isFreeTimeTask ? 'lg:grid-cols-[minmax(0,1fr)] cursor-pointer bg-panel-accent-soft/35 hover:bg-panel-accent-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-accent' : 'lg:grid-cols-[minmax(0,1fr)_180px_auto]'
+        showQuickFinishButton || (showUndoButton && !showActionButton)
+          ? 'lg:grid-cols-[minmax(0,1fr)_auto]'
+          : isActivityTask || isBreakTask
+          ? 'lg:grid-cols-[minmax(0,1fr)]'
+          : 'lg:grid-cols-[minmax(0,1fr)_180px_auto]'
       } ${
-        isBreakTask ? 'bg-panel-sage-soft/35 hover:bg-panel-sage-soft/60' : !isFreeTimeTask ? 'bg-panel-surface hover:bg-panel-surface-soft/70' : ''
+        isActivityTask ? 'bg-panel-accent-soft/35 hover:bg-panel-accent-soft/60' : ''
+      } ${
+        isFreeTimeTask ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-accent' : ''
+      } ${
+        isBreakTask ? 'bg-panel-sage-soft/35 hover:bg-panel-sage-soft/60' : !isActivityTask ? 'bg-panel-surface hover:bg-panel-surface-soft/70' : ''
       }`}
     >
       <div className="min-w-0">
@@ -150,7 +231,9 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
           ) : null}
         </div>
 
-        <p className="mt-3 line-clamp-2 text-base font-bold text-panel-text">{getPrimaryText(task, details)}</p>
+        <p className={`mt-3 line-clamp-2 text-base font-bold ${isOverdueIncomplete ? 'text-panel-red' : 'text-panel-text'}`}>
+          {getPrimaryText(task, details)}
+        </p>
 
         {secondaryItems.length > 0 ? (
           <div className="mt-1.5 space-y-0.5">
@@ -179,7 +262,7 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
               <span className="font-semibold text-panel-text">Kaldığı Sayfa:</span> {task.currentPageNumber}
             </span>
           ) : null}
-          {isActive && overdueDays > 0 ? <span className="font-semibold text-panel-red">{overdueDays} gün gecikme</span> : null}
+          {isOverdueIncomplete ? <span className="font-semibold text-panel-red">{overdueDays} gün gecikme</span> : null}
         </div>
       </div>
 
@@ -196,24 +279,66 @@ export default function TaskListCard({ task, lessonLabel, onOpenDetails, showLes
           </div>
           <span className="self-end text-xs font-bold text-student-theme-text">%{progressPct}</span>
         </div>
-      ) : !isFreeTimeTask ? (
+      ) : showActionButton ? (
         <div className="hidden lg:block" />
       ) : null}
 
-      {!isFreeTimeTask ? (
+      {showActionColumn ? (
+        <div className="flex min-w-36 shrink-0 flex-col gap-2">
+          {showTimerControl ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (!timerRunning && onStartTimer) onStartTimer(task)
+              }}
+              aria-label={`${task.title} - Sayaç Başlat`}
+              disabled={timerRunning || !onStartTimer}
+              className={`inline-flex h-9 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
+                timerRunning
+                  ? 'border-student-theme-primary/30 bg-student-theme-soft text-student-theme-text'
+                  : 'border-student-theme-primary/30 bg-panel-surface text-student-theme-text hover:bg-student-theme-soft'
+              }`}
+            >
+              <Timer size={14} aria-hidden="true" />
+              {timerRunning ? formatSecondsAsTimer(elapsedSeconds) : 'Sayaç Başlat'}
+            </button>
+          ) : task.timerElapsedSeconds ? (
+            <span className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-panel-surface-soft px-3 text-xs font-semibold text-panel-text-muted">
+              <Timer size={14} aria-hidden="true" />
+              {formatSecondsAsTimer(elapsedSeconds)}
+            </span>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={showUndoButton ? handleUndoComplete : handlePrimaryAction}
+            aria-label={`${task.title} - ${showUndoButton ? 'Geri Al' : 'Tamamla'}`}
+            className={`inline-flex h-10 min-w-32 shrink-0 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.98] ${
+              showUndoButton
+                ? 'border-panel-red/25 bg-panel-surface text-panel-red hover:bg-panel-red-soft focus-visible:outline-panel-red'
+                : 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text hover:border-student-theme-hover hover:bg-student-theme-hover focus-visible:outline-student-theme-primary'
+            }`}
+          >
+            {showUndoButton ? <RotateCcw size={16} aria-hidden="true" /> : null}
+            {showUndoButton ? 'Geri Al' : 'Tamamla'}
+            {!showUndoButton ? <ArrowRight size={16} aria-hidden="true" /> : null}
+          </button>
+        </div>
+      ) : null}
+
+      {showQuickFinishButton ? (
         <button
           type="button"
-          onClick={() => onOpenDetails(task)}
-          aria-label={`${task.title} - ${actionLabel}`}
-          className={`inline-flex h-10 min-w-32 shrink-0 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.98] ${
+          onClick={handleQuickFinish}
+          aria-label={`${task.title} - Bitir`}
+          className={`inline-flex h-10 min-w-28 shrink-0 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.98] ${
             isBreakTask
-              ? 'border-panel-sage bg-panel-sage text-white hover:border-panel-sage hover:bg-panel-sage/90 focus-visible:outline-panel-sage'
-              : 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text hover:border-student-theme-hover hover:bg-student-theme-hover focus-visible:outline-student-theme-primary'
+              ? 'border-panel-sage bg-panel-sage text-white hover:bg-panel-sage/90 focus-visible:outline-panel-sage'
+              : 'border-panel-accent bg-panel-accent text-white hover:bg-panel-accent/90 focus-visible:outline-panel-accent'
           }`}
         >
-          {isBreakTask ? <BreakTypeIcon taskType={task.taskType} size={16} /> : null}
-          {actionLabel}
-          {!isBreakTask ? <ArrowRight size={16} aria-hidden="true" /> : null}
+          <CheckCircle2 size={16} aria-hidden="true" />
+          Bitir
         </button>
       ) : null}
     </article>
