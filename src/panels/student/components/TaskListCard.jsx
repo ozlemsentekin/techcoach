@@ -55,7 +55,7 @@ function getPrimaryText(task, details) {
 
 function getSecondaryItems(details) {
   if (details.testGroups.length) {
-    return details.testGroups.slice(0, 3).map((item) => {
+    return details.testGroups.map((item) => {
       if (item.topic && item.testName) return `${item.topic}: ${item.testName}`
       return item.topic || item.testName
     })
@@ -410,20 +410,14 @@ export default function TaskListCard({
           {secondaryItems.length > 0 ? (
             <div className="mt-1.5 space-y-0.5 sm:mt-2 sm:space-y-1">
               {secondaryItems.map((item, index) => (
-                <p key={`${task.id}-detail-${index}`} className="line-clamp-1 text-xs leading-snug text-panel-text-muted sm:text-sm sm:leading-relaxed">
+                <p key={`${task.id}-detail-${index}`} className="text-xs leading-snug text-panel-text-muted sm:text-sm sm:leading-relaxed">
                   {item}
-                  {details.testGroups.length > 3 && index === secondaryItems.length - 1 ? '...' : ''}
                 </p>
               ))}
             </div>
           ) : null}
 
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-panel-text-muted sm:mt-3 sm:gap-2 sm:text-xs">
-            {total > 0 ? (
-              <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-surface-soft px-2 py-0.5 font-medium sm:min-h-8 sm:px-2.5 sm:py-1">
-                <span className="font-semibold text-panel-text">{isReading ? 'Sayfa' : 'Soru'}:</span>&nbsp;{total} {unit}
-              </span>
-            ) : null}
             {isReading && task.currentPageNumber ? (
               <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-surface-soft px-2 py-0.5 font-medium sm:min-h-8 sm:px-2.5 sm:py-1">
                 <span className="font-semibold text-panel-text">Kaldığı Sayfa:</span>&nbsp;{task.currentPageNumber}

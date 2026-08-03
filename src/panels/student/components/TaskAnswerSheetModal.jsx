@@ -33,7 +33,7 @@ function ResultBadge({ result }) {
 function TestSection({ test, answers, result, onSelect }) {
   const locked = Boolean(result)
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-panel-border p-4">
+    <div className="flex flex-col gap-1.5 rounded-2xl border border-panel-border p-2.5">
       <h3
         className="truncate text-xs font-semibold text-panel-text"
         title={test.topicName ? `${test.name} · ${test.topicName}` : test.name}
@@ -53,12 +53,12 @@ function TestSection({ test, answers, result, onSelect }) {
           return (
             <div
               key={key}
-              className={`flex items-center gap-2 rounded-lg px-2 py-0.5 transition-colors ${
+              className={`flex items-center gap-1 rounded-lg px-1 py-0.5 transition-colors ${
                 isWrong ? 'bg-panel-red-soft' : ''
               }`}
             >
-              <span className="w-6 shrink-0 text-right text-sm font-bold text-panel-text-muted">{orderNo}.</span>
-              <div className="flex gap-1.5">
+              <span className="w-5 shrink-0 text-right text-sm font-bold text-panel-text-muted">{orderNo}.</span>
+              <div className="flex gap-1">
                 {OPTIONS.map((option) => {
                   const isSelected = selected === option
                   const isCorrectReveal = isWrong && !isSelected && option === correctLabel
@@ -70,7 +70,7 @@ function TestSection({ test, answers, result, onSelect }) {
                       aria-pressed={isSelected}
                       aria-label={`${orderNo}. soru için ${option} şıkkı`}
                       onClick={() => onSelect(orderNo, isSelected ? null : option)}
-                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
                         locked ? 'cursor-not-allowed' : ''
                       } ${
                         isSelected
@@ -170,7 +170,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 md:items-center">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-t-3xl border border-panel-border bg-panel-surface md:max-h-[85vh] md:max-w-4xl md:rounded-2xl xl:max-w-6xl">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-t-3xl border border-panel-border bg-panel-surface md:max-h-[85vh] md:max-w-4xl md:rounded-2xl xl:max-w-6xl 2xl:max-w-7xl">
         <div className="flex items-center justify-between border-b border-panel-border p-5">
           <div>
             <h2 className="text-lg font-semibold text-panel-text">Cevap Kağıdı</h2>
@@ -183,7 +183,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 overflow-y-auto p-3">
           {error ? <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div> : null}
 
           {tests === null ? (
@@ -191,7 +191,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
           ) : tests.length === 0 ? (
             <p className="text-sm text-panel-text-muted">Bu göreve bağlı test bulunamadı.</p>
           ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
               {tests.map((test) => (
                 <TestSection
                   key={test.id}
