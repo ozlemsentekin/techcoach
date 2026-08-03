@@ -6,6 +6,7 @@ export const STUDENT_PRIMARY_NAV = [
 ]
 
 export const STUDENT_MORE_NAV = [
+  { to: '/student/teachers', label: 'Öğretmenlerim', icon: 'GraduationCap' },
   { to: '/student/homework', label: 'Ödevlerim', icon: 'NotebookPen' },
   { to: '/student/mistakes', label: 'Hata Defterim', icon: 'AlertCircle' },
 ]

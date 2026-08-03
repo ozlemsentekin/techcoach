@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BookOpen, Check, Search, Users, X } from 'lucide-react'
+import { BookOpen, Check, GraduationCap, Search, Users, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
@@ -7,6 +7,7 @@ import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
 import DataTable from '../../ui/DataTable'
 import { MotionDiv } from '../../ui/motion'
+import StudentTeacherModal from '../components/StudentTeacherModal'
 
 const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{12,72}$/
 const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -371,6 +372,7 @@ export default function StudentsPage() {
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [resourceModalStudent, setResourceModalStudent] = useState(null)
+  const [teacherModalStudent, setTeacherModalStudent] = useState(null)
 
   const loadStudents = () => {
     authRequest('/api/parent/students', { method: 'GET' })
@@ -392,6 +394,12 @@ export default function StudentsPage() {
       (current || []).map((student) => (student.id === studentId ? { ...student, resourceCount } : student)),
     )
     setResourceModalStudent(null)
+  }
+
+  const handleTeachersSaved = (studentId, teacherCount) => {
+    setStudents((current) =>
+      (current || []).map((student) => (student.id === studentId ? { ...student, teacherCount } : student)),
+    )
   }
 
   return (
@@ -421,12 +429,13 @@ export default function StudentsPage() {
       ) : (
         <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <DataTable>
-            <table className="w-full min-w-[760px] text-left">
+            <table className="w-full min-w-[920px] text-left">
               <thead>
                 <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#655e94]">
                   <th className="px-4 py-3">Ad Soyad</th>
                   <th className="px-4 py-3">E-posta</th>
                   <th className="px-4 py-3">Kaynak</th>
+                  <th className="px-4 py-3">Öğretmen</th>
                   <th className="px-4 py-3">Kayıt Tarihi</th>
                   <th className="px-4 py-3">Son Giriş</th>
                   <th className="px-4 py-3 text-right">İşlemler</th>
@@ -441,22 +450,37 @@ export default function StudentsPage() {
                       {student.resourceCount || 0} kaynak
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">
+                      {student.teacherCount || 0} öğretmen
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">
                       {formatDate(student.createdAt)}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">
                       {formatDate(student.lastLoginAt)}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="h-[34px] rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#f8f7fb]"
-                        onClick={() => setResourceModalStudent(student)}
-                      >
-                        <BookOpen size={14} className="mr-1.5 inline" aria-hidden="true" />
-                        Kaynak Ekle
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="h-[34px] rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#f8f7fb]"
+                          onClick={() => setTeacherModalStudent(student)}
+                        >
+                          <GraduationCap size={14} className="mr-1.5 inline" aria-hidden="true" />
+                          Öğretmen Ekle
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="h-[34px] rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#f8f7fb]"
+                          onClick={() => setResourceModalStudent(student)}
+                        >
+                          <BookOpen size={14} className="mr-1.5 inline" aria-hidden="true" />
+                          Kaynak Ekle
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -472,6 +496,13 @@ export default function StudentsPage() {
           student={resourceModalStudent}
           onSaved={handleResourcesSaved}
           onClose={() => setResourceModalStudent(null)}
+        />
+      ) : null}
+      {teacherModalStudent ? (
+        <StudentTeacherModal
+          student={teacherModalStudent}
+          onSaved={handleTeachersSaved}
+          onClose={() => setTeacherModalStudent(null)}
         />
       ) : null}
     </div>

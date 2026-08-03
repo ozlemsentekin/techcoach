@@ -10,6 +10,7 @@ const CoursesPage = lazy(() => import('./pages/CoursesPage'))
 const HomeworkPage = lazy(() => import('./pages/HomeworkPage'))
 const MistakesPage = lazy(() => import('./pages/MistakesPage'))
 const ProgressPage = lazy(() => import('./pages/ProgressPage'))
+const TeachersPage = lazy(() => import('./pages/TeachersPage'))
 
 function pageElement(Page) {
   return (
@@ -28,6 +29,7 @@ export default function StudentApp() {
           <Route path="today" element={pageElement(TodayPage)} />
           <Route path="weekly-plan" element={pageElement(WeeklyPlanPage)} />
           <Route path="courses" element={pageElement(CoursesPage)} />
+          <Route path="teachers" element={pageElement(TeachersPage)} />
           <Route path="homework" element={pageElement(HomeworkPage)} />
           <Route path="mistakes" element={pageElement(MistakesPage)} />
           <Route path="progress" element={pageElement(ProgressPage)} />

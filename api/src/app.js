@@ -8,6 +8,9 @@ const {
   exitStudentHandler,
   listStudentResourceBooksHandler,
   updateStudentResourceBooksHandler,
+  listStudentTeachersForParentHandler,
+  createStudentTeacherHandler,
+  listStudentTeachersForPanelHandler,
 } = require('./students')
 const {
   listSubjectsHandler,
@@ -164,6 +167,20 @@ app.http('parent-student-resource-books-update', {
   handler: updateStudentResourceBooksHandler,
 })
 
+app.http('parent-student-teachers-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'parent/students/{studentId}/teachers',
+  handler: listStudentTeachersForParentHandler,
+})
+
+app.http('parent-student-teachers-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'parent/students/{studentId}/teachers',
+  handler: createStudentTeacherHandler,
+})
+
 app.http('parent-return', {
   authLevel: 'anonymous',
   methods: ['POST'],
@@ -288,6 +305,13 @@ app.http('panel-resource-books', {
   methods: ['GET'],
   route: 'panel/resource-books',
   handler: listResourceBooksForPanelHandler,
+})
+
+app.http('panel-teachers-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/teachers',
+  handler: listStudentTeachersForPanelHandler,
 })
 
 app.http('panel-admin-resource-book-topics-list', {

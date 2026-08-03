@@ -12,6 +12,7 @@ const DOT_CLASSES = [
 
 const WORKED_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
 const READING_RESOURCE_TYPE = 'okuma_kitabi'
+const HOMEWORK_TASK_TYPE = 'odev'
 
 function getSubjectLabel(task) {
   return task.subject || TASK_TYPES[task.taskType]?.label || 'Genel'
@@ -83,9 +84,10 @@ function SubjectDetailList({ items, formatValue, columns = 2 }) {
 
 export default function StudentStatsCards({ tasks = [] }) {
   const workedTasks = tasks.filter((task) => WORKED_STATUSES.has(task.status))
+  const workedHomeworkTasks = workedTasks.filter((task) => task.taskType === HOMEWORK_TASK_TYPE)
 
   const timeBySubject = aggregateBySubject(
-    workedTasks.filter((task) => task.resourceType !== READING_RESOURCE_TYPE),
+    workedHomeworkTasks.filter((task) => task.resourceType !== READING_RESOURCE_TYPE),
     (task) => task.durationMinutes,
   )
   const totalMinutes = timeBySubject.reduce((sum, item) => sum + item.value, 0)

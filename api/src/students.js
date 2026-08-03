@@ -11,6 +11,28 @@ const {
   verifySessionToken,
 } = require('./security')
 const { sanitizeUser } = require('./auth')
+const { requireStudentContext } = require('./studentScope')
+
+const TEACHER_TYPES = new Set(['ozel_ogretmen', 'okul_ogretmeni'])
+const TEACHER_TYPE_LABELS = {
+  ozel_ogretmen: 'Özel Öğretmen',
+  okul_ogretmeni: 'Okul Öğretmeni',
+}
+const SCHEDULE_DAYS = new Set(['pazartesi', 'sali', 'carsamba', 'persembe', 'cuma', 'cumartesi', 'pazar'])
+const SCHEDULE_DAY_ALIASES = {
+  pazartesi: 'pazartesi',
+  sali: 'sali',
+  salı: 'sali',
+  carsamba: 'carsamba',
+  çarşamba: 'carsamba',
+  persembe: 'persembe',
+  perşembe: 'persembe',
+  cuma: 'cuma',
+  cumartesi: 'cumartesi',
+  pazar: 'pazar',
+}
+const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/
 
 function sanitizeStudent(record) {
   return {
@@ -20,6 +42,7 @@ function sanitizeStudent(record) {
     role: record.role,
     createdAt: record.created_at,
     resourceCount: Number(record.resource_count) || 0,
+    teacherCount: Number(record.teacher_count) || 0,
   }
 }
 
@@ -38,6 +61,127 @@ function sanitizeStudentResourceBook(record) {
     imageUrl: record.image_url || null,
     assigned: Boolean(record.assigned),
     assignedAt: record.assigned_at || null,
+  }
+}
+
+function parseScheduleJson(value) {
+  if (!value) return []
+
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function sanitizeStudentTeacher(record) {
+  return {
+    id: record.id,
+    studentId: record.student_id,
+    subjectId: record.subject_id,
+    subjectName: record.subject_name || null,
+    fullName: record.teacher_full_name,
+    phone: record.phone,
+    type: record.teacher_type,
+    typeLabel: TEACHER_TYPE_LABELS[record.teacher_type] || record.teacher_type,
+    schedule: parseScheduleJson(record.schedule_json),
+    createdAt: record.created_at,
+    updatedAt: record.updated_at,
+  }
+}
+
+function isGuid(value) {
+  return typeof value === 'string' && GUID_PATTERN.test(value.trim())
+}
+
+function minutesForTime(value) {
+  const [hours, minutes] = value.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+function normalizeTime(value) {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return TIME_PATTERN.test(trimmed) ? trimmed : null
+}
+
+function normalizeDay(value) {
+  if (typeof value !== 'string') return ''
+  return SCHEDULE_DAY_ALIASES[value.trim().toLocaleLowerCase('tr-TR')] || ''
+}
+
+function normalizeSchedule(value, teacherType) {
+  if (teacherType !== 'ozel_ogretmen') {
+    return { schedule: [] }
+  }
+
+  const entries = Array.isArray(value) ? value : []
+  if (entries.length > 7) {
+    return { error: 'En fazla 7 ders zamanı ekleyebilirsiniz.' }
+  }
+
+  const schedule = []
+  for (const entry of entries) {
+    const dayOfWeek = normalizeDay(entry?.dayOfWeek)
+    const startTime = normalizeTime(entry?.startTime)
+    const endTime = normalizeTime(entry?.endTime)
+    const hasValue = dayOfWeek || entry?.startTime || entry?.endTime
+
+    if (!hasValue) continue
+
+    if (!SCHEDULE_DAYS.has(dayOfWeek) || !startTime || !endTime) {
+      return { error: 'Ders günü ve saat aralığı geçerli olmalı.' }
+    }
+
+    if (minutesForTime(startTime) >= minutesForTime(endTime)) {
+      return { error: 'Ders başlangıç saati bitiş saatinden önce olmalı.' }
+    }
+
+    schedule.push({ dayOfWeek, startTime, endTime })
+  }
+
+  return { schedule }
+}
+
+function validateTeacherPayload(payload) {
+  if (!payload) {
+    return { error: 'Geçersiz istek gövdesi.' }
+  }
+
+  const fullName = payload.fullName?.trim()
+  if (!fullName || fullName.length < 3 || fullName.length > 120) {
+    return { error: 'Öğretmen ad soyadı 3-120 karakter arasında olmalı.' }
+  }
+
+  const subjectId = payload.subjectId?.trim()
+  if (!isGuid(subjectId)) {
+    return { error: 'Geçerli bir ders seçin.' }
+  }
+
+  const phone = payload.phone?.trim()
+  if (!phone || phone.length < 7 || phone.length > 30) {
+    return { error: 'Telefon bilgisi 7-30 karakter arasında olmalı.' }
+  }
+
+  const type = payload.type
+  if (!TEACHER_TYPES.has(type)) {
+    return { error: 'Geçerli bir öğretmen tipi seçin.' }
+  }
+
+  const scheduleResult = normalizeSchedule(payload.schedule, type)
+  if (scheduleResult.error) {
+    return { error: scheduleResult.error }
+  }
+
+  return {
+    value: {
+      fullName,
+      subjectId,
+      phone,
+      type,
+      schedule: scheduleResult.schedule,
+    },
   }
 }
 
@@ -99,6 +243,33 @@ async function fetchStudentResourceBooks(studentId) {
   return result.recordset.map(sanitizeStudentResourceBook)
 }
 
+async function fetchStudentTeachers(studentId) {
+  const requestDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+  })
+  const result = await requestDb.query(`
+    SELECT st.id, st.student_id, st.subject_id, s.name AS subject_name,
+           st.teacher_full_name, st.phone, st.teacher_type, st.schedule_json,
+           st.created_at, st.updated_at
+    FROM dbo.StudentTeachers st
+    LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
+    WHERE st.student_id = @studentId
+    ORDER BY s.name ASC, st.teacher_full_name ASC;
+  `)
+
+  return result.recordset.map(sanitizeStudentTeacher)
+}
+
+async function verifySubjectExists(subjectId) {
+  const subjectDb = await withRequest({
+    subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+  })
+  const result = await subjectDb.query(`
+    SELECT TOP 1 id FROM dbo.Subjects WHERE id = @subjectId;
+  `)
+  return Boolean(result.recordset[0])
+}
+
 async function listStudentsHandler(request) {
   try {
     const { error, parentId } = await requireParentSession(request)
@@ -111,10 +282,12 @@ async function listStudentsHandler(request) {
     })
     const result = await requestDb.query(`
       SELECT u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at,
-             COUNT(rb.id) AS resource_count
+             COUNT(DISTINCT rb.id) AS resource_count,
+             COUNT(DISTINCT st.id) AS teacher_count
       FROM dbo.Users u
       LEFT JOIN dbo.StudentResourceBooks srb ON srb.student_id = u.id
       LEFT JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id AND rb.is_active = 1
+      LEFT JOIN dbo.StudentTeachers st ON st.student_id = u.id
       WHERE u.parent_id = @parentId
       GROUP BY u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at
       ORDER BY u.created_at ASC;
@@ -177,7 +350,8 @@ async function createStudentHandler(request) {
 
     const result = await requestDb.query(`
       INSERT INTO dbo.Users (full_name, email, password_hash, role, parent_id, aydinlatma_accepted_at, kvkk_accepted_at)
-      OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.role, inserted.created_at, 0 AS resource_count
+      OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.role, inserted.created_at,
+             0 AS resource_count, 0 AS teacher_count
       VALUES (@fullName, @email, @passwordHash, @role, @parentId, @consentAt, @consentAt);
     `)
 
@@ -430,6 +604,124 @@ async function updateStudentResourceBooksHandler(request) {
   }
 }
 
+async function listStudentTeachersForParentHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const studentId = request.params.studentId
+    const ownsStudent = await verifyParentOwnsStudent(parentId, studentId)
+    if (!ownsStudent) {
+      return json(404, { error: 'Öğrenci bulunamadı.' })
+    }
+
+    const teachers = await fetchStudentTeachers(studentId)
+    return json(200, { teachers })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('listStudentTeachersForParentHandler failed', error)
+    return json(500, { error: 'Öğretmenler yüklenemedi.' })
+  }
+}
+
+async function createStudentTeacherHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const studentId = request.params.studentId
+    const ownsStudent = await verifyParentOwnsStudent(parentId, studentId)
+    if (!ownsStudent) {
+      return json(404, { error: 'Öğrenci bulunamadı.' })
+    }
+
+    const payload = await request.json().catch(() => null)
+    const validationResult = validateTeacherPayload(payload)
+    if (validationResult.error) {
+      return json(400, { error: validationResult.error })
+    }
+
+    const teacher = validationResult.value
+    const subjectExists = await verifySubjectExists(teacher.subjectId)
+    if (!subjectExists) {
+      return json(400, { error: 'Seçilen ders bulunamadı.' })
+    }
+
+    const requestDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      subjectId: { type: sql.UniqueIdentifier, value: teacher.subjectId },
+      createdByParentId: { type: sql.UniqueIdentifier, value: parentId },
+      fullName: { type: sql.NVarChar(120), value: teacher.fullName },
+      phone: { type: sql.NVarChar(30), value: teacher.phone },
+      teacherType: { type: sql.NVarChar(30), value: teacher.type },
+      scheduleJson: {
+        type: sql.NVarChar(sql.MAX),
+        value: teacher.type === 'ozel_ogretmen' && teacher.schedule.length ? JSON.stringify(teacher.schedule) : null,
+      },
+    })
+
+    const result = await requestDb.query(`
+      INSERT INTO dbo.StudentTeachers
+        (student_id, subject_id, created_by_parent_id, teacher_full_name, phone, teacher_type, schedule_json)
+      OUTPUT inserted.id
+      VALUES (@studentId, @subjectId, @createdByParentId, @fullName, @phone, @teacherType, @scheduleJson);
+    `)
+
+    const teachers = await fetchStudentTeachers(studentId)
+    const createdTeacherId = result.recordset[0]?.id
+    return json(201, {
+      teacher: teachers.find((item) => item.id === createdTeacherId) || null,
+      teachers,
+      teacherCount: teachers.length,
+    })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('createStudentTeacherHandler failed', error)
+    return json(500, { error: 'Öğretmen kaydı oluşturulamadı.' })
+  }
+}
+
+async function listStudentTeachersForPanelHandler(request) {
+  try {
+    const { error, studentId } = await requireStudentContext(request)
+    if (error) {
+      return error
+    }
+
+    const teachers = await fetchStudentTeachers(studentId)
+    return json(200, { teachers })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('listStudentTeachersForPanelHandler failed', error)
+    return json(500, { error: 'Öğretmenler yüklenemedi.' })
+  }
+}
+
 module.exports = {
   listStudentsHandler,
   createStudentHandler,
@@ -437,4 +729,7 @@ module.exports = {
   exitStudentHandler,
   listStudentResourceBooksHandler,
   updateStudentResourceBooksHandler,
+  listStudentTeachersForParentHandler,
+  createStudentTeacherHandler,
+  listStudentTeachersForPanelHandler,
 }
