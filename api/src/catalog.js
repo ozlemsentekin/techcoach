@@ -850,7 +850,7 @@ async function listResourceBookTopicTestsHandler(request) {
       ORDER BY created_at ASC;
     `)
 
-    return json(200, { tests: result.recordset.map(sanitizeResourceBookTopicTest) })
+    return json(200, { tests: result.recordset.map((record) => sanitizeResourceBookTopicTest(record)) })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
