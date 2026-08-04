@@ -108,6 +108,34 @@ function getBillingConfig() {
   }
 }
 
+function getSmsConfig() {
+  return {
+    netgsmUsercode: getRequiredEnv('NETGSM_USERCODE', {
+      placeholders: ['replace-with-netgsm-usercode'],
+    }),
+    netgsmPassword: getRequiredEnv('NETGSM_PASSWORD', {
+      placeholders: ['replace-with-netgsm-password'],
+    }),
+    netgsmHeader: getRequiredEnv('NETGSM_HEADER', {
+      placeholders: ['replace-with-netgsm-header'],
+    }),
+  }
+}
+
+function getCaptchaConfig() {
+  return {
+    turnstileSecretKey: getRequiredEnv('TURNSTILE_SECRET_KEY', {
+      placeholders: ['replace-with-turnstile-secret-key'],
+    }),
+  }
+}
+
+function isCaptchaConfigured() {
+  loadLocalSettings()
+  const value = process.env.TURNSTILE_SECRET_KEY
+  return Boolean(value) && value !== 'replace-with-turnstile-secret-key'
+}
+
 function isConfigError(error) {
   return error?.code === 'CONFIG_ERROR'
 }
@@ -118,6 +146,10 @@ module.exports = {
   getAuthConfig,
   getAnthropicConfig,
   getBillingConfig,
+  getSmsConfig,
+  getCaptchaConfig,
+  isCaptchaConfigured,
   getRuntimeConfig,
   isConfigError,
+  isProductionLike,
 }

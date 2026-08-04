@@ -1,61 +1,49 @@
-const bcrypt = require('bcryptjs')
+const crypto = require('crypto')
 const jwt = require('jsonwebtoken')
 const { getAuthConfig, getRuntimeConfig } = require('./config')
 
-const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{12,72}$/
+const TR_MOBILE_RULE = /^5\d{9}$/
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase()
 }
 
-function validateRegistrationInput(payload) {
-  const fullName = String(payload.fullName || '').trim()
-  const email = normalizeEmail(payload.email)
-  const password = String(payload.password || '')
-  const passwordRepeat = String(payload.passwordRepeat || '')
-  const acceptAydinlatma = payload.acceptAydinlatma === true
-  const acceptKvkk = payload.acceptKvkk === true
+// Kabul edilen girdiler: 5XXXXXXXXX, 05XXXXXXXXX, 905XXXXXXXXX, +905XXXXXXXXX.
+// Geçersizse null döner. Depolama biçimi her zaman E.164 (+905XXXXXXXXX).
+function normalizePhone(value) {
+  let digits = String(value || '').replace(/\D/g, '')
 
-  if (fullName.length < 3 || fullName.length > 120) {
-    return 'Ad soyad 3 ile 120 karakter arasında olmalı.'
+  if (digits.startsWith('90') && digits.length === 12) {
+    digits = digits.slice(2)
+  } else if (digits.startsWith('0') && digits.length === 11) {
+    digits = digits.slice(1)
   }
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 320) {
-    return 'Geçerli bir e-posta adresi girin.'
+  if (!TR_MOBILE_RULE.test(digits)) {
+    return null
   }
 
-  if (!PASSWORD_RULE.test(password)) {
-    return 'Şifre en az 12 karakter olmalı; büyük harf, küçük harf, rakam ve özel karakter içermelidir.'
-  }
-
-  if (password !== passwordRepeat) {
-    return 'Şifre tekrarı eşleşmiyor.'
-  }
-
-  if (!acceptAydinlatma || !acceptKvkk) {
-    return 'Devam etmek için aydınlatma ve KVKK onaylarını vermelisiniz.'
-  }
-
-  return null
+  return `+90${digits}`
 }
 
-function validateLoginInput(payload) {
-  const email = normalizeEmail(payload.email)
-  const password = String(payload.password || '')
+function generateOtpCode() {
+  return String(crypto.randomInt(100000, 1000000))
+}
 
-  if (!email || !password) {
-    return 'E-posta ve şifre zorunludur.'
+function hashOtpCode(code) {
+  return crypto.createHash('sha256').update(String(code)).digest('hex')
+}
+
+function verifyOtpCode(code, hash) {
+  const candidate = hashOtpCode(code)
+  const candidateBuffer = Buffer.from(candidate, 'hex')
+  const hashBuffer = Buffer.from(String(hash || ''), 'hex')
+
+  if (candidateBuffer.length !== hashBuffer.length) {
+    return false
   }
 
-  return null
-}
-
-async function hashPassword(password) {
-  return bcrypt.hash(password, 12)
-}
-
-async function verifyPassword(password, hash) {
-  return bcrypt.compare(password, hash)
+  return crypto.timingSafeEqual(candidateBuffer, hashBuffer)
 }
 
 function createSessionToken(user, options = {}) {
@@ -110,12 +98,12 @@ function isSessionError(error) {
 
 module.exports = {
   createSessionToken,
-  hashPassword,
+  generateOtpCode,
+  hashOtpCode,
   isSessionError,
   normalizeEmail,
+  normalizePhone,
   readSessionToken,
-  validateLoginInput,
-  validateRegistrationInput,
-  verifyPassword,
+  verifyOtpCode,
   verifySessionToken,
 }

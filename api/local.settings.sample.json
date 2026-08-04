@@ -7,6 +7,7 @@
     "AUTH_JWT_SECRET": "replace-with-a-32-byte-random-secret",
     "AUTH_COOKIE_NAME": "techcoach_session",
     "AUTH_COOKIE_SECURE": "false",
-    "REVENUECAT_WEBHOOK_AUTH_HEADER": "replace-with-the-revenuecat-webhook-auth-header"
+    "REVENUECAT_WEBHOOK_AUTH_HEADER": "replace-with-the-revenuecat-webhook-auth-header",
+    "TURNSTILE_SECRET_KEY": "replace-with-turnstile-secret-key"
   }
 }
