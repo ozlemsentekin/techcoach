@@ -1,6 +1,7 @@
 const { app } = require('@azure/functions')
-const { loginHandler, logoutHandler, meHandler, registerHandler } = require('./auth')
-const { listUsersHandler } = require('./admin')
+const { logoutHandler, meHandler } = require('./auth')
+const { requestOtpHandler, verifyOtpHandler } = require('./otp')
+const { listUsersHandler, updateUserHandler } = require('./admin')
 const {
   listStudentsHandler,
   createStudentHandler,
@@ -11,10 +12,13 @@ const {
   listStudentTeachersForParentHandler,
   listParentTeachersHandler,
   createStudentTeacherHandler,
+  updateStudentTeacherHandler,
   listTeacherResourceBooksForParentHandler,
   updateTeacherResourceBooksForParentHandler,
   listStudentTeachersForPanelHandler,
 } = require('./students')
+const { getStudentProfileHandler, updateStudentProfileHandler } = require('./studentProfile')
+const { listProvincesHandler, listDistrictsHandler, listSchoolsHandler } = require('./geo')
 const {
   listSubjectsHandler,
   listSubjectsForPanelHandler,
@@ -36,6 +40,10 @@ const {
   createQuestionHandler,
   listTestAnswerKeyHandler,
   setTestAnswerKeyHandler,
+  listSchoolsForAdminHandler,
+  createSchoolHandler,
+  updateSchoolHandler,
+  bulkImportSchoolsHandler,
 } = require('./catalog')
 const { extractQuestionsFromImageHandler } = require('./questionExtraction')
 const { listHomeworksHandler, createHomeworkHandler, updateHomeworkHandler, deleteHomeworkHandler } = require('./homework')
@@ -47,6 +55,7 @@ const {
   deleteTaskHandler,
   getTaskAnswerSheetHandler,
   saveTaskAnswersHandler,
+  removeTaskTestHandler,
   getWeeklyPlanStatusHandler,
   setWeeklyPlanStatusHandler,
 } = require('./tasks')
@@ -94,18 +103,18 @@ const {
   listGreetingRulesForPanelHandler,
 } = require('./content')
 
-app.http('auth-register', {
+app.http('auth-otp-request', {
   authLevel: 'anonymous',
   methods: ['POST'],
-  route: 'auth/register',
-  handler: registerHandler,
+  route: 'auth/otp/request',
+  handler: requestOtpHandler,
 })
 
-app.http('auth-login', {
+app.http('auth-otp-verify', {
   authLevel: 'anonymous',
   methods: ['POST'],
-  route: 'auth/login',
-  handler: loginHandler,
+  route: 'auth/otp/verify',
+  handler: verifyOtpHandler,
 })
 
 app.http('auth-me', {
@@ -134,6 +143,13 @@ app.http('panel-admin-users', {
   methods: ['GET'],
   route: 'panel-admin/users',
   handler: listUsersHandler,
+})
+
+app.http('panel-admin-users-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-admin/users/{userId}',
+  handler: updateUserHandler,
 })
 
 app.http('parent-students-list', {
@@ -192,6 +208,13 @@ app.http('parent-student-teachers-create', {
   handler: createStudentTeacherHandler,
 })
 
+app.http('parent-student-teacher-update', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'parent/students/{studentId}/teachers/{teacherId}',
+  handler: updateStudentTeacherHandler,
+})
+
 app.http('parent-student-teacher-resource-books-list', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -211,6 +234,69 @@ app.http('parent-return', {
   methods: ['POST'],
   route: 'parent/return',
   handler: exitStudentHandler,
+})
+
+app.http('parent-student-profile-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'parent/students/{studentId}/profile',
+  handler: getStudentProfileHandler,
+})
+
+app.http('parent-student-profile-update', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'parent/students/{studentId}/profile',
+  handler: updateStudentProfileHandler,
+})
+
+app.http('panel-geo-provinces-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/geo/provinces',
+  handler: listProvincesHandler,
+})
+
+app.http('panel-geo-districts-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/geo/districts',
+  handler: listDistrictsHandler,
+})
+
+app.http('panel-geo-schools-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/geo/schools',
+  handler: listSchoolsHandler,
+})
+
+app.http('panel-admin-schools-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-admin/schools',
+  handler: listSchoolsForAdminHandler,
+})
+
+app.http('panel-admin-schools-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-admin/schools',
+  handler: createSchoolHandler,
+})
+
+app.http('panel-admin-schools-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-admin/schools/{schoolId}',
+  handler: updateSchoolHandler,
+})
+
+app.http('panel-admin-schools-bulk-import', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-admin/schools/bulk-import',
+  handler: bulkImportSchoolsHandler,
 })
 
 app.http('panel-admin-subjects', {
@@ -512,6 +598,13 @@ app.http('panel-tasks-answers-save', {
   methods: ['PATCH'],
   route: 'panel/tasks/{taskId}/answers',
   handler: saveTaskAnswersHandler,
+})
+
+app.http('panel-tasks-test-remove', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel/tasks/{taskId}/tests/{testId}',
+  handler: removeTaskTestHandler,
 })
 
 app.http('panel-weekly-plan-status-get', {

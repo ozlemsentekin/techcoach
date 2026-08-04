@@ -3,11 +3,9 @@ const { isConfigError } = require('./config')
 const { clearSessionHeaders, createSessionHeaders, json } = require('./http')
 const {
   createSessionToken,
-  hashPassword,
   isSessionError,
   normalizeEmail,
   readSessionToken,
-  validateRegistrationInput,
   verifySessionToken,
 } = require('./security')
 const { sanitizeUser } = require('./auth')
@@ -472,34 +470,36 @@ async function createStudentHandler(request) {
       return json(400, { error: 'Geçersiz istek gövdesi.' })
     }
 
-    const acceptConsent = payload.acceptConsent === true
-    const validationError = validateRegistrationInput({
-      ...payload,
-      acceptAydinlatma: acceptConsent,
-      acceptKvkk: acceptConsent,
-    })
-    if (validationError) {
-      return json(400, { error: validationError })
+    const fullName = String(payload.fullName || '').trim()
+    if (fullName.length < 3 || fullName.length > 120) {
+      return json(400, { error: 'Ad soyad 3 ile 120 karakter arasında olmalı.' })
     }
 
-    const email = normalizeEmail(payload.email)
-    const passwordHash = await hashPassword(payload.password)
+    if (payload.acceptConsent !== true) {
+      return json(400, { error: 'Devam etmek için aydınlatma ve KVKK onaylarını vermelisiniz.' })
+    }
+
+    const rawEmail = normalizeEmail(payload.email)
+    const email = rawEmail || null
+    if (email && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 320)) {
+      return json(400, { error: 'Geçerli bir e-posta adresi girin.' })
+    }
+
     const now = new Date()
 
     const requestDb = await withRequest({
-      fullName: { type: sql.NVarChar(120), value: payload.fullName.trim() },
+      fullName: { type: sql.NVarChar(120), value: fullName },
       email: { type: sql.NVarChar(320), value: email },
-      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       role: { type: sql.NVarChar(20), value: 'ogrenci' },
       parentId: { type: sql.UniqueIdentifier, value: parentId },
       consentAt: { type: sql.DateTime2, value: now },
     })
 
     const result = await requestDb.query(`
-      INSERT INTO dbo.Users (full_name, email, password_hash, role, parent_id, aydinlatma_accepted_at, kvkk_accepted_at)
+      INSERT INTO dbo.Users (full_name, email, role, parent_id, aydinlatma_accepted_at, kvkk_accepted_at)
       OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.role, inserted.created_at,
              0 AS resource_count, 0 AS teacher_count
-      VALUES (@fullName, @email, @passwordHash, @role, @parentId, @consentAt, @consentAt);
+      VALUES (@fullName, @email, @role, @parentId, @consentAt, @consentAt);
     `)
 
     return json(201, { student: sanitizeStudent(result.recordset[0]) })
@@ -869,6 +869,70 @@ async function createStudentTeacherHandler(request) {
   }
 }
 
+async function updateStudentTeacherHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const studentId = request.params.studentId
+    const teacherId = request.params.teacherId
+    const ownsTeacher = await verifyParentOwnsTeacher(parentId, studentId, teacherId)
+    if (!ownsTeacher) {
+      return json(404, { error: 'Öğretmen bulunamadı.' })
+    }
+
+    const payload = await request.json().catch(() => null)
+    const validationResult = validateTeacherPayload(payload)
+    if (validationResult.error) {
+      return json(400, { error: validationResult.error })
+    }
+
+    const teacher = validationResult.value
+    const subjectExists = await verifySubjectExists(teacher.subjectId)
+    if (!subjectExists) {
+      return json(400, { error: 'Seçilen ders bulunamadı.' })
+    }
+
+    const requestDb = await withRequest({
+      teacherId: { type: sql.UniqueIdentifier, value: teacherId },
+      subjectId: { type: sql.UniqueIdentifier, value: teacher.subjectId },
+      fullName: { type: sql.NVarChar(120), value: teacher.fullName },
+      phone: { type: sql.NVarChar(30), value: teacher.phone },
+      teacherType: { type: sql.NVarChar(30), value: teacher.type },
+      scheduleJson: {
+        type: sql.NVarChar(sql.MAX),
+        value: teacher.type === 'ozel_ogretmen' && teacher.schedule.length ? JSON.stringify(teacher.schedule) : null,
+      },
+    })
+
+    await requestDb.query(`
+      UPDATE dbo.StudentTeachers
+      SET subject_id = @subjectId, teacher_full_name = @fullName, phone = @phone,
+          teacher_type = @teacherType, schedule_json = @scheduleJson, updated_at = SYSUTCDATETIME()
+      WHERE id = @teacherId;
+    `)
+
+    const teachers = await fetchStudentTeachers(studentId)
+    return json(200, {
+      teacher: teachers.find((item) => item.id === teacherId) || null,
+      teachers,
+    })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('updateStudentTeacherHandler failed', error)
+    return json(500, { error: 'Öğretmen bilgileri güncellenemedi.' })
+  }
+}
+
 async function listTeacherResourceBooksForParentHandler(request) {
   try {
     const { error, parentId } = await requireParentSession(request)
@@ -1021,7 +1085,10 @@ module.exports = {
   listStudentTeachersForParentHandler,
   listParentTeachersHandler,
   createStudentTeacherHandler,
+  updateStudentTeacherHandler,
   listTeacherResourceBooksForParentHandler,
   updateTeacherResourceBooksForParentHandler,
   listStudentTeachersForPanelHandler,
+  requireParentSession,
+  verifyParentOwnsStudent,
 }
