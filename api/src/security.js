@@ -1,4 +1,5 @@
 const crypto = require('crypto')
+const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const { getAuthConfig, getRuntimeConfig } = require('./config')
 
@@ -24,6 +25,22 @@ function normalizePhone(value) {
   }
 
   return `+90${digits}`
+}
+
+// Netgsm hesabı kurulana kadar geçici olarak: her kullanıcının şifresi telefon
+// numarasının son 6 hanesidir (kayıt anında otomatik atanır). Netgsm bağlandığında
+// gerçek SMS/OTP akışına dönülebilir; bu yardımcı yalnızca varsayılan şifreyi türetir,
+// kullanıcı isterse şifresini daha sonra değiştirebilir.
+function defaultPasswordForPhone(phone) {
+  return String(phone || '').replace(/\D/g, '').slice(-6)
+}
+
+async function hashPassword(password) {
+  return bcrypt.hash(password, 12)
+}
+
+async function verifyPassword(password, hash) {
+  return bcrypt.compare(password, hash)
 }
 
 function generateOtpCode() {
@@ -98,12 +115,15 @@ function isSessionError(error) {
 
 module.exports = {
   createSessionToken,
+  defaultPasswordForPhone,
   generateOtpCode,
   hashOtpCode,
+  hashPassword,
   isSessionError,
   normalizeEmail,
   normalizePhone,
   readSessionToken,
   verifyOtpCode,
+  verifyPassword,
   verifySessionToken,
 }

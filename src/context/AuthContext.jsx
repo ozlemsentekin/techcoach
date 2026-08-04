@@ -41,23 +41,20 @@ export function AuthProvider({ children }) {
     setAuthMessage('')
   }
 
-  const requestOtp = async (payload) => {
+  const login = async (payload) => {
     setAuthLoading(true)
     setAuthError('')
     setAuthMessage('')
 
     try {
-      const data = await authRequest('/api/auth/otp/request', {
+      const data = await authRequest('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify(payload),
         timeoutMs: 10000,
       })
-      setAuthMessage(
-        data.smsDisabled
-          ? 'Doğrulama kodu olarak telefon numaranızın son 6 hanesini girin.'
-          : 'Doğrulama kodu telefonunuza gönderildi.',
-      )
-      return data
+      setAuthUser(data.user)
+      setAuthMessage('Giriş başarılı.')
+      return data.user
     } catch (error) {
       setAuthError(error.message)
       throw error
@@ -66,21 +63,19 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const verifyOtp = async (payload) => {
+  const register = async (payload) => {
     setAuthLoading(true)
     setAuthError('')
     setAuthMessage('')
 
     try {
-      const data = await authRequest('/api/auth/otp/verify', {
+      const data = await authRequest('/api/auth/register', {
         method: 'POST',
         body: JSON.stringify(payload),
         timeoutMs: 10000,
       })
       setAuthUser(data.user)
-      setAuthMessage(
-        payload.purpose === 'register' ? 'Üyelik oluşturuldu ve giriş yapıldı.' : 'Giriş başarılı.',
-      )
+      setAuthMessage('Üyelik oluşturuldu ve giriş yapıldı.')
       return data.user
     } catch (error) {
       setAuthError(error.message)
@@ -136,8 +131,8 @@ export function AuthProvider({ children }) {
       authLoading,
       authError,
       authMessage,
-      requestOtp,
-      verifyOtp,
+      login,
+      register,
       logout,
       enterStudent,
       returnToParent,

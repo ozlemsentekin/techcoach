@@ -1,7 +1,7 @@
 const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
 const { clearSessionHeaders, json } = require('./http')
-const { isSessionError, normalizePhone } = require('./security')
+const { defaultPasswordForPhone, hashPassword, isSessionError, normalizePhone } = require('./security')
 const { requireParentSession, verifyParentOwnsStudent } = require('./students')
 
 const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -300,6 +300,10 @@ async function updateStudentProfileHandler(request) {
       return json(400, { error: geoValidation.error })
     }
 
+    // Öğrenci telefonu, veli profilinden ilk kez girildiğinde ya da değiştirildiğinde,
+    // öğrencinin bağımsız giriş şifresini de (telefonun son 6 hanesi) günceller.
+    const passwordHash = profile.phone ? await hashPassword(defaultPasswordForPhone(profile.phone)) : null
+
     const requestDb = await withRequest({
       studentId: { type: sql.UniqueIdentifier, value: studentId },
       provinceId: { type: sql.UniqueIdentifier, value: profile.provinceId },
@@ -309,6 +313,7 @@ async function updateStudentProfileHandler(request) {
       supportedTeam: { type: sql.NVarChar(100), value: profile.supportedTeam },
       grade: { type: sql.NVarChar(20), value: profile.grade },
       phone: { type: sql.NVarChar(30), value: profile.phone },
+      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       photoUrl: { type: sql.NVarChar(sql.MAX), value: profile.photoUrl },
       interestedSportsJson: {
         type: sql.NVarChar(sql.MAX),
@@ -322,7 +327,8 @@ async function updateStudentProfileHandler(request) {
 
     await requestDb.query(`
       UPDATE dbo.Users
-      SET phone_number = @phone
+      SET phone_number = @phone,
+          password_hash = CASE WHEN @phone IS NOT NULL THEN @passwordHash ELSE password_hash END
       WHERE id = @studentId;
 
       MERGE dbo.StudentProfiles AS target

@@ -1,6 +1,5 @@
 const { app } = require('@azure/functions')
-const { logoutHandler, meHandler } = require('./auth')
-const { requestOtpHandler, verifyOtpHandler } = require('./otp')
+const { loginHandler, logoutHandler, meHandler, registerHandler } = require('./auth')
 const { listUsersHandler, updateUserHandler } = require('./admin')
 const {
   listStudentsHandler,
@@ -103,18 +102,18 @@ const {
   listGreetingRulesForPanelHandler,
 } = require('./content')
 
-app.http('auth-otp-request', {
+app.http('auth-register', {
   authLevel: 'anonymous',
   methods: ['POST'],
-  route: 'auth/otp/request',
-  handler: requestOtpHandler,
+  route: 'auth/register',
+  handler: registerHandler,
 })
 
-app.http('auth-otp-verify', {
+app.http('auth-login', {
   authLevel: 'anonymous',
   methods: ['POST'],
-  route: 'auth/otp/verify',
-  handler: verifyOtpHandler,
+  route: 'auth/login',
+  handler: loginHandler,
 })
 
 app.http('auth-me', {

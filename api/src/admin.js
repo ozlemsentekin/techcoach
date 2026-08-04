@@ -1,7 +1,15 @@
 const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
 const { clearSessionHeaders, json } = require('./http')
-const { isSessionError, normalizeEmail, normalizePhone, readSessionToken, verifySessionToken } = require('./security')
+const {
+  defaultPasswordForPhone,
+  hashPassword,
+  isSessionError,
+  normalizeEmail,
+  normalizePhone,
+  readSessionToken,
+  verifySessionToken,
+} = require('./security')
 
 async function requireAdmin(request) {
   const token = readSessionToken(request)
@@ -111,17 +119,23 @@ async function updateUserHandler(request) {
       return json(400, { error: 'E-posta veya telefon numarasından en az biri girilmeli.' })
     }
 
+    // Telefon numarası (yeniden) girildiğinde, kullanıcının bağımsız giriş şifresini
+    // de (telefonun son 6 hanesi) günceller.
+    const passwordHash = phone ? await hashPassword(defaultPasswordForPhone(phone)) : null
+
     const requestDb = await withRequest({
       id: { type: sql.UniqueIdentifier, value: userId },
       fullName: { type: sql.NVarChar(120), value: fullName },
       email: { type: sql.NVarChar(320), value: email },
       phone: { type: sql.NVarChar(20), value: phone },
+      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       isAdmin: { type: sql.Bit, value: isAdmin },
     })
 
     const result = await requestDb.query(`
       UPDATE dbo.Users
-      SET full_name = @fullName, email = @email, phone_number = @phone, is_admin = @isAdmin
+      SET full_name = @fullName, email = @email, phone_number = @phone, is_admin = @isAdmin,
+          password_hash = CASE WHEN @phone IS NOT NULL THEN @passwordHash ELSE password_hash END
       WHERE id = @id;
 
       SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.parent_id,
