@@ -83,6 +83,23 @@ async function syncHomeworkCompletion(taskRecord) {
   `)
 }
 
+// Bir görevin soru bankası test seçimi (dolayısıyla target_question_count'u) değiştiğinde,
+// bağlı olduğu dbo.Homeworks.total_question_count'u da senkron tutar; aksi halde Ödevlerim
+// sayfası testi kaldırılmadan önceki eski soru toplamını göstermeye devam eder.
+async function syncHomeworkQuestionTotal(taskRecord) {
+  if (!taskRecord?.homework_id) return
+
+  const homeworkDb = await withRequest({
+    id: { type: sql.UniqueIdentifier, value: taskRecord.homework_id },
+    totalQuestionCount: { type: sql.Int, value: taskRecord.target_question_count ?? 0 },
+  })
+  await homeworkDb.query(`
+    UPDATE dbo.Homeworks
+    SET total_question_count = @totalQuestionCount
+    WHERE id = @id;
+  `)
+}
+
 const SELECT_TASK = `
   SELECT t.id, t.student_id, t.is_draft, t.date, t.title, t.task_type, t.homework_id, t.subject, t.topic, t.start_time, t.end_time, t.duration_minutes,
          t.timer_started_at, t.timer_stopped_at, t.timer_elapsed_seconds,
@@ -140,7 +157,88 @@ const FIELD_MAP = {
 }
 
 const STUDENT_ACTIVITY_ACTOR_ROLE = 'ogrenci'
+const SYSTEM_ACTIVITY_ACTOR_ROLE = 'sistem'
 const DONE_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
+const BREAK_TASK_TYPES = new Set(['mola', 'dinlenme', 'yemek', 'yemek-dinlenme'])
+// Bu proje şimdilik yalnızca TR kullanıcıları için çalışıyor; sunucu (Azure Functions) UTC'de
+// koşuyor ama date/start_time/end_time kolonları TR yerel duvar saati olarak saklanıyor.
+// TR, 2016'dan beri yaz saati uygulamıyor, bu yüzden sabit +3 saatlik ofset güvenli.
+const TR_UTC_OFFSET_MS = 3 * 60 * 60 * 1000
+
+// Süresi (date + end_time) geçmiş ama hâlâ 'bekliyor' durumundaki mola/dinlenme/yemek
+// görevlerini otomatik 'tamamlandi' yapar ve bunu 'sistem' aktörüyle loglar; böylece
+// "İşlem Logları" panelinde öğrencinin kendisinin mi yoksa sürenin dolmasıyla sistemin mi
+// bitirdiği ayırt edilebilir. Öğrencinin "Bitir" butonuyla yaptığı manuel tamamlama zaten
+// recordStudentTaskUpdateActivities üzerinden 'ogrenci' aktörüyle loglanıyor.
+async function autoCompleteExpiredBreaks({ studentId, date, isDraft }) {
+  if (isDraft) return
+
+  const selectDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    date: { type: sql.Date, value: date },
+  })
+  const pending = await selectDb.query(`
+    SELECT id, title, subject, task_type, date, start_time, end_time
+    FROM dbo.Tasks
+    WHERE student_id = @studentId AND date = @date AND is_draft = 0
+      AND task_type IN ('mola', 'dinlenme', 'yemek', 'yemek-dinlenme')
+      AND status = 'bekliyor';
+  `)
+
+  if (!pending.recordset.length) return
+
+  const nowLocal = new Date(Date.now() + TR_UTC_OFFSET_MS)
+  const todayLocalDate = nowLocal.toISOString().slice(0, 10)
+  const nowLocalTime = nowLocal.toISOString().slice(11, 16)
+
+  const expired = pending.recordset.filter((row) => {
+    if (!BREAK_TASK_TYPES.has(row.task_type)) return false
+    const rowDate = toISODate(row.date)
+    if (rowDate < todayLocalDate) return true
+    if (rowDate === todayLocalDate) return row.end_time <= nowLocalTime
+    return false
+  })
+
+  if (!expired.length) return
+
+  const completedAt = new Date().toISOString()
+
+  for (const row of expired) {
+    const updateDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: row.id },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      completedAt: { type: sql.DateTime2, value: completedAt },
+    })
+    const updateResult = await updateDb.query(`
+      UPDATE dbo.Tasks
+      SET status = 'tamamlandi', completed_at = @completedAt
+      WHERE id = @id AND student_id = @studentId AND status = 'bekliyor';
+    `)
+
+    if (!updateResult.rowsAffected[0]) continue
+
+    await recordTaskActivities({
+      studentId,
+      taskId: row.id,
+      actorRole: SYSTEM_ACTIVITY_ACTOR_ROLE,
+      actorUserId: null,
+      entries: [{
+        action: 'task_completed',
+        metadata: {
+          taskTitle: row.title || 'Görev',
+          taskSummary: row.title || 'Görev',
+          taskType: row.task_type,
+          subject: row.subject || undefined,
+          taskDate: toISODate(row.date),
+          startTime: row.start_time,
+          previousStatus: 'bekliyor',
+          nextStatus: 'tamamlandi',
+          auto: true,
+        },
+      }],
+    })
+  }
+}
 
 function hasPayloadField(payload, key) {
   return Object.prototype.hasOwnProperty.call(payload || {}, key)
@@ -310,6 +408,8 @@ async function listTasksHandler(request) {
     if (!date) {
       return json(400, { error: 'Tarih zorunludur.' })
     }
+
+    await autoCompleteExpiredBreaks({ studentId, date, isDraft })
 
     const requestDb = await withRequest({
       studentId: { type: sql.UniqueIdentifier, value: studentId },
@@ -506,11 +606,28 @@ async function deleteTaskHandler(request) {
       studentId: { type: sql.UniqueIdentifier, value: studentId },
     })
     const result = await requestDb.query(`
-      DELETE FROM dbo.Tasks WHERE id = @id AND student_id = @studentId;
+      DELETE FROM dbo.Tasks
+      OUTPUT deleted.homework_id
+      WHERE id = @id AND student_id = @studentId;
     `)
 
-    if (!result.rowsAffected[0]) {
+    if (!result.recordset.length) {
       return json(404, { error: 'Görev bulunamadı.' })
+    }
+
+    // Görev bir ödeve bağlıysa (homework_id dolu), arkasında kalan dbo.Homeworks satırı
+    // görünmeden dururdu ve aynı kaynak/test/tarih için yeni ödev eklemeyi "zaten eklenmiş"
+    // diyerek engellerdi (bkz. homework.js createHomeworkHandler'daki tekrar kontrolü).
+    // Bu yüzden bağlı ödev kaydını da burada temizliyoruz.
+    const homeworkId = result.recordset[0].homework_id
+    if (homeworkId) {
+      const homeworkDb = await withRequest({
+        id: { type: sql.UniqueIdentifier, value: homeworkId },
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+      })
+      await homeworkDb.query(`
+        DELETE FROM dbo.Homeworks WHERE id = @id AND student_id = @studentId;
+      `)
     }
 
     return json(200, { success: true })
@@ -765,6 +882,145 @@ async function saveTaskAnswersHandler(request) {
   }
 }
 
+// Öğrenilmediği anlaşılan tek bir testi (cevapları ve sonucuyla) görevden çıkarır. Test kaynağı
+// (dbo.ResourceBookTopicTests) silinmez, sadece bu görevin seçim/cevap/sonuç JSON'larından düşülür;
+// böylece kütüphanede kalır ve öğrenciye daha sonra ayrı bir görev olarak yeniden atanabilir.
+async function removeTaskTestHandler(request) {
+  try {
+    const taskId = request.params.taskId
+    const testId = request.params.testId
+    const payload = await request.json().catch(() => null)
+    const { error, studentId, actorRole, actorId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    if (error) {
+      return error
+    }
+
+    const taskDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const taskResult = await taskDb.query(`
+      SELECT selected_test_ids_json, answers_json, test_results_json, status, completed_at
+      FROM dbo.Tasks WHERE id = @id AND student_id = @studentId;
+    `)
+    const taskRecord = taskResult.recordset[0]
+    if (!taskRecord) {
+      return json(404, { error: 'Görev bulunamadı.' })
+    }
+
+    const selectedTestIds = taskRecord.selected_test_ids_json ? JSON.parse(taskRecord.selected_test_ids_json) : []
+    if (!selectedTestIds.includes(testId)) {
+      return json(404, { error: 'Test bu göreve bağlı değil.' })
+    }
+
+    const answers = taskRecord.answers_json ? JSON.parse(taskRecord.answers_json) : {}
+    const results = taskRecord.test_results_json ? JSON.parse(taskRecord.test_results_json) : {}
+    const remainingTestIds = selectedTestIds.filter((id) => id !== testId)
+    delete answers[testId]
+    delete results[testId]
+
+    let questionCountByTestId = new Map()
+    if (remainingTestIds.length) {
+      const testBindings = {}
+      const testPlaceholders = remainingTestIds.map((id, index) => {
+        testBindings[`test${index}`] = { type: sql.UniqueIdentifier, value: id }
+        return `@test${index}`
+      })
+      const testsDb = await withRequest(testBindings)
+      const testsResult = await testsDb.query(`
+        SELECT id, question_count FROM dbo.ResourceBookTopicTests WHERE id IN (${testPlaceholders.join(', ')});
+      `)
+      questionCountByTestId = new Map(testsResult.recordset.map((row) => [row.id, row.question_count]))
+    }
+
+    let totalCompleted = 0
+    let totalCorrect = 0
+    let totalWrong = 0
+    let totalBlank = 0
+    let allGraded = remainingTestIds.length > 0
+
+    remainingTestIds.forEach((id) => {
+      const questionCount = questionCountByTestId.get(id) || 0
+      const answeredCount = Object.keys(answers[id] || {}).length
+      totalCompleted += Math.min(answeredCount, questionCount)
+
+      const result = results[id]
+      if (result) {
+        totalCorrect += Number(result.correct) || 0
+        totalWrong += Number(result.wrong) || 0
+        totalBlank += Number(result.blank) || 0
+      } else {
+        allGraded = false
+      }
+    })
+
+    const targetQuestionCount = remainingTestIds.reduce((sum, id) => sum + (questionCountByTestId.get(id) || 0), 0)
+    const nextStatus = remainingTestIds.length === 0 ? 'bekliyor' : allGraded ? 'tamamlandi' : totalCompleted > 0 ? 'devam-ediyor' : 'bekliyor'
+
+    const updateDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      selectedTestIdsJson: { type: sql.NVarChar(sql.MAX), value: remainingTestIds.length ? JSON.stringify(remainingTestIds) : null },
+      answersJson: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(answers) },
+      testResultsJson: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(results) },
+      targetQuestionCount: { type: sql.Int, value: targetQuestionCount },
+      completedQuestionCount: { type: sql.Int, value: totalCompleted },
+      correctCount: { type: sql.Int, value: totalCorrect },
+      wrongCount: { type: sql.Int, value: totalWrong },
+      blankCount: { type: sql.Int, value: totalBlank },
+      status: { type: sql.NVarChar(30), value: nextStatus },
+      completedAt: { type: sql.DateTime2, value: nextStatus === 'tamamlandi' ? taskRecord.completed_at || new Date() : null },
+    })
+    await updateDb.query(`
+      UPDATE dbo.Tasks
+      SET selected_test_ids_json = @selectedTestIdsJson,
+          answers_json = @answersJson,
+          test_results_json = @testResultsJson,
+          target_question_count = @targetQuestionCount,
+          completed_question_count = @completedQuestionCount,
+          correct_count = @correctCount,
+          wrong_count = @wrongCount,
+          blank_count = @blankCount,
+          status = @status,
+          completed_at = @completedAt
+      WHERE id = @id;
+    `)
+
+    const fetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: taskId } })
+    const fetchResult = await fetchDb.query(`${SELECT_TASK} WHERE t.id = @id;`)
+    await syncHomeworkCompletion(fetchResult.recordset[0])
+    await syncHomeworkQuestionTotal(fetchResult.recordset[0])
+    const finalTask = sanitizeTask(fetchResult.recordset[0])
+
+    await recordTaskActivities({
+      studentId: finalTask.studentId,
+      taskId: finalTask.id,
+      actorRole,
+      actorUserId: actorId,
+      entries: [
+        {
+          action: 'test_removed',
+          metadata: taskActivityMetadata(finalTask, null, {
+            detail: buildProgressDetail(finalTask),
+          }),
+        },
+      ],
+    })
+
+    return json(200, { task: finalTask })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('removeTaskTestHandler failed', error)
+    return json(500, { error: 'Test görevden kaldırılamadı.' })
+  }
+}
+
 async function getWeeklyPlanStatusHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
@@ -872,6 +1128,7 @@ module.exports = {
   deleteTaskHandler,
   getTaskAnswerSheetHandler,
   saveTaskAnswersHandler,
+  removeTaskTestHandler,
   getWeeklyPlanStatusHandler,
   setWeeklyPlanStatusHandler,
 }
