@@ -273,7 +273,7 @@ export default function TaskListCard({
   const cardSurfaceClass = isActivityTask
     ? 'bg-panel-sage-soft/15 hover:bg-panel-sage-soft/25'
     : isBreakTask
-      ? 'bg-panel-sage-soft/15 hover:bg-panel-sage-soft/25'
+      ? 'bg-panel-accent-soft/45 hover:bg-panel-accent-soft/60'
       : 'bg-panel-surface hover:bg-panel-surface-soft/55'
 
   const progressNode = showProgress ? (
