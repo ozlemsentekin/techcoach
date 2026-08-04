@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Search, ShieldCheck } from 'lucide-react'
+import { ChevronDown, ChevronRight, Pencil, Search, ShieldCheck, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
+import { useAuth } from '../../../context/useAuth'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Badge from '../../ui/Badge'
+import Button from '../../ui/Button'
 import DataTable from '../../ui/DataTable'
 import { MotionDiv } from '../../ui/motion'
 
@@ -28,12 +30,143 @@ function formatDate(value) {
   })
 }
 
+function formatPhone(value) {
+  if (!value) return null
+  const digits = value.replace(/\D/g, '').replace(/^90/, '')
+  if (digits.length !== 10) return value
+  return `0${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 8)} ${digits.slice(8, 10)}`
+}
+
 function RoleBadge({ user }) {
   if (!user.role) return <span className="text-sm text-[#667475]">—</span>
   return <Badge tone={ROLE_TONE[user.role] || 'neutral'}>{user.role}</Badge>
 }
 
-function UserRow({ user, indent = false }) {
+function ContactCell({ user }) {
+  if (!user.email && !user.phone) {
+    return <span className="text-sm text-[#667475]">—</span>
+  }
+  return (
+    <div className="flex flex-col">
+      {user.email ? <span className="text-sm text-[#667475]">{user.email}</span> : null}
+      {user.phone ? <span className="text-xs text-[#87a3a5]">{formatPhone(user.phone)}</span> : null}
+    </div>
+  )
+}
+
+function EditUserModal({ user, isSelf, onSaved, onClose }) {
+  const [fullName, setFullName] = useState(user.fullName || '')
+  const [email, setEmail] = useState(user.email || '')
+  const [phone, setPhone] = useState(user.phone || '')
+  const [isAdmin, setIsAdmin] = useState(user.isAdmin)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+
+    if (fullName.trim().length < 2) {
+      setError('Ad soyad en az 2 karakter olmalı.')
+      return
+    }
+    if (!email.trim() && !phone.trim()) {
+      setError('E-posta veya telefon numarasından en az biri girilmeli.')
+      return
+    }
+
+    setError('')
+    setLoading(true)
+    try {
+      const data = await authRequest(`/api/panel-admin/users/${user.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          email: email.trim() || null,
+          phone: phone.trim() || null,
+          isAdmin,
+        }),
+      })
+      onSaved(data.user)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <form onSubmit={handleSubmit} className="w-full max-w-md panel-card p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-panel-text">Üyeyi Düzenle</h2>
+          <button type="button" aria-label="Kapat" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        {error ? (
+          <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
+        ) : null}
+
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-panel-text-muted">Ad Soyad</span>
+            <input
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-panel-text-muted">E-posta</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-panel-text-muted">Telefon</span>
+            <input
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="05XX XXX XX XX"
+              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+            />
+            {user.role === 'ogrenci' ? (
+              <span className="text-xs text-panel-text-muted">
+                Öğrenci bu numarayla ebeveyn hesabından bağımsız olarak doğrudan giriş yapabilir.
+              </span>
+            ) : null}
+          </label>
+
+          <label className={`flex items-center gap-2.5 ${isSelf ? 'opacity-50' : ''}`}>
+            <input
+              type="checkbox"
+              checked={isAdmin}
+              disabled={isSelf}
+              onChange={(event) => setIsAdmin(event.target.checked)}
+              className="h-4 w-4"
+            />
+            <span className="text-sm font-medium text-panel-text">Admin yetkisi</span>
+          </label>
+          {isSelf ? (
+            <p className="-mt-2 text-xs text-panel-text-muted">Kendi admin yetkinizi buradan kaldıramazsınız.</p>
+          ) : null}
+
+          <Button type="submit" disabled={loading} size="md" className="w-full">
+            {loading ? 'Kaydediliyor...' : 'Kaydet'}
+          </Button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function UserRow({ user, indent = false, onEdit }) {
   return (
     <tr className="hover:bg-[#f8f7fb]">
       <td className="px-4 py-3 text-[#253d3e]">
@@ -47,17 +180,29 @@ function UserRow({ user, indent = false }) {
           ) : null}
         </div>
       </td>
-      <td className="px-4 py-3 text-sm text-[#667475]">{user.email}</td>
+      <td className="px-4 py-3">
+        <ContactCell user={user} />
+      </td>
       <td className="px-4 py-3">
         <RoleBadge user={user} />
       </td>
       <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.createdAt)}</td>
       <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.lastLoginAt)}</td>
+      <td className="px-4 py-3 text-right">
+        <button
+          type="button"
+          aria-label="Üyeyi düzenle"
+          className="text-[#87a3a5] hover:text-[#253d3e]"
+          onClick={() => onEdit(user)}
+        >
+          <Pencil size={14} aria-hidden="true" />
+        </button>
+      </td>
     </tr>
   )
 }
 
-function ParentRow({ user, students }) {
+function ParentRow({ user, students, onEdit }) {
   const [expanded, setExpanded] = useState(true)
   const hasStudents = students.length > 0
 
@@ -92,25 +237,39 @@ function ParentRow({ user, students }) {
             ) : null}
           </div>
         </td>
-        <td className="px-4 py-3 text-sm text-[#667475]">{user.email}</td>
+        <td className="px-4 py-3">
+        <ContactCell user={user} />
+      </td>
         <td className="px-4 py-3">
           <RoleBadge user={user} />
         </td>
         <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.createdAt)}</td>
         <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.lastLoginAt)}</td>
+        <td className="px-4 py-3 text-right" onClick={(event) => event.stopPropagation()}>
+          <button
+            type="button"
+            aria-label="Üyeyi düzenle"
+            className="text-[#87a3a5] hover:text-[#253d3e]"
+            onClick={() => onEdit(user)}
+          >
+            <Pencil size={14} aria-hidden="true" />
+          </button>
+        </td>
       </tr>
       {hasStudents && expanded
-        ? students.map((student) => <UserRow key={student.id} user={student} indent />)
+        ? students.map((student) => <UserRow key={student.id} user={student} indent onEdit={onEdit} />)
         : null}
     </>
   )
 }
 
 export default function AdminUsersPage() {
+  const { authUser } = useAuth()
   const [users, setUsers] = useState(null)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
+  const [editingUser, setEditingUser] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -128,12 +287,22 @@ export default function AdminUsersPage() {
     }
   }, [])
 
+  const handleUserUpdated = (updatedUser) => {
+    setUsers((current) =>
+      (current || []).map((item) => (item.id === updatedUser.id ? { ...item, ...updatedUser } : item)),
+    )
+    setEditingUser(null)
+  }
+
   const filteredUsers = useMemo(() => {
     if (!users) return null
     const q = query.trim().toLowerCase()
     return users.filter((user) => {
       const matchesQuery =
-        !q || user.fullName.toLowerCase().includes(q) || user.email.toLowerCase().includes(q)
+        !q ||
+        user.fullName.toLowerCase().includes(q) ||
+        (user.email || '').toLowerCase().includes(q) ||
+        (user.phone || '').toLowerCase().includes(q)
       const matchesRole = roleFilter === 'all' || user.role === roleFilter
       return matchesQuery && matchesRole
     })
@@ -170,7 +339,7 @@ export default function AdminUsersPage() {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Ad veya e-posta ara..."
+                  placeholder="Ad, e-posta veya telefon ara..."
                   className="w-48 rounded-lg border border-[#dfe4e5] bg-white py-1.5 pl-8 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#655e94]/20 sm:w-56"
                 />
               </div>
@@ -202,19 +371,25 @@ export default function AdminUsersPage() {
             {topLevelUsers.length === 0 ? (
               <p className="px-4 py-6 text-sm text-[#667475]">Aramayla eşleşen kullanıcı yok.</p>
             ) : (
-              <table className="w-full min-w-[720px] text-left">
+              <table className="w-full min-w-[760px] text-left">
                 <thead>
                   <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#655e94]">
                     <th className="px-4 py-3">Ad Soyad</th>
-                    <th className="px-4 py-3">E-posta</th>
+                    <th className="px-4 py-3">İletişim</th>
                     <th className="px-4 py-3">Rol</th>
                     <th className="px-4 py-3">Kayıt Tarihi</th>
                     <th className="px-4 py-3">Son Giriş</th>
+                    <th className="w-10 px-4 py-3">İşlem</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#edf0f1]">
                   {topLevelUsers.map((user) => (
-                    <ParentRow key={user.id} user={user} students={studentsByParentId.get(user.id) || []} />
+                    <ParentRow
+                      key={user.id}
+                      user={user}
+                      students={studentsByParentId.get(user.id) || []}
+                      onEdit={setEditingUser}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -222,6 +397,15 @@ export default function AdminUsersPage() {
           </DataTable>
         </MotionDiv>
       )}
+
+      {editingUser ? (
+        <EditUserModal
+          user={editingUser}
+          isSelf={editingUser.id === authUser?.id}
+          onSaved={handleUserUpdated}
+          onClose={() => setEditingUser(null)}
+        />
+      ) : null}
     </div>
   )
 }
