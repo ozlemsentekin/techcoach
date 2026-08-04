@@ -130,22 +130,6 @@ export default function WeeklyPlanPage() {
     window.setTimeout(() => setBanner(''), 4000)
   }
 
-  /** Bir tarihteki, verilen görev hariç, `fromTime`'da veya sonrasında başlayan tüm görevleri `minutesDelta` kadar öteler. */
-  const shiftTasksFrom = async (date, fromTime, minutesDelta, excludeTaskId) => {
-    if (!fromTime || !minutesDelta) return
-
-    const tasksToShift = (tasksByDate[date] || [])
-      .filter((task) => task.id !== excludeTaskId && (task.startTime || '') >= fromTime)
-      .sort((a, b) => (minutesDelta > 0 ? (b.startTime || '').localeCompare(a.startTime || '') : (a.startTime || '').localeCompare(b.startTime || '')))
-
-    for (const task of tasksToShift) {
-      await patchTask(task.id, {
-        startTime: addMinutesToTime(task.startTime, minutesDelta),
-        endTime: addMinutesToTime(task.endTime, minutesDelta),
-      })
-    }
-  }
-
   const handleSaveDrawerTask = async (taskData) => {
     const initialTask = drawerState?.initialTask
     const targetStatus = dayStatusByDate[taskData.date]
@@ -188,8 +172,6 @@ export default function WeeklyPlanPage() {
     const breakEnd = addMinutesToTime(breakStart, minutes)
     const targetStatus = dayStatusByDate[date]
 
-    await shiftTasksFrom(date, breakStart, minutes, afterTask.id)
-
     await saveTaskForDay(
       date,
       {
@@ -203,7 +185,7 @@ export default function WeeklyPlanPage() {
     )
 
     await refresh()
-    showBanner(`${minutes} dakikalık mola eklendi, sonraki görevler kaydırıldı.`)
+    showBanner(`${minutes} dakikalık mola eklendi.`)
   }
 
   const allTasks = weekDates.flatMap((date) => tasksByDate[date] || [])
