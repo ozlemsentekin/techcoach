@@ -11,12 +11,18 @@ import { MotionDiv } from '../../ui/motion'
 import { groupHomeworksByDate } from '../../shared/homework/homeworkDisplay'
 import HomeworkDateAccordion from '../../shared/homework/HomeworkDateAccordion'
 
+const FILTER_TABS = [
+  { key: 'active', label: 'Aktif' },
+  { key: 'all', label: 'Tümü' },
+]
+
 export default function HomeworkPage() {
   const [homeworks, setHomeworks] = useState(null)
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [deletingHomework, setDeletingHomework] = useState(null)
   const [expandedDateOverrides, setExpandedDateOverrides] = useState({})
+  const [filter, setFilter] = useState('active')
 
   useEffect(() => {
     let ignore = false
@@ -33,6 +39,10 @@ export default function HomeworkPage() {
   }, [])
 
   const groupedByDate = useMemo(() => groupHomeworksByDate(homeworks), [homeworks])
+  const visibleGroups = useMemo(
+    () => (filter === 'active' ? groupedByDate.filter((dateGroup) => dateGroup.completionPercentage < 100) : groupedByDate),
+    [groupedByDate, filter],
+  )
 
   const isDateOpen = (dueDate, index) => {
     const key = dueDate || 'unassigned'
@@ -91,17 +101,41 @@ export default function HomeworkPage() {
       ) : homeworks.length === 0 ? (
         <EmptyState icon={NotebookPen} title="Henüz ödev eklenmedi" description="Yukarıdaki butonla ilk ödevi ekleyebilirsin." />
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-4">
-          {groupedByDate.map((dateGroup, index) => (
-            <HomeworkDateAccordion
-              key={dateGroup.dueDate || 'unassigned'}
-              dateGroup={dateGroup}
-              isOpen={isDateOpen(dateGroup.dueDate, index)}
-              onToggle={() => toggleDate(dateGroup.dueDate, index)}
-              onDeleteRequest={setDeletingHomework}
-            />
-          ))}
-        </MotionDiv>
+        <>
+          <div className="flex gap-2">
+            {FILTER_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                aria-pressed={filter === tab.key}
+                onClick={() => setFilter(tab.key)}
+                className={`rounded-[10px] px-4 py-2 text-sm font-semibold transition-colors ${
+                  filter === tab.key
+                    ? 'bg-panel-blue text-white shadow-sm'
+                    : 'bg-panel-blue-soft text-panel-blue hover:bg-panel-blue hover:text-white'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {visibleGroups.length === 0 ? (
+            <EmptyState icon={NotebookPen} title="Aktif ödev yok" description="Tüm ödevler tamamlandı." />
+          ) : (
+            <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-4">
+              {visibleGroups.map((dateGroup, index) => (
+                <HomeworkDateAccordion
+                  key={dateGroup.dueDate || 'unassigned'}
+                  dateGroup={dateGroup}
+                  isOpen={isDateOpen(dateGroup.dueDate, index)}
+                  onToggle={() => toggleDate(dateGroup.dueDate, index)}
+                  onDeleteRequest={setDeletingHomework}
+                />
+              ))}
+            </MotionDiv>
+          )}
+        </>
       )}
 
       {showModal ? <AddHomeworkModal onSave={handleSave} onClose={() => setShowModal(false)} /> : null}
