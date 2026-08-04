@@ -51,8 +51,15 @@ async function resizeImageFile(file) {
   return canvas.toDataURL('image/jpeg', OUTPUT_QUALITY)
 }
 
-export default function ResourceImageField({ value, onChange }) {
+export default function ResourceImageField({
+  value,
+  onChange,
+  shape = 'square',
+  label = 'Kapak / Profil Görseli',
+  compact = false,
+}) {
   const inputId = useId()
+  const previewShapeClass = shape === 'circle' ? 'rounded-full' : 'rounded-xl'
   const [error, setError] = useState('')
   const [showUrlInput, setShowUrlInput] = useState(Boolean(value && !value.startsWith('data:image/')))
   const [uploading, setUploading] = useState(false)
@@ -83,18 +90,71 @@ export default function ResourceImageField({ value, onChange }) {
     handleFile(event.dataTransfer.files?.[0] || null)
   }
 
+  if (compact) {
+    return (
+      <div className="flex flex-col items-center gap-1">
+        <div className="relative shrink-0" onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
+          {value ? (
+            <img
+              src={value}
+              alt="Görsel"
+              className={`h-24 w-24 border border-[#e5e8e9] object-cover shadow-sm ${previewShapeClass}`}
+            />
+          ) : (
+            <span className={`flex h-24 w-24 items-center justify-center bg-[#f5f2fb] text-[#655e94] ${previewShapeClass}`}>
+              <ImagePlus size={26} aria-hidden="true" />
+            </span>
+          )}
+
+          <label
+            htmlFor={inputId}
+            aria-label={value ? 'Görseli değiştir' : 'Görsel yükle'}
+            className="absolute bottom-0 right-0 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-[#655e94] text-white shadow ring-2 ring-white hover:opacity-90"
+          >
+            <UploadCloud size={14} aria-hidden="true" />
+          </label>
+          <input
+            id={inputId}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+
+          {value ? (
+            <button
+              type="button"
+              aria-label="Görseli kaldır"
+              onClick={() => onChange('')}
+              className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-panel-border bg-white text-panel-text-muted shadow ring-2 ring-white hover:text-panel-warm"
+            >
+              <X size={11} aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+
+        {uploading ? <span className="text-xs text-panel-text-muted">Yükleniyor...</span> : null}
+        {error ? <span className="text-xs text-panel-warm">{error}</span> : null}
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-sm font-medium text-panel-text-muted">Kapak / Profil Görseli</span>
+      <span className="text-sm font-medium text-panel-text-muted">{label}</span>
       <div
         className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-[#d7dadd] bg-[#fbfcfc] p-3"
         onDragOver={(event) => event.preventDefault()}
         onDrop={handleDrop}
       >
         {value ? (
-          <img src={value} alt="Kaynak görseli" className="h-20 w-20 rounded-xl border border-[#e5e8e9] object-cover shadow-sm" />
+          <img
+            src={value}
+            alt="Görsel"
+            className={`h-20 w-20 border border-[#e5e8e9] object-cover shadow-sm ${previewShapeClass}`}
+          />
         ) : (
-          <span className="flex h-20 w-20 items-center justify-center rounded-xl bg-[#f5f2fb] text-[#655e94]">
+          <span className={`flex h-20 w-20 items-center justify-center bg-[#f5f2fb] text-[#655e94] ${previewShapeClass}`}>
             <ImagePlus size={24} aria-hidden="true" />
           </span>
         )}

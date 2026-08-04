@@ -1,28 +1,23 @@
 import { useEffect, useState } from 'react'
-import { Flame, CalendarCheck, BookOpenCheck } from 'lucide-react'
-import { getSessions } from '../../../services/studySessionService'
-import { getTasksForDate } from '../../../services/taskService'
-import { getWrongQuestions } from '../../../services/wrongQuestionService'
-import { todayISODate } from '../../../utils/time'
-import PageHeader from '../../layout/PageHeader'
+import { Users } from 'lucide-react'
+import { authRequest } from '../../../services/authClient'
 import LoadingState from '../../shared/LoadingState'
-import ProgressSummaryCard from '../../shared/ProgressSummaryCard'
+import EmptyState from '../../shared/EmptyState'
+import StudentProgressView from '../../shared/StudentProgressView'
 
 export default function ProgressPage() {
-  const [stats, setStats] = useState(null)
+  const [students, setStudents] = useState(null)
+  const [selectedStudentId, setSelectedStudentId] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
     let ignore = false
 
-    Promise.all([getTasksForDate(todayISODate()), getSessions(), getWrongQuestions()])
-      .then(([tasks, sessions, wrongQuestions]) => {
+    authRequest('/api/parent/students', { method: 'GET' })
+      .then((data) => {
         if (ignore) return
-        const focusMinutes = sessions.reduce((sum, session) => sum + (session.durationMinutes || 0), 0)
-        const startedPlan = tasks.some((task) => task.status !== 'bekliyor')
-        const completedCount = tasks.filter((task) => ['tamamlandi', 'kismen-tamamlandi'].includes(task.status)).length
-        const learnedMistakes = wrongQuestions.filter((item) => item.reviewStatus === 'ogrenildi').length
-        setStats({ focusMinutes, startedPlan, completedCount, totalTasks: tasks.length, learnedMistakes })
+        setStudents(data.students)
+        setSelectedStudentId((current) => current || data.students[0]?.id || '')
       })
       .catch((err) => {
         if (!ignore) setError(err.message)
@@ -37,41 +32,45 @@ export default function ProgressPage() {
     return <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
   }
 
-  if (stats === null) {
-    return <LoadingState label="Gelişim verileri yükleniyor..." />
+  if (students === null) {
+    return <LoadingState label="Öğrenciler yükleniyor..." />
   }
 
+  if (!students.length) {
+    return (
+      <EmptyState
+        icon={Users}
+        title="Bağlı öğrenci bulunamadı"
+        description="Gelişim verilerini görebilmek için önce bir öğrenci profili eklemelisin."
+      />
+    )
+  }
+
+  const selectedStudent = students.find((student) => student.id === selectedStudentId) || students[0]
+
+  const studentPicker = students.length > 1 ? (
+    <select
+      value={selectedStudent.id}
+      onChange={(event) => setSelectedStudentId(event.target.value)}
+      className="h-10 rounded-xl border border-panel-border bg-panel-surface px-3 text-sm font-medium text-panel-text"
+      aria-label="Öğrenci seç"
+    >
+      {students.map((student) => (
+        <option key={student.id} value={student.id}>
+          {student.fullName}
+        </option>
+      ))}
+    </select>
+  ) : null
+
   return (
-    <div className="flex w-full flex-col gap-5">
-      <PageHeader title="Gelişim" subtitle="Aylin'in emeği, istikrarı ve öğrenmesi burada görünüyor." />
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <ProgressSummaryCard
-          icon={Flame}
-          title="Emek"
-          value={`${stats.focusMinutes} dk`}
-          description="Toplam odaklı çalışma süresi"
-        />
-        <ProgressSummaryCard
-          icon={CalendarCheck}
-          title="İstikrar"
-          value={`${stats.completedCount} / ${stats.totalTasks}`}
-          description={stats.startedPlan ? 'Bugün planına başladı' : 'Bugün henüz başlamadı'}
-        />
-        <ProgressSummaryCard
-          icon={BookOpenCheck}
-          title="Öğrenme"
-          value={stats.learnedMistakes}
-          description="Öğrenilmiş duruma getirilen yanlış"
-        />
-      </div>
-
-      <div className="panel-card p-5">
-        <p className="text-sm text-panel-text-muted">
-          Daha derin haftalık/aylık gelişim grafikleri, birden fazla günün verisi biriktikçe bir sonraki
-          geliştirme aşamasında eklenecek.
-        </p>
-      </div>
-    </div>
+    <StudentProgressView
+      key={selectedStudent.id}
+      studentId={selectedStudent.id}
+      title="Gelişim"
+      emptySubtitle={`${selectedStudent.fullName} için gösterilecek ders bulunamadı.`}
+      buildSubtitle={(subjectLabel) => `${selectedStudent.fullName} için ${subjectLabel} bazında emek, doğruluk ve kaynak ilerlemesi.`}
+      headerActions={studentPicker}
+    />
   )
 }
