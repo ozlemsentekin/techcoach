@@ -384,6 +384,12 @@ export default function TaskListCard({
           </span>
         ) : null}
 
+        {isCompactBreakRow && task.startTime ? (
+          <span className="inline-flex min-h-6 items-center gap-1 rounded-[10px] bg-panel-surface-soft px-2 py-0.5 text-xs font-semibold text-panel-text-muted sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-sm">
+            {task.startTime}{task.endTime ? ` - ${task.endTime}` : ''}
+          </span>
+        ) : null}
+
         {showStatusBadge ? (
           <span
             className={`inline-flex min-h-6 items-center gap-1.5 rounded-[10px] px-2 py-0.5 text-[10px] font-semibold sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-xs ${STATUS_TONE_CLASSES[status.tone]}`}
@@ -450,31 +456,35 @@ export default function TaskListCard({
           isFreeTimeTask ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-accent' : ''
         }`}
       >
-        <div className="col-start-1 row-span-4 min-w-0 pt-0.5">
-          <p className={`inline-flex h-7 min-w-14 items-center justify-center rounded-[10px] px-2 text-xs font-extrabold leading-none shadow-sm sm:h-9 sm:min-w-16 sm:px-2.5 sm:text-[15px] ${
-            isBreakTask || isActivityTask ? SOFT_TIME_BADGE_CLASS : 'bg-student-theme-primary text-student-theme-button-text'
-          }`}>
-            {task.startTime || '--:--'}
-          </p>
-          {task.endTime ? <p className="mt-1 pl-1 text-[10px] font-medium text-panel-text-muted sm:mt-1.5 sm:text-xs">{task.endTime}</p> : null}
-        </div>
+        {isCompactBreakRow ? null : (
+          <div className="col-start-1 row-span-4 min-w-0 pt-0.5">
+            <p className={`inline-flex h-7 min-w-14 items-center justify-center rounded-[10px] px-2 text-xs font-extrabold leading-none shadow-sm sm:h-9 sm:min-w-16 sm:px-2.5 sm:text-[15px] ${
+              isActivityTask ? SOFT_TIME_BADGE_CLASS : 'bg-student-theme-primary text-student-theme-button-text'
+            }`}>
+              {task.startTime || '--:--'}
+            </p>
+            {task.endTime ? <p className="mt-1 pl-1 text-[10px] font-medium text-panel-text-muted sm:mt-1.5 sm:text-xs">{task.endTime}</p> : null}
+          </div>
+        )}
 
         <div className="relative col-start-2 row-span-4 flex justify-center">
           {!isFirst ? <span className="absolute top-0 h-5 w-px bg-panel-border" aria-hidden="true" /> : null}
           {!isLast ? <span className="absolute bottom-0 top-5 w-px bg-panel-border" aria-hidden="true" /> : null}
-          <span
-            className={`relative mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 bg-panel-surface sm:h-5 sm:w-5 ${
-              isCompletedStatus
-                ? 'border-panel-sage text-panel-sage'
-                : isBreakTask
+          {isCompactBreakRow ? null : (
+            <span
+              className={`relative mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 bg-panel-surface sm:h-5 sm:w-5 ${
+                isCompletedStatus
                   ? 'border-panel-sage text-panel-sage'
-                  : isActivityTask
+                  : isBreakTask
                     ? 'border-panel-sage text-panel-sage'
-                    : 'border-student-theme-primary text-student-theme-text'
-            }`}
-          >
-            {isCompletedStatus ? <CheckCircle2 size={12} aria-hidden="true" /> : <span className="h-1.5 w-1.5 rounded-full bg-current sm:h-2 sm:w-2" />}
-          </span>
+                    : isActivityTask
+                      ? 'border-panel-sage text-panel-sage'
+                      : 'border-student-theme-primary text-student-theme-text'
+              }`}
+            >
+              {isCompletedStatus ? <CheckCircle2 size={12} aria-hidden="true" /> : <span className="h-1.5 w-1.5 rounded-full bg-current sm:h-2 sm:w-2" />}
+            </span>
+          )}
         </div>
 
         <div className="col-start-3 min-w-0 lg:col-start-3">

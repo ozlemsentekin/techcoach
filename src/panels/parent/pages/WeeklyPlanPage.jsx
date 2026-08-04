@@ -13,7 +13,7 @@ import {
 } from '../../../services/weeklyPlanService'
 import { addHomework } from '../../../services/homeworkService'
 import { patchTask, removeTask } from '../../../services/taskService'
-import { addDaysISO, addMinutesToTime, getMondayOfWeek, parseTimeToMinutes, todayISODate } from '../../../utils/time'
+import { addDaysISO, addMinutesToTime, getMondayOfWeek, todayISODate } from '../../../utils/time'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
 import WeeklyPlannerGrid from '../components/WeeklyPlannerGrid'
@@ -153,9 +153,6 @@ export default function WeeklyPlanPage() {
     if (initialTask && taskData.date === initialTask.date) {
       // Aynı gün içinde düzenleme: görev zaten hangi durumdaysa (taslak/canlı) o durumda kalır.
       await patchTask(initialTask.id, taskData)
-
-      const endTimeDelta = parseTimeToMinutes(taskData.endTime) - parseTimeToMinutes(initialTask.endTime)
-      await shiftTasksFrom(taskData.date, initialTask.endTime, endTimeDelta, initialTask.id)
     } else if (initialTask) {
       await removeTask(initialTask.id)
       await saveTaskForDay(taskData.date, taskData, targetStatus)
