@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Capacitor } from '@capacitor/core'
 import { useAuth } from '../context/useAuth'
 import './LandingPage.css'
 
@@ -12,56 +11,6 @@ const NAV_ITEMS = [
   { id: 'paketler', label: 'Paketler' },
   { id: 'paneller', label: 'Paneller' },
 ]
-
-const INITIAL_AUTH_FORM = {
-  fullName: '',
-  email: '',
-  password: '',
-  passwordRepeat: '',
-  acceptAydinlatma: false,
-  acceptKvkk: false,
-}
-
-const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{12,72}$/
-
-function validateAuthPayload(mode, payload) {
-  const email = String(payload.email || '').trim().toLowerCase()
-  const password = String(payload.password || '')
-
-  if (!email || !password) {
-    return 'E-posta ve şifre zorunludur.'
-  }
-
-  if (!EMAIL_RULE.test(email) || email.length > 320) {
-    return 'Geçerli bir e-posta adresi girin.'
-  }
-
-  if (mode !== 'register') {
-    return null
-  }
-
-  const fullName = String(payload.fullName || '').trim()
-  const passwordRepeat = String(payload.passwordRepeat || '')
-
-  if (fullName.length < 3 || fullName.length > 120) {
-    return 'Ad soyad 3 ile 120 karakter arasında olmalı.'
-  }
-
-  if (!PASSWORD_RULE.test(password)) {
-    return 'Şifre en az 12 karakter olmalı; büyük harf, küçük harf, rakam ve özel karakter içermelidir.'
-  }
-
-  if (password !== passwordRepeat) {
-    return 'Şifre tekrarı eşleşmiyor.'
-  }
-
-  if (!payload.acceptAydinlatma || !payload.acceptKvkk) {
-    return 'Devam etmek için aydınlatma ve KVKK onaylarını vermelisiniz.'
-  }
-
-  return null
-}
 
 function getLgsCountdown() {
   const today = new Date()
@@ -199,112 +148,27 @@ function panelPathForRole(role) {
 
 export default function LandingPage() {
   const navigate = useNavigate()
-  const {
-    authUser,
-    sessionLoading,
-    authLoading,
-    authError,
-    authMessage,
-    login,
-    register,
-    logout,
-    clearAuthFeedback,
-    setAuthError,
-  } = useAuth()
+  const { authUser, sessionLoading, authLoading, logout } = useAuth()
 
   const [activeSection, setActiveSection] = useState('nasil')
-  const [showLogin, setShowLogin] = useState(() => Capacitor.isNativePlatform())
-  const [authMode, setAuthMode] = useState('login')
-  const [infoModal, setInfoModal] = useState(null)
-  const [authForm, setAuthForm] = useState(INITIAL_AUTH_FORM)
   const showPricing = false
   const lgsCountdown = getLgsCountdown()
 
-  const openLogin = (event) => {
+  const handlePrimaryCta = (event) => {
     event.preventDefault()
-    setAuthMode('login')
-    clearAuthFeedback()
-    setShowLogin(true)
-  }
-
-  const closeAuthModal = () => {
-    setShowLogin(false)
-    setAuthMode('login')
-    setInfoModal(null)
-    clearAuthFeedback()
-  }
-
-  const switchAuthMode = () => {
-    setAuthMode(authMode === 'login' ? 'register' : 'login')
-    clearAuthFeedback()
-    setAuthForm(INITIAL_AUTH_FORM)
-  }
-
-  const handleAuthInputChange = (event) => {
-    const { name, type, value, checked } = event.target
-    setAuthForm((current) => ({
-      ...current,
-      [name]: type === 'checkbox' ? checked : value,
-    }))
+    if (authUser?.role) {
+      navigate(panelPathForRole(authUser.role))
+    } else {
+      navigate('/uye-ol')
+    }
   }
 
   const handleLogout = async () => {
     try {
       await logout()
-      setAuthForm(INITIAL_AUTH_FORM)
     } catch {
       // error surfaced via authError from context
     }
-  }
-
-  const handleAuthSubmit = async (event) => {
-    event.preventDefault()
-
-    const payload =
-      authMode === 'register'
-        ? authForm
-        : { email: authForm.email, password: authForm.password }
-
-    const validationError = validateAuthPayload(authMode, payload)
-    if (validationError) {
-      setAuthError(validationError)
-      return
-    }
-
-    try {
-      const user = authMode === 'login' ? await login(payload) : await register(payload)
-      setAuthForm(INITIAL_AUTH_FORM)
-      setShowLogin(false)
-
-      if (authMode === 'login' && user?.role) {
-        navigate(panelPathForRole(user.role))
-      }
-    } catch {
-      // error surfaced via authError from context
-    }
-  }
-
-  const infoModalContent = {
-    aydinlatma: {
-      title: 'Aydınlatma Metni',
-      intro:
-        'TechCoach olarak paylaştığınız kişisel verileri üyelik oluşturma, hesabınıza erişim sağlama, hizmet deneyimini iyileştirme ve gerekli durumlarda sizinle iletişime geçme amaçlarıyla işliyoruz.',
-      body: [
-        'Toplanan veriler; kimlik, iletişim ve kullanım bilgileri ile sınırlıdır. Veriler, yalnızca hizmetin sunulması, destek süreçlerinin yürütülmesi ve yasal yükümlülüklerin yerine getirilmesi kapsamında kullanılacaktır.',
-        'Kişisel verileriniz, açık rızanız veya ilgili mevzuatta belirtilen hukuki sebepler bulunmadıkça üçüncü taraflarla paylaşılmaz. Mevzuat kapsamındaki erişim, düzeltme, silme ve itiraz haklarınızı dilediğiniz zaman kullanabilirsiniz.',
-        'Detaylı talepleriniz için destek kanallarımız üzerinden bizimle iletişime geçebilirsiniz.',
-      ],
-    },
-    kvkk: {
-      title: 'KVKK Onay Metni',
-      intro:
-        '6698 sayılı Kişisel Verilerin Korunması Kanunu kapsamında, TechCoach ile paylaştığınız kişisel verilerin belirtilen amaçlarla işlenmesine ilişkin açık rızanızı bu metin üzerinden sunarsınız.',
-      body: [
-        'Verileriniz; üyelik işlemlerinin tamamlanması, hesabınızın güvenli şekilde yönetilmesi, öğrenci-veli-koç deneyiminin kişiselleştirilmesi ve hizmet kalitesinin artırılması amacıyla işlenebilir.',
-        'İşlenen kişisel veriler, gerekli teknik ve idari tedbirler alınarak korunur. Yasal zorunluluklar dışında üçüncü kişilere aktarım yapılmaz; gerekli durumlarda yalnızca hizmetin sürdürülebilmesi için sınırlı paylaşım yapılır.',
-        'KVKK kapsamındaki açık rızanızı dilediğiniz zaman geri çekebilir, veri işleme faaliyetlerine ilişkin bilgi talep edebilir ve kanuni haklarınızı kullanabilirsiniz.',
-      ],
-    },
   }
 
   useEffect(() => {
@@ -359,10 +223,13 @@ export default function LandingPage() {
           {authUser && !sessionLoading ? (
             <div className="auth-chip" aria-live="polite">
               <strong>{authUser.fullName}</strong>
-              <span>{authUser.email}</span>
+              <span>{authUser.email || authUser.phone}</span>
+              <button type="button" className="inline-link" onClick={handleLogout} disabled={authLoading}>
+                {authLoading ? 'Çıkış Yapılıyor...' : 'Çıkış Yap'}
+              </button>
             </div>
           ) : null}
-          <a className="btn btn-primary nav-cta" href="#" onClick={openLogin}>
+          <a className="btn btn-primary nav-cta" href="#" onClick={handlePrimaryCta}>
             <span className="cta-full">{primaryCtaLabel}</span>
             <span className="cta-short">{authUser ? 'Hesap' : 'Başla'}</span>
           </a>
@@ -810,7 +677,7 @@ export default function LandingPage() {
                   premium bir akademik performans sistemidir.
                 </p>
               </div>
-              <a className="btn btn-primary cta-action" href="#" onClick={openLogin}>
+              <a className="btn btn-primary cta-action" href="#" onClick={handlePrimaryCta}>
                 <span>Hemen Başla</span>
                 <span className="cta-action-icon" aria-hidden="true">→</span>
               </a>
@@ -822,214 +689,6 @@ export default function LandingPage() {
       <footer id="sss">
         <div className="container">© 2026 TechCoach · Disiplin. Analiz. Başarı.</div>
       </footer>
-
-      {showLogin && (
-        <div className="login-overlay" role="dialog" aria-modal="true" aria-label="Giriş Ekranı">
-          <div className="login-card">
-            <button
-              type="button"
-              className="login-close"
-              aria-label="Kapat"
-              onClick={closeAuthModal}
-            >
-              ×
-            </button>
-            <h3>{authMode === 'login' ? 'Giriş Yap' : 'Üye Ol'}</h3>
-            <p>
-              {authMode === 'login'
-                ? 'TechCoach ve Teco deneyimi için hesabına giriş yap.'
-                : 'TechCoach deneyimine başlamak için üyelik bilgilerini doldur.'}
-            </p>
-            {authMessage ? <div className="auth-feedback auth-feedback-success">{authMessage}</div> : null}
-            {authError ? <div className="auth-feedback auth-feedback-error">{authError}</div> : null}
-
-            {authUser && authMode === 'login' ? (
-              <div className="account-panel">
-                <div className="account-panel-row">
-                  <span>Aktif kullanıcı</span>
-                  <strong>{authUser.fullName}</strong>
-                </div>
-                <div className="account-panel-row">
-                  <span>E-posta</span>
-                  <strong>{authUser.email}</strong>
-                </div>
-                <div className="account-panel-row">
-                  <span>Son giriş</span>
-                  <strong>{authUser.lastLoginAt ? 'Kaydedildi' : 'Yeni hesap'}</strong>
-                </div>
-                {authUser.role ? (
-                  <button
-                    type="button"
-                    className="btn btn-primary login-register"
-                    onClick={() => navigate(panelPathForRole(authUser.role))}
-                  >
-                    Paneline Git
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="btn btn-outline login-register"
-                  onClick={handleLogout}
-                  disabled={authLoading}
-                >
-                  {authLoading ? 'Çıkış Yapılıyor...' : 'Oturumu Kapat'}
-                </button>
-              </div>
-            ) : (
-              <form className="login-form" onSubmit={handleAuthSubmit}>
-                {authMode === 'register' && (
-                  <>
-                    <label htmlFor="tc-name">Ad Soyad</label>
-                    <input
-                      id="tc-name"
-                      name="fullName"
-                      type="text"
-                      placeholder="Adınızı ve soyadınızı girin"
-                      autoComplete="name"
-                      minLength="3"
-                      maxLength="120"
-                      required
-                      value={authForm.fullName}
-                      onChange={handleAuthInputChange}
-                    />
-                  </>
-                )}
-
-                <label htmlFor="tc-email">Email Adresi</label>
-                <input
-                  id="tc-email"
-                  name="email"
-                  type="email"
-                  placeholder="ornek@mail.com"
-                  autoComplete="email"
-                  required
-                  value={authForm.email}
-                  onChange={handleAuthInputChange}
-                />
-
-                <label htmlFor="tc-password">Şifre</label>
-                <input
-                  id="tc-password"
-                  name="password"
-                  type="password"
-                  placeholder="Şifrenizi girin"
-                  autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
-                  required
-                  value={authForm.password}
-                  onChange={handleAuthInputChange}
-                />
-
-                {authMode === 'register' && (
-                  <>
-                    <label htmlFor="tc-password-repeat">Şifre Tekrar</label>
-                    <input
-                      id="tc-password-repeat"
-                      name="passwordRepeat"
-                      type="password"
-                      placeholder="Şifrenizi tekrar girin"
-                      autoComplete="new-password"
-                      required
-                      value={authForm.passwordRepeat}
-                      onChange={handleAuthInputChange}
-                    />
-                    <div className="auth-hint">
-                      Şifre en az 12 karakter olmalı; büyük harf, küçük harf, rakam ve özel
-                      karakter içermelidir.
-                    </div>
-                  </>
-                )}
-
-                {authMode === 'register' && (
-                  <>
-                    <label className="check-row">
-                      <input
-                        name="acceptAydinlatma"
-                        type="checkbox"
-                        checked={authForm.acceptAydinlatma}
-                        onChange={handleAuthInputChange}
-                      />
-                      <span>
-                        <button
-                          type="button"
-                          className="inline-link"
-                          onClick={() => setInfoModal('aydinlatma')}
-                        >
-                          Aydınlatma metni
-                        </button>{' '}
-                        okudum ve onaylıyorum.
-                      </span>
-                    </label>
-
-                    <label className="check-row">
-                      <input
-                        name="acceptKvkk"
-                        type="checkbox"
-                        checked={authForm.acceptKvkk}
-                        onChange={handleAuthInputChange}
-                      />
-                      <span>
-                        <button
-                          type="button"
-                          className="inline-link"
-                          onClick={() => setInfoModal('kvkk')}
-                        >
-                          KVKK
-                        </button>{' '}
-                        kapsamında kişisel verilerimin işlenmesine izin veriyorum.
-                      </span>
-                    </label>
-                  </>
-                )}
-
-                <button type="submit" className="btn btn-primary login-submit" disabled={authLoading}>
-                  {authLoading
-                    ? authMode === 'login'
-                      ? 'Giriş Yapılıyor...'
-                      : 'Üyelik Oluşturuluyor...'
-                    : authMode === 'login'
-                      ? 'Giriş Yap'
-                      : 'Üyeliği Oluştur'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline login-register"
-                  onClick={switchAuthMode}
-                  disabled={authLoading}
-                >
-                  {authMode === 'login' ? 'Üye Olmak İstiyorum' : 'Zaten Üyeyim'}
-                </button>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
-
-      {infoModal && (
-        <div
-          className="login-overlay info-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label={infoModalContent[infoModal].title}
-        >
-          <div className="login-card info-card">
-            <button
-              type="button"
-              className="login-close"
-              aria-label="Kapat"
-              onClick={() => setInfoModal(null)}
-            >
-              ×
-            </button>
-            <h3>{infoModalContent[infoModal].title}</h3>
-            <p>{infoModalContent[infoModal].intro}</p>
-            <div className="info-content">
-              {infoModalContent[infoModal].body.map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 }

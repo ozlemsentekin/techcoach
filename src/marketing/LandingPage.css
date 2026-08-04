@@ -4598,6 +4598,33 @@ footer {
   margin: 0;
 }
 
+.auth-page {
+  min-height: calc(100vh - 96px);
+  display: grid;
+  align-items: center;
+  padding: 40px 0 80px;
+  background: #ffffff;
+}
+
+.auth-page-shell {
+  display: grid;
+  place-items: center;
+}
+
+.auth-page-card {
+  position: static;
+}
+
+.auth-topbar .topbar-inner {
+  width: 95%;
+  max-width: none;
+  margin: 0 auto;
+}
+
+.turnstile-widget {
+  width: 100%;
+}
+
 @media (max-width: 1100px) {
   .hero-grid,
   .hero-copy,

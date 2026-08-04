@@ -1,9 +1,11 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
 import { useAuth } from './context/useAuth'
 import LoadingState from './panels/shared/LoadingState'
 
 const LandingPage = lazy(() => import('./marketing/LandingPage'))
+const AuthPage = lazy(() => import('./marketing/AuthPage'))
 const PaywallPage = lazy(() => import('./marketing/PaywallPage'))
 const StudentApp = lazy(() => import('./panels/student/StudentApp'))
 const ParentApp = lazy(() => import('./panels/parent/ParentApp'))
@@ -23,6 +25,12 @@ function RootRoute() {
 
   if (authUser?.role) {
     return <Navigate to={panelPathForRole(authUser.role)} replace />
+  }
+
+  // Native uygulama (iOS/Android) doğrudan giriş/üyelik sayfasını açar; pazarlama
+  // sayfası yalnızca web'de görünür.
+  if (Capacitor.isNativePlatform()) {
+    return <Navigate to="/uye-ol" replace />
   }
 
   return <LandingPage />
@@ -55,6 +63,7 @@ export default function App() {
     <Suspense fallback={<LoadingState label="Sayfa yükleniyor..." fullScreen />}>
       <Routes>
         <Route path="/" element={<RootRoute />} />
+        <Route path="/uye-ol" element={<AuthPage />} />
         <Route path="/paywall" element={<PaywallPage />} />
         <Route
           path="/student/*"
