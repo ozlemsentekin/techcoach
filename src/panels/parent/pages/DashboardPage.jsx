@@ -15,6 +15,7 @@ import {
   Sparkles,
   Timer,
   TrendingUp,
+  Trash2,
 } from 'lucide-react'
 import { getTaskActivityLogs, getTasksForDate, updateTask, createTask, deleteTask } from '../../../services/taskService'
 import { getWrongQuestions } from '../../../services/wrongQuestionService'
@@ -31,6 +32,7 @@ import DailyPlanTable from '../components/DailyPlanTable'
 import StudentRequestsCard from '../components/StudentRequestsCard'
 import PlanBalanceCard from '../components/PlanBalanceCard'
 import AddTaskDrawer from '../components/AddTaskDrawer'
+import TaskAnswerSheetModal from '../../student/components/TaskAnswerSheetModal'
 
 const date = todayISODate()
 const HOMEWORK_TASK_TYPE = 'odev'
@@ -258,6 +260,13 @@ const TASK_LOG_ACTIONS = {
   help_requested: { title: 'Yardım istedi', icon: HelpCircle, tone: 'warm' },
   progress_updated: { title: 'İlerleme kaydedildi', icon: ListChecks, tone: 'blue' },
   answers_saved: { title: 'Cevaplar kaydedildi', icon: ListChecks, tone: 'blue' },
+  test_removed: { title: 'Test görevden kaldırıldı', icon: Trash2, tone: 'warm' },
+}
+
+function getActorLabel(entry) {
+  if (entry.actorRole === 'sistem') return 'Sistem (süre doldu)'
+  if (entry.actorRole === 'ebeveyn') return 'Veli'
+  return null
 }
 
 function getTaskLogDetail(entry) {
@@ -360,6 +369,7 @@ function TaskFlowLogPanel({ tasks, activityLogs = [] }) {
             const action = TASK_LOG_ACTIONS[entry.action] || TASK_LOG_ACTIONS.progress_updated
             const Icon = action.icon
             const detail = getTaskLogDetail(entry)
+            const actorLabel = getActorLabel(entry)
             return (
               <li key={entry.id} className="flex gap-3 py-3 first:pt-0 last:pb-0">
                 <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${toneClasses[action.tone]}`}>
@@ -369,6 +379,11 @@ function TaskFlowLogPanel({ tasks, activityLogs = [] }) {
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     <p className="text-sm font-semibold text-panel-text">{action.title}</p>
                     <span className="text-xs font-medium text-panel-text-muted">{formatTime(new Date(entry.createdAt))}</span>
+                    {actorLabel ? (
+                      <span className="rounded-full bg-panel-surface-soft px-2 py-0.5 text-xs font-medium text-panel-text-muted">
+                        {actorLabel}
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-0.5 line-clamp-1 text-sm text-panel-text-muted">{entry.taskTitle}</p>
                   {detail ? <p className="mt-1 text-xs font-semibold text-panel-sage">{detail}</p> : null}
@@ -392,6 +407,7 @@ export default function DashboardPage() {
   const [loadError, setLoadError] = useState('')
   const [drawerState, setDrawerState] = useState(null)
   const [deletingTask, setDeletingTask] = useState(null)
+  const [answerSheetTask, setAnswerSheetTask] = useState(null)
   const [banner, setBanner] = useState('')
 
   useEffect(() => {
@@ -422,6 +438,21 @@ export default function DashboardPage() {
     return () => {
       ignore = true
     }
+  }, [])
+
+  // Mola süresi dolduğunda backend'i sistem olarak otomatik tamamlar (bkz. tasks.js
+  // autoCompleteExpiredBreaks); burada periyodik yenileme yalnızca bu değişikliğin
+  // gün özeti ve işlem logları panelinde görünmesini sağlar.
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      Promise.all([getTasksForDate(date), getTaskActivityLogs(date).catch(() => [])])
+        .then(([tasksData, activityLogsData]) => {
+          setTasks(tasksData)
+          setActivityLogs(activityLogsData)
+        })
+        .catch(() => {})
+    }, 30000)
+    return () => window.clearInterval(interval)
   }, [])
 
   const showBanner = (text) => {
@@ -518,6 +549,7 @@ export default function DashboardPage() {
             onAddTask={() => setDrawerState({ defaultDate: date })}
             onEdit={(task) => setDrawerState({ initialTask: task })}
             onDelete={(task) => setDeletingTask(task)}
+            onOpenAnswerSheet={setAnswerSheetTask}
           />
 
           <div className="grid gap-5 lg:grid-cols-2">
@@ -562,6 +594,18 @@ export default function DashboardPage() {
           confirmLabel="Sil"
           onConfirm={handleDeleteConfirmed}
           onCancel={() => setDeletingTask(null)}
+        />
+      ) : null}
+
+      {answerSheetTask ? (
+        <TaskAnswerSheetModal
+          task={answerSheetTask}
+          lessonLabel={answerSheetTask.subject || 'Görev'}
+          onClose={() => setAnswerSheetTask(null)}
+          onSaved={(updatedTask) => {
+            setTasks((prev) => prev.map((item) => (item.id === updatedTask.id ? updatedTask : item)))
+            setAnswerSheetTask(updatedTask)
+          }}
         />
       ) : null}
     </div>

@@ -61,14 +61,14 @@ const TASK_KIND_STYLES = {
   break: {
     label: 'Mola',
     icon: Coffee,
-    rowBorder: 'border-l-panel-sage',
-    rowBackground: 'bg-panel-sage-soft/35 hover:bg-panel-sage-soft/55',
-    typeBadge: 'border-panel-sage/35 bg-panel-sage-soft text-panel-sage',
-    typeIcon: 'bg-white text-panel-sage',
-    timeBlock: 'bg-panel-sage-soft/55',
-    durationChip: 'bg-white text-panel-sage',
-    questionChip: 'bg-panel-sage-soft text-panel-sage',
-    dot: 'border-panel-sage text-panel-sage',
+    rowBorder: 'border-l-panel-lilac',
+    rowBackground: 'bg-panel-lilac-soft/45 hover:bg-panel-lilac-soft/65',
+    typeBadge: 'border-panel-lilac/35 bg-panel-lilac-soft text-panel-lilac',
+    typeIcon: 'bg-white text-panel-lilac',
+    timeBlock: 'bg-panel-lilac-soft/60',
+    durationChip: 'bg-white text-panel-lilac',
+    questionChip: 'bg-panel-lilac-soft text-panel-lilac',
+    dot: 'border-panel-lilac text-panel-lilac',
   },
   activity: {
     label: 'Aktivite',
@@ -387,7 +387,7 @@ function TaskDetail({ task }) {
   )
 }
 
-function OpticalResultSummary({ task, className = '' }) {
+function OpticalResultSummary({ task, className = '', onOpenAnswerSheet }) {
   const result = getOpticalResult(task)
   if (!result) return null
 
@@ -396,9 +396,18 @@ function OpticalResultSummary({ task, className = '' }) {
     { label: 'Yanlış', value: result.wrong, icon: XCircle, className: 'text-panel-red' },
     { label: 'Boş', value: result.blank, icon: MinusCircle, className: 'text-panel-text-muted' },
   ]
+  const isClickable = Boolean(onOpenAnswerSheet) && task.resourceType === 'soru_bankasi' && Boolean(task.selectedTestIds?.length)
+  const Wrapper = isClickable ? 'button' : 'div'
 
   return (
-    <div className={`${className} rounded-xl border border-panel-border bg-white px-3 py-2.5 shadow-sm`}>
+    <Wrapper
+      type={isClickable ? 'button' : undefined}
+      onClick={isClickable ? (event) => { event.stopPropagation(); onOpenAnswerSheet(task) } : undefined}
+      title={isClickable ? 'Cevap kağıdını görüntüle' : undefined}
+      className={`${className} rounded-xl border border-panel-border bg-white px-3 py-2.5 text-left shadow-sm ${
+        isClickable ? 'cursor-pointer transition-colors hover:bg-panel-surface-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-blue' : ''
+      }`}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-bold uppercase tracking-wide text-panel-sage">Optik sonucu</span>
         {result.totalQuestions > 0 ? (
@@ -424,7 +433,7 @@ function OpticalResultSummary({ task, className = '' }) {
           {formatResultNumber(result.net)} net
         </span>
       </div>
-    </div>
+    </Wrapper>
   )
 }
 
@@ -569,6 +578,7 @@ function TaskAgendaItem({
   onCloseMenu,
   onEdit,
   onDelete,
+  onOpenAnswerSheet,
 }) {
   const completed = task.status === 'tamamlandi'
   const visual = getTaskKindStyle(task)
@@ -580,7 +590,7 @@ function TaskAgendaItem({
       className={`grid grid-cols-[minmax(0,1fr)_2.5rem] gap-3 border-l-4 px-4 py-4 transition-colors sm:grid-cols-[10rem_2rem_minmax(0,1fr)_2.5rem] sm:gap-4 sm:px-5 ${
         visual.rowBorder
       } ${
-        completed ? 'bg-panel-sage-soft/30' : visual.rowBackground
+        completed && showStatus ? 'bg-panel-sage-soft/30' : visual.rowBackground
       }`}
     >
       <div className="col-start-1 row-start-1 min-w-0 sm:col-start-1 sm:row-start-1">
@@ -614,12 +624,13 @@ function TaskAgendaItem({
       <OpticalResultSummary
         task={task}
         className="col-span-2 col-start-1 row-start-3 sm:col-span-4 sm:col-start-1 sm:row-start-2"
+        onOpenAnswerSheet={onOpenAnswerSheet}
       />
     </article>
   )
 }
 
-export default function DailyPlanTable({ tasks, onEdit, onDelete, onAddTask }) {
+export default function DailyPlanTable({ tasks, onEdit, onDelete, onAddTask, onOpenAnswerSheet }) {
   const [openMenuId, setOpenMenuId] = useState(null)
   const [agendaFilter, setAgendaFilter] = useState('pending')
 
@@ -710,6 +721,7 @@ export default function DailyPlanTable({ tasks, onEdit, onDelete, onAddTask }) {
               onCloseMenu={() => setOpenMenuId(null)}
               onEdit={() => onEdit(task)}
               onDelete={() => onDelete(task)}
+              onOpenAnswerSheet={onOpenAnswerSheet}
             />
           ))}
         </div>

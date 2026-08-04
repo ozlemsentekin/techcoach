@@ -59,6 +59,12 @@ export async function saveTaskAnswers(taskId, tests) {
   return data.task
 }
 
+/** Öğrenilmeyen konuları içeren tek bir testi (cevap/sonuçlarıyla) görevden kaldırır; test kaynağı silinmez, daha sonra ayrı bir görev olarak yeniden atanabilir. */
+export async function removeTaskTest(taskId, testId) {
+  const data = await authRequest(`/api/panel/tasks/${taskId}/tests/${testId}`, { method: 'DELETE' })
+  return data.task
+}
+
 /** Ebeveyn panelinden yeni bir görev oluşturur (canlı plana doğrudan yazar). */
 export async function createTask(date, taskData, { isDraft = false } = {}) {
   return postTask({

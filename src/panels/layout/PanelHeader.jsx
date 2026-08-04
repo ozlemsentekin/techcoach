@@ -231,10 +231,11 @@ export default function PanelHeader({ role }) {
         onClick={() => window.location.reload()}
         aria-label="Sayfayı yenile"
         title="Sayfayı yenile"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-text"
+        className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-text"
       >
         <RefreshCw size={16} aria-hidden="true" />
       </button>
+      <div className="h-6 w-px shrink-0 bg-panel-border" aria-hidden="true" />
 
       {themeCtx ? (
         <div className="relative" ref={themeMenuRef}>

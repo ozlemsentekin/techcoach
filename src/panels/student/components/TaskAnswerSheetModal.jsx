@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X, CheckCircle2, XCircle, MinusCircle } from 'lucide-react'
-import { getTaskAnswerSheet, saveTaskAnswers, patchTask } from '../../../services/taskService'
+import { X, CheckCircle2, XCircle, MinusCircle, Trash2 } from 'lucide-react'
+import { getTaskAnswerSheet, saveTaskAnswers, patchTask, removeTaskTest } from '../../../services/taskService'
 import LoadingState from '../../shared/LoadingState'
+import ConfirmationDialog from '../../shared/ConfirmationDialog'
 
 const OPTIONS = ['A', 'B', 'C', 'D']
 
@@ -30,17 +31,28 @@ function ResultBadge({ result }) {
   )
 }
 
-function TestSection({ test, answers, result, onSelect }) {
+function TestSection({ test, answers, result, onSelect, onRemove }) {
   const locked = Boolean(result)
   return (
     <div className="flex flex-col gap-1.5 rounded-2xl border border-panel-border p-2.5">
-      <h3
-        className="truncate text-xs font-semibold text-panel-text"
-        title={test.topicName ? `${test.name} · ${test.topicName}` : test.name}
-      >
-        {test.name}
-        {test.topicName ? <span className="font-normal text-panel-text-muted"> · {test.topicName}</span> : null}
-      </h3>
+      <div className="flex items-start justify-between gap-1.5">
+        <h3
+          className="min-w-0 truncate text-xs font-semibold text-panel-text"
+          title={test.topicName ? `${test.name} · ${test.topicName}` : test.name}
+        >
+          {test.name}
+          {test.topicName ? <span className="font-normal text-panel-text-muted"> · {test.topicName}</span> : null}
+        </h3>
+        <button
+          type="button"
+          onClick={() => onRemove(test)}
+          aria-label={`${test.name} testini görevden kaldır`}
+          title="Testi görevden kaldır"
+          className="shrink-0 rounded-lg p-1 text-panel-text-muted hover:bg-panel-red-soft hover:text-panel-red"
+        >
+          <Trash2 size={14} aria-hidden="true" />
+        </button>
+      </div>
 
       <ResultBadge result={result} />
 
@@ -104,6 +116,9 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
   const [note, setNote] = useState(task.notes || '')
   const [noteDirty, setNoteDirty] = useState(false)
   const [noteSaving, setNoteSaving] = useState(false)
+  const [removingTest, setRemovingTest] = useState(null)
+  const [removeError, setRemoveError] = useState('')
+  const [removeSaving, setRemoveSaving] = useState(false)
 
   useEffect(() => {
     let ignore = false
@@ -154,6 +169,32 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
     }
   }
 
+  const handleConfirmRemoveTest = async () => {
+    if (!removingTest) return
+    setRemoveSaving(true)
+    setRemoveError('')
+    try {
+      const updatedTask = await removeTaskTest(task.id, removingTest.id)
+      setTests((prev) => (prev || []).filter((test) => test.id !== removingTest.id))
+      setAnswersByTest((prev) => {
+        const next = { ...prev }
+        delete next[removingTest.id]
+        return next
+      })
+      setResultsByTest((prev) => {
+        const next = { ...prev }
+        delete next[removingTest.id]
+        return next
+      })
+      setRemovingTest(null)
+      onSaved(updatedTask)
+    } catch (err) {
+      setRemoveError(err.message)
+    } finally {
+      setRemoveSaving(false)
+    }
+  }
+
   const handleSaveNote = async () => {
     setNoteSaving(true)
     setError('')
@@ -199,6 +240,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
                   answers={answersByTest[test.id] || {}}
                   result={resultsByTest[test.id]}
                   onSelect={(orderNo, label) => handleSelect(test.id, orderNo, label)}
+                  onRemove={setRemovingTest}
                 />
               ))}
             </div>
@@ -245,6 +287,19 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
           </div>
         ) : null}
       </div>
+
+      {removingTest ? (
+        <ConfirmationDialog
+          title={`"${removingTest.name}" görevden kaldırılsın mı?`}
+          description={`${removingTest.topicName ? `${removingTest.topicName} konulu ` : ''}bu testin cevapları da silinecek. Daha sonra ayrı bir görev olarak yeniden atanabilir.${removeError ? ` ${removeError}` : ''}`}
+          confirmLabel={removeSaving ? 'Kaldırılıyor...' : 'Kaldır'}
+          onConfirm={handleConfirmRemoveTest}
+          onCancel={() => {
+            setRemovingTest(null)
+            setRemoveError('')
+          }}
+        />
+      ) : null}
     </div>
   )
 }

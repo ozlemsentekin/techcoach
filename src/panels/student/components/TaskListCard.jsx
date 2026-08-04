@@ -181,6 +181,7 @@ export default function TaskListCard({
   const isBreakTask = BREAK_TASK_TYPES.has(task.taskType)
   const isFreeTimeTask = task.taskType === 'serbest-zaman'
   const isActivityTask = ACTIVITY_TASK_TYPES.has(task.taskType)
+  const isOpenableRow = isFreeTimeTask || shouldOpenCompletionFlow(task)
   const subjectStyle = isBreakTask
     ? BREAK_STYLE
     : isActivityTask
@@ -233,7 +234,7 @@ export default function TaskListCard({
   }, [timerRunning])
 
   const handleCardKeyDown = (event) => {
-    if (!isFreeTimeTask) return
+    if (!isOpenableRow) return
     if (event.key !== 'Enter' && event.key !== ' ') return
 
     event.preventDefault()
@@ -298,7 +299,8 @@ export default function TaskListCard({
       {showTimerControl ? (
         <button
           type="button"
-          onClick={() => {
+          onClick={(event) => {
+            event.stopPropagation()
             if (!timerRunning && onStartTimer) onStartTimer(task)
           }}
           aria-label={`${task.title} - Sayaç Başlat`}
@@ -321,7 +323,11 @@ export default function TaskListCard({
 
       <button
         type="button"
-        onClick={showUndoButton ? handleUndoComplete : handlePrimaryAction}
+        onClick={(event) => {
+          event.stopPropagation()
+          if (showUndoButton) handleUndoComplete(event)
+          else handlePrimaryAction()
+        }}
         aria-label={`${task.title} - ${showUndoButton ? 'Geri Al' : 'Tamamla'}`}
         className={`inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-[12px] border px-3 text-sm font-semibold shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.98] sm:h-11 sm:px-4 ${
           showUndoButton
@@ -443,17 +449,17 @@ export default function TaskListCard({
   if (timeline) {
     return (
       <article
-        role={isFreeTimeTask ? 'button' : undefined}
-        tabIndex={isFreeTimeTask ? 0 : undefined}
-        onClick={isFreeTimeTask ? () => onOpenDetails(task) : undefined}
+        role={isOpenableRow ? 'button' : undefined}
+        tabIndex={isOpenableRow ? 0 : undefined}
+        onClick={isOpenableRow ? () => onOpenDetails(task) : undefined}
         onKeyDown={handleCardKeyDown}
-        aria-label={isFreeTimeTask ? `${task.title} detayını aç` : undefined}
+        aria-label={isOpenableRow ? `${task.title} detayını aç` : undefined}
         className={`grid grid-cols-[4.5rem_1.25rem_minmax(0,1fr)] gap-x-2 transition-colors sm:grid-cols-[4.9rem_1.5rem_minmax(0,1fr)] sm:gap-x-3 lg:grid-cols-[5.15rem_1.5rem_minmax(0,1fr)_minmax(170px,220px)_156px] lg:items-center ${
           isCompactBreakRow ? 'px-2.5 py-1.5 sm:px-4 sm:py-2' : 'px-2.5 py-2.5 sm:px-4 sm:py-4'
         } ${
           highlight ? 'bg-student-theme-soft/55' : cardSurfaceClass
         } ${
-          isFreeTimeTask ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-accent' : ''
+          isOpenableRow ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-accent' : ''
         }`}
       >
         {isCompactBreakRow ? null : (
@@ -506,13 +512,13 @@ export default function TaskListCard({
 
   return (
     <article
-      role={isFreeTimeTask ? 'button' : undefined}
-      tabIndex={isFreeTimeTask ? 0 : undefined}
-      onClick={isFreeTimeTask ? () => onOpenDetails(task) : undefined}
+      role={isOpenableRow ? 'button' : undefined}
+      tabIndex={isOpenableRow ? 0 : undefined}
+      onClick={isOpenableRow ? () => onOpenDetails(task) : undefined}
       onKeyDown={handleCardKeyDown}
-      aria-label={isFreeTimeTask ? `${task.title} detayını aç` : undefined}
+      aria-label={isOpenableRow ? `${task.title} detayını aç` : undefined}
       className={`grid gap-3 border-l-[3px] ${subjectStyle.border} px-2.5 py-2.5 transition-colors sm:gap-4 sm:px-4 sm:py-4 lg:items-center ${cardGridClass} ${cardSurfaceClass} ${
-        isFreeTimeTask ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-accent' : ''
+        isOpenableRow ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-accent' : ''
       }`}
     >
       {bodyNode}

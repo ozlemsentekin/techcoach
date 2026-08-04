@@ -91,6 +91,15 @@ export default function TodayPage() {
     }
   }, [])
 
+  // Mola süresi dolduğunda backend'i sistem olarak otomatik tamamlar (bkz. autoCompleteExpiredBreaks);
+  // burada periyodik yenileme yalnızca bu değişikliğin ekrana yansımasını sağlar.
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      getTasksForDate(date).then(setTasks).catch(() => {})
+    }, 30000)
+    return () => window.clearInterval(interval)
+  }, [])
+
   useEffect(() => {
     if (historyDays.length === 0) return undefined
     let ignore = false
