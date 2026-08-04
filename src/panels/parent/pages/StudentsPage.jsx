@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
-import { BookOpen, Check, GraduationCap, Search, Users, X } from 'lucide-react'
+import { Award, BookOpen, Check, GraduationCap, Search, UserRound, Users, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
 import DataTable from '../../ui/DataTable'
+import ActionsMenu from '../../ui/ActionsMenu'
 import { MotionDiv } from '../../ui/motion'
 import StudentTeacherModal from '../components/StudentTeacherModal'
+import StudentProfileModal from '../components/StudentProfileModal'
+import StudentReportCardModal from '../components/StudentReportCardModal'
 
-const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{12,72}$/
 const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const RESOURCE_BOOK_TYPE_LABELS = {
@@ -21,8 +23,6 @@ const RESOURCE_BOOK_TYPE_LABELS = {
 const INITIAL_FORM = {
   fullName: '',
   email: '',
-  password: '',
-  passwordRepeat: '',
   acceptConsent: false,
 }
 
@@ -84,16 +84,8 @@ function AddStudentModal({ onCreated, onClose }) {
       setError('Ad soyad en az 3 karakter olmalı.')
       return
     }
-    if (!EMAIL_RULE.test(form.email)) {
+    if (form.email && !EMAIL_RULE.test(form.email)) {
       setError('Geçerli bir e-posta adresi girin.')
-      return
-    }
-    if (!PASSWORD_RULE.test(form.password)) {
-      setError('Şifre en az 12 karakter olmalı; büyük harf, küçük harf, rakam ve özel karakter içermelidir.')
-      return
-    }
-    if (form.password !== form.passwordRepeat) {
-      setError('Şifre tekrarı eşleşmiyor.')
       return
     }
     if (!form.acceptConsent) {
@@ -142,33 +134,11 @@ function AddStudentModal({ onCreated, onClose }) {
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">E-posta</span>
+            <span className="text-sm font-medium text-panel-text-muted">E-posta (tercihen)</span>
             <input
               name="email"
               type="email"
               value={form.email}
-              onChange={handleChange}
-              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">Şifre</span>
-            <input
-              name="password"
-              type="password"
-              value={form.password}
-              onChange={handleChange}
-              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">Şifre Tekrar</span>
-            <input
-              name="passwordRepeat"
-              type="password"
-              value={form.passwordRepeat}
               onChange={handleChange}
               className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
             />
@@ -373,6 +343,9 @@ export default function StudentsPage() {
   const [showModal, setShowModal] = useState(false)
   const [resourceModalStudent, setResourceModalStudent] = useState(null)
   const [teacherModalStudent, setTeacherModalStudent] = useState(null)
+  const [profileModalStudent, setProfileModalStudent] = useState(null)
+  const [reportCardStudent, setReportCardStudent] = useState(null)
+  const [openMenuStudentId, setOpenMenuStudentId] = useState(null)
 
   const loadStudents = () => {
     authRequest('/api/parent/students', { method: 'GET' })
@@ -459,27 +432,21 @@ export default function StudentsPage() {
                       {formatDate(student.lastLoginAt)}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          className="h-[34px] rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#f8f7fb]"
-                          onClick={() => setTeacherModalStudent(student)}
-                        >
-                          <GraduationCap size={14} className="mr-1.5 inline" aria-hidden="true" />
-                          Öğretmen Ekle
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          className="h-[34px] rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#f8f7fb]"
-                          onClick={() => setResourceModalStudent(student)}
-                        >
-                          <BookOpen size={14} className="mr-1.5 inline" aria-hidden="true" />
-                          Kaynak Ekle
-                        </Button>
+                      <div className="flex justify-end">
+                        <ActionsMenu
+                          isOpen={openMenuStudentId === student.id}
+                          onToggle={() =>
+                            setOpenMenuStudentId((current) => (current === student.id ? null : student.id))
+                          }
+                          onClose={() => setOpenMenuStudentId(null)}
+                          triggerLabel="Öğrenci işlemleri"
+                          items={[
+                            { label: 'Öğretmenler', icon: GraduationCap, onClick: () => setTeacherModalStudent(student) },
+                            { label: 'Kaynaklar', icon: BookOpen, onClick: () => setResourceModalStudent(student) },
+                            { label: 'Profil', icon: UserRound, onClick: () => setProfileModalStudent(student) },
+                            { label: 'LGS Karnesi', icon: Award, onClick: () => setReportCardStudent(student) },
+                          ]}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -503,6 +470,18 @@ export default function StudentsPage() {
           student={teacherModalStudent}
           onSaved={handleTeachersSaved}
           onClose={() => setTeacherModalStudent(null)}
+        />
+      ) : null}
+      {profileModalStudent ? (
+        <StudentProfileModal
+          student={profileModalStudent}
+          onClose={() => setProfileModalStudent(null)}
+        />
+      ) : null}
+      {reportCardStudent ? (
+        <StudentReportCardModal
+          student={reportCardStudent}
+          onClose={() => setReportCardStudent(null)}
         />
       ) : null}
     </div>

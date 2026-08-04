@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, CalendarDays, Eye, GraduationCap, Mail, Phone, Search, Users, X } from 'lucide-react'
+import { BookOpen, CalendarDays, Eye, GraduationCap, Mail, Phone, Search, UserRound, Users, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import PageHeader from '../../layout/PageHeader'
 import EmptyState from '../../shared/EmptyState'
 import LoadingState from '../../shared/LoadingState'
+import ActionsMenu from '../../ui/ActionsMenu'
 import Button from '../../ui/Button'
 import DataTable from '../../ui/DataTable'
 import { MotionDiv } from '../../ui/motion'
+import TeacherProfileModal from '../components/TeacherProfileModal'
 import TeacherResourceBooksModal from '../components/TeacherResourceBooksModal'
 
 const WEEKDAY_SHORT_LABELS = {
@@ -249,7 +251,9 @@ export default function TeachersPage() {
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
   const [resourceModalTeacher, setResourceModalTeacher] = useState(null)
+  const [profileModalTeacher, setProfileModalTeacher] = useState(null)
   const [detailTeacherId, setDetailTeacherId] = useState(null)
+  const [openMenuTeacherId, setOpenMenuTeacherId] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -308,6 +312,27 @@ export default function TeachersPage() {
 
   const toggleTeacherDetail = (teacher) => {
     setDetailTeacherId((current) => (current === teacher.id ? null : teacher.id))
+  }
+
+  const handleTeacherProfileSaved = (updatedTeacher) => {
+    if (!updatedTeacher) return
+    setTeachers((current) =>
+      (current || []).map((teacher) =>
+        teacher.id === updatedTeacher.id
+          ? {
+              ...teacher,
+              fullName: updatedTeacher.fullName,
+              subjectId: updatedTeacher.subjectId,
+              subjectName: updatedTeacher.subjectName,
+              phone: updatedTeacher.phone,
+              type: updatedTeacher.type,
+              typeLabel: updatedTeacher.typeLabel,
+              schedule: updatedTeacher.schedule,
+              updatedAt: updatedTeacher.updatedAt,
+            }
+          : teacher,
+      ),
+    )
   }
 
   return (
@@ -421,29 +446,20 @@ export default function TeachersPage() {
                             <ResourceSummary teacher={teacher} />
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                className={`h-[34px] rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#f8f7fb] ${
-                                  detailSelected ? 'border-[#655e94] bg-[#f5f2fb] text-[#655e94]' : ''
-                                }`}
-                                onClick={() => toggleTeacherDetail(teacher)}
-                              >
-                                <Eye size={14} aria-hidden="true" />
-                                Detay
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                className="h-[34px] rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#f8f7fb]"
-                                onClick={() => setResourceModalTeacher(teacher)}
-                              >
-                                <BookOpen size={14} aria-hidden="true" />
-                                Kaynak
-                              </Button>
+                            <div className="flex justify-end">
+                              <ActionsMenu
+                                isOpen={openMenuTeacherId === teacher.id}
+                                onToggle={() =>
+                                  setOpenMenuTeacherId((current) => (current === teacher.id ? null : teacher.id))
+                                }
+                                onClose={() => setOpenMenuTeacherId(null)}
+                                triggerLabel="Öğretmen işlemleri"
+                                items={[
+                                  { label: 'Detay', icon: Eye, onClick: () => toggleTeacherDetail(teacher) },
+                                  { label: 'Profil', icon: UserRound, onClick: () => setProfileModalTeacher(teacher) },
+                                  { label: 'Kaynak', icon: BookOpen, onClick: () => setResourceModalTeacher(teacher) },
+                                ]}
+                              />
                             </div>
                           </td>
                         </tr>
@@ -466,6 +482,14 @@ export default function TeachersPage() {
           teacher={resourceModalTeacher}
           onSaved={handleTeacherResourcesSaved}
           onClose={() => setResourceModalTeacher(null)}
+        />
+      ) : null}
+
+      {profileModalTeacher ? (
+        <TeacherProfileModal
+          teacher={profileModalTeacher}
+          onSaved={handleTeacherProfileSaved}
+          onClose={() => setProfileModalTeacher(null)}
         />
       ) : null}
     </div>
