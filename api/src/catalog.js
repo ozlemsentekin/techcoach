@@ -1134,6 +1134,283 @@ async function setTestAnswerKeyHandler(request) {
   }
 }
 
+const SCHOOL_TYPES = new Set(['devlet', 'ozel'])
+const MAX_BULK_IMPORT_LINES = 500
+
+function sanitizeSchool(record) {
+  return {
+    id: record.id,
+    provinceId: record.province_id,
+    provinceName: record.province_name || null,
+    districtId: record.district_id,
+    districtName: record.district_name || null,
+    name: record.name,
+    type: record.school_type,
+    isActive: Boolean(record.is_active),
+    createdAt: record.created_at,
+  }
+}
+
+async function fetchDistrictWithProvince(districtId) {
+  const requestDb = await withRequest({
+    districtId: { type: sql.UniqueIdentifier, value: districtId },
+  })
+  const result = await requestDb.query(`
+    SELECT TOP 1 id, province_id FROM dbo.Districts WHERE id = @districtId;
+  `)
+  return result.recordset[0] || null
+}
+
+async function listSchoolsForAdminHandler(request) {
+  try {
+    const { error } = await requireAdmin(request)
+    if (error) {
+      return error
+    }
+
+    const provinceId = request.query.get('provinceId') || null
+    const districtId = request.query.get('districtId') || null
+    const search = request.query.get('search')?.trim() || null
+
+    const requestDb = await withRequest({
+      provinceId: { type: sql.UniqueIdentifier, value: provinceId },
+      districtId: { type: sql.UniqueIdentifier, value: districtId },
+      search: { type: sql.NVarChar(200), value: search ? `%${search}%` : null },
+    })
+    const result = await requestDb.query(`
+      SELECT s.id, s.province_id, pr.name AS province_name, s.district_id, d.name AS district_name,
+             s.name, s.school_type, s.is_active, s.created_at
+      FROM dbo.Schools s
+      INNER JOIN dbo.Provinces pr ON pr.id = s.province_id
+      INNER JOIN dbo.Districts d ON d.id = s.district_id
+      WHERE (@provinceId IS NULL OR s.province_id = @provinceId)
+        AND (@districtId IS NULL OR s.district_id = @districtId)
+        AND (@search IS NULL OR s.name LIKE @search)
+      ORDER BY pr.name ASC, d.name ASC, s.name ASC;
+    `)
+
+    return json(200, { schools: result.recordset.map(sanitizeSchool) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    console.error('listSchoolsForAdminHandler failed', error)
+    return json(500, { error: 'Okullar yüklenemedi.' })
+  }
+}
+
+async function createSchoolHandler(request) {
+  try {
+    const { error } = await requireAdmin(request)
+    if (error) {
+      return error
+    }
+
+    const payload = await request.json().catch(() => null)
+    const districtId = payload?.districtId?.trim()
+    const name = payload?.name?.trim()
+    const type = payload?.type
+
+    if (!districtId) {
+      return json(400, { error: 'İlçe seçilmeli.' })
+    }
+    if (!name || name.length < 2) {
+      return json(400, { error: 'Okul adı en az 2 karakter olmalı.' })
+    }
+    if (!SCHOOL_TYPES.has(type)) {
+      return json(400, { error: 'Okul türü devlet veya özel olmalı.' })
+    }
+
+    const district = await fetchDistrictWithProvince(districtId)
+    if (!district) {
+      return json(400, { error: 'Seçilen ilçe bulunamadı.' })
+    }
+
+    const requestDb = await withRequest({
+      provinceId: { type: sql.UniqueIdentifier, value: district.province_id },
+      districtId: { type: sql.UniqueIdentifier, value: district.id },
+      name: { type: sql.NVarChar(200), value: name },
+      schoolType: { type: sql.NVarChar(20), value: type },
+    })
+
+    const result = await requestDb.query(`
+      INSERT INTO dbo.Schools (province_id, district_id, name, school_type)
+      OUTPUT inserted.id, inserted.province_id, inserted.district_id, inserted.name,
+             inserted.school_type, inserted.is_active, inserted.created_at
+      VALUES (@provinceId, @districtId, @name, @schoolType);
+    `)
+
+    const created = result.recordset[0]
+    const withNamesDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: created.id },
+    })
+    const withNamesResult = await withNamesDb.query(`
+      SELECT s.id, s.province_id, pr.name AS province_name, s.district_id, d.name AS district_name,
+             s.name, s.school_type, s.is_active, s.created_at
+      FROM dbo.Schools s
+      INNER JOIN dbo.Provinces pr ON pr.id = s.province_id
+      INNER JOIN dbo.Districts d ON d.id = s.district_id
+      WHERE s.id = @id;
+    `)
+
+    return json(201, { school: sanitizeSchool(withNamesResult.recordset[0]) })
+  } catch (error) {
+    if (error.number === 2601 || error.number === 2627) {
+      return json(409, { error: 'Bu ilçede aynı isimde bir okul zaten var.' })
+    }
+
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    console.error('createSchoolHandler failed', error)
+    return json(500, { error: 'Okul oluşturulamadı.' })
+  }
+}
+
+async function updateSchoolHandler(request) {
+  try {
+    const { error } = await requireAdmin(request)
+    if (error) {
+      return error
+    }
+
+    const schoolId = request.params.schoolId
+    const payload = await request.json().catch(() => null)
+    const name = payload?.name?.trim()
+    const type = payload?.type
+    const isActive = payload?.isActive
+
+    if (!name || name.length < 2) {
+      return json(400, { error: 'Okul adı en az 2 karakter olmalı.' })
+    }
+    if (!SCHOOL_TYPES.has(type)) {
+      return json(400, { error: 'Okul türü devlet veya özel olmalı.' })
+    }
+    if (typeof isActive !== 'boolean') {
+      return json(400, { error: 'Durum bilgisi geçersiz.' })
+    }
+
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: schoolId },
+      name: { type: sql.NVarChar(200), value: name },
+      schoolType: { type: sql.NVarChar(20), value: type },
+      isActive: { type: sql.Bit, value: isActive },
+    })
+
+    const result = await requestDb.query(`
+      UPDATE dbo.Schools
+      SET name = @name, school_type = @schoolType, is_active = @isActive
+      WHERE id = @id;
+
+      SELECT s.id, s.province_id, pr.name AS province_name, s.district_id, d.name AS district_name,
+             s.name, s.school_type, s.is_active, s.created_at
+      FROM dbo.Schools s
+      INNER JOIN dbo.Provinces pr ON pr.id = s.province_id
+      INNER JOIN dbo.Districts d ON d.id = s.district_id
+      WHERE s.id = @id;
+    `)
+
+    const updated = result.recordset[0]
+    if (!updated) {
+      return json(404, { error: 'Okul bulunamadı.' })
+    }
+
+    return json(200, { school: sanitizeSchool(updated) })
+  } catch (error) {
+    if (error.number === 2601 || error.number === 2627) {
+      return json(409, { error: 'Bu ilçede aynı isimde bir okul zaten var.' })
+    }
+
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    console.error('updateSchoolHandler failed', error)
+    return json(500, { error: 'Okul güncellenemedi.' })
+  }
+}
+
+async function bulkImportSchoolsHandler(request) {
+  try {
+    const { error } = await requireAdmin(request)
+    if (error) {
+      return error
+    }
+
+    const payload = await request.json().catch(() => null)
+    const districtId = payload?.districtId?.trim()
+    const rowsText = payload?.rows
+
+    if (!districtId) {
+      return json(400, { error: 'İlçe seçilmeli.' })
+    }
+    if (typeof rowsText !== 'string' || !rowsText.trim()) {
+      return json(400, { error: 'İçe aktarılacak okul listesi boş olamaz.' })
+    }
+
+    const district = await fetchDistrictWithProvince(districtId)
+    if (!district) {
+      return json(400, { error: 'Seçilen ilçe bulunamadı.' })
+    }
+
+    const lines = rowsText.split('\n').map((line) => line.trim()).filter(Boolean)
+    if (lines.length > MAX_BULK_IMPORT_LINES) {
+      return json(400, { error: `En fazla ${MAX_BULK_IMPORT_LINES} satır içe aktarabilirsiniz.` })
+    }
+
+    const validRows = []
+    const errors = []
+    lines.forEach((line, index) => {
+      const parts = line.split(';').map((part) => part.trim())
+      const [name, rawType] = parts
+      const type = rawType?.toLocaleLowerCase('tr-TR')
+
+      if (parts.length !== 2 || !name || name.length < 2 || !SCHOOL_TYPES.has(type)) {
+        errors.push({ line: index + 1, reason: 'Beklenen biçim: Okul Adı;devlet veya Okul Adı;ozel' })
+        return
+      }
+
+      validRows.push({ name, type })
+    })
+
+    let createdCount = 0
+    let skippedCount = 0
+
+    for (const row of validRows) {
+      const requestDb = await withRequest({
+        provinceId: { type: sql.UniqueIdentifier, value: district.province_id },
+        districtId: { type: sql.UniqueIdentifier, value: district.id },
+        name: { type: sql.NVarChar(200), value: row.name },
+        schoolType: { type: sql.NVarChar(20), value: row.type },
+      })
+      const result = await requestDb.query(`
+        INSERT INTO dbo.Schools (province_id, district_id, name, school_type)
+        SELECT @provinceId, @districtId, @name, @schoolType
+        WHERE NOT EXISTS (
+          SELECT 1 FROM dbo.Schools WHERE district_id = @districtId AND name = @name
+        );
+      `)
+
+      if (result.rowsAffected[0] > 0) {
+        createdCount += 1
+      } else {
+        skippedCount += 1
+      }
+    }
+
+    return json(200, { createdCount, skippedCount, errors })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    console.error('bulkImportSchoolsHandler failed', error)
+    return json(500, { error: 'Okullar içe aktarılamadı.' })
+  }
+}
+
 module.exports = {
   listSubjectsHandler,
   listSubjectsForPanelHandler,
@@ -1155,4 +1432,8 @@ module.exports = {
   createQuestionHandler,
   listTestAnswerKeyHandler,
   setTestAnswerKeyHandler,
+  listSchoolsForAdminHandler,
+  createSchoolHandler,
+  updateSchoolHandler,
+  bulkImportSchoolsHandler,
 }
