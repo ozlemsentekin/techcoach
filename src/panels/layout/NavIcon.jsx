@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Clock,
   GraduationCap,
+  School,
 } from 'lucide-react'
 
 const ICONS = {
@@ -46,6 +47,7 @@ const ICONS = {
   ChevronRight,
   Clock,
   GraduationCap,
+  School,
 }
 
 export default function NavIcon({ name, size = 20, className }) {

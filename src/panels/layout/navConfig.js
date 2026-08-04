@@ -44,6 +44,7 @@ export const PARENT_ADMIN_NAV = {
     { to: '/parent/admin/users', label: 'Üyeler', icon: 'Users' },
     { to: '/parent/admin/subjects', label: 'Dersler', icon: 'BookOpen' },
     { to: '/parent/admin/publishers', label: 'Yayın Evleri', icon: 'Building2' },
+    { to: '/parent/admin/schools', label: 'Okul Yönetimi', icon: 'School' },
     { to: '/parent/admin/motivation-messages', label: 'Motivasyon Mesajları', icon: 'Sparkles' },
     { to: '/parent/admin/greetings', label: 'Selamlama Metinleri', icon: 'Clock' },
   ],
