@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
 import NavIcon from './NavIcon'
-import BrandMark from './BrandMark'
 import { PARENT_ADMIN_NAV, PARENT_SIDEBAR_NAV, isNavItemActive } from './navConfig'
 
 export default function ParentSidebar() {
@@ -14,7 +13,7 @@ export default function ParentSidebar() {
   return (
     <aside className="hidden shrink-0 flex-col bg-panel-surface px-2 py-5 shadow-panel-1 md:flex md:w-20 lg:w-64 lg:px-3">
       <div className="mb-5 flex h-9 items-center gap-2 border-b border-panel-border px-1 pb-5 lg:px-2">
-        <BrandMark className="h-7 w-7 shrink-0 text-panel-blue" />
+        <img src="/icon-192.png" alt="" className="h-7 w-7 shrink-0 rounded-lg" />
         <span className="hidden truncate text-xl font-bold tracking-wide text-panel-text lg:inline">TechCoach</span>
       </div>
 
