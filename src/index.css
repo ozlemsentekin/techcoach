@@ -350,7 +350,7 @@ body {
 }
 
 .student-theme-section-muted {
-  color: rgba(255, 255, 255, 0.94);
+  color: #ffffff !important;
 }
 
 /*
@@ -364,8 +364,8 @@ body {
  * tanımlıdır (bkz. yukarıdaki tema blokları).
  */
 .student-theme-time-badge {
-  background-color: var(--color-student-theme-badge-bg);
-  color: #ffffff;
+  background-color: var(--color-student-theme-badge-bg) !important;
+  color: #ffffff !important;
 }
 
 [data-theme='black'] .student-theme-banner,
