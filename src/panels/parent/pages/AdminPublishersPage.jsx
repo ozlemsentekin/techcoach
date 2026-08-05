@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { MotionDiv } from '../../ui/motion'
 import { BookOpen, Building2, CheckCircle2, ChevronDown, ChevronRight, Dot, FileText, HelpCircle, ImagePlus, KeyRound, ListTree, Pencil, Search, Trash2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
@@ -1075,12 +1076,25 @@ function TopicBlock({ topic, tests, expanded, onToggle, onAddTest, onEditTopic, 
   )
 }
 
-function BookBlock({ book, subjectsById, topics, tests, onAddTopic, onAddTest, onEditTopic, onEditTest, onViewTest, onDeleteTest, onEditBook, onToggleActive }) {
-  const [expanded, setExpanded] = useState(false)
+function BookBlock({ book, subjectsById, topics, tests, isFocused, missingAnswerKeyInfo, onAddTopic, onAddTest, onEditTopic, onEditTest, onViewTest, onDeleteTest, onEditBook, onToggleActive }) {
+  const [expanded, setExpanded] = useState(isFocused)
   const [expandedTopicId, setExpandedTopicId] = useState(null)
+  const blockRef = useRef(null)
+
+  useEffect(() => {
+    if (isFocused && blockRef.current) {
+      blockRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[#e7e8ed] border-l-2 border-l-[#c9bfec] bg-white shadow-[0_1px_4px_rgba(20,25,40,0.03)]">
+    <div
+      ref={blockRef}
+      className={`overflow-hidden rounded-xl border border-[#e7e8ed] border-l-2 border-l-[#c9bfec] bg-white shadow-[0_1px_4px_rgba(20,25,40,0.03)] ${
+        isFocused ? 'ring-2 ring-[#655e94] ring-offset-2' : ''
+      }`}
+    >
       <div
         className="flex min-h-[80px] flex-wrap items-center gap-3 px-[18px] py-4 cursor-pointer hover:bg-[#fbfaff]"
         onClick={() => setExpanded((value) => !value)}
@@ -1135,6 +1149,11 @@ function BookBlock({ book, subjectsById, topics, tests, onAddTopic, onAddTest, o
               {book.type === 'soru_bankasi' && !book.hasAnswerKey ? (
                 <span className="inline-flex items-center rounded-full bg-panel-accent-soft px-2.5 py-1 text-[11px] font-medium text-panel-warm">
                   Cevap Anahtarı Yok
+                </span>
+              ) : null}
+              {missingAnswerKeyInfo ? (
+                <span className="inline-flex items-center rounded-full bg-panel-accent-soft px-2.5 py-1 text-[11px] font-medium text-panel-warm">
+                  {missingAnswerKeyInfo.incompleteTestCount}/{missingAnswerKeyInfo.totalTestCount} Test Eksik
                 </span>
               ) : null}
               <button
@@ -1198,6 +1217,9 @@ function PublisherRow({
   subjectsById,
   topics,
   tests,
+  focusBookId,
+  isFocusPublisher,
+  missingAnswerKeyInfoById,
   onAddBook,
   onAddTopic,
   onAddTest,
@@ -1208,7 +1230,7 @@ function PublisherRow({
   onEditBook,
   onToggleActive,
 }) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(isFocusPublisher)
 
   return (
     <div className="overflow-hidden rounded-[14px] border border-[#e7e9ee] bg-white shadow-[0_2px_8px_rgba(20,25,40,0.04)]">
@@ -1254,6 +1276,8 @@ function PublisherRow({
                   subjectsById={subjectsById}
                   topics={topics.filter((topic) => topic.resourceBookId === book.id)}
                   tests={tests}
+                  isFocused={book.id === focusBookId}
+                  missingAnswerKeyInfo={missingAnswerKeyInfoById[book.id]}
                   onAddTopic={onAddTopic}
                   onAddTest={onAddTest}
                   onEditTopic={onEditTopic}
@@ -1273,6 +1297,8 @@ function PublisherRow({
 }
 
 export default function AdminPublishersPage() {
+  const [searchParams] = useSearchParams()
+  const focusBookId = searchParams.get('resourceBookId')
   const [publishers, setPublishers] = useState(null)
   const [resourceBooks, setResourceBooks] = useState(null)
   const [subjects, setSubjects] = useState(null)
@@ -1291,6 +1317,8 @@ export default function AdminPublishersPage() {
   const [deletingTestError, setDeletingTestError] = useState('')
   const [deletingTestLoading, setDeletingTestLoading] = useState(false)
   const [query, setQuery] = useState('')
+  const [onlyMissingAnswerKey, setOnlyMissingAnswerKey] = useState(false)
+  const [missingAnswerKeyBooks, setMissingAnswerKeyBooks] = useState([])
 
   const loadData = () => {
     Promise.all([
@@ -1299,13 +1327,15 @@ export default function AdminPublishersPage() {
       authRequest('/api/panel-admin/subjects', { method: 'GET' }),
       authRequest('/api/panel-admin/resource-book-topics', { method: 'GET' }),
       authRequest('/api/panel-admin/resource-book-topic-tests', { method: 'GET' }),
+      authRequest('/api/panel-admin/resource-books/missing-answer-key', { method: 'GET' }),
     ])
-      .then(([publishersData, booksData, subjectsData, topicsData, testsData]) => {
+      .then(([publishersData, booksData, subjectsData, topicsData, testsData, missingAnswerKeyData]) => {
         setPublishers(publishersData.publishers)
         setResourceBooks(booksData.resourceBooks)
         setSubjects(subjectsData.subjects)
         setTopics(topicsData.topics)
         setTests(testsData.tests)
+        setMissingAnswerKeyBooks(missingAnswerKeyData.resourceBooks)
       })
       .catch((err) => setError(err.message))
   }
@@ -1386,16 +1416,40 @@ export default function AdminPublishersPage() {
     }
   }
 
+  const missingAnswerKeyIds = useMemo(
+    () => new Set(missingAnswerKeyBooks.map((book) => book.id)),
+    [missingAnswerKeyBooks],
+  )
+
+  const missingAnswerKeyInfoById = useMemo(
+    () => Object.fromEntries(missingAnswerKeyBooks.map((book) => [book.id, book])),
+    [missingAnswerKeyBooks],
+  )
+
   const filteredPublishers = useMemo(() => {
-    if (!publishers) return null
+    if (!publishers || !resourceBooks) return null
     const q = query.trim().toLowerCase()
-    return q ? publishers.filter((publisher) => publisher.name.toLowerCase().includes(q)) : publishers
-  }, [publishers, query])
+    return publishers.filter((publisher) => {
+      if (q && !publisher.name.toLowerCase().includes(q)) return false
+      if (onlyMissingAnswerKey) {
+        const hasMissingBook = resourceBooks.some(
+          (book) => book.publisherId === publisher.id && missingAnswerKeyIds.has(book.id),
+        )
+        if (!hasMissingBook) return false
+      }
+      return true
+    })
+  }, [publishers, resourceBooks, query, onlyMissingAnswerKey, missingAnswerKeyIds])
 
   const subjectsById = useMemo(
     () => Object.fromEntries((subjects || []).map((subject) => [subject.id, subject])),
     [subjects],
   )
+
+  const focusPublisherId = useMemo(() => {
+    if (!focusBookId || !resourceBooks) return null
+    return resourceBooks.find((book) => book.id === focusBookId)?.publisherId || null
+  }, [focusBookId, resourceBooks])
 
   const viewingTestResourceBookType = useMemo(() => {
     if (!viewingTest) return null
@@ -1426,6 +1480,15 @@ export default function AdminPublishersPage() {
                 />
               </div>
             ) : null}
+            <label className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-[#dfe4e5] bg-white px-3 text-sm text-[#253d3e]">
+              <input
+                type="checkbox"
+                checked={onlyMissingAnswerKey}
+                onChange={(event) => setOnlyMissingAnswerKey(event.target.checked)}
+                className="h-4 w-4"
+              />
+              Eksik cevap anahtarı
+            </label>
             <Button
               onClick={() => setShowPublisherModal(true)}
               className="h-10 rounded-[10px] bg-[#655e94] px-4 text-sm font-medium text-white hover:opacity-90"
@@ -1450,16 +1513,23 @@ export default function AdminPublishersPage() {
         <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex flex-col gap-3">
             {filteredPublishers.length === 0 ? (
-              <p className="px-1 py-6 text-sm text-[#667475]">Aramayla eşleşen yayın evi yok.</p>
+              <p className="px-1 py-6 text-sm text-[#667475]">
+                {onlyMissingAnswerKey ? 'Cevap anahtarı eksik kaynak yok.' : 'Aramayla eşleşen yayın evi yok.'}
+              </p>
             ) : (
               filteredPublishers.map((publisher) => (
                 <PublisherRow
                   key={publisher.id}
                   publisher={publisher}
-                  books={resourceBooks.filter((book) => book.publisherId === publisher.id)}
+                  books={resourceBooks.filter(
+                    (book) => book.publisherId === publisher.id && (!onlyMissingAnswerKey || missingAnswerKeyIds.has(book.id)),
+                  )}
                   subjectsById={subjectsById}
                   topics={topics}
                   tests={tests}
+                  focusBookId={focusBookId}
+                  isFocusPublisher={publisher.id === focusPublisherId}
+                  missingAnswerKeyInfoById={missingAnswerKeyInfoById}
                   onAddBook={setBookModalPublisher}
                   onAddTopic={setTopicModalBook}
                   onAddTest={setTestModalTopic}

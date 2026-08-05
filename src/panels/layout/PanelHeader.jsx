@@ -263,7 +263,7 @@ export default function PanelHeader({ role }) {
       </button>
       <div className="h-6 w-px shrink-0 bg-panel-border" aria-hidden="true" />
 
-      {themeCtx ? (
+      {themeCtx && !themeCtx.locked ? (
         <div className="relative" ref={themeMenuRef}>
           <button
             type="button"

@@ -44,6 +44,7 @@ function sanitizeStudent(record) {
     createdAt: record.created_at,
     resourceCount: Number(record.resource_count) || 0,
     teacherCount: Number(record.teacher_count) || 0,
+    restricted: Boolean(record.funded_by_teacher_id),
   }
 }
 
@@ -247,7 +248,7 @@ async function requireParentSession(request) {
     id: { type: sql.UniqueIdentifier, value: session.sub },
   })
   const result = await requestDb.query(`
-    SELECT TOP 1 role FROM dbo.Users WHERE id = @id;
+    SELECT TOP 1 role, aydinlatma_accepted_at, kvkk_accepted_at FROM dbo.Users WHERE id = @id;
   `)
   const record = result.recordset[0]
 
@@ -257,6 +258,15 @@ async function requireParentSession(request) {
 
   if (record.role !== 'ebeveyn') {
     return { error: json(403, { error: 'Bu alana erişim yetkiniz yok.' }) }
+  }
+
+  if (!record.aydinlatma_accepted_at || !record.kvkk_accepted_at) {
+    return {
+      error: json(403, {
+        error: 'Devam etmek için KVKK ve aydınlatma metnini onaylamalısınız.',
+        code: 'CONSENT_REQUIRED',
+      }),
+    }
   }
 
   return { parentId: session.sub }
@@ -433,7 +443,7 @@ async function listStudentsHandler(request) {
       parentId: { type: sql.UniqueIdentifier, value: parentId },
     })
     const result = await requestDb.query(`
-      SELECT u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at,
+      SELECT u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at, u.funded_by_teacher_id,
              COUNT(DISTINCT rb.id) AS resource_count,
              COUNT(DISTINCT st.id) AS teacher_count
       FROM dbo.Users u
@@ -441,7 +451,7 @@ async function listStudentsHandler(request) {
       LEFT JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id AND rb.is_active = 1
       LEFT JOIN dbo.StudentTeachers st ON st.student_id = u.id
       WHERE u.parent_id = @parentId
-      GROUP BY u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at
+      GROUP BY u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at, u.funded_by_teacher_id
       ORDER BY u.created_at ASC;
     `)
 
@@ -539,7 +549,7 @@ async function enterStudentHandler(request) {
     })
     const result = await requestDb.query(`
       SELECT TOP 1
-        u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at,
+        u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at, u.funded_by_teacher_id,
         e.status AS entitlement_status, e.source AS entitlement_source,
         e.current_period_end AS entitlement_current_period_end
       FROM dbo.Users u
@@ -607,6 +617,7 @@ async function exitStudentHandler(request) {
     const result = await requestDb.query(`
       SELECT TOP 1
         u.id, u.full_name, u.email, u.role, u.is_admin, u.last_login_at, u.created_at,
+        u.aydinlatma_accepted_at, u.kvkk_accepted_at,
         e.status AS entitlement_status, e.source AS entitlement_source,
         e.current_period_end AS entitlement_current_period_end
       FROM dbo.Users u
@@ -1224,4 +1235,5 @@ module.exports = {
   fetchTeacherResourceBooks,
   requireParentSession,
   verifyParentOwnsStudent,
+  verifySubjectExists,
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useAuth } from '../../../context/useAuth'
 import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Clock3, Coffee, Copy, Info, Star } from 'lucide-react'
 import {
   getWeekDates,
@@ -80,6 +81,8 @@ function SummaryItem({ type, value }) {
 }
 
 export default function WeeklyPlanPage() {
+  const { authUser } = useAuth()
+  const restricted = Boolean(authUser?.restricted)
   const [searchParams, setSearchParams] = useSearchParams()
   const [weekOffset, setWeekOffset] = useState(0)
   const weekStart = addDaysISO(currentWeekStart, weekOffset * 7)
@@ -242,8 +245,11 @@ export default function WeeklyPlanPage() {
           <ChevronRight size={18} aria-hidden="true" />
         </Button>
 
-        <span className="mx-1 hidden h-9 w-px bg-panel-border sm:block" aria-hidden="true" />
+        {restricted ? null : (
+          <span className="mx-1 hidden h-9 w-px bg-panel-border sm:block" aria-hidden="true" />
+        )}
 
+        {restricted ? null : (
         <Button
           type="button"
           variant="secondary"
@@ -257,6 +263,7 @@ export default function WeeklyPlanPage() {
           <Copy size={18} aria-hidden="true" />
           Geçen Haftayı Kopyala
         </Button>
+        )}
       </div>
 
       {loadError ? (
@@ -277,11 +284,11 @@ export default function WeeklyPlanPage() {
             weekDates={weekDates}
             tasksByDate={tasksByDate}
             dayStatusByDate={dayStatusByDate}
-            onAddHomework={(date) => setHomeworkModalDate(date)}
-            onAddTask={(date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}
+            onAddHomework={restricted ? undefined : (date) => setHomeworkModalDate(date)}
+            onAddTask={restricted ? undefined : (date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}
             onEditTask={(task) => setDrawerState({ initialTask: task })}
             onPublishDay={handlePublishDay}
-            onQuickAddBreak={handleQuickAddBreak}
+            onQuickAddBreak={restricted ? undefined : handleQuickAddBreak}
           />
 
           <div className="flex items-center gap-3 rounded-2xl bg-panel-blue-soft px-5 py-4 text-sm font-semibold text-panel-blue">

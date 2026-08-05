@@ -44,10 +44,19 @@ export async function getTaskActivityLogs(date, { limit = 50 } = {}) {
   return data.logs || []
 }
 
-/** Soru bankası görevinin dijital cevap kağıdı: testler, soru sayıları, kayıtlı cevaplar/sonuçlar. */
+/** Soru bankası görevinin dijital cevap kağıdı: testler, soru sayıları, kayıtlı cevaplar/sonuçlar, yanlış soru fotoğrafları. */
 export async function getTaskAnswerSheet(taskId) {
   const data = await authRequest(`/api/panel/tasks/${taskId}/answer-sheet`, { method: 'GET' })
-  return data.tests
+  return { tests: data.tests, photos: data.photos || {} }
+}
+
+/** Yanlış işaretlenmiş bir soru için öğrencinin çektiği/seçtiği fotoğrafı kaydeder (Hata Defterim'de görünür). */
+export async function saveWrongQuestionPhoto(taskId, testId, orderNo, photoDataUrl) {
+  const data = await authRequest(`/api/panel/tasks/${taskId}/mistakes/${testId}/${orderNo}`, {
+    method: 'PUT',
+    body: JSON.stringify({ photo: photoDataUrl }),
+  })
+  return data.wrongQuestion
 }
 
 /** Cevap kağıdındaki tek "Kaydet" butonu: görevdeki tüm testlerin o anki cevaplarını tek istekte gönderir. */

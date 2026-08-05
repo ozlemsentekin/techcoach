@@ -2,8 +2,14 @@ const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
 const { json } = require('./http')
 const { isSessionError } = require('./security')
-const { requireStudentContext } = require('./studentScope')
+const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
 const { recordTaskActivities } = require('./taskActivity')
+const { sanitizeWrongQuestion } = require('./progress')
+
+// Öğrencinin cevabını bilmediği bir soruyu bilinçli olarak "boş" işaretlemesini temsil eder.
+// Cevaplanmamış (key hiç yok) durumdan farklıdır: bu işaret "cevaplandı" sayılır (tamamlama
+// sayacına ve testin tam cevaplanma şartına dahil olur) ama notlama sırasında hep boş sayılır.
+const BLANK_ANSWER_LABEL = '-'
 
 function toISODate(value) {
   if (!value) return null
@@ -477,7 +483,7 @@ async function getTaskHandler(request) {
 async function createTaskHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }
@@ -526,7 +532,7 @@ async function updateTaskHandler(request) {
   try {
     const taskId = request.params.taskId
     const payload = await request.json().catch(() => null)
-    const { error, studentId, actorRole, actorId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId, actorRole, actorId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }
@@ -597,7 +603,7 @@ async function updateTaskHandler(request) {
 async function deleteTaskHandler(request) {
   try {
     const taskId = request.params.taskId
-    const { error, studentId } = await requireStudentContext(request)
+    const { error, studentId } = await requireStudentWriteContext(request)
     if (error) {
       return error
     }
@@ -644,6 +650,72 @@ async function deleteTaskHandler(request) {
 
 // Soru bankası görevi için dijital optik cevap kağıdı: görevin bağlı olduğu testleri
 // (isim, konu, soru sayısı) + o testler için öğrencinin daha önce kaydettiği cevapları/sonuçları döner.
+// getTaskAnswerSheetHandler (öğrenci) ve panel-teacher'daki salt okunur öğretmen görünümü
+// aynı sorgu mantığını paylaşır; auth/scope kontrolü çağıran handler'a ait olduğundan burada
+// sadece taskId + studentId ile veri çekilir.
+async function fetchTaskAnswerSheetData(taskId, studentId) {
+  const taskDb = await withRequest({
+    id: { type: sql.UniqueIdentifier, value: taskId },
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+  })
+  const taskResult = await taskDb.query(`
+    SELECT selected_test_ids_json, answers_json, test_results_json
+    FROM dbo.Tasks WHERE id = @id AND student_id = @studentId;
+  `)
+
+  const taskRecord = taskResult.recordset[0]
+  if (!taskRecord) {
+    return null
+  }
+
+  const testIds = taskRecord.selected_test_ids_json ? JSON.parse(taskRecord.selected_test_ids_json) : []
+  if (!testIds.length) {
+    return { tests: [], photos: {} }
+  }
+
+  const answers = taskRecord.answers_json ? JSON.parse(taskRecord.answers_json) : {}
+  const results = taskRecord.test_results_json ? JSON.parse(taskRecord.test_results_json) : {}
+
+  const bindings = {}
+  const placeholders = testIds.map((id, index) => {
+    bindings[`test${index}`] = { type: sql.UniqueIdentifier, value: id }
+    return `@test${index}`
+  })
+  const testsDb = await withRequest(bindings)
+  const testsResult = await testsDb.query(`
+    SELECT id, topic_name, name, question_count
+    FROM dbo.ResourceBookTopicTests
+    WHERE id IN (${placeholders.join(', ')});
+  `)
+
+  const testsById = new Map(testsResult.recordset.map((row) => [row.id, row]))
+  const tests = testIds
+    .map((id) => testsById.get(id))
+    .filter(Boolean)
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      topicName: row.topic_name || undefined,
+      questionCount: row.question_count,
+      answers: answers[row.id] || {},
+      result: results[row.id] || null,
+    }))
+
+  const photosDb = await withRequest({ taskId: { type: sql.UniqueIdentifier, value: taskId } })
+  const photosResult = await photosDb.query(`
+    SELECT test_id, question_number, photo_url FROM dbo.WrongQuestions
+    WHERE task_id = @taskId AND photo_url IS NOT NULL;
+  `)
+  const photos = {}
+  photosResult.recordset.forEach((row) => {
+    if (!row.test_id) return
+    photos[row.test_id] = photos[row.test_id] || {}
+    photos[row.test_id][row.question_number] = row.photo_url
+  })
+
+  return { tests, photos }
+}
+
 async function getTaskAnswerSheetHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
@@ -652,54 +724,12 @@ async function getTaskAnswerSheetHandler(request) {
     }
 
     const taskId = request.params.taskId
-    const taskDb = await withRequest({
-      id: { type: sql.UniqueIdentifier, value: taskId },
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-    })
-    const taskResult = await taskDb.query(`
-      SELECT selected_test_ids_json, answers_json, test_results_json
-      FROM dbo.Tasks WHERE id = @id AND student_id = @studentId;
-    `)
-
-    const taskRecord = taskResult.recordset[0]
-    if (!taskRecord) {
+    const data = await fetchTaskAnswerSheetData(taskId, studentId)
+    if (!data) {
       return json(404, { error: 'Görev bulunamadı.' })
     }
 
-    const testIds = taskRecord.selected_test_ids_json ? JSON.parse(taskRecord.selected_test_ids_json) : []
-    if (!testIds.length) {
-      return json(200, { tests: [] })
-    }
-
-    const answers = taskRecord.answers_json ? JSON.parse(taskRecord.answers_json) : {}
-    const results = taskRecord.test_results_json ? JSON.parse(taskRecord.test_results_json) : {}
-
-    const bindings = {}
-    const placeholders = testIds.map((id, index) => {
-      bindings[`test${index}`] = { type: sql.UniqueIdentifier, value: id }
-      return `@test${index}`
-    })
-    const testsDb = await withRequest(bindings)
-    const testsResult = await testsDb.query(`
-      SELECT id, topic_name, name, question_count
-      FROM dbo.ResourceBookTopicTests
-      WHERE id IN (${placeholders.join(', ')});
-    `)
-
-    const testsById = new Map(testsResult.recordset.map((row) => [row.id, row]))
-    const tests = testIds
-      .map((id) => testsById.get(id))
-      .filter(Boolean)
-      .map((row) => ({
-        id: row.id,
-        name: row.name,
-        topicName: row.topic_name || undefined,
-        questionCount: row.question_count,
-        answers: answers[row.id] || {},
-        result: results[row.id] || null,
-      }))
-
-    return json(200, { tests })
+    return json(200, data)
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -714,6 +744,142 @@ async function getTaskAnswerSheetHandler(request) {
   }
 }
 
+const MAX_MISTAKE_PHOTO_LENGTH = 350000
+const MISTAKE_PHOTO_DATA_URL_PATTERN = /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\s]+$/i
+
+function sanitizeMistakePhoto(value) {
+  const photo = typeof value === 'string' ? value.trim() : ''
+  if (!photo) return { error: 'Fotoğraf zorunludur.' }
+  if (photo.length > MAX_MISTAKE_PHOTO_LENGTH) {
+    return { error: 'Fotoğraf çok büyük. Daha küçük bir görsel seçin.' }
+  }
+  if (!MISTAKE_PHOTO_DATA_URL_PATTERN.test(photo)) {
+    return { error: 'Geçerli bir JPG/PNG/WEBP fotoğrafı yükleyin.' }
+  }
+  return { value: photo }
+}
+
+const WRONG_QUESTION_OUTPUT_COLUMNS = `
+  inserted.id, inserted.student_id, inserted.task_id, inserted.test_id, inserted.subject, inserted.topic,
+  inserted.test_name, inserted.book_name, inserted.publisher_name, inserted.question_number,
+  inserted.error_type, inserted.student_note, inserted.review_status, inserted.resolved_at,
+  inserted.photo_url, inserted.created_at
+`
+
+// Cevap kağıdında yanlış işaretlenmiş bir soruya öğrencinin galeriden seçtiği ya da kamerayla
+// çektiği fotoğrafı kaydeder. testId üzerinden yayın evi/kitap/konu/test adını server tarafında
+// çözer (client'a güvenmiyoruz) ve dbo.WrongQuestions'a upsert eder; Hata Defterim bu tabloyu okur.
+async function saveWrongQuestionPhotoHandler(request) {
+  try {
+    const taskId = request.params.taskId
+    const testId = request.params.testId
+    const orderNo = request.params.orderNo
+    const payload = await request.json().catch(() => null)
+    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
+    if (error) {
+      return error
+    }
+
+    const photoCheck = sanitizeMistakePhoto(payload?.photo)
+    if (photoCheck.error) {
+      return json(400, { error: photoCheck.error })
+    }
+
+    const taskDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const taskResult = await taskDb.query(`
+      SELECT subject, selected_test_ids_json, test_results_json, answers_json
+      FROM dbo.Tasks WHERE id = @id AND student_id = @studentId;
+    `)
+    const taskRecord = taskResult.recordset[0]
+    if (!taskRecord) {
+      return json(404, { error: 'Görev bulunamadı.' })
+    }
+
+    const selectedTestIds = taskRecord.selected_test_ids_json ? JSON.parse(taskRecord.selected_test_ids_json) : []
+    if (!selectedTestIds.includes(testId)) {
+      return json(400, { error: 'Bu test bu göreve ait değil.' })
+    }
+
+    const results = taskRecord.test_results_json ? JSON.parse(taskRecord.test_results_json) : {}
+    const answers = taskRecord.answers_json ? JSON.parse(taskRecord.answers_json) : {}
+    const testResult = results[testId]
+    const correctLabel = testResult?.correctLabels?.[orderNo]
+    const studentAnswer = answers[testId]?.[orderNo]
+    const isActuallyWrong =
+      Boolean(testResult) &&
+      Boolean(correctLabel) &&
+      Boolean(studentAnswer) &&
+      studentAnswer !== BLANK_ANSWER_LABEL &&
+      studentAnswer !== correctLabel
+    if (!isActuallyWrong) {
+      return json(400, { error: 'Bu soru yanlış işaretlenmemiş.' })
+    }
+
+    const testInfoDb = await withRequest({ testId: { type: sql.UniqueIdentifier, value: testId } })
+    const testInfoResult = await testInfoDb.query(`
+      SELECT t.name AS test_name, tp.name AS topic_name, rb.name AS book_name, pub.name AS publisher_name
+      FROM dbo.ResourceBookTopicTests t
+      JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
+      JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
+      JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
+      WHERE t.id = @testId;
+    `)
+    const testInfo = testInfoResult.recordset[0]
+    if (!testInfo) {
+      return json(404, { error: 'Test bulunamadı.' })
+    }
+
+    const bindings = {
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      taskId: { type: sql.UniqueIdentifier, value: taskId },
+      testId: { type: sql.UniqueIdentifier, value: testId },
+      questionNumber: { type: sql.NVarChar(20), value: orderNo },
+      subject: { type: sql.NVarChar(100), value: taskRecord.subject || 'Genel' },
+      topic: { type: sql.NVarChar(200), value: testInfo.topic_name || null },
+      testName: { type: sql.NVarChar(200), value: testInfo.test_name || null },
+      bookName: { type: sql.NVarChar(200), value: testInfo.book_name || null },
+      publisherName: { type: sql.NVarChar(200), value: testInfo.publisher_name || null },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoCheck.value },
+      errorType: { type: sql.NVarChar(50), value: 'cevap-kagidi' },
+    }
+
+    const updateDb = await withRequest(bindings)
+    const updateResult = await updateDb.query(`
+      UPDATE dbo.WrongQuestions
+      SET topic = @topic, test_name = @testName, book_name = @bookName, publisher_name = @publisherName, photo_url = @photoUrl
+      OUTPUT ${WRONG_QUESTION_OUTPUT_COLUMNS}
+      WHERE student_id = @studentId AND task_id = @taskId AND test_id = @testId AND question_number = @questionNumber;
+    `)
+
+    let wrongQuestionRecord = updateResult.recordset[0]
+    if (!wrongQuestionRecord) {
+      const insertDb = await withRequest(bindings)
+      const insertResult = await insertDb.query(`
+        INSERT INTO dbo.WrongQuestions (student_id, task_id, test_id, subject, topic, test_name, book_name, publisher_name, question_number, error_type, photo_url)
+        OUTPUT ${WRONG_QUESTION_OUTPUT_COLUMNS}
+        VALUES (@studentId, @taskId, @testId, @subject, @topic, @testName, @bookName, @publisherName, @questionNumber, @errorType, @photoUrl);
+      `)
+      wrongQuestionRecord = insertResult.recordset[0]
+    }
+
+    return json(200, { wrongQuestion: sanitizeWrongQuestion(wrongQuestionRecord) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('saveWrongQuestionPhotoHandler failed', error)
+    return json(500, { error: 'Fotoğraf kaydedilemedi.' })
+  }
+}
+
 // Popup'taki tek "Kaydet" butonu tüm testlerin o anki cevaplarını tek istekte gönderir.
 // Her test için: sorular tam cevaplanmışsa dbo.TestAnswerKeys ile karşılaştırılıp doğru/yanlış/boş
 // hesaplanır (cevap anahtarı eksikse test grade edilmeden atlanır); tamamlanmamış testler sadece
@@ -722,7 +888,7 @@ async function saveTaskAnswersHandler(request) {
   try {
     const taskId = request.params.taskId
     const payload = await request.json().catch(() => null)
-    const { error, studentId, actorRole, actorId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId, actorRole, actorId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }
@@ -761,7 +927,7 @@ async function saveTaskAnswersHandler(request) {
       const sanitizedAnswers = {}
       Object.entries(entry?.answers || {}).forEach(([orderNo, label]) => {
         const normalizedLabel = typeof label === 'string' ? label.trim().toUpperCase() : ''
-        if (['A', 'B', 'C', 'D'].includes(normalizedLabel)) {
+        if (['A', 'B', 'C', 'D', BLANK_ANSWER_LABEL].includes(normalizedLabel)) {
           sanitizedAnswers[orderNo] = normalizedLabel
         }
       })
@@ -805,7 +971,7 @@ async function saveTaskAnswersHandler(request) {
             const correctLabel = row.correct_label.trim()
             correctLabels[String(row.order_no)] = correctLabel
             const studentLabel = testAnswers[String(row.order_no)]
-            if (!studentLabel) return
+            if (!studentLabel || studentLabel === BLANK_ANSWER_LABEL) return
             if (studentLabel === correctLabel) correct += 1
             else wrong += 1
           })
@@ -891,7 +1057,7 @@ async function removeTaskTestHandler(request) {
     const taskId = request.params.taskId
     const testId = request.params.testId
     const payload = await request.json().catch(() => null)
-    const { error, studentId, actorRole, actorId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId, actorRole, actorId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }
@@ -1077,7 +1243,7 @@ async function getWeeklyPlanStatusHandler(request) {
 async function setWeeklyPlanStatusHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }
@@ -1129,9 +1295,11 @@ module.exports = {
   deleteTaskHandler,
   getTaskAnswerSheetHandler,
   saveTaskAnswersHandler,
+  saveWrongQuestionPhotoHandler,
   removeTaskTestHandler,
   getWeeklyPlanStatusHandler,
   setWeeklyPlanStatusHandler,
+  fetchTaskAnswerSheetData,
   SELECT_TASK,
   sanitizeTask,
 }

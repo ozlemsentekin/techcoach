@@ -1,9 +1,15 @@
 const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
 const { clearSessionHeaders, json } = require('./http')
-const { isSessionError } = require('./security')
+const {
+  defaultPasswordForPhone,
+  hashPassword,
+  isSessionError,
+  normalizePhone,
+} = require('./security')
 const { requireTeacherSession, requireTeacherStudentContext } = require('./teacherScope')
-const { fetchTeacherResourceBooks } = require('./students')
+const { fetchTeacherResourceBooks, verifySubjectExists } = require('./students')
+const { getTeacherQuota, hasActiveParentEntitlement } = require('./entitlements')
 const {
   SELECT_HOMEWORK,
   sanitizeHomework,
@@ -12,7 +18,24 @@ const {
   isValidTime,
   computeEndTime,
 } = require('./homework')
-const { SELECT_TASK, sanitizeTask } = require('./tasks')
+
+const WEEKDAY_IDS = ['pazartesi', 'sali', 'carsamba', 'persembe', 'cuma', 'cumartesi', 'pazar']
+
+function timeRangesOverlap(aStart, aEnd, bStart, bEnd) {
+  return aStart < bEnd && bStart < aEnd
+}
+
+function weekdayIdForDate(dateISO) {
+  const jsDay = new Date(`${dateISO}T00:00:00Z`).getUTCDay()
+  return WEEKDAY_IDS[(jsDay + 6) % 7]
+}
+
+function addDaysISO(dateISO, days) {
+  const date = new Date(`${dateISO}T00:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+const { SELECT_TASK, sanitizeTask, fetchTaskAnswerSheetData } = require('./tasks')
 const { fetchResourceBookTopicsWithTests } = require('./catalog')
 const {
   sanitizeProgressResourceBook,
@@ -49,6 +72,57 @@ function handleError(error, fallbackLabel, fallbackMessage) {
   return json(500, { error: fallbackMessage })
 }
 
+function nextRecurringOccurrence(schedule, todayISO, nowHHMM) {
+  if (!schedule?.length) return null
+  const todayWeekdayIdx = WEEKDAY_IDS.indexOf(weekdayIdForDate(todayISO))
+  let best = null
+  schedule.forEach((slot) => {
+    const targetIdx = WEEKDAY_IDS.indexOf(slot.dayOfWeek)
+    if (targetIdx === -1) return
+    let diff = (targetIdx - todayWeekdayIdx + 7) % 7
+    if (diff === 0 && slot.startTime <= nowHHMM) diff = 7
+    const date = addDaysISO(todayISO, diff)
+    if (!best || date < best.date || (date === best.date && slot.startTime < best.startTime)) {
+      best = { date, startTime: slot.startTime, endTime: slot.endTime }
+    }
+  })
+  return best
+}
+
+function earlierLesson(a, b) {
+  if (!a) return b
+  if (!b) return a
+  if (a.date !== b.date) return a.date < b.date ? a : b
+  return a.startTime <= b.startTime ? a : b
+}
+
+async function fetchNextOneTimeLessonsByStudentTeacherId(teacherUserId, todayISO) {
+  const requestDb = await withRequest({
+    teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+    today: { type: sql.Date, value: todayISO },
+  })
+  const result = await requestDb.query(`
+    SELECT t.student_teacher_id, t.date, t.start_time, t.end_time
+    FROM dbo.Tasks t
+    INNER JOIN dbo.StudentTeachers st ON st.id = t.student_teacher_id
+    WHERE st.teacher_user_id = @teacherUserId
+      AND t.task_type = 'ders-calisma' AND t.created_by = 'ogretmen'
+      AND t.date >= @today
+    ORDER BY t.date ASC, t.start_time ASC;
+  `)
+
+  const byStudentTeacherId = new Map()
+  result.recordset.forEach((record) => {
+    if (byStudentTeacherId.has(record.student_teacher_id)) return
+    byStudentTeacherId.set(record.student_teacher_id, {
+      date: record.date.toISOString().slice(0, 10),
+      startTime: record.start_time,
+      endTime: record.end_time,
+    })
+  })
+  return byStudentTeacherId
+}
+
 async function listTeacherStudentsHandler(request) {
   try {
     const { error, teacherUserId } = await requireTeacherSession(request)
@@ -56,28 +130,47 @@ async function listTeacherStudentsHandler(request) {
 
     const requestDb = await withRequest({ teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId } })
     const result = await requestDb.query(`
-      SELECT st.id AS student_teacher_id, st.student_id, u.full_name AS student_full_name,
+      SELECT st.id AS student_teacher_id, st.student_id, u.full_name AS student_full_name, u.phone_number AS student_phone,
              st.subject_id, s.name AS subject_name, st.teacher_type, st.schedule_json, st.access_granted_at,
+             sp.grade AS student_grade, sch.name AS school_name,
              (SELECT COUNT(*) FROM dbo.StudentTeacherResourceBooks strb WHERE strb.teacher_id = st.id) AS resource_count
       FROM dbo.StudentTeachers st
       INNER JOIN dbo.Users u ON u.id = st.student_id
       LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
+      LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = st.student_id
+      LEFT JOIN dbo.Schools sch ON sch.id = sp.school_id
       WHERE st.teacher_user_id = @teacherUserId
       ORDER BY u.full_name ASC, s.name ASC;
     `)
 
-    const students = result.recordset.map((record) => ({
-      studentTeacherId: record.student_teacher_id,
-      studentId: record.student_id,
-      studentFullName: record.student_full_name,
-      subjectId: record.subject_id,
-      subjectName: record.subject_name || null,
-      teacherType: record.teacher_type,
-      typeLabel: TEACHER_TYPE_LABELS[record.teacher_type] || record.teacher_type,
-      schedule: parseScheduleJson(record.schedule_json),
-      resourceCount: Number(record.resource_count) || 0,
-      accessGrantedAt: record.access_granted_at || null,
-    }))
+    const todayISO = new Date().toISOString().slice(0, 10)
+    const nowHHMM = new Date().toISOString().slice(11, 16)
+    const nextOneTimeByStudentTeacherId = await fetchNextOneTimeLessonsByStudentTeacherId(teacherUserId, todayISO)
+
+    const students = result.recordset.map((record) => {
+      const schedule = parseScheduleJson(record.schedule_json)
+      const nextLesson = earlierLesson(
+        nextRecurringOccurrence(schedule, todayISO, nowHHMM),
+        nextOneTimeByStudentTeacherId.get(record.student_teacher_id) || null,
+      )
+
+      return {
+        studentTeacherId: record.student_teacher_id,
+        studentId: record.student_id,
+        studentFullName: record.student_full_name,
+        studentPhone: record.student_phone || null,
+        studentGrade: record.student_grade || null,
+        schoolName: record.school_name || null,
+        subjectId: record.subject_id,
+        subjectName: record.subject_name || null,
+        teacherType: record.teacher_type,
+        typeLabel: TEACHER_TYPE_LABELS[record.teacher_type] || record.teacher_type,
+        schedule,
+        nextLesson,
+        resourceCount: Number(record.resource_count) || 0,
+        accessGrantedAt: record.access_granted_at || null,
+      }
+    })
 
     return json(200, { students })
   } catch (error) {
@@ -93,6 +186,7 @@ async function listTeacherParentsHandler(request) {
     const requestDb = await withRequest({ teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId } })
     const result = await requestDb.query(`
       SELECT p.id AS parent_id, p.full_name AS parent_full_name, p.phone_number AS parent_phone,
+             p.password_hash AS parent_password_hash,
              u.id AS student_id, u.full_name AS student_full_name
       FROM dbo.StudentTeachers st
       INNER JOIN dbo.Users u ON u.id = st.student_id
@@ -112,6 +206,7 @@ async function listTeacherParentsHandler(request) {
           id: record.parent_id,
           fullName: record.parent_full_name,
           phone: record.parent_phone,
+          hasPanelAccess: Boolean(record.parent_password_hash),
           students: [student],
         })
       }
@@ -123,36 +218,660 @@ async function listTeacherParentsHandler(request) {
   }
 }
 
+// Bir öğretmenin bir öğrencisinin velisine ilk kez panel erişimi açar (veli şu ana kadar
+// hiç giriş yapamıyorsa, password_hash NULL'dır). Geçici şifre `defaultPasswordForPhone`
+// ile aynı desende üretilir — grantTeacherAccessHandler (students.js) ile simetrik bir akış.
+async function grantParentAccessHandler(request) {
+  try {
+    const { error, teacherUserId } = await requireTeacherSession(request)
+    if (error) return error
+
+    const parentId = request.params.parentId
+
+    const ownershipDb = await withRequest({
+      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+      parentId: { type: sql.UniqueIdentifier, value: parentId },
+    })
+    const ownershipResult = await ownershipDb.query(`
+      SELECT TOP 1 1
+      FROM dbo.StudentTeachers st
+      INNER JOIN dbo.Users u ON u.id = st.student_id
+      WHERE st.teacher_user_id = @teacherUserId AND u.parent_id = @parentId;
+    `)
+    if (!ownershipResult.recordset[0]) {
+      return json(404, { error: 'Veli bulunamadı.' })
+    }
+
+    const parentDb = await withRequest({ parentId: { type: sql.UniqueIdentifier, value: parentId } })
+    const parentResult = await parentDb.query(`
+      SELECT TOP 1 phone_number, password_hash FROM dbo.Users WHERE id = @parentId AND role = 'ebeveyn';
+    `)
+    const parent = parentResult.recordset[0]
+    if (!parent) {
+      return json(404, { error: 'Veli bulunamadı.' })
+    }
+    if (parent.password_hash) {
+      return json(409, { error: 'Bu veli zaten panel erişimine sahip.' })
+    }
+    if (!parent.phone_number) {
+      return json(400, { error: 'Velinin geçerli bir cep telefonu numarası olmalı ki panele giriş yapabilsin.' })
+    }
+
+    const temporaryPassword = defaultPasswordForPhone(parent.phone_number)
+    const passwordHash = await hashPassword(temporaryPassword)
+
+    const updateDb = await withRequest({
+      parentId: { type: sql.UniqueIdentifier, value: parentId },
+      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
+    })
+    await updateDb.query(`
+      UPDATE dbo.Users SET password_hash = @passwordHash WHERE id = @parentId;
+    `)
+
+    return json(200, { temporaryPassword })
+  } catch (error) {
+    return handleError(error, 'grantParentAccessHandler', 'Veliye panel erişimi verilemedi.')
+  }
+}
+
+async function getTeacherEntitlementHandler(request) {
+  try {
+    const { error, teacherUserId } = await requireTeacherSession(request)
+    if (error) return error
+
+    const quota = await getTeacherQuota(teacherUserId)
+    return json(200, { entitlement: quota })
+  } catch (error) {
+    return handleError(error, 'getTeacherEntitlementHandler', 'Panel kotası yüklenemedi.')
+  }
+}
+
+// Öğretmenin kendi panel kotasından doğrudan bir öğrenci eklemesini sağlar. Veli telefon
+// numarasıyla aranır: zaten kendi (aktif) planı olan bir veli bulunursa öğretmenin kotası
+// harcanmaz; bulunamazsa veya velinin aktif planı yoksa yeni öğrenci öğretmenin kotasından
+// düşülür ve veliye (varsa yeni oluşturularak) kısıtlı bir panel erişimi bağlanır.
+async function createTeacherStudentHandler(request) {
+  try {
+    const { error, teacherUserId, teacherFullName, teacherPhone } = await requireTeacherSession(request)
+    if (error) return error
+
+    const payload = await request.json().catch(() => null)
+    if (!payload) {
+      return json(400, { error: 'Geçersiz istek gövdesi.' })
+    }
+
+    const studentFullName = String(payload.studentFullName || '').trim()
+    if (studentFullName.length < 3 || studentFullName.length > 120) {
+      return json(400, { error: 'Öğrenci adı 3 ile 120 karakter arasında olmalı.' })
+    }
+
+    const parentFullName = String(payload.parentFullName || '').trim()
+    if (parentFullName.length < 3 || parentFullName.length > 120) {
+      return json(400, { error: 'Veli adı 3 ile 120 karakter arasında olmalı.' })
+    }
+
+    const teacherType = payload.teacherType
+    if (teacherType !== 'ozel_ogretmen' && teacherType !== 'okul_ogretmeni') {
+      return json(400, { error: 'Geçerli bir öğretmen tipi seçilmeli.' })
+    }
+
+    const subjectId = payload.subjectId
+    if (!subjectId || !(await verifySubjectExists(subjectId))) {
+      return json(400, { error: 'Geçerli bir ders seçilmeli.' })
+    }
+
+    const parentPhone = normalizePhone(payload.parentPhone)
+    if (!parentPhone) {
+      return json(400, { error: 'Geçerli bir veli telefon numarası girin.' })
+    }
+
+    const quota = await getTeacherQuota(teacherUserId)
+    if (!quota.isActive) {
+      return json(403, { error: 'Panel aboneliğiniz aktif değil.' })
+    }
+
+    let parentId
+    let consumesQuota
+    let parentHasPanelAccess
+
+    const existingParentDb = await withRequest({ phone: { type: sql.NVarChar(20), value: parentPhone } })
+    const existingParentResult = await existingParentDb.query(`
+      SELECT TOP 1 id, password_hash FROM dbo.Users WHERE role = 'ebeveyn' AND phone_number = @phone;
+    `)
+    const existingParent = existingParentResult.recordset[0]
+
+    if (existingParent) {
+      parentId = existingParent.id
+      parentHasPanelAccess = Boolean(existingParent.password_hash)
+      consumesQuota = !(await hasActiveParentEntitlement(parentId))
+    } else {
+      consumesQuota = true
+      parentHasPanelAccess = false
+      const now = new Date()
+      const insertParentDb = await withRequest({
+        fullName: { type: sql.NVarChar(120), value: parentFullName },
+        phone: { type: sql.NVarChar(20), value: parentPhone },
+        role: { type: sql.NVarChar(20), value: 'ebeveyn' },
+      })
+      try {
+        const insertParentResult = await insertParentDb.query(`
+          INSERT INTO dbo.Users (full_name, phone_number, role)
+          OUTPUT inserted.id
+          VALUES (@fullName, @phone, @role);
+        `)
+        parentId = insertParentResult.recordset[0].id
+      } catch (insertError) {
+        // Yarış durumu: aynı telefonla eşzamanlı ikinci "öğrenci ekle" isteği.
+        if (insertError.number === 2601 || insertError.number === 2627) {
+          const retryDb = await withRequest({ phone: { type: sql.NVarChar(20), value: parentPhone } })
+          const retryResult = await retryDb.query(`
+            SELECT TOP 1 id, password_hash FROM dbo.Users WHERE phone_number = @phone;
+          `)
+          const retryParent = retryResult.recordset[0]
+          if (!retryParent) throw insertError
+          parentId = retryParent.id
+          parentHasPanelAccess = Boolean(retryParent.password_hash)
+          consumesQuota = !(await hasActiveParentEntitlement(parentId))
+        } else {
+          throw insertError
+        }
+      }
+    }
+
+    if (consumesQuota && quota.remainingSeats <= 0) {
+      return json(403, { error: 'Öğrenci ekleme hakkınız kalmadı.' })
+    }
+
+    // Aile zaten onay verdiyse (veli girişe sahipse) yeni öğrenci de aynı onayı miras alır;
+    // aksi halde onay velinin ilk girişinde (KVKK/aydınlatma ekranı) alınana kadar bekler.
+    const parentConsentDb = await withRequest({ parentId: { type: sql.UniqueIdentifier, value: parentId } })
+    const parentConsentResult = await parentConsentDb.query(`
+      SELECT aydinlatma_accepted_at, kvkk_accepted_at FROM dbo.Users WHERE id = @parentId;
+    `)
+    const parentConsent = parentConsentResult.recordset[0]
+
+    const insertStudentDb = await withRequest({
+      fullName: { type: sql.NVarChar(120), value: studentFullName },
+      role: { type: sql.NVarChar(20), value: 'ogrenci' },
+      parentId: { type: sql.UniqueIdentifier, value: parentId },
+      fundedByTeacherId: { type: sql.UniqueIdentifier, value: consumesQuota ? teacherUserId : null },
+      aydinlatmaAcceptedAt: { type: sql.DateTime2, value: parentConsent?.aydinlatma_accepted_at || null },
+      kvkkAcceptedAt: { type: sql.DateTime2, value: parentConsent?.kvkk_accepted_at || null },
+    })
+    const studentResult = await insertStudentDb.query(`
+      INSERT INTO dbo.Users (full_name, role, parent_id, funded_by_teacher_id, aydinlatma_accepted_at, kvkk_accepted_at)
+      OUTPUT inserted.id
+      VALUES (@fullName, @role, @parentId, @fundedByTeacherId, @aydinlatmaAcceptedAt, @kvkkAcceptedAt);
+    `)
+    const studentId = studentResult.recordset[0].id
+
+    const insertStudentTeacherDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+      createdByParentId: { type: sql.UniqueIdentifier, value: parentId },
+      teacherFullName: { type: sql.NVarChar(120), value: teacherFullName },
+      teacherPhone: { type: sql.NVarChar(30), value: teacherPhone || '' },
+      teacherType: { type: sql.NVarChar(30), value: teacherType },
+      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+    })
+    await insertStudentTeacherDb.query(`
+      INSERT INTO dbo.StudentTeachers (
+        student_id, subject_id, created_by_parent_id, teacher_full_name, phone, teacher_type,
+        teacher_user_id, access_granted_at
+      )
+      VALUES (
+        @studentId, @subjectId, @createdByParentId, @teacherFullName, @teacherPhone, @teacherType,
+        @teacherUserId, SYSUTCDATETIME()
+      );
+    `)
+
+    return json(201, {
+      student: { id: studentId, fullName: studentFullName, restricted: consumesQuota },
+      parent: { id: parentId, fullName: parentFullName, phone: parentPhone, hasPanelAccess: parentHasPanelAccess },
+    })
+  } catch (error) {
+    return handleError(error, 'createTeacherStudentHandler', 'Öğrenci eklenemedi.')
+  }
+}
+
+async function fetchRecurringLessonEntries(teacherUserId) {
+  const requestDb = await withRequest({ teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId } })
+  const result = await requestDb.query(`
+    SELECT st.id AS student_teacher_id, u.full_name AS student_full_name, s.name AS subject_name, st.schedule_json
+    FROM dbo.StudentTeachers st
+    INNER JOIN dbo.Users u ON u.id = st.student_id
+    LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
+    WHERE st.teacher_user_id = @teacherUserId
+      AND st.teacher_type = 'ozel_ogretmen'
+      AND st.schedule_json IS NOT NULL;
+  `)
+
+  return result.recordset.flatMap((record) =>
+    parseScheduleJson(record.schedule_json).map((slot) => ({
+      dayOfWeek: slot.dayOfWeek,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      studentTeacherId: record.student_teacher_id,
+      studentFullName: record.student_full_name,
+      subjectName: record.subject_name || null,
+    })),
+  )
+}
+
+async function fetchOneTimeLessonEntries(teacherUserId, weekStart) {
+  const weekEnd = addDaysISO(weekStart, 6)
+  const requestDb = await withRequest({
+    teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+    weekStart: { type: sql.Date, value: weekStart },
+    weekEnd: { type: sql.Date, value: weekEnd },
+  })
+  const result = await requestDb.query(`
+    SELECT t.id, t.date, t.start_time, t.end_time, st.id AS student_teacher_id,
+           u.full_name AS student_full_name, s.name AS subject_name
+    FROM dbo.Tasks t
+    INNER JOIN dbo.StudentTeachers st ON st.id = t.student_teacher_id
+    INNER JOIN dbo.Users u ON u.id = t.student_id
+    LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
+    WHERE st.teacher_user_id = @teacherUserId
+      AND t.task_type = 'ders-calisma' AND t.created_by = 'ogretmen'
+      AND t.date BETWEEN @weekStart AND @weekEnd;
+  `)
+
+  return result.recordset.map((record) => ({
+    id: record.id,
+    date: record.date.toISOString().slice(0, 10),
+    startTime: record.start_time,
+    endTime: record.end_time,
+    studentTeacherId: record.student_teacher_id,
+    studentFullName: record.student_full_name,
+    subjectName: record.subject_name || null,
+  }))
+}
+
 async function getTeacherLessonPlanHandler(request) {
   try {
     const { error, teacherUserId } = await requireTeacherSession(request)
     if (error) return error
 
-    const requestDb = await withRequest({ teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId } })
-    const result = await requestDb.query(`
-      SELECT st.id AS student_teacher_id, u.full_name AS student_full_name, s.name AS subject_name, st.schedule_json
-      FROM dbo.StudentTeachers st
-      INNER JOIN dbo.Users u ON u.id = st.student_id
-      LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
-      WHERE st.teacher_user_id = @teacherUserId
-        AND st.teacher_type = 'ozel_ogretmen'
-        AND st.schedule_json IS NOT NULL;
-    `)
+    const weekStart = request.query.get('weekStart')
+    const recurringEntries = await fetchRecurringLessonEntries(teacherUserId)
+    const oneTimeEntries =
+      weekStart && /^\d{4}-\d{2}-\d{2}$/.test(weekStart)
+        ? await fetchOneTimeLessonEntries(teacherUserId, weekStart)
+        : []
 
-    const entries = result.recordset.flatMap((record) =>
-      parseScheduleJson(record.schedule_json).map((slot) => ({
-        dayOfWeek: slot.dayOfWeek,
-        startTime: slot.startTime,
-        endTime: slot.endTime,
-        studentTeacherId: record.student_teacher_id,
-        studentFullName: record.student_full_name,
-        subjectName: record.subject_name || null,
-      })),
-    )
-
-    return json(200, { entries })
+    return json(200, { recurringEntries, oneTimeEntries })
   } catch (error) {
     return handleError(error, 'getTeacherLessonPlanHandler', 'Ders planı yüklenemedi.')
+  }
+}
+
+async function addTeacherRecurringLessonSlotHandler(request) {
+  try {
+    const { error, studentTeacherId, teacherType, actorId: teacherUserId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    if (teacherType !== 'ozel_ogretmen') {
+      return json(400, { error: 'Ders planı yalnızca özel ders öğrencileri için kullanılabilir.' })
+    }
+
+    const payload = await request.json().catch(() => null)
+    const dayOfWeek = payload?.dayOfWeek
+    const startTime = payload?.startTime
+    const durationMinutes = Number(payload?.durationMinutes)
+
+    if (!WEEKDAY_IDS.includes(dayOfWeek)) {
+      return json(400, { error: 'Geçerli bir gün seçilmeli.' })
+    }
+    if (!isValidTime(startTime)) {
+      return json(400, { error: 'Geçerli bir başlangıç saati seçilmeli.' })
+    }
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
+      return json(400, { error: 'Süre 5 ile 480 dakika arasında olmalı.' })
+    }
+
+    const endTime = computeEndTime(startTime, durationMinutes)
+
+    const recurringEntries = await fetchRecurringLessonEntries(teacherUserId)
+    const hasConflict = recurringEntries.some(
+      (entry) => entry.dayOfWeek === dayOfWeek && timeRangesOverlap(startTime, endTime, entry.startTime, entry.endTime),
+    )
+    if (hasConflict) {
+      return json(409, { error: 'Bu saatte planlanmış başka bir dersiniz var.' })
+    }
+
+    const currentDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: studentTeacherId } })
+    const currentResult = await currentDb.query(`
+      SELECT schedule_json FROM dbo.StudentTeachers WHERE id = @id;
+    `)
+    const schedule = parseScheduleJson(currentResult.recordset[0]?.schedule_json)
+    schedule.push({ dayOfWeek, startTime, endTime })
+    schedule.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+
+    const updateDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: studentTeacherId },
+      scheduleJson: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(schedule) },
+    })
+    await updateDb.query(`
+      UPDATE dbo.StudentTeachers SET schedule_json = @scheduleJson WHERE id = @id;
+    `)
+
+    return json(201, { recurringEntries: await fetchRecurringLessonEntries(teacherUserId) })
+  } catch (error) {
+    return handleError(error, 'addTeacherRecurringLessonSlotHandler', 'Ders eklenemedi.')
+  }
+}
+
+async function updateTeacherRecurringLessonSlotHandler(request) {
+  try {
+    const { error, studentTeacherId, teacherType, actorId: teacherUserId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    if (teacherType !== 'ozel_ogretmen') {
+      return json(400, { error: 'Ders planı yalnızca özel ders öğrencileri için kullanılabilir.' })
+    }
+
+    const payload = await request.json().catch(() => null)
+    const originalDayOfWeek = payload?.originalDayOfWeek
+    const originalStartTime = payload?.originalStartTime
+    const dayOfWeek = payload?.dayOfWeek
+    const startTime = payload?.startTime
+    const durationMinutes = Number(payload?.durationMinutes)
+
+    if (!WEEKDAY_IDS.includes(originalDayOfWeek) || !isValidTime(originalStartTime)) {
+      return json(400, { error: 'Düzenlenecek ders bulunamadı.' })
+    }
+    if (!WEEKDAY_IDS.includes(dayOfWeek)) {
+      return json(400, { error: 'Geçerli bir gün seçilmeli.' })
+    }
+    if (!isValidTime(startTime)) {
+      return json(400, { error: 'Geçerli bir başlangıç saati seçilmeli.' })
+    }
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
+      return json(400, { error: 'Süre 5 ile 480 dakika arasında olmalı.' })
+    }
+
+    const endTime = computeEndTime(startTime, durationMinutes)
+
+    const currentDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: studentTeacherId } })
+    const currentResult = await currentDb.query(`
+      SELECT schedule_json FROM dbo.StudentTeachers WHERE id = @id;
+    `)
+    const schedule = parseScheduleJson(currentResult.recordset[0]?.schedule_json)
+    const slotIndex = schedule.findIndex(
+      (slot) => slot.dayOfWeek === originalDayOfWeek && slot.startTime === originalStartTime,
+    )
+    if (slotIndex === -1) {
+      return json(404, { error: 'Düzenlenecek ders bulunamadı.' })
+    }
+
+    const otherRecurringEntries = (await fetchRecurringLessonEntries(teacherUserId)).filter(
+      (entry) =>
+        !(
+          entry.studentTeacherId === studentTeacherId &&
+          entry.dayOfWeek === originalDayOfWeek &&
+          entry.startTime === originalStartTime
+        ),
+    )
+    const hasConflict = otherRecurringEntries.some(
+      (entry) => entry.dayOfWeek === dayOfWeek && timeRangesOverlap(startTime, endTime, entry.startTime, entry.endTime),
+    )
+    if (hasConflict) {
+      return json(409, { error: 'Bu saatte planlanmış başka bir dersiniz var.' })
+    }
+
+    schedule[slotIndex] = { dayOfWeek, startTime, endTime }
+    schedule.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+
+    const updateDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: studentTeacherId },
+      scheduleJson: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(schedule) },
+    })
+    await updateDb.query(`
+      UPDATE dbo.StudentTeachers SET schedule_json = @scheduleJson WHERE id = @id;
+    `)
+
+    return json(200, { recurringEntries: await fetchRecurringLessonEntries(teacherUserId) })
+  } catch (error) {
+    return handleError(error, 'updateTeacherRecurringLessonSlotHandler', 'Ders güncellenemedi.')
+  }
+}
+
+async function deleteTeacherRecurringLessonSlotHandler(request) {
+  try {
+    const { error, studentTeacherId, teacherType, actorId: teacherUserId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    if (teacherType !== 'ozel_ogretmen') {
+      return json(400, { error: 'Ders planı yalnızca özel ders öğrencileri için kullanılabilir.' })
+    }
+
+    const payload = await request.json().catch(() => null)
+    const dayOfWeek = payload?.dayOfWeek
+    const startTime = payload?.startTime
+
+    if (!WEEKDAY_IDS.includes(dayOfWeek) || !isValidTime(startTime)) {
+      return json(400, { error: 'Silinecek ders bulunamadı.' })
+    }
+
+    const currentDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: studentTeacherId } })
+    const currentResult = await currentDb.query(`
+      SELECT schedule_json FROM dbo.StudentTeachers WHERE id = @id;
+    `)
+    const schedule = parseScheduleJson(currentResult.recordset[0]?.schedule_json)
+    const nextSchedule = schedule.filter((slot) => !(slot.dayOfWeek === dayOfWeek && slot.startTime === startTime))
+    if (nextSchedule.length === schedule.length) {
+      return json(404, { error: 'Silinecek ders bulunamadı.' })
+    }
+
+    const updateDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: studentTeacherId },
+      scheduleJson: { type: sql.NVarChar(sql.MAX), value: nextSchedule.length ? JSON.stringify(nextSchedule) : null },
+    })
+    await updateDb.query(`
+      UPDATE dbo.StudentTeachers SET schedule_json = @scheduleJson WHERE id = @id;
+    `)
+
+    return json(200, { recurringEntries: await fetchRecurringLessonEntries(teacherUserId) })
+  } catch (error) {
+    return handleError(error, 'deleteTeacherRecurringLessonSlotHandler', 'Ders silinemedi.')
+  }
+}
+
+async function addTeacherOneTimeLessonHandler(request) {
+  try {
+    const {
+      error,
+      studentId,
+      studentTeacherId,
+      teacherType,
+      studentFullName,
+      subjectId,
+      actorId: teacherUserId,
+    } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    if (teacherType !== 'ozel_ogretmen') {
+      return json(400, { error: 'Ders planı yalnızca özel ders öğrencileri için kullanılabilir.' })
+    }
+
+    const payload = await request.json().catch(() => null)
+    const date = payload?.date
+    const startTime = payload?.startTime
+    const durationMinutes = Number(payload?.durationMinutes)
+
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return json(400, { error: 'Geçerli bir tarih seçilmeli.' })
+    }
+    const todayISO = new Date().toISOString().slice(0, 10)
+    if (date < todayISO) {
+      return json(400, { error: 'Geçmiş bir tarihe ders eklenemez.' })
+    }
+    if (!isValidTime(startTime)) {
+      return json(400, { error: 'Geçerli bir başlangıç saati seçilmeli.' })
+    }
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
+      return json(400, { error: 'Süre 5 ile 480 dakika arasında olmalı.' })
+    }
+
+    const endTime = computeEndTime(startTime, durationMinutes)
+
+    const recurringEntries = await fetchRecurringLessonEntries(teacherUserId)
+    const dayOfWeek = weekdayIdForDate(date)
+    const recurringConflict = recurringEntries.some(
+      (entry) => entry.dayOfWeek === dayOfWeek && timeRangesOverlap(startTime, endTime, entry.startTime, entry.endTime),
+    )
+
+    const oneTimeEntries = await fetchOneTimeLessonEntries(teacherUserId, date)
+    const oneTimeConflict = oneTimeEntries.some(
+      (entry) => entry.date === date && timeRangesOverlap(startTime, endTime, entry.startTime, entry.endTime),
+    )
+
+    if (recurringConflict || oneTimeConflict) {
+      return json(409, { error: 'Bu saatte planlanmış başka bir dersiniz var.' })
+    }
+
+    const subjectDb = await withRequest({ subjectId: { type: sql.UniqueIdentifier, value: subjectId } })
+    const subjectResult = await subjectDb.query(`SELECT TOP 1 name FROM dbo.Subjects WHERE id = @subjectId;`)
+    const subjectName = subjectResult.recordset[0]?.name || null
+    const title = subjectName ? `${subjectName} Dersi` : 'Özel Ders'
+
+    const insertDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+      date: { type: sql.Date, value: date },
+      title: { type: sql.NVarChar(200), value: title },
+      subject: { type: sql.NVarChar(100), value: subjectName },
+      startTime: { type: sql.Char(5), value: startTime },
+      endTime: { type: sql.Char(5), value: endTime },
+      durationMinutes: { type: sql.Int, value: durationMinutes },
+    })
+    const insertResult = await insertDb.query(`
+      INSERT INTO dbo.Tasks (
+        student_id, student_teacher_id, date, title, subject, task_type,
+        start_time, end_time, duration_minutes, status, priority, created_by, is_draft
+      )
+      OUTPUT inserted.id
+      VALUES (
+        @studentId, @studentTeacherId, @date, @title, @subject, 'ders-calisma',
+        @startTime, @endTime, @durationMinutes, 'bekliyor', 'orta', 'ogretmen', 0
+      );
+    `)
+
+    return json(201, {
+      lesson: {
+        id: insertResult.recordset[0].id,
+        date,
+        startTime,
+        endTime,
+        studentTeacherId,
+        studentFullName,
+        subjectName,
+      },
+    })
+  } catch (error) {
+    return handleError(error, 'addTeacherOneTimeLessonHandler', 'Ders eklenemedi.')
+  }
+}
+
+async function updateTeacherOneTimeLessonHandler(request) {
+  try {
+    const { error, studentTeacherId, teacherType, actorId: teacherUserId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    if (teacherType !== 'ozel_ogretmen') {
+      return json(400, { error: 'Ders planı yalnızca özel ders öğrencileri için kullanılabilir.' })
+    }
+
+    const lessonId = request.params.lessonId
+    const payload = await request.json().catch(() => null)
+    const date = payload?.date
+    const startTime = payload?.startTime
+    const durationMinutes = Number(payload?.durationMinutes)
+
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return json(400, { error: 'Geçerli bir tarih seçilmeli.' })
+    }
+    if (!isValidTime(startTime)) {
+      return json(400, { error: 'Geçerli bir başlangıç saati seçilmeli.' })
+    }
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
+      return json(400, { error: 'Süre 5 ile 480 dakika arasında olmalı.' })
+    }
+
+    const lessonDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: lessonId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+    })
+    const lessonResult = await lessonDb.query(`
+      SELECT TOP 1 id FROM dbo.Tasks
+      WHERE id = @id AND student_teacher_id = @studentTeacherId
+        AND task_type = 'ders-calisma' AND created_by = 'ogretmen';
+    `)
+    if (!lessonResult.recordset[0]) {
+      return json(404, { error: 'Ders bulunamadı.' })
+    }
+
+    const endTime = computeEndTime(startTime, durationMinutes)
+
+    const recurringEntries = await fetchRecurringLessonEntries(teacherUserId)
+    const dayOfWeek = weekdayIdForDate(date)
+    const recurringConflict = recurringEntries.some(
+      (entry) => entry.dayOfWeek === dayOfWeek && timeRangesOverlap(startTime, endTime, entry.startTime, entry.endTime),
+    )
+
+    const oneTimeEntries = (await fetchOneTimeLessonEntries(teacherUserId, date)).filter((entry) => entry.id !== lessonId)
+    const oneTimeConflict = oneTimeEntries.some(
+      (entry) => entry.date === date && timeRangesOverlap(startTime, endTime, entry.startTime, entry.endTime),
+    )
+
+    if (recurringConflict || oneTimeConflict) {
+      return json(409, { error: 'Bu saatte planlanmış başka bir dersiniz var.' })
+    }
+
+    const updateDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: lessonId },
+      date: { type: sql.Date, value: date },
+      startTime: { type: sql.Char(5), value: startTime },
+      endTime: { type: sql.Char(5), value: endTime },
+      durationMinutes: { type: sql.Int, value: durationMinutes },
+    })
+    await updateDb.query(`
+      UPDATE dbo.Tasks
+      SET date = @date, start_time = @startTime, end_time = @endTime, duration_minutes = @durationMinutes
+      WHERE id = @id;
+    `)
+
+    return json(200, { oneTimeEntries: await fetchOneTimeLessonEntries(teacherUserId, date) })
+  } catch (error) {
+    return handleError(error, 'updateTeacherOneTimeLessonHandler', 'Ders güncellenemedi.')
+  }
+}
+
+async function deleteTeacherOneTimeLessonHandler(request) {
+  try {
+    const { error, studentTeacherId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    const lessonId = request.params.lessonId
+
+    const deleteDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: lessonId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+    })
+    const deleteResult = await deleteDb.query(`
+      DELETE FROM dbo.Tasks
+      OUTPUT deleted.id
+      WHERE id = @id AND student_teacher_id = @studentTeacherId
+        AND task_type = 'ders-calisma' AND created_by = 'ogretmen';
+    `)
+    if (!deleteResult.recordset[0]) {
+      return json(404, { error: 'Ders bulunamadı.' })
+    }
+
+    return json(200, { success: true })
+  } catch (error) {
+    return handleError(error, 'deleteTeacherOneTimeLessonHandler', 'Ders silinemedi.')
   }
 }
 
@@ -201,16 +920,21 @@ async function listTeacherResourceBookTopicsHandler(request) {
 
 async function listTeacherStudentHomeworksHandler(request) {
   try {
-    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
+    const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
     if (error) return error
 
     const requestDb = await withRequest({
       studentId: { type: sql.UniqueIdentifier, value: studentId },
       subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
     })
     const result = await requestDb.query(`
       ${SELECT_HOMEWORK}
       WHERE h.student_id = @studentId AND h.subject_id = @subjectId
+        AND (h.resource_book_id IS NULL OR EXISTS (
+          SELECT 1 FROM dbo.StudentTeacherResourceBooks strb
+          WHERE strb.teacher_id = @studentTeacherId AND strb.resource_book_id = h.resource_book_id
+        ))
       ORDER BY h.due_date ASC;
     `)
 
@@ -240,6 +964,7 @@ async function createTeacherHomeworkHandler(request) {
     const dayPlans = Array.isArray(payload?.dayPlans) ? payload.dayPlans : []
     const taskDate = payload?.taskDate || null
     const taskTime = payload?.taskTime || null
+    const taskDurationMinutes = Number(payload?.taskDurationMinutes) || null
 
     if (!resourceBookId) {
       return json(400, { error: 'Ödev için takip ettiğiniz bir kaynak seçilmeli.' })
@@ -317,7 +1042,7 @@ async function createTeacherHomeworkHandler(request) {
 
     const homework = sanitizeHomework(fetchResult.recordset[0])
     if (taskDate) {
-      await createTaskForHomework(studentId, homework, taskDate, resourceBookId, testIds, taskTime)
+      await createTaskForHomework(studentId, homework, taskDate, resourceBookId, testIds, taskTime, taskDurationMinutes)
     }
 
     return json(201, { homework })
@@ -441,7 +1166,7 @@ async function assignTeacherHomeworkTaskHandler(request) {
 
 async function listTeacherStudentTasksHandler(request) {
   try {
-    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
+    const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
     if (error) return error
 
     const date = request.query.get('date')
@@ -452,18 +1177,69 @@ async function listTeacherStudentTasksHandler(request) {
     const requestDb = await withRequest({
       studentId: { type: sql.UniqueIdentifier, value: studentId },
       subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
       date: { type: sql.Date, value: date },
     })
     const result = await requestDb.query(`
       ${SELECT_TASK}
       WHERE t.student_id = @studentId AND t.date = @date AND t.is_draft = 0
-        AND t.homework_id IN (SELECT id FROM dbo.Homeworks WHERE student_id = @studentId AND subject_id = @subjectId)
+        AND (
+          t.student_teacher_id = @studentTeacherId
+          OR (
+            t.homework_id IN (SELECT id FROM dbo.Homeworks WHERE student_id = @studentId AND subject_id = @subjectId)
+            AND (t.resource_book_id IS NULL OR EXISTS (
+              SELECT 1 FROM dbo.StudentTeacherResourceBooks strb
+              WHERE strb.teacher_id = @studentTeacherId AND strb.resource_book_id = t.resource_book_id
+            ))
+          )
+        )
       ORDER BY t.start_time ASC;
     `)
 
     return json(200, { tasks: result.recordset.map(sanitizeTask) })
   } catch (error) {
     return handleError(error, 'listTeacherStudentTasksHandler', 'Görevler yüklenemedi.')
+  }
+}
+
+// Öğretmenin, kendi dersine ait ve tamamlanmış bir soru bankası görevinin dijital optik
+// cevap kağıdını salt okunur görebilmesini sağlar. Görevin gerçekten bu öğretmenin
+// (öğrenci, ders) kapsamına ait olduğu, listTeacherStudentTasksHandler'daki aynı
+// homework_id → subject_id zincirinden doğrulanır.
+async function getTeacherTaskAnswerSheetHandler(request) {
+  try {
+    const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    const taskId = request.params.taskId
+    const scopeDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+    })
+    const scopeResult = await scopeDb.query(`
+      SELECT TOP 1 t.id
+      FROM dbo.Tasks t
+      WHERE t.id = @id AND t.student_id = @studentId
+        AND t.homework_id IN (SELECT id FROM dbo.Homeworks WHERE student_id = @studentId AND subject_id = @subjectId)
+        AND (t.resource_book_id IS NULL OR EXISTS (
+          SELECT 1 FROM dbo.StudentTeacherResourceBooks strb
+          WHERE strb.teacher_id = @studentTeacherId AND strb.resource_book_id = t.resource_book_id
+        ));
+    `)
+    if (!scopeResult.recordset[0]) {
+      return json(404, { error: 'Görev bulunamadı.' })
+    }
+
+    const data = await fetchTaskAnswerSheetData(taskId, studentId)
+    if (!data) {
+      return json(404, { error: 'Görev bulunamadı.' })
+    }
+
+    return json(200, data)
+  } catch (error) {
+    return handleError(error, 'getTeacherTaskAnswerSheetHandler', 'Cevap kağıdı yüklenemedi.')
   }
 }
 
@@ -612,11 +1388,21 @@ module.exports = {
   listTeacherStudentsHandler,
   listTeacherParentsHandler,
   getTeacherLessonPlanHandler,
+  addTeacherRecurringLessonSlotHandler,
+  updateTeacherRecurringLessonSlotHandler,
+  deleteTeacherRecurringLessonSlotHandler,
+  addTeacherOneTimeLessonHandler,
+  updateTeacherOneTimeLessonHandler,
+  deleteTeacherOneTimeLessonHandler,
   listTeacherResourceBooksHandler,
   listTeacherResourceBookTopicsHandler,
   listTeacherStudentHomeworksHandler,
   createTeacherHomeworkHandler,
   assignTeacherHomeworkTaskHandler,
   listTeacherStudentTasksHandler,
+  getTeacherTaskAnswerSheetHandler,
   getTeacherStudentProgressOverviewHandler,
+  grantParentAccessHandler,
+  getTeacherEntitlementHandler,
+  createTeacherStudentHandler,
 }

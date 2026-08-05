@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Phone, UserRound, Users } from 'lucide-react'
+import { CheckCircle2, KeyRound, Phone, UserRound, Users } from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
 import EmptyState from '../../shared/EmptyState'
 import LoadingState from '../../shared/LoadingState'
 import { getTeacherParents } from '../../../services/teacherService'
+import GrantParentAccessDialog from '../components/GrantParentAccessDialog'
 
 export default function ParentsPage() {
   const [parents, setParents] = useState(null)
   const [error, setError] = useState('')
+  const [grantDialogParent, setGrantDialogParent] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -68,10 +70,40 @@ export default function ParentsPage() {
                 <Users size={14} aria-hidden="true" />
                 {parent.students.map((student) => student.fullName).join(', ')}
               </p>
+
+              {parent.hasPanelAccess ? (
+                <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-panel-sage-soft px-2.5 py-1 text-xs font-semibold text-panel-sage">
+                  <CheckCircle2 size={12} aria-hidden="true" />
+                  Panel Erişimi Var
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setGrantDialogParent(parent)}
+                  className="inline-flex w-fit items-center gap-1.5 rounded-full bg-panel-blue-soft px-2.5 py-1 text-xs font-semibold text-panel-blue transition-colors hover:bg-panel-blue hover:text-white"
+                >
+                  <KeyRound size={12} aria-hidden="true" />
+                  Panel Erişimi Ver
+                </button>
+              )}
             </div>
           ))}
         </div>
       )}
+
+      {grantDialogParent ? (
+        <GrantParentAccessDialog
+          parent={grantDialogParent}
+          onGranted={(parentId) => {
+            setParents((current) =>
+              (current || []).map((parent) =>
+                parent.id === parentId ? { ...parent, hasPanelAccess: true } : parent,
+              ),
+            )
+          }}
+          onClose={() => setGrantDialogParent(null)}
+        />
+      ) : null}
     </div>
   )
 }

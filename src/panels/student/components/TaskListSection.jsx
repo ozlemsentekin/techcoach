@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { BookOpen, CheckCircle2, Circle, Clock, ListChecks, SlidersHorizontal } from 'lucide-react'
 import { getSortedTasks } from '../../../utils/taskSelectors'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
-import { TASK_TYPES } from '../../../data/taskTypes'
+import { TASK_TYPES, BREAK_TASK_TYPES } from '../../../data/taskTypes'
 import { addDaysISO, formatDateLong, todayISODate } from '../../../utils/time'
 import TaskGroupSection from './TaskGroupSection'
 import TaskDetailsDrawer from './TaskDetailsDrawer'
@@ -158,6 +158,7 @@ export default function TaskListSection({
   const sorted = useMemo(() => getSortedTasks(tasks), [tasks])
 
   const filtered = sorted.filter((task) => {
+    if (filter === 'done' && BREAK_TASK_TYPES.has(task.taskType)) return false
     return getAssignmentStatus(task).filterKey === filter
   })
 

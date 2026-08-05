@@ -106,6 +106,26 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const acceptConsent = async () => {
+    setAuthLoading(true)
+    setAuthError('')
+
+    try {
+      await authRequest('/api/auth/consent', {
+        method: 'POST',
+        body: JSON.stringify({ acceptAydinlatma: true, acceptKvkk: true }),
+      })
+      const data = await authRequest('/api/auth/me', { method: 'GET' })
+      setAuthUser(data.user)
+      return data.user
+    } catch (error) {
+      setAuthError(error.message)
+      throw error
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
   const enterStudent = async (studentId) => {
     const data = await authRequest(`/api/parent/students/${studentId}/enter`, {
       method: 'POST',
@@ -152,6 +172,7 @@ export function AuthProvider({ children }) {
       login,
       register,
       logout,
+      acceptConsent,
       enterStudent,
       returnToParent,
       impersonateUser,

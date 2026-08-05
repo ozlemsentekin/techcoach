@@ -2,7 +2,7 @@ const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
 const { json } = require('./http')
 const { isSessionError } = require('./security')
-const { requireStudentContext } = require('./studentScope')
+const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
 
 function toISODate(value) {
   if (!value) return null
@@ -93,9 +93,11 @@ async function getAssignedResourceBook(studentId, subjectId, resourceBookId, { s
 // dbo.Homeworks satırına eşlik eden bir dbo.Tasks satırı oluşturur (taslak değil, canlı).
 // resourceBookId + testIds burada aktarılır ki soru bankası görevlerinde dijital cevap kağıdı
 // (bkz. tasks.js getTaskAnswerSheetHandler) gerçek test/soru sayısına ve cevap anahtarına erişebilsin.
-async function createTaskForHomework(studentId, homework, taskDate, resourceBookId, testIds, taskTime) {
+async function createTaskForHomework(studentId, homework, taskDate, resourceBookId, testIds, taskTime, durationMinutesOverride) {
   try {
-    const durationMinutes = Math.min(60, Math.max(20, homework.totalQuestionCount || 20))
+    const durationMinutes = Number.isFinite(durationMinutesOverride) && durationMinutesOverride > 0
+      ? durationMinutesOverride
+      : Math.min(60, Math.max(20, homework.totalQuestionCount || 20))
     const startTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(taskTime || '') ? taskTime : '00:00'
     const [startHour, startMinute] = startTime.split(':').map(Number)
     const startMinutes = startHour * 60 + startMinute
@@ -261,7 +263,7 @@ async function listHomeworksHandler(request) {
 async function createHomeworkHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }
@@ -381,7 +383,7 @@ async function updateHomeworkHandler(request) {
   try {
     const homeworkId = request.params.homeworkId
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }
@@ -453,7 +455,7 @@ async function assignHomeworkTaskHandler(request) {
   try {
     const homeworkId = request.params.homeworkId
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }
@@ -573,7 +575,7 @@ async function assignHomeworkTaskHandler(request) {
 async function deleteHomeworkHandler(request) {
   try {
     const homeworkId = request.params.homeworkId
-    const { error, studentId } = await requireStudentContext(request)
+    const { error, studentId } = await requireStudentWriteContext(request)
     if (error) {
       return error
     }

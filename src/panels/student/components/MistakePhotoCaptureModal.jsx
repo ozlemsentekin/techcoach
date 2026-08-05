@@ -1,0 +1,162 @@
+import { useId, useState } from 'react'
+import { Camera, ImagePlus, X } from 'lucide-react'
+
+const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+const MAX_OUTPUT_DIMENSION = 1400
+const OUTPUT_QUALITY = 0.82
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Görsel okunamadı.'))
+    image.src = src
+  })
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error || new Error('Dosya okunamadı.'))
+    reader.readAsDataURL(file)
+  })
+}
+
+// Profil görseli gibi kareye kırpmıyoruz: soru fotoğrafında en-boy oranı korunur, sadece uzun
+// kenar MAX_OUTPUT_DIMENSION'a indirilip JPEG'e sıkıştırılır (bkz. ResourceImageField.jsx'teki
+// benzer desen — orada kare kırpma vardı çünkü profil/kapak görseli için).
+async function resizeQuestionPhoto(file) {
+  if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+    throw new Error('JPG, PNG veya WEBP görsel seçin.')
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error('Görsel en fazla 8 MB olabilir.')
+  }
+
+  const sourceUrl = await readFileAsDataUrl(file)
+  const image = await loadImage(sourceUrl)
+  const width = image.naturalWidth || image.width
+  const height = image.naturalHeight || image.height
+  const scale = Math.min(1, MAX_OUTPUT_DIMENSION / Math.max(width, height))
+  const outputWidth = Math.max(1, Math.round(width * scale))
+  const outputHeight = Math.max(1, Math.round(height * scale))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = outputWidth
+  canvas.height = outputHeight
+  const context = canvas.getContext('2d')
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, outputWidth, outputHeight)
+  context.drawImage(image, 0, 0, outputWidth, outputHeight)
+
+  return canvas.toDataURL('image/jpeg', OUTPUT_QUALITY)
+}
+
+export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoUrl, onClose, onSave }) {
+  const cameraInputId = useId()
+  const galleryInputId = useId()
+  const [preview, setPreview] = useState(existingPhotoUrl || '')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const handleFile = async (file) => {
+    if (!file) return
+    setBusy(true)
+    setError('')
+    try {
+      const dataUrl = await resizeQuestionPhoto(file)
+      setPreview(dataUrl)
+      await onSave(dataUrl)
+      onClose()
+    } catch (err) {
+      setError(err.message || 'Fotoğraf yüklenemedi.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleInputChange = (event) => {
+    const file = event.target.files?.[0] || null
+    event.target.value = ''
+    handleFile(file)
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Soru fotoğrafı ekle"
+    >
+      <div className="w-full max-w-sm panel-card p-6 shadow-lg">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-panel-text">{questionLabel ? `${questionLabel}. Soru Fotoğrafı` : 'Soru Fotoğrafı'}</h2>
+            <p className="mt-1 text-sm text-panel-text-muted">
+              Fotoğrafı Hata Defterim'de daha sonra tekrar görebilirsin.
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Kapat"
+            onClick={onClose}
+            className="shrink-0 text-panel-text-muted hover:text-panel-text"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {preview ? (
+          <img
+            src={preview}
+            alt="Soru fotoğrafı önizleme"
+            className="mt-4 max-h-64 w-full rounded-xl border border-panel-border object-contain"
+          />
+        ) : null}
+
+        {error ? <p className="mt-3 text-sm text-panel-warm">{error}</p> : null}
+
+        <div className="mt-5 flex flex-col gap-2">
+          <label
+            htmlFor={cameraInputId}
+            className={`flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-student-theme-primary text-sm font-semibold text-student-theme-button-text hover:bg-student-theme-hover ${
+              busy ? 'pointer-events-none opacity-60' : ''
+            }`}
+          >
+            <Camera size={16} aria-hidden="true" />
+            {busy ? 'Yükleniyor...' : preview ? 'Yeniden Çek' : 'Kamera ile Çek'}
+          </label>
+          <input
+            id={cameraInputId}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            disabled={busy}
+            className="hidden"
+            onChange={handleInputChange}
+          />
+
+          <label
+            htmlFor={galleryInputId}
+            className={`flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-panel-border text-sm font-semibold text-panel-text hover:bg-panel-surface-soft ${
+              busy ? 'pointer-events-none opacity-60' : ''
+            }`}
+          >
+            <ImagePlus size={16} aria-hidden="true" />
+            Galeriden Seç
+          </label>
+          <input
+            id={galleryInputId}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            disabled={busy}
+            className="hidden"
+            onChange={handleInputChange}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}

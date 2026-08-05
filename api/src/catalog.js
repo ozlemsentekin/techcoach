@@ -244,6 +244,63 @@ async function listResourceBooksHandler(request) {
   }
 }
 
+function sanitizeResourceBookAnswerKeyStatus(record) {
+  return {
+    ...sanitizeResourceBook(record),
+    totalTestCount: record.total_test_count,
+    incompleteTestCount: record.incomplete_test_count,
+  }
+}
+
+async function listResourceBooksMissingAnswerKeyHandler(request) {
+  try {
+    const { error } = await requireAdmin(request)
+    if (error) {
+      return error
+    }
+
+    // has_answer_key only marks that a book is *supposed* to have one; the actual answer
+    // data lives per-test in TestAnswerKeys, entered separately from that flag. So a book
+    // can have has_answer_key = 1 while its tests still sit at 0 entered answers — that's
+    // the case this list needs to surface, not just books where the flag itself is off.
+    const requestDb = await withRequest({})
+    const result = await requestDb.query(`
+      SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
+             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.created_at,
+             COUNT(tt.id) AS total_test_count,
+             SUM(CASE WHEN tt.question_count > ISNULL(ak.answer_count, 0) THEN 1 ELSE 0 END) AS incomplete_test_count
+      FROM dbo.ResourceBooks rb
+      LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+      LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
+      INNER JOIN dbo.ResourceBookTopics rbt ON rbt.resource_book_id = rb.id
+      INNER JOIN dbo.ResourceBookTopicTests tt ON tt.topic_id = rbt.id
+      LEFT JOIN (
+        SELECT test_id, COUNT(*) AS answer_count
+        FROM dbo.TestAnswerKeys
+        GROUP BY test_id
+      ) ak ON ak.test_id = tt.id
+      WHERE rb.resource_type = 'soru_bankasi' AND rb.has_answer_key = 1
+      GROUP BY rb.id, rb.publisher_id, p.name, rb.subject_id, s.name, rb.name, rb.page_count,
+               rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.created_at
+      HAVING SUM(CASE WHEN tt.question_count > ISNULL(ak.answer_count, 0) THEN 1 ELSE 0 END) > 0
+      ORDER BY s.name ASC, rb.name ASC;
+    `)
+
+    return json(200, { resourceBooks: result.recordset.map(sanitizeResourceBookAnswerKeyStatus) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('listResourceBooksMissingAnswerKeyHandler failed', error)
+    return json(500, { error: 'Kaynak kitaplar yüklenemedi.' })
+  }
+}
+
 async function listResourceBooksForPanelHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
@@ -1420,6 +1477,7 @@ module.exports = {
   listPublishersHandler,
   createPublisherHandler,
   listResourceBooksHandler,
+  listResourceBooksMissingAnswerKeyHandler,
   listResourceBooksForPanelHandler,
   createResourceBookHandler,
   updateResourceBookHandler,

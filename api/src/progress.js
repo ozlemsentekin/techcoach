@@ -2,7 +2,7 @@ const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
 const { json } = require('./http')
 const { isSessionError } = require('./security')
-const { requireStudentContext } = require('./studentScope')
+const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
 
 function toISODate(value) {
   if (!value) return null
@@ -23,13 +23,18 @@ function sanitizeWrongQuestion(record) {
     id: record.id,
     studentId: record.student_id,
     taskId: record.task_id,
+    testId: record.test_id || undefined,
     subject: record.subject,
     topic: record.topic || undefined,
+    testName: record.test_name || undefined,
+    bookName: record.book_name || undefined,
+    publisherName: record.publisher_name || undefined,
     questionNumber: record.question_number || undefined,
     errorType: record.error_type,
     studentNote: record.student_note || undefined,
     reviewStatus: record.review_status,
     resolvedAt: record.resolved_at,
+    photoUrl: record.photo_url || undefined,
     createdAt: record.created_at,
   }
 }
@@ -202,7 +207,7 @@ async function getCheckInHandler(request) {
 async function saveCheckInHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }
@@ -261,7 +266,8 @@ async function listWrongQuestionsHandler(request) {
       studentId: { type: sql.UniqueIdentifier, value: studentId },
     })
     const result = await requestDb.query(`
-      SELECT id, student_id, task_id, subject, topic, question_number, error_type, student_note, review_status, resolved_at, created_at
+      SELECT id, student_id, task_id, test_id, subject, topic, test_name, book_name, publisher_name,
+             question_number, error_type, student_note, review_status, resolved_at, photo_url, created_at
       FROM dbo.WrongQuestions
       WHERE student_id = @studentId
       ORDER BY created_at DESC;
@@ -285,7 +291,7 @@ async function listWrongQuestionsHandler(request) {
 async function addWrongQuestionHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }
@@ -331,7 +337,7 @@ async function updateWrongQuestionHandler(request) {
   try {
     const wrongQuestionId = request.params.wrongQuestionId
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }
@@ -548,7 +554,7 @@ async function getProgressOverviewHandler(request) {
 async function addStudySessionHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }
@@ -628,7 +634,7 @@ async function getSmallGoalHandler(request) {
 async function setSmallGoalHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }

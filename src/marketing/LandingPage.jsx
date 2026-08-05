@@ -5,9 +5,6 @@ import './LandingPage.css'
 
 const NAV_ITEMS = [
   { id: 'nasil', label: 'Nedir?' },
-  { id: 'how', label: 'Nasıl Çalışır?' },
-  { id: 'teco', label: 'Teco' },
-  { id: 'arena', label: 'Teco Arena' },
   { id: 'paketler', label: 'Paketler' },
   { id: 'paneller', label: 'Paneller' },
 ]
@@ -29,19 +26,7 @@ function getLgsCountdown() {
 }
 
 function BrandIcon() {
-  return (
-    <svg viewBox="0 0 120 120" aria-hidden="true">
-      <circle cx="60" cy="60" r="54" fill="#2B2F77" />
-      <path
-        d="M30 60L54 84L92 40"
-        fill="none"
-        stroke="#3ED6C3"
-        strokeWidth="10"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
+  return <img src="/logo-mark.png" alt="" className="logo-mark-img" />
 }
 
 function TecoMessageIcon() {
@@ -195,10 +180,10 @@ export default function LandingPage() {
     ? 'Oturum Kontrol Ediliyor'
     : authUser
       ? `${authUser.fullName.split(' ')[0]}`
-      : 'Çalışmaya Başla'
+      : 'Başla'
 
   return (
-    <>
+    <div className="landing-page">
       <header className="topbar">
         <div className="container topbar-inner">
           <a href="#" className="logo" aria-label="TechCoach">
@@ -242,21 +227,6 @@ export default function LandingPage() {
             <div className="hero-copy">
               <div className="hero-copy-main">
                 <div className="eyebrow">Akademik performansın dijital sistemi</div>
-                <h1 className="hero-title">
-                  <span className="hero-title-line hero-title-lead">
-                    <span className="hero-title-brand">TechCoach</span>{' '}
-                    <span className="hero-title-word">planlar</span>
-                  </span>
-                  <span className="hero-title-line hero-title-subline">
-                    <span className="hero-title-accent">Teco</span>{' '}
-                    <span className="hero-title-word">ilerletir</span>
-                  </span>
-                </h1>
-                <p>
-                  <strong>TechCoach</strong> öğrencinin akademik sürecini yöneten dijital sistemdir;{' '}
-                  <strong>Teco</strong> ise günlük planı oluşturan ve öğrenciyi yönlendiren akıllı
-                  çalışma asistanıdır.
-                </p>
                 <div className="hero-mobile-device" aria-hidden="true">
                   <span className="hero-mobile-device-notch" />
                   <span className="hero-mobile-device-side hero-mobile-device-side-top" />
@@ -275,47 +245,6 @@ export default function LandingPage() {
                   </div>
                 </div>
               </div>
-
-              <div className="hero-journey" aria-label="Teco akışı">
-                <div className="hero-journey-intro">
-                  <span className="hero-journey-kicker">Tek akış</span>
-                  <strong className="hero-journey-headline">
-                    <span className="hero-journey-headline-line hero-journey-headline-line-primary">
-                      Takvim gelir, plan oluşur.
-                    </span>
-                    <span>
-                      <span className="teco-accent">Teco</span> süreci yürütür.
-                    </span>
-                  </strong>
-                  <p>
-                    Öğrenci, veli ve varsa öğrenci koçunuz aynı akışın içinde kalır. Ayrı modüller
-                    değil, tek yönlü ilerleyen bir sistem.
-                  </p>
-                </div>
-                <ol className="hero-journey-list">
-                  <li className="hero-journey-item">
-                    <b>1</b>
-                    <div>
-                      <span className="hero-journey-title hero-journey-title-nowrap"><span className="teco-accent">Teco</span>’ya sor</span>
-                      <p>Sınav takvimini içeri al, çalışma planı otomatik çıksın.</p>
-                    </div>
-                  </li>
-                  <li className="hero-journey-item">
-                    <b>2</b>
-                    <div>
-                      <span className="hero-journey-title hero-journey-title-nowrap"><span className="teco-accent">Teco</span> planı yürütür</span>
-                      <p>Günlük görevleri hatırlatır, hata analizi yapar, öğrenciyi yönlendirir.</p>
-                    </div>
-                  </li>
-                  <li className="hero-journey-item">
-                    <b>3</b>
-                    <div>
-                      <span className="hero-journey-title">Herkes aynı veriyi görür</span>
-                      <p>Öğrenci uygular, veli takip eder, koç veriye göre müdahale eder.</p>
-                    </div>
-                  </li>
-                </ol>
-              </div>
             </div>
           </div>
 
@@ -330,14 +259,14 @@ export default function LandingPage() {
             <div className="about-shell">
               <h2 className="section-title">TechCoach Nedir?</h2>
               <p className="section-subtitle about-subtitle">
-                TechCoach; LGS sürecinde öğrencinin akademik disiplinini sistemleştiren, veliye net
-                görünürlük sağlayan ve varsa öğrenci koçunuzun kararlarını veriye dayandıran
-                dijital performans platformudur.
+                TechCoach; öğrencinin hedeflerini planlara dönüştüren, ilerlemesini görünür hâle
+                getiren ve öğrenci, veli ile öğretmeni aynı gelişim sürecinde buluşturan akademik
+                gelişim platformudur.
               </p>
               <div className="about-highlights">
-                <span>Disiplin odaklı çalışma sistemi</span>
-                <span>Veriye dayalı öğrenci koçu kararları</span>
-                <span>Öğrenci + Veli + Öğrenci Koçu tek akış</span>
+                <span>Planlı çalışma süreci</span>
+                <span>Görünür akademik gelişim</span>
+                <span>Öğrenci • Veli • Öğretmen iş birliği.</span>
               </div>
             </div>
 
@@ -370,194 +299,10 @@ export default function LandingPage() {
                   <h3>Özet Değer</h3>
                 </div>
                 <p>
-                  Öğrenci uygular, veli takip eder, koç yön verir. TechCoach bu üç rolü tek bir
+                  Öğrenci uygular, veli takip eder, öğretmen yön verir. TechCoach bu üç rolü tek bir
                   veri diliyle birleştirir.
                 </p>
               </article>
-            </div>
-          </div>
-        </section>
-
-        <section className="section" id="how">
-          <div className="container">
-            <div className="how-mission how-unified">
-              <div className="how-intro">
-                <h2>Nasıl Çalışır?</h2>
-                <p>
-                  Öğrenci verisi her gün küçük adımlarla toplanır; sistem bu veriyi plan, analiz ve
-                  yönlendirmeye dönüştürür.
-                </p>
-              </div>
-
-              <article className="how-rail how-modern-rail">
-                <div className="flow-grid">
-                  <div className="flow-card">
-                    <div className="flow-heading">
-                      <span className="flow-step">01</span>
-                      <h3>Kurulum ve Hedefleme</h3>
-                    </div>
-                    <p>Takvim yüklenir, hedef dersler seçilir, kişisel başlangıç profili çıkarılır.</p>
-                  </div>
-                  <div className="flow-card">
-                    <div className="flow-heading">
-                      <span className="flow-step">02</span>
-                      <h3>Günlük Operasyon</h3>
-                    </div>
-                    <p>Otomatik plan üretilir; öğrenci süre, kaynak ve soru verisini akışta işler.</p>
-                  </div>
-                  <div className="flow-card">
-                    <div className="flow-heading">
-                      <span className="flow-step">03</span>
-                      <h3>AI Hata Analizi</h3>
-                    </div>
-                    <p>Yanlışlar konu/hata tipi bazında ayrıştırılır, tekrar seti ve öncelik listesi oluşur.</p>
-                  </div>
-                  <div className="flow-card">
-                    <div className="flow-heading">
-                      <span className="flow-step">04</span>
-                      <h3>Haftalık Yeniden Planlama</h3>
-                    </div>
-                    <p>Raporlar öğrenci-veli-koç paneline düşer, sistem bir sonraki haftayı otomatik revize eder.</p>
-                  </div>
-                </div>
-              </article>
-
-              <aside className="how-control how-modern-control">
-                <div className="control-head">
-                  <div>
-                    <p className="control-kicker">Mission Control</p>
-                    <h3>Canlı Süreç Durumu</h3>
-                  </div>
-                  <span className="live-pill">
-                    <i className="live-dot" />
-                    LIVE
-                  </span>
-                </div>
-                <div className="control-grid">
-                  <div className="control-card">
-                    <span>Bu Hafta Plan Tamamlama</span>
-                    <strong>%82</strong>
-                    <p className="kpi-meta">+6 puan / geçen hafta</p>
-                  </div>
-                  <div className="control-card">
-                    <span>AI ile İşlenen Hata</span>
-                    <strong>126</strong>
-                    <p className="kpi-meta">47 soru görselden analiz edildi</p>
-                  </div>
-                  <div className="control-card">
-                    <span>Riskli Konular</span>
-                    <strong>3</strong>
-                    <p className="kpi-meta">Olasılık, Cebir, Paragraf</p>
-                  </div>
-                  <div className="control-card">
-                    <span>Önerilen Müdahale</span>
-                    <strong>8</strong>
-                    <p className="kpi-meta">Koç paneline push edildi</p>
-                  </div>
-                </div>
-                <div className="control-queue">
-                  <p className="queue-title">Öncelikli Karar Kuyruğu</p>
-                  <div className="queue-item">
-                    <span>1</span>
-                    Olasılık mini-kampı (48 saat)
-                  </div>
-                  <div className="queue-item">
-                    <span>2</span>
-                    Fen deneme telafisi (30 dk)
-                  </div>
-                  <div className="queue-item">
-                    <span>3</span>
-                    Türkçe paragraf ritmi (günlük 15 soru)
-                  </div>
-                </div>
-              </aside>
-            </div>
-          </div>
-        </section>
-
-        <section className="section split-section" id="teco">
-          <div className="container">
-            <div className="split-shell">
-              <div className="split-grid">
-                <div>
-                  <p className="split-label"><span className="teco-accent">Teco</span></p>
-                  <h2 className="section-title split-title"><span className="teco-accent">Teco</span>, öğrencinin dijital asistanı</h2>
-                  <p className="split-text">
-                    Teco emir vermez; yön gösterir. "Teco’ya soralım" dediğinde günlük planını oluşturur,
-                    hata defterinden zayıf başlıkları çıkarır ve gün içinde mini görevlerle ritmi korur.
-                  </p>
-                  <ul className="split-list">
-                    <li><span>✓</span>Teco’da planlama yaptım: gün otomatik başlar</li>
-                    <li><span>✓</span>Yüklenen sorudan konu ve hata türü tespiti yapar</li>
-                    <li><span>✓</span>Her ders için kısa tekrar seti ve öncelik önerir</li>
-                  </ul>
-                </div>
-                <div className="split-visual">
-                  <div className="teco-board">
-                    <div className="teco-board-head">
-                      <strong><span className="teco-accent">Teco</span> / Günlük Akış</strong>
-                      <span>Canlı</span>
-                    </div>
-                    <div className="teco-board-row">
-                      <h4>Bugün</h4>
-                      <p>Matematik tekrar · 28 dk</p>
-                    </div>
-                    <div className="teco-board-row">
-                      <h4>Hata Defteri</h4>
-                      <p>2 soru analiz edildi · Olasılık</p>
-                    </div>
-                    <div className="teco-board-row">
-                      <h4>Öneri</h4>
-                      <p>Cebir mini seti · 12 soru</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="section split-section" id="arena">
-          <div className="container">
-            <div className="split-shell">
-              <div className="split-grid split-grid-reverse">
-                <div className="split-visual">
-                  <div className="arena-board">
-                    <div className="arena-head">
-                      <strong>Teco Arena</strong>
-                      <span>Haftalık Lig</span>
-                    </div>
-                    <div className="arena-item">
-                      <b>1</b>
-                      <p>Matematik de benden iyisi yok</p>
-                      <em>1.240 puan</em>
-                    </div>
-                    <div className="arena-item">
-                      <b>2</b>
-                      <p>Türkçe’de kapışalım</p>
-                      <em>1.180 puan</em>
-                    </div>
-                    <div className="arena-item">
-                      <b>3</b>
-                      <p>Genel deneme ligi</p>
-                      <em>1.040 puan</em>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <h2 className="section-title split-title"><span className="teco-accent">Teco</span> Arena&apos;da arkadaşlarınla güvenli performans yarışı</h2>
-                  <p className="split-text">
-                    Öğrenciler takım kurar, birbirini yarışa davet eder ve ders bazlı liglerde kapışır.
-                    Sosyal medya dağınıklığı yok; sadece görev, puan, rozet ve sıralama var.
-                  </p>
-                  <ul className="split-list">
-                    <li><span>✓</span>Takım kur, arkadaşlarını davet et</li>
-                    <li><span>✓</span>Türkçe, Matematik veya genel deneme liglerine katıl</li>
-                    <li><span>✓</span>Haftalık rozetlerle motivasyonu canlı tut</li>
-                  </ul>
-                  <a className="btn btn-primary" href="#">Teco Arena’ya Katıl</a>
-                </div>
-              </div>
             </div>
           </div>
         </section>
@@ -601,10 +346,10 @@ export default function LandingPage() {
                   <h3>Premium</h3>
                   <div className="price">990 <small>TL / ay</small></div>
                   <ul>
-                    <li>Koç paneli erişimi</li>
+                    <li>Öğretmen paneli erişimi</li>
                     <li>Öncelikli analiz ve yönlendirme</li>
                     <li>Derin performans raporları</li>
-                    <li>Gelişmiş koç görünümü</li>
+                    <li>Gelişmiş öğretmen görünümü</li>
                   </ul>
                   <a className="btn btn-outline" href="#">Paketi Seç</a>
                 </article>
@@ -615,9 +360,9 @@ export default function LandingPage() {
 
         <section className="section" id="paneller">
           <div className="container">
-            <h2 className="section-title">Öğrenci, veli ve koç için kişiye özel paneller</h2>
+            <h2 className="section-title">Öğrenci, veli ve öğretmen için kişiye özel paneller</h2>
             <p className="section-subtitle">
-              Her kullanıcı yalnızca ihtiyacı olan veriyi görür. Öğrenci uygular, veli izler, koç
+              Her kullanıcı yalnızca ihtiyacı olan veriyi görür. Öğrenci uygular, veli izler, öğretmen
               yön verir.
             </p>
 
@@ -654,7 +399,7 @@ export default function LandingPage() {
                 <div className="panel-card-head">
                   <div className="mock-device laptop-style" />
                   <div className="panel-card-copy">
-                    <h3>Koç</h3>
+                    <h3>Öğretmen</h3>
                     <p>Öğrencinin hata yoğunluğu, yaklaşan sınavları ve haftalık öncelik alanları tek yerde.</p>
                   </div>
                 </div>
@@ -671,14 +416,14 @@ export default function LandingPage() {
           <div className="container">
             <div className="cta-strip">
               <div>
-                <h2>Disiplinli bir akademik sistem kurmak için doğru yerdesin.</h2>
+                <h2>Hedefler netleşsin, gelişim görünür olsun.</h2>
                 <p>
-                  TechCoach, öğrenciyi yönlendiren, veliyi rahatlatan ve koçu veriyle güçlendiren
-                  premium bir akademik performans sistemidir.
+                  TechCoach; öğrencinin çalışma sürecini planlayan, ilerlemesini ölçen ve öğrenci,
+                  veli ve öğretmen arasındaki iletişimi güçlendiren akademik gelişim platformudur.
                 </p>
               </div>
               <a className="btn btn-primary cta-action" href="#" onClick={handlePrimaryCta}>
-                <span>Hemen Başla</span>
+                <span>TechCoach&apos;u Keşfet</span>
                 <span className="cta-action-icon" aria-hidden="true">→</span>
               </a>
             </div>
@@ -689,6 +434,6 @@ export default function LandingPage() {
       <footer id="sss">
         <div className="container">© 2026 TechCoach · Disiplin. Analiz. Başarı.</div>
       </footer>
-    </>
+    </div>
   )
 }

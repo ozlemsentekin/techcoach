@@ -10,16 +10,21 @@ function getStoredTheme(storageKey, defaultTheme) {
   return isValidTheme(stored) ? stored : defaultTheme
 }
 
-export default function ThemeProvider({ children, storageKey = STORAGE_KEY, defaultTheme = DEFAULT_THEME }) {
-  const [theme, setThemeState] = useState(() => getStoredTheme(storageKey, defaultTheme))
+// fixedTheme: panelin kendi seçilebilir stil paleti yoksa (bkz. TeacherApp) kullanılır.
+// Kayıtlı/önceki bir tercihi yok sayar ve setTheme'i no-op yapar; PanelHeader da bu panel
+// için "Stil" değiştiriciyi zaten göstermez, ama context yine de tüm alt bileşenlerin
+// data-theme'e bağlı CSS token'larını (panel-blue, student-theme-* vb.) alabilmesi için sağlanır.
+export default function ThemeProvider({ children, storageKey = STORAGE_KEY, defaultTheme = DEFAULT_THEME, fixedTheme }) {
+  const [theme, setThemeState] = useState(() => fixedTheme || getStoredTheme(storageKey, defaultTheme))
 
   const setTheme = useCallback((nextTheme) => {
+    if (fixedTheme) return
     if (!isValidTheme(nextTheme)) return
     setThemeState(nextTheme)
     writeJSON(storageKey, nextTheme)
-  }, [storageKey])
+  }, [storageKey, fixedTheme])
 
-  const value = useMemo(() => ({ theme, setTheme }), [theme, setTheme])
+  const value = useMemo(() => ({ theme, setTheme, locked: Boolean(fixedTheme) }), [theme, setTheme, fixedTheme])
 
   return (
     <ThemeContext.Provider value={value}>

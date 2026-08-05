@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from './context/useAuth'
 import LoadingState from './panels/shared/LoadingState'
+import ConsentGate from './panels/shared/ConsentGate'
 
 const LandingPage = lazy(() => import('./marketing/LandingPage'))
 const AuthPage = lazy(() => import('./marketing/AuthPage'))
@@ -48,6 +49,12 @@ function RequireRole({ role, children }) {
 
   if (!authUser) {
     return <Navigate to="/" replace />
+  }
+
+  // Öğretmen tarafından oluşturulan veli/öğrenci hesapları "onay bekliyor" durumunda açılır;
+  // KVKK/aydınlatma onayı verilmeden panelin geri kalanına erişilemez.
+  if (authUser.needsConsent) {
+    return <ConsentGate />
   }
 
   if (authUser.role !== role) {

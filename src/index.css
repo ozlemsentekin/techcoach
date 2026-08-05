@@ -260,6 +260,35 @@ body {
   --color-student-theme-button-text: #ffffff;
 }
 
+/*
+ * TechCoach markası (öğretmen paneli) — lacivert + altın/amber ikiliye sabitlenmiş,
+ * seçilemeyen tek tema (bkz. akademik sunum/eğitim kredisi referans görselleri).
+ */
+[data-theme='techcoach'] {
+  --color-panel-bg: #ffffff;
+  --color-panel-surface: #ffffff;
+  --color-panel-surface-soft: #eef1f8;
+  --color-panel-border: #dde2f0;
+  --color-panel-border-strong: #c1c8e0;
+  --color-panel-text: #1b2350;
+  --color-panel-text-muted: #5b6084;
+  --color-panel-blue: #1c2b5e;
+  --color-panel-blue-soft: #e2e6f5;
+  --color-panel-sage: #b8860b;
+  --color-panel-sage-soft: #fbf1d9;
+  --color-panel-lilac: #8a5fae;
+  --color-panel-lilac-soft: #efe7f7;
+  --color-panel-accent: #e08a3e;
+  --color-panel-accent-soft: #fbe9d7;
+  --color-panel-warm: #c96a1f;
+  --color-student-theme-primary: #1c2b5e;
+  --color-student-theme-hover: color-mix(in srgb, #1c2b5e 82%, black);
+  --color-student-theme-soft: #e2e6f5;
+  --color-student-theme-border: #1c2b5e;
+  --color-student-theme-text: #1c2b5e;
+  --color-student-theme-button-text: #ffffff;
+}
+
 .panel-card {
   border-radius: 1rem;
   border: 1px solid color-mix(in srgb, var(--color-panel-border) 60%, transparent);

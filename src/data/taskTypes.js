@@ -25,6 +25,9 @@ export const TASK_TYPES = {
   'gunluk-degerlendirme': { label: 'Günlük Değerlendirme', icon: 'Star', color: 'accent' },
 }
 
+/** Mola/yemek gibi ders dışı ara türler; tamamlanan akışta bunlar listelenmez. */
+export const BREAK_TASK_TYPES = new Set(['mola', 'dinlenme', 'yemek', 'yemek-dinlenme'])
+
 /** Bu türlerde "Başlat" odak ekranını (zamanlayıcı + soru sayacı / alt hedefler) açar. */
 export const FOCUS_TASK_TYPES = new Set([
   'ders-calisma',

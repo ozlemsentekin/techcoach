@@ -26,6 +26,7 @@ function sanitizeUser(record) {
     isAdmin: Boolean(record.is_admin),
     lastLoginAt: record.last_login_at,
     createdAt: record.created_at,
+    needsConsent: !record.aydinlatma_accepted_at || !record.kvkk_accepted_at,
   }
 }
 
@@ -100,7 +101,8 @@ async function registerHandler(request) {
     const result = await requestDb.query(`
       INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
       OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
-             inserted.is_admin, inserted.last_login_at, inserted.created_at
+             inserted.is_admin, inserted.last_login_at, inserted.created_at,
+             inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at
       VALUES (@fullName, @email, @phone, @passwordHash, @role, @consentAt, @consentAt);
     `)
 
@@ -152,7 +154,9 @@ async function loginHandler(request) {
         failed_login_count,
         lockout_until,
         last_login_at,
-        created_at
+        created_at,
+        aydinlatma_accepted_at,
+        kvkk_accepted_at
       FROM dbo.Users
       WHERE phone_number = @phone;
     `)
@@ -224,6 +228,7 @@ async function meHandler(request) {
     const result = await requestDb.query(`
       SELECT TOP 1
         u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.last_login_at, u.created_at,
+        u.aydinlatma_accepted_at, u.kvkk_accepted_at, u.funded_by_teacher_id,
         e.status AS entitlement_status, e.source AS entitlement_source,
         e.current_period_end AS entitlement_current_period_end
       FROM dbo.Users u
@@ -237,6 +242,18 @@ async function meHandler(request) {
     }
 
     const user = sanitizeUser(record)
+    if (record.role === 'ogrenci') {
+      user.restricted = Boolean(record.funded_by_teacher_id)
+    } else if (record.role === 'ebeveyn') {
+      // Veli panelindeki sayfalar (Dashboard, Haftalık Plan) bir studentId belirtmeden çalışır ve
+      // arka planda requireStudentContext bu veliye ait İLK öğrenciyi (created_at ASC) varsayılan
+      // olarak kullanır — burada da aynı öğrenciyi çözüp kısıtlı olup olmadığını aynı alanda taşırız.
+      const defaultStudentDb = await withRequest({ parentId: { type: sql.UniqueIdentifier, value: record.id } })
+      const defaultStudentResult = await defaultStudentDb.query(`
+        SELECT TOP 1 funded_by_teacher_id FROM dbo.Users WHERE parent_id = @parentId ORDER BY created_at ASC;
+      `)
+      user.restricted = Boolean(defaultStudentResult.recordset[0]?.funded_by_teacher_id)
+    }
     if (session.actingParentId) {
       user.actingParent = { id: session.actingParentId, fullName: session.actingParentName }
     }
@@ -267,10 +284,46 @@ async function logoutHandler() {
   return json(200, { ok: true }, clearSessionHeaders())
 }
 
+// Öğretmen tarafından oluşturulan veli/öğrenci hesapları "onay bekliyor" durumunda açılır
+// (aydinlatma_accepted_at/kvkk_accepted_at NULL). Bu uç, oturum sahibinin KENDİ onayını ve
+// o an onayı bekleyen tüm bağlı öğrenci profillerinin onayını tek seferde tamamlar.
+async function acceptConsentHandler(request) {
+  try {
+    const token = readSessionToken(request)
+    if (!token) {
+      return json(401, { error: 'Oturum bulunamadı.' })
+    }
+
+    const session = verifySessionToken(token)
+    const payload = await request.json().catch(() => null)
+    if (payload?.acceptAydinlatma !== true || payload?.acceptKvkk !== true) {
+      return json(400, { error: 'Devam etmek için aydınlatma ve KVKK onaylarını vermelisiniz.' })
+    }
+
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: session.sub },
+    })
+    await requestDb.query(`
+      UPDATE dbo.Users
+      SET aydinlatma_accepted_at = SYSUTCDATETIME(), kvkk_accepted_at = SYSUTCDATETIME()
+      WHERE (id = @id OR (parent_id = @id AND aydinlatma_accepted_at IS NULL))
+        AND aydinlatma_accepted_at IS NULL;
+    `)
+
+    return json(200, { ok: true })
+  } catch (error) {
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+    return createAuthServiceErrorResponse(error, 'acceptConsentHandler failed')
+  }
+}
+
 module.exports = {
   loginHandler,
   logoutHandler,
   meHandler,
   registerHandler,
   sanitizeUser,
+  acceptConsentHandler,
 }

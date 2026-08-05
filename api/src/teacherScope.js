@@ -17,7 +17,7 @@ async function requireTeacherSession(request) {
     id: { type: sql.UniqueIdentifier, value: session.sub },
   })
   const result = await requestDb.query(`
-    SELECT TOP 1 id, role FROM dbo.Users WHERE id = @id;
+    SELECT TOP 1 id, role, full_name, phone_number FROM dbo.Users WHERE id = @id;
   `)
   const record = result.recordset[0]
   if (!record) {
@@ -27,7 +27,7 @@ async function requireTeacherSession(request) {
     return { error: json(403, { error: 'Bu alana erişim yetkiniz yok.' }) }
   }
 
-  return { teacherUserId: record.id }
+  return { teacherUserId: record.id, teacherFullName: record.full_name, teacherPhone: record.phone_number }
 }
 
 /**

@@ -101,10 +101,18 @@ function getAnthropicConfig() {
 }
 
 function getBillingConfig() {
+  loadLocalSettings()
+
   return {
     revenueCatWebhookAuthHeader: getRequiredEnv('REVENUECAT_WEBHOOK_AUTH_HEADER', {
       placeholders: ['replace-with-the-revenuecat-webhook-auth-header'],
     }),
+    // Öğretmenin sabit panel ücretine (3000 TL/ay, 4 öğrenci dahil) ek olarak satın aldığı
+    // öğrenci başı (200 TL/ay) koltuk ürünlerinin RevenueCat product_id listesi.
+    teacherSeatProductIds: (process.env.REVENUECAT_TEACHER_SEAT_PRODUCT_IDS || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
   }
 }
 

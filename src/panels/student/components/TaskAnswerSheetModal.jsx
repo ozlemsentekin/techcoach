@@ -1,10 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X, CheckCircle2, XCircle, MinusCircle, Trash2 } from 'lucide-react'
-import { getTaskAnswerSheet, saveTaskAnswers, patchTask, removeTaskTest } from '../../../services/taskService'
+import { X, CheckCircle2, XCircle, MinusCircle, Trash2, Camera } from 'lucide-react'
+import {
+  getTaskAnswerSheet,
+  saveTaskAnswers,
+  patchTask,
+  removeTaskTest,
+  saveWrongQuestionPhoto,
+} from '../../../services/taskService'
 import LoadingState from '../../shared/LoadingState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
+import MistakePhotoCaptureModal from './MistakePhotoCaptureModal'
 
 const OPTIONS = ['A', 'B', 'C', 'D']
+// Backend'deki BLANK_ANSWER_LABEL ile eşleşmeli (api/src/tasks.js).
+const BLANK_LABEL = '-'
 
 function buildInitialAnswers(tests) {
   const initial = {}
@@ -17,21 +26,21 @@ function buildInitialAnswers(tests) {
 function ResultBadge({ result }) {
   if (!result) return null
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl bg-student-theme-soft px-3 py-2 text-sm font-semibold">
-      <span className="flex items-center gap-1.5 text-panel-sage">
-        <CheckCircle2 size={16} aria-hidden="true" /> {result.correct} Doğru
+    <div className="flex flex-nowrap items-center justify-between gap-1 rounded-xl bg-student-theme-soft px-2 py-1.5 text-xs font-semibold">
+      <span className="flex shrink-0 items-center gap-1 text-panel-sage">
+        <CheckCircle2 size={13} aria-hidden="true" /> {result.correct} Doğru
       </span>
-      <span className="flex items-center gap-1.5 text-panel-red">
-        <XCircle size={16} aria-hidden="true" /> {result.wrong} Yanlış
+      <span className="flex shrink-0 items-center gap-1 text-panel-red">
+        <XCircle size={13} aria-hidden="true" /> {result.wrong} Yanlış
       </span>
-      <span className="flex items-center gap-1.5 text-panel-text-muted">
-        <MinusCircle size={16} aria-hidden="true" /> {result.blank} Boş
+      <span className="flex shrink-0 items-center gap-1 text-panel-text-muted">
+        <MinusCircle size={13} aria-hidden="true" /> {result.blank} Boş
       </span>
     </div>
   )
 }
 
-function TestSection({ test, answers, result, onSelect, onRemove }) {
+function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapture }) {
   const locked = Boolean(result)
   return (
     <div className="flex flex-col gap-1.5 rounded-2xl border border-panel-border p-2.5">
@@ -60,20 +69,36 @@ function TestSection({ test, answers, result, onSelect, onRemove }) {
         {Array.from({ length: test.questionCount }, (_, index) => index + 1).map((orderNo) => {
           const key = String(orderNo)
           const selected = answers[key]
+          const isBlankSelected = selected === BLANK_LABEL
           const correctLabel = result?.correctLabels?.[key]
-          const isWrong = Boolean(result) && Boolean(selected) && Boolean(correctLabel) && selected !== correctLabel
+          const isMismatch = Boolean(result) && Boolean(correctLabel) && selected !== correctLabel
+          const isWrongSelection = isMismatch && Boolean(selected) && !isBlankSelected
+          const hasPhoto = Boolean(photos?.[key])
           return (
             <div
               key={key}
-              className={`flex items-center gap-1 rounded-lg px-1 py-0.5 transition-colors ${
-                isWrong ? 'bg-panel-red-soft' : ''
+              role={isWrongSelection ? 'button' : undefined}
+              tabIndex={isWrongSelection ? 0 : undefined}
+              onClick={isWrongSelection ? () => onCapture(orderNo) : undefined}
+              onKeyDown={
+                isWrongSelection
+                  ? (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        onCapture(orderNo)
+                      }
+                    }
+                  : undefined
+              }
+              className={`flex items-center gap-1.5 rounded-lg px-1 py-0.5 transition-colors ${
+                isWrongSelection ? 'cursor-pointer bg-panel-red-soft hover:bg-panel-red-soft/70' : ''
               }`}
             >
               <span className="w-5 shrink-0 text-right text-sm font-bold text-panel-text-muted">{orderNo}.</span>
-              <div className="flex gap-1">
+              <div className="flex shrink-0 gap-1">
                 {OPTIONS.map((option) => {
                   const isSelected = selected === option
-                  const isCorrectReveal = isWrong && !isSelected && option === correctLabel
+                  const isCorrectReveal = isMismatch && !isSelected && option === correctLabel
                   return (
                     <button
                       key={option}
@@ -86,7 +111,7 @@ function TestSection({ test, answers, result, onSelect, onRemove }) {
                         locked ? 'cursor-not-allowed' : ''
                       } ${
                         isSelected
-                          ? isWrong
+                          ? isWrongSelection
                             ? 'border-panel-red bg-panel-red text-white'
                             : 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text'
                           : isCorrectReveal
@@ -98,7 +123,38 @@ function TestSection({ test, answers, result, onSelect, onRemove }) {
                     </button>
                   )
                 })}
+                {!locked || isBlankSelected ? (
+                  <button
+                    type="button"
+                    disabled={locked}
+                    aria-pressed={isBlankSelected}
+                    aria-label={`${orderNo}. soruyu boş bırak`}
+                    title="Boş bırak"
+                    onClick={() => onSelect(orderNo, isBlankSelected ? null : BLANK_LABEL)}
+                    className={`flex h-6 shrink-0 items-center justify-center rounded-full border px-1.5 text-[10px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
+                      locked ? 'cursor-not-allowed' : ''
+                    } ${
+                      isBlankSelected
+                        ? 'border-panel-text-muted bg-panel-text-muted text-white'
+                        : `border-panel-border text-panel-text-muted ${locked ? '' : 'hover:border-panel-text-muted hover:text-panel-text'}`
+                    }`}
+                  >
+                    Boş
+                  </button>
+                ) : null}
               </div>
+              {isMismatch && correctLabel ? (
+                <span className="min-w-0 truncate text-[10px] italic leading-none text-panel-text-muted">
+                  Doğru cevap: {correctLabel}
+                </span>
+              ) : null}
+              {isWrongSelection ? (
+                <Camera
+                  size={13}
+                  aria-hidden="true"
+                  className={`ml-auto shrink-0 ${hasPhoto ? 'text-student-theme-primary' : 'text-panel-text-muted'}`}
+                />
+              ) : null}
             </div>
           )
         })}
@@ -119,16 +175,19 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
   const [removingTest, setRemovingTest] = useState(null)
   const [removeError, setRemoveError] = useState('')
   const [removeSaving, setRemoveSaving] = useState(false)
+  const [photosByTest, setPhotosByTest] = useState({})
+  const [capturingQuestion, setCapturingQuestion] = useState(null)
 
   useEffect(() => {
     let ignore = false
 
     getTaskAnswerSheet(task.id)
-      .then((data) => {
+      .then(({ tests: fetchedTests, photos }) => {
         if (ignore) return
-        setTests(data)
-        setAnswersByTest(buildInitialAnswers(data))
-        setResultsByTest(Object.fromEntries(data.map((test) => [test.id, test.result])))
+        setTests(fetchedTests)
+        setAnswersByTest(buildInitialAnswers(fetchedTests))
+        setResultsByTest(Object.fromEntries(fetchedTests.map((test) => [test.id, test.result])))
+        setPhotosByTest(photos || {})
       })
       .catch((err) => {
         if (!ignore) setError(err.message)
@@ -195,6 +254,14 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
     }
   }
 
+  const handleSavePhoto = async (dataUrl) => {
+    if (!capturingQuestion) return
+    const { testId, orderNo } = capturingQuestion
+    const key = String(orderNo)
+    await saveWrongQuestionPhoto(task.id, testId, key, dataUrl)
+    setPhotosByTest((prev) => ({ ...prev, [testId]: { ...prev[testId], [key]: dataUrl } }))
+  }
+
   const handleSaveNote = async () => {
     setNoteSaving(true)
     setError('')
@@ -232,15 +299,17 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
           ) : tests.length === 0 ? (
             <p className="text-sm text-panel-text-muted">Bu göreve bağlı test bulunamadı.</p>
           ) : (
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
               {tests.map((test) => (
                 <TestSection
                   key={test.id}
                   test={test}
                   answers={answersByTest[test.id] || {}}
                   result={resultsByTest[test.id]}
+                  photos={photosByTest[test.id]}
                   onSelect={(orderNo, label) => handleSelect(test.id, orderNo, label)}
                   onRemove={setRemovingTest}
+                  onCapture={(orderNo) => setCapturingQuestion({ testId: test.id, orderNo })}
                 />
               ))}
             </div>
@@ -298,6 +367,15 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
             setRemovingTest(null)
             setRemoveError('')
           }}
+        />
+      ) : null}
+
+      {capturingQuestion ? (
+        <MistakePhotoCaptureModal
+          questionLabel={capturingQuestion.orderNo}
+          existingPhotoUrl={photosByTest[capturingQuestion.testId]?.[String(capturingQuestion.orderNo)]}
+          onClose={() => setCapturingQuestion(null)}
+          onSave={handleSavePhoto}
         />
       ) : null}
     </div>

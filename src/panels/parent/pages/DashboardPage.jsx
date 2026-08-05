@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../../../context/useAuth'
 import {
   Activity,
   AlertTriangle,
@@ -106,14 +107,16 @@ function TodayOverview({ tasks, onAddTask }) {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onAddTask}
-          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-panel-blue px-4 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 active:opacity-90"
-        >
-          <Plus size={18} aria-hidden="true" />
-          Görev Ekle
-        </button>
+        {onAddTask ? (
+          <button
+            type="button"
+            onClick={onAddTask}
+            className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-panel-blue px-4 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 active:opacity-90"
+          >
+            <Plus size={18} aria-hidden="true" />
+            Görev Ekle
+          </button>
+        ) : null}
       </div>
 
       <div className="border-t border-panel-border bg-panel-surface-soft/60 p-5">
@@ -398,6 +401,8 @@ function TaskFlowLogPanel({ tasks, activityLogs = [] }) {
 }
 
 export default function DashboardPage() {
+  const { authUser } = useAuth()
+  const restricted = Boolean(authUser?.restricted)
   const [tasks, setTasks] = useState([])
   const [wrongQuestions, setWrongQuestions] = useState([])
   const [requests, setRequests] = useState([])
@@ -540,13 +545,13 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      <TodayOverview tasks={tasks} onAddTask={() => setDrawerState({ defaultDate: date })} />
+      <TodayOverview tasks={tasks} onAddTask={restricted ? null : () => setDrawerState({ defaultDate: date })} />
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-w-0 flex-col gap-5">
           <DailyPlanTable
             tasks={tasks}
-            onAddTask={() => setDrawerState({ defaultDate: date })}
+            onAddTask={restricted ? null : () => setDrawerState({ defaultDate: date })}
             onEdit={(task) => setDrawerState({ initialTask: task })}
             onDelete={(task) => setDeletingTask(task)}
             onOpenAnswerSheet={setAnswerSheetTask}

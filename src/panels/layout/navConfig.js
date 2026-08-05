@@ -20,13 +20,9 @@ export const PARENT_PRIMARY_NAV = [
 ]
 
 export const PARENT_MORE_NAV = [
-  { to: '/parent/weekly-plan?openDrawer=1', label: 'Plan Oluştur', icon: 'ClipboardList' },
-  { to: '/parent/tests', label: 'Test ve Denemeler', icon: 'FileCheck2' },
   { to: '/parent/progress', label: 'Gelişim', icon: 'TrendingUp' },
-  { to: '/parent/mistakes', label: 'Yanlışlar', icon: 'AlertCircle' },
   { to: '/parent/students', label: 'Öğrenciler', icon: 'Users' },
   { to: '/parent/teachers', label: 'Öğretmenler', icon: 'GraduationCap' },
-  { to: '/parent/settings', label: 'Ayarlar', icon: 'Settings' },
 ]
 
 export const PARENT_SIDEBAR_NAV = [...PARENT_PRIMARY_NAV, ...PARENT_MORE_NAV]
@@ -54,6 +50,7 @@ export const PARENT_ADMIN_NAV = {
     { to: '/parent/admin/users', label: 'Üyeler', icon: 'Users' },
     { to: '/parent/admin/subjects', label: 'Dersler', icon: 'BookOpen' },
     { to: '/parent/admin/publishers', label: 'Yayın Evleri', icon: 'Building2' },
+    { to: '/parent/admin/missing-answer-keys', label: 'Eksik Cevap Anahtarları', icon: 'AlertCircle' },
     { to: '/parent/admin/schools', label: 'Okul Yönetimi', icon: 'School' },
     { to: '/parent/admin/motivation-messages', label: 'Motivasyon Mesajları', icon: 'Sparkles' },
     { to: '/parent/admin/greetings', label: 'Selamlama Metinleri', icon: 'Clock' },

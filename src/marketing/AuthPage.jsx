@@ -17,19 +17,7 @@ const INITIAL_FORM = {
 }
 
 function BrandIcon() {
-  return (
-    <svg viewBox="0 0 120 120" aria-hidden="true">
-      <circle cx="60" cy="60" r="54" fill="#2B2F77" />
-      <path
-        d="M30 60L54 84L92 40"
-        fill="none"
-        stroke="#3ED6C3"
-        strokeWidth="10"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
+  return <img src="/logo-mark.png" alt="" className="logo-mark-img" />
 }
 
 function panelPathForRole(role) {

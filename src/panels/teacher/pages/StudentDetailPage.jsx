@@ -8,6 +8,7 @@ import AssignTaskModal from '../../shared/homework/AssignTaskModal'
 import StudentProgressView from '../../shared/StudentProgressView'
 import AssignHomeworkModal from '../components/AssignHomeworkModal'
 import TaskDetailModal from '../components/TaskDetailModal'
+import TaskOpticalResultModal from '../components/TaskOpticalResultModal'
 import {
   getTeacherStudents,
   getTeacherStudentHomeworks,
@@ -38,6 +39,7 @@ export default function StudentDetailPage() {
   const [homeworkModalDate, setHomeworkModalDate] = useState('')
   const [rescheduleHomework, setRescheduleHomework] = useState(null)
   const [detailTask, setDetailTask] = useState(null)
+  const [answerSheetTask, setAnswerSheetTask] = useState(null)
   const [banner, setBanner] = useState('')
 
   useEffect(() => {
@@ -171,7 +173,7 @@ export default function StudentDetailPage() {
           }`}
         >
           <TrendingUp size={15} aria-hidden="true" />
-          Ders Analizi
+          Gelişim Analizi
         </button>
       </div>
 
@@ -195,9 +197,13 @@ export default function StudentDetailPage() {
             </Button>
             <Button
               type="button"
-              variant="secondary"
+              variant={weekOffset === 0 ? 'primary' : 'secondary'}
               onClick={() => setWeekOffset(0)}
-              className="h-11 border-panel-blue-soft px-4 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50"
+              className={
+                weekOffset === 0
+                  ? 'h-11 px-4 text-sm font-semibold'
+                  : 'h-11 border-panel-blue-soft px-4 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50'
+              }
             >
               <CalendarDays size={18} aria-hidden="true" />
               Bu Hafta
@@ -223,15 +229,17 @@ export default function StudentDetailPage() {
             <WeeklyPlannerGrid
               weekDates={weekDates}
               tasksByDate={tasksByDate}
+              lessonSchedule={student.schedule}
               onAddHomework={(date) => setHomeworkModalDate(date)}
               onEditTask={handleEditTask}
+              onViewAnswerSheet={setAnswerSheetTask}
             />
           )}
         </div>
       ) : (
         <StudentProgressView
           studentId={studentTeacherId}
-          title="Ders Analizi"
+          title="Gelişim Analizi"
           emptySubtitle={`${student.subjectName || 'Bu ders'} için ilerleme burada görünecek.`}
           buildSubtitle={() => `${student.subjectName || 'Ders'} için emek, doğruluk ve kaynak ilerlemesi.`}
           fetchOverview={getTeacherStudentProgressOverview}
@@ -261,6 +269,14 @@ export default function StudentDetailPage() {
           homework={rescheduleHomework}
           onSave={handleReschedule}
           onClose={() => setRescheduleHomework(null)}
+        />
+      ) : null}
+
+      {answerSheetTask ? (
+        <TaskOpticalResultModal
+          task={answerSheetTask}
+          studentTeacherId={studentTeacherId}
+          onClose={() => setAnswerSheetTask(null)}
         />
       ) : null}
     </div>

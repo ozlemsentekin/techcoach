@@ -18,7 +18,8 @@ import {
 import { calculateNet } from '../../../utils/netCalculator'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { parseAssignmentDetails } from '../../../utils/assignmentDetails'
-import { daysLate, formatDateShort, formatSecondsAsTimer } from '../../../utils/time'
+import { daysLate, formatDateShort, formatSecondsAsTimer, taskTimeState, todayISODate } from '../../../utils/time'
+import { BREAK_TASK_TYPES } from '../../../data/taskTypes'
 import { SUBJECT_STYLES, DEFAULT_SUBJECT_STYLE } from './subjectStyles'
 
 const STATUS_ICONS = { Circle, Timer, CheckCircle2, Eye, HelpCircle, RotateCcw, AlertTriangle }
@@ -30,9 +31,10 @@ const STATUS_TONE_CLASSES = {
   accent: 'bg-panel-accent-soft text-panel-warm',
   slate: 'bg-panel-slate-soft text-panel-slate',
   red: 'bg-panel-red-soft text-panel-red',
+  now: 'bg-student-theme-primary text-student-theme-button-text animate-pulse',
+  late: 'bg-panel-yellow text-white',
 }
 
-const BREAK_TASK_TYPES = new Set(['mola', 'dinlenme', 'yemek', 'yemek-dinlenme'])
 const ACTIVITY_TASK_TYPES = new Set(['serbest-zaman', 'sosyal-aktivite', 'spor'])
 const BREAK_STYLE = { text: 'text-panel-warm', soft: 'bg-panel-accent-soft', border: 'border-l-panel-sage', dot: 'bg-panel-sage' }
 const FREE_TIME_STYLE = { text: 'text-panel-warm', soft: 'bg-panel-accent-soft', border: 'border-l-panel-sage', dot: 'bg-panel-sage' }
@@ -192,9 +194,22 @@ export default function TaskListCard({
   const isActive = task.status === 'bekliyor' || task.status === 'devam-ediyor' || task.status === 'yardim-bekliyor'
   const isOverdueIncomplete = overdueDays > 0 && !['tamamlandi', 'yeniden-planlandi'].includes(task.status)
 
+  // Bugüne ait, henüz başlanmamış ve saat aralığı olan görevlerde anlık saatle görevin
+  // start-end aralığı karşılaştırılır: aralık şu anı kapsıyorsa "Şimdi", aralık geçtiyse
+  // "Saati geçti" gösterilir — geride kalınan görevlerin HEPSİNDE, tek bir tanesinde değil.
+  const isTodayTask = task.date === todayISODate()
+  const hasTimeWindow = Boolean(task.startTime && task.endTime)
+  const timeState = task.status === 'bekliyor' && isTodayTask && hasTimeWindow ? taskTimeState(task) : null
+  const isNowTask = timeState?.phase === 'active'
+  const isBehindToday = timeState?.phase === 'past'
+
   let status = getAssignmentStatus(task)
   if (isOverdueIncomplete) {
     status = { ...status, label: 'Gecikti', tone: 'red', icon: 'AlertTriangle' }
+  } else if (isNowTask) {
+    status = { ...status, label: `Şimdi · ${timeState.minutesUntilEnd} dk kaldı`, tone: 'now', icon: 'Timer' }
+  } else if (isBehindToday) {
+    status = { ...status, label: `Saati geçti · ${timeState.minutesPast} dk`, tone: 'late', icon: 'AlertTriangle' }
   }
   const StatusIcon = STATUS_ICONS[status.icon]
 
@@ -276,6 +291,20 @@ export default function TaskListCard({
     : isBreakTask
       ? 'bg-panel-accent-soft/45 hover:bg-panel-accent-soft/60'
       : 'bg-panel-surface hover:bg-panel-surface-soft/55'
+
+  const timeStateBorderClass = isNowTask
+    ? 'border-l-4 border-l-student-theme-primary'
+    : isBehindToday
+      ? 'border-l-4 border-l-panel-yellow'
+      : 'border-l-4 border-l-transparent'
+
+  const rowStateClass = highlight
+    ? 'bg-student-theme-soft/55'
+    : isNowTask
+      ? 'bg-student-theme-soft/40 ring-1 ring-inset ring-student-theme-primary/40'
+      : isBehindToday
+        ? 'bg-panel-yellow-soft/35'
+        : cardSurfaceClass
 
   const progressNode = showProgress ? (
     <div className="min-w-0 rounded-[12px] bg-panel-surface-soft/70 p-2 sm:p-3 lg:bg-transparent lg:p-0">
@@ -457,7 +486,9 @@ export default function TaskListCard({
         className={`grid grid-cols-[4.5rem_1.25rem_minmax(0,1fr)] gap-x-2 transition-colors sm:grid-cols-[4.9rem_1.5rem_minmax(0,1fr)] sm:gap-x-3 lg:grid-cols-[5.15rem_1.5rem_minmax(0,1fr)_minmax(170px,220px)_156px] lg:items-center ${
           isCompactBreakRow ? 'px-2.5 py-1.5 sm:px-4 sm:py-2' : 'px-2.5 py-2.5 sm:px-4 sm:py-4'
         } ${
-          highlight ? 'bg-student-theme-soft/55' : cardSurfaceClass
+          rowStateClass
+        } ${
+          timeStateBorderClass
         } ${
           isOpenableRow ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-accent' : ''
         }`}
@@ -466,7 +497,7 @@ export default function TaskListCard({
           <div className="col-start-1 row-span-4 min-w-0 pt-0.5">
             <p className={`inline-flex h-7 min-w-14 items-center justify-center rounded-[10px] px-2 text-xs font-extrabold leading-none shadow-sm sm:h-9 sm:min-w-16 sm:px-2.5 sm:text-[15px] ${
               isActivityTask ? SOFT_TIME_BADGE_CLASS : 'bg-student-theme-primary text-student-theme-button-text'
-            }`}>
+            } ${isNowTask ? 'ring-2 ring-student-theme-primary ring-offset-2 ring-offset-panel-surface' : ''}`}>
               {task.startTime || '--:--'}
             </p>
             {task.endTime ? <p className="mt-1 pl-1 text-[10px] font-medium text-panel-text-muted sm:mt-1.5 sm:text-xs">{task.endTime}</p> : null}
@@ -488,6 +519,9 @@ export default function TaskListCard({
                       : 'border-student-theme-primary text-student-theme-text'
               }`}
             >
+              {isNowTask ? (
+                <span className="absolute -inset-1 animate-ping rounded-full bg-student-theme-primary/40" aria-hidden="true" />
+              ) : null}
               {isCompletedStatus ? <CheckCircle2 size={12} aria-hidden="true" /> : <span className="h-1.5 w-1.5 rounded-full bg-current sm:h-2 sm:w-2" />}
             </span>
           )}
@@ -517,7 +551,7 @@ export default function TaskListCard({
       onClick={isOpenableRow ? () => onOpenDetails(task) : undefined}
       onKeyDown={handleCardKeyDown}
       aria-label={isOpenableRow ? `${task.title} detayını aç` : undefined}
-      className={`grid gap-3 border-l-[3px] ${subjectStyle.border} px-2.5 py-2.5 transition-colors sm:gap-4 sm:px-4 sm:py-4 lg:items-center ${cardGridClass} ${cardSurfaceClass} ${
+      className={`grid gap-3 border-l-[3px] ${subjectStyle.border} px-2.5 py-2.5 transition-colors sm:gap-4 sm:px-4 sm:py-4 lg:items-center ${cardGridClass} ${rowStateClass} ${
         isOpenableRow ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-accent' : ''
       }`}
     >

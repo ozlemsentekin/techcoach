@@ -19,7 +19,7 @@ function pageElement(Page) {
 
 export default function TeacherApp() {
   return (
-    <ThemeProvider storageKey="teacher_theme" defaultTheme="blue">
+    <ThemeProvider fixedTheme="techcoach">
       <Routes>
         <Route element={<PanelLayout role="teacher" />}>
           <Route index element={<Navigate to="students" replace />} />

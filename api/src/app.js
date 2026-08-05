@@ -1,6 +1,12 @@
 const { app } = require('@azure/functions')
-const { loginHandler, logoutHandler, meHandler, registerHandler } = require('./auth')
-const { listUsersHandler, updateUserHandler, impersonateUserHandler, returnToAdminHandler } = require('./admin')
+const { loginHandler, logoutHandler, meHandler, registerHandler, acceptConsentHandler } = require('./auth')
+const {
+  listUsersHandler,
+  updateUserHandler,
+  impersonateUserHandler,
+  returnToAdminHandler,
+  grantTeacherEntitlementHandler,
+} = require('./admin')
 const {
   listStudentsHandler,
   createStudentHandler,
@@ -22,13 +28,23 @@ const {
   listTeacherStudentsHandler,
   listTeacherParentsHandler,
   getTeacherLessonPlanHandler,
+  addTeacherRecurringLessonSlotHandler,
+  updateTeacherRecurringLessonSlotHandler,
+  deleteTeacherRecurringLessonSlotHandler,
+  addTeacherOneTimeLessonHandler,
+  updateTeacherOneTimeLessonHandler,
+  deleteTeacherOneTimeLessonHandler,
   listTeacherResourceBooksHandler,
   listTeacherResourceBookTopicsHandler,
   listTeacherStudentHomeworksHandler,
   createTeacherHomeworkHandler,
   assignTeacherHomeworkTaskHandler,
   listTeacherStudentTasksHandler,
+  getTeacherTaskAnswerSheetHandler,
   getTeacherStudentProgressOverviewHandler,
+  grantParentAccessHandler,
+  getTeacherEntitlementHandler,
+  createTeacherStudentHandler,
 } = require('./teacher')
 const { listProvincesHandler, listDistrictsHandler, listSchoolsHandler } = require('./geo')
 const {
@@ -37,6 +53,7 @@ const {
   listPublishersHandler,
   createPublisherHandler,
   listResourceBooksHandler,
+  listResourceBooksMissingAnswerKeyHandler,
   listResourceBooksForPanelHandler,
   createResourceBookHandler,
   updateResourceBookHandler,
@@ -73,6 +90,7 @@ const {
   deleteTaskHandler,
   getTaskAnswerSheetHandler,
   saveTaskAnswersHandler,
+  saveWrongQuestionPhotoHandler,
   removeTaskTestHandler,
   getWeeklyPlanStatusHandler,
   setWeeklyPlanStatusHandler,
@@ -149,6 +167,13 @@ app.http('auth-logout', {
   handler: logoutHandler,
 })
 
+app.http('auth-consent', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'auth/consent',
+  handler: acceptConsentHandler,
+})
+
 app.http('billing-revenuecat-webhook', {
   authLevel: 'anonymous',
   methods: ['POST'],
@@ -182,6 +207,13 @@ app.http('panel-admin-return-to-admin', {
   methods: ['POST'],
   route: 'panel-admin/return-to-admin',
   handler: returnToAdminHandler,
+})
+
+app.http('panel-admin-teacher-entitlement-grant', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-admin/users/{userId}/teacher-entitlement',
+  handler: grantTeacherEntitlementHandler,
 })
 
 app.http('parent-students-list', {
@@ -275,6 +307,20 @@ app.http('panel-teacher-students-list', {
   handler: listTeacherStudentsHandler,
 })
 
+app.http('panel-teacher-students-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/students',
+  handler: createTeacherStudentHandler,
+})
+
+app.http('panel-teacher-entitlement', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/entitlement',
+  handler: getTeacherEntitlementHandler,
+})
+
 app.http('panel-teacher-parents-list', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -282,11 +328,60 @@ app.http('panel-teacher-parents-list', {
   handler: listTeacherParentsHandler,
 })
 
+app.http('panel-teacher-parents-grant-access', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/parents/{parentId}/grant-access',
+  handler: grantParentAccessHandler,
+})
+
 app.http('panel-teacher-lesson-plan', {
   authLevel: 'anonymous',
   methods: ['GET'],
   route: 'panel-teacher/lesson-plan',
   handler: getTeacherLessonPlanHandler,
+})
+
+app.http('panel-teacher-lesson-plan-recurring-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/students/{studentTeacherId}/lesson-plan/recurring',
+  handler: addTeacherRecurringLessonSlotHandler,
+})
+
+app.http('panel-teacher-lesson-plan-recurring-update', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel-teacher/students/{studentTeacherId}/lesson-plan/recurring',
+  handler: updateTeacherRecurringLessonSlotHandler,
+})
+
+app.http('panel-teacher-lesson-plan-recurring-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-teacher/students/{studentTeacherId}/lesson-plan/recurring',
+  handler: deleteTeacherRecurringLessonSlotHandler,
+})
+
+app.http('panel-teacher-lesson-plan-one-time-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/students/{studentTeacherId}/lesson-plan/one-time',
+  handler: addTeacherOneTimeLessonHandler,
+})
+
+app.http('panel-teacher-lesson-plan-one-time-update', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel-teacher/students/{studentTeacherId}/lesson-plan/one-time/{lessonId}',
+  handler: updateTeacherOneTimeLessonHandler,
+})
+
+app.http('panel-teacher-lesson-plan-one-time-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-teacher/students/{studentTeacherId}/lesson-plan/one-time/{lessonId}',
+  handler: deleteTeacherOneTimeLessonHandler,
 })
 
 app.http('panel-teacher-resource-books-list', {
@@ -329,6 +424,13 @@ app.http('panel-teacher-tasks-list', {
   methods: ['GET'],
   route: 'panel-teacher/students/{studentTeacherId}/tasks',
   handler: listTeacherStudentTasksHandler,
+})
+
+app.http('panel-teacher-tasks-answer-sheet-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/tasks/{taskId}/answer-sheet',
+  handler: getTeacherTaskAnswerSheetHandler,
 })
 
 app.http('panel-teacher-progress-overview', {
@@ -518,6 +620,13 @@ app.http('panel-admin-resource-books-update', {
   methods: ['PATCH'],
   route: 'panel-admin/resource-books/{resourceBookId}',
   handler: updateResourceBookHandler,
+})
+
+app.http('panel-admin-resource-books-missing-answer-key', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-admin/resource-books/missing-answer-key',
+  handler: listResourceBooksMissingAnswerKeyHandler,
 })
 
 app.http('panel-resource-books', {
@@ -714,6 +823,13 @@ app.http('panel-tasks-answers-save', {
   methods: ['PATCH'],
   route: 'panel/tasks/{taskId}/answers',
   handler: saveTaskAnswersHandler,
+})
+
+app.http('panel-tasks-mistake-photo-save', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel/tasks/{taskId}/mistakes/{testId}/{orderNo}',
+  handler: saveWrongQuestionPhotoHandler,
 })
 
 app.http('panel-tasks-test-remove', {

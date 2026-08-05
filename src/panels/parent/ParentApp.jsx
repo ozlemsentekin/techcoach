@@ -16,6 +16,7 @@ const AdminPublishersPage = lazy(() => import('./pages/AdminPublishersPage'))
 const AdminMotivationMessagesPage = lazy(() => import('./pages/AdminMotivationMessagesPage'))
 const AdminGreetingsPage = lazy(() => import('./pages/AdminGreetingsPage'))
 const AdminSchoolsPage = lazy(() => import('./pages/AdminSchoolsPage'))
+const AdminMissingAnswerKeysPage = lazy(() => import('./pages/AdminMissingAnswerKeysPage'))
 const StudentsPage = lazy(() => import('./pages/StudentsPage'))
 const TeachersPage = lazy(() => import('./pages/TeachersPage'))
 const HomeworkPage = lazy(() => import('./pages/HomeworkPage'))
@@ -37,7 +38,7 @@ function pageElement(Page) {
 
 export default function ParentApp() {
   return (
-    <ThemeProvider storageKey="parent_theme" defaultTheme="blue">
+    <ThemeProvider fixedTheme="techcoach">
       <Routes>
         <Route element={<PanelLayout role="parent" />}>
           <Route index element={<Navigate to="dashboard" replace />} />
@@ -96,6 +97,14 @@ export default function ParentApp() {
             element={
               <RequireAdmin>
                 {pageElement(AdminSchoolsPage)}
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="admin/missing-answer-keys"
+            element={
+              <RequireAdmin>
+                {pageElement(AdminMissingAnswerKeysPage)}
               </RequireAdmin>
             }
           />

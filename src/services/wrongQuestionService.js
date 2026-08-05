@@ -4,14 +4,19 @@ import { authRequest } from './authClient'
  * @typedef {Object} WrongQuestion
  * @property {string} id
  * @property {string} [taskId]
+ * @property {string} [testId]
  * @property {string} subject
  * @property {string} [topic]
+ * @property {string} [testName]
+ * @property {string} [bookName]
+ * @property {string} [publisherName]
  * @property {string} [questionNumber]
  * @property {string} errorType
  * @property {string} [studentNote]
  * @property {string} createdAt
  * @property {string} reviewStatus  // 'tekrar-bekliyor' | 'bugun-tekrar' | 'tekrar-edildi' | 'ogrenildi'
  * @property {string|null} [resolvedAt]
+ * @property {string} [photoUrl]
  */
 
 /** @returns {Promise<WrongQuestion[]>} */

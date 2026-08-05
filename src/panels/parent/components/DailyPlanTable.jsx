@@ -690,15 +690,19 @@ export default function DailyPlanTable({ tasks, onEdit, onDelete, onAddTask, onO
             <CalendarDays size={22} aria-hidden="true" />
           </span>
           <h3 className="mt-4 text-lg font-semibold text-panel-text">Bugün plan boş</h3>
-          <p className="mt-1 max-w-sm text-sm text-panel-text-muted">Aylin için ilk görevi ekleyebilirsin.</p>
-          <button
-            type="button"
-            onClick={onAddTask}
-            className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-panel-blue px-4 text-sm font-semibold text-white hover:opacity-90"
-          >
-            <Plus size={17} aria-hidden="true" />
-            Görev Ekle
-          </button>
+          <p className="mt-1 max-w-sm text-sm text-panel-text-muted">
+            {onAddTask ? 'Aylin için ilk görevi ekleyebilirsin.' : 'Öğretmenin planladığı görevler burada görünecek.'}
+          </p>
+          {onAddTask ? (
+            <button
+              type="button"
+              onClick={onAddTask}
+              className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-panel-blue px-4 text-sm font-semibold text-white hover:opacity-90"
+            >
+              <Plus size={17} aria-hidden="true" />
+              Görev Ekle
+            </button>
+          ) : null}
         </div>
       ) : visibleTasks.length === 0 ? (
         <div className="flex flex-col items-center justify-center px-5 py-12 text-center">

@@ -246,6 +246,72 @@ async function impersonateUserHandler(request) {
   }
 }
 
+const TEACHER_ENTITLEMENT_STATUSES = new Set(['none', 'trial', 'active', 'grace_period', 'cancelled', 'expired'])
+
+// Gerçek RevenueCat sandbox webhook'u kurulmadan önce (ve destek ekibinin manuel düzeltme
+// yapabilmesi için) öğretmen panel kotasını admin panelinden "comp" kaynaklı olarak elle ayarlar.
+async function grantTeacherEntitlementHandler(request) {
+  try {
+    const { error, session } = await requireAdmin(request)
+    if (error) {
+      return error
+    }
+
+    const teacherId = request.params.userId
+    const payload = await request.json().catch(() => null)
+    const status = payload?.status
+    const baseSeats = Number.isFinite(Number(payload?.baseSeats)) ? Number(payload.baseSeats) : 4
+    const purchasedSeats = Number.isFinite(Number(payload?.purchasedSeats)) ? Number(payload.purchasedSeats) : 0
+
+    if (!TEACHER_ENTITLEMENT_STATUSES.has(status)) {
+      return json(400, { error: 'Geçerli bir durum seçilmeli.' })
+    }
+    if (baseSeats < 0 || purchasedSeats < 0) {
+      return json(400, { error: 'Koltuk sayıları negatif olamaz.' })
+    }
+
+    const teacherDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: teacherId } })
+    const teacherResult = await teacherDb.query(`
+      SELECT TOP 1 id FROM dbo.Users WHERE id = @id AND role = 'ogretmen';
+    `)
+    if (!teacherResult.recordset[0]) {
+      return json(404, { error: 'Öğretmen bulunamadı.' })
+    }
+
+    const upsertDb = await withRequest({
+      teacherId: { type: sql.UniqueIdentifier, value: teacherId },
+      status: { type: sql.NVarChar(20), value: status },
+      baseSeats: { type: sql.Int, value: baseSeats },
+      purchasedSeats: { type: sql.Int, value: purchasedSeats },
+      grantedBy: { type: sql.UniqueIdentifier, value: session.sub },
+      grantedReason: { type: sql.NVarChar(255), value: payload?.reason || null },
+    })
+    await upsertDb.query(`
+      MERGE dbo.TeacherEntitlements AS target
+      USING (SELECT @teacherId AS teacher_id) AS source_row
+      ON target.teacher_id = source_row.teacher_id
+      WHEN MATCHED THEN
+        UPDATE SET status = @status, source = 'comp', product_id = NULL, current_period_end = NULL,
+                   base_seats = @baseSeats, purchased_seats = @purchasedSeats,
+                   granted_by = @grantedBy, granted_reason = @grantedReason
+      WHEN NOT MATCHED THEN
+        INSERT (teacher_id, status, source, base_seats, purchased_seats, granted_by, granted_reason)
+        VALUES (@teacherId, @status, 'comp', @baseSeats, @purchasedSeats, @grantedBy, @grantedReason);
+    `)
+
+    return json(200, { ok: true })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+    console.error('grantTeacherEntitlementHandler failed', error)
+    return json(500, { error: 'Öğretmen kotası güncellenemedi.' })
+  }
+}
+
 async function returnToAdminHandler(request) {
   try {
     const token = readSessionToken(request)
@@ -303,4 +369,5 @@ module.exports = {
   updateUserHandler,
   impersonateUserHandler,
   returnToAdminHandler,
+  grantTeacherEntitlementHandler,
 }
