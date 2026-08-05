@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
 import StudentSidebar from './StudentSidebar'
 import ParentSidebar from './ParentSidebar'
+import TeacherSidebar from './TeacherSidebar'
 import PanelHeader from './PanelHeader'
 import MobileBottomNavigation from './MobileBottomNavigation'
 import {
@@ -10,16 +11,22 @@ import {
   PARENT_PRIMARY_NAV,
   PARENT_MORE_NAV,
   PARENT_ADMIN_NAV,
+  TEACHER_PRIMARY_NAV,
+  TEACHER_MORE_NAV,
 } from './navConfig'
+
+const SIDEBAR_BY_ROLE = { parent: ParentSidebar, student: StudentSidebar, teacher: TeacherSidebar }
 
 export default function PanelLayout({ role }) {
   const { authUser } = useAuth()
-  const Sidebar = role === 'parent' ? ParentSidebar : StudentSidebar
-  const primaryItems = role === 'parent' ? PARENT_PRIMARY_NAV : STUDENT_PRIMARY_NAV
+  const Sidebar = SIDEBAR_BY_ROLE[role] || StudentSidebar
+  const primaryItems = role === 'parent' ? PARENT_PRIMARY_NAV : role === 'teacher' ? TEACHER_PRIMARY_NAV : STUDENT_PRIMARY_NAV
   const moreItems =
     role === 'parent'
       ? [...PARENT_MORE_NAV, ...(authUser?.isAdmin ? PARENT_ADMIN_NAV.children : [])]
-      : STUDENT_MORE_NAV
+      : role === 'teacher'
+        ? TEACHER_MORE_NAV
+        : STUDENT_MORE_NAV
 
   return (
     <div className="min-h-screen bg-panel-bg" data-panel-role={role}>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Calculator, ChevronDown, Coffee, FlaskConical, NotebookPen, Plus, Star, UploadCloud } from 'lucide-react'
+import { BookOpen, Calculator, ChevronDown, Coffee, FlaskConical, Library, ListChecks, NotebookPen, Plus, Star, UploadCloud } from 'lucide-react'
 import { todayISODate } from '../../../utils/time'
 
 const BREAK_DURATION_OPTIONS = [15, 30, 45, 60]
@@ -118,6 +118,26 @@ function formatTaskTime(task) {
   return task.startTime || task.endTime || 'Saat eklenmedi'
 }
 
+// Ders/ödev kartlarında görev adı çoğu zaman genel bir kalıptır (örn. "Matematik Ödevi");
+// asıl neyin çalışılacağını konu (topic) ya da ödev notu (description) taşır, bu yüzden
+// kartta ikinci bir satır olarak bunu gösteriyoruz.
+function getTaskDetail(task) {
+  if (task.topic) return task.subject ? `${task.subject} · ${task.topic}` : task.topic
+  if (task.description) return task.description
+  return null
+}
+
+function getTaskSource(task) {
+  const parts = [task.publisherName, task.resourceBookName].filter(Boolean)
+  return parts.length ? parts.join(' · ') : null
+}
+
+function getTaskProgress(task) {
+  if (task.targetQuestionCount) return `${task.completedQuestionCount || 0}/${task.targetQuestionCount} soru`
+  if (task.targetPageCount) return `${task.completedPageCount || 0}/${task.targetPageCount} sayfa`
+  return null
+}
+
 function QuickBreakMenu({ task, onPick, onClose }) {
   const menuRef = useRef(null)
   const [customValue, setCustomValue] = useState('')
@@ -183,6 +203,9 @@ function TaskCard({ task, onEditTask, onQuickAddBreak }) {
   const Icon = style.icon
   const [showBreakMenu, setShowBreakMenu] = useState(false)
   const canAddBreak = typeof onQuickAddBreak === 'function' && !['mola', 'dinlenme'].includes(task.taskType) && Boolean(task.endTime)
+  const detail = getTaskDetail(task)
+  const source = getTaskSource(task)
+  const progress = getTaskProgress(task)
 
   const handlePick = (minutes) => {
     setShowBreakMenu(false)
@@ -191,43 +214,74 @@ function TaskCard({ task, onEditTask, onQuickAddBreak }) {
 
   return (
     <div
-      className={`group relative flex min-h-[60px] w-full items-stretch gap-1 rounded-xl border px-2.5 py-2 shadow-[0_1px_4px_rgba(49,42,92,0.06)] transition duration-150 hover:-translate-y-0.5 hover:shadow-sm ${showBreakMenu ? 'z-30' : ''} ${style.card}`}
+      className={`group relative flex min-h-[60px] w-full flex-col gap-1.5 rounded-xl border px-2.5 py-2 shadow-[0_1px_4px_rgba(49,42,92,0.06)] transition duration-150 hover:-translate-y-0.5 hover:shadow-sm ${showBreakMenu ? 'z-30' : ''} ${style.card}`}
     >
-      <button
-        type="button"
-        onClick={() => onEditTask(task)}
-        className="flex min-w-0 flex-1 items-center gap-2 text-left"
-      >
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${style.iconClassName}`}>
-          <Icon size={21} strokeWidth={2.2} aria-hidden="true" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className={`block text-[11px] font-bold leading-tight ${style.timeClassName}`}>
-            {formatTaskTime(task)}
-          </span>
-          <span className={`mt-1 block break-words text-xs font-bold leading-snug ${style.titleClassName}`}>
-            {task.title}
-          </span>
-        </span>
-      </button>
-
-      {canAddBreak ? (
+      <div className="flex items-stretch gap-1">
         <button
           type="button"
-          onClick={(event) => {
-            event.stopPropagation()
-            setShowBreakMenu((current) => !current)
-          }}
-          title="Bu dersin ardına mola ekle"
-          aria-expanded={showBreakMenu}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-panel-text-muted opacity-0 transition-colors duration-150 hover:bg-amber-100/70 hover:text-panel-warm focus-visible:opacity-100 group-hover:opacity-100"
+          onClick={() => onEditTask(task)}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
-          <Coffee size={15} aria-hidden="true" />
+          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${style.iconClassName}`}>
+            <Icon size={21} strokeWidth={2.2} aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center justify-between gap-1">
+              <span className={`block text-[11px] font-bold leading-tight ${style.timeClassName}`}>
+                {formatTaskTime(task)}
+              </span>
+              {task.durationMinutes ? (
+                <span className="shrink-0 text-[10px] font-semibold text-panel-text-muted">{task.durationMinutes} dk</span>
+              ) : null}
+            </span>
+            <span className={`mt-1 block break-words text-xs font-bold leading-snug ${style.titleClassName}`}>
+              {task.title}
+            </span>
+          </span>
         </button>
+
+        {canAddBreak ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              setShowBreakMenu((current) => !current)
+            }}
+            title="Bu dersin ardına mola ekle"
+            aria-expanded={showBreakMenu}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-panel-text-muted opacity-0 transition-colors duration-150 hover:bg-amber-100/70 hover:text-panel-warm focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            <Coffee size={15} aria-hidden="true" />
+          </button>
+        ) : null}
+
+        {canAddBreak && showBreakMenu ? (
+          <QuickBreakMenu task={task} onPick={handlePick} onClose={() => setShowBreakMenu(false)} />
+        ) : null}
+      </div>
+
+      {detail ? (
+        <p className="line-clamp-2 break-words pl-11 text-[11px] font-medium leading-snug text-panel-text-muted">{detail}</p>
       ) : null}
 
-      {canAddBreak && showBreakMenu ? (
-        <QuickBreakMenu task={task} onPick={handlePick} onClose={() => setShowBreakMenu(false)} />
+      {source || progress ? (
+        <div className="flex flex-wrap items-center gap-1 pl-11">
+          {source ? (
+            <span
+              title={source}
+              className="inline-flex max-w-full items-center gap-1 rounded-md bg-white/60 px-1.5 py-0.5 text-[10px] font-semibold text-panel-text-muted"
+            >
+              <Library size={11} className="shrink-0" aria-hidden="true" />
+              <span className="truncate">{source}</span>
+            </span>
+          ) : null}
+          {progress ? (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-white/60 px-1.5 py-0.5 text-[10px] font-semibold text-panel-text-muted">
+              <ListChecks size={11} aria-hidden="true" />
+              {progress}
+            </span>
+          ) : null}
+        </div>
       ) : null}
     </div>
   )
@@ -244,7 +298,7 @@ export default function WeeklyPlannerGrid({ weekDates, tasksByDate, dayStatusByD
   }
 
   const handleAddTask = (date, initialTemplate) => {
-    if (date < currentDate) return
+    if (date < currentDate || typeof onAddTask !== 'function') return
     setExpandedActionDate(null)
     onAddTask(date, initialTemplate)
   }
@@ -255,7 +309,7 @@ export default function WeeklyPlannerGrid({ weekDates, tasksByDate, dayStatusByD
   }
 
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7">
+    <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
       {weekDates.map((date, index) => {
         const tasks = [...(tasksByDate[date] || [])].sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
         const isPastDay = date < currentDate
@@ -266,7 +320,7 @@ export default function WeeklyPlannerGrid({ weekDates, tasksByDate, dayStatusByD
         return (
           <div
             key={date}
-            className="flex min-h-[30rem] min-w-0 flex-col rounded-2xl border border-panel-border bg-panel-surface shadow-[0_2px_10px_rgba(49,42,92,0.06)] lg:min-h-[36rem]"
+            className="flex min-h-[32rem] min-w-0 flex-col rounded-2xl border border-panel-border bg-panel-surface shadow-[0_2px_10px_rgba(49,42,92,0.06)] lg:min-h-[38rem]"
           >
             <div className="rounded-t-2xl border-b border-panel-blue-soft bg-panel-blue-soft px-3 py-4 text-center">
               <p className="break-words text-base font-extrabold leading-tight text-panel-text">{DAY_LABELS[index]}</p>
@@ -285,7 +339,11 @@ export default function WeeklyPlannerGrid({ weekDates, tasksByDate, dayStatusByD
                     key={task.id}
                     task={task}
                     onEditTask={onEditTask}
-                    onQuickAddBreak={isPastDay ? undefined : (pickedTask, minutes) => onQuickAddBreak(date, pickedTask, minutes)}
+                    onQuickAddBreak={
+                      isPastDay || typeof onQuickAddBreak !== 'function'
+                        ? undefined
+                        : (pickedTask, minutes) => onQuickAddBreak(date, pickedTask, minutes)
+                    }
                   />
                 ))}
               </div>
@@ -301,20 +359,22 @@ export default function WeeklyPlannerGrid({ weekDates, tasksByDate, dayStatusByD
                   Ödev Ekle
                 </button>
 
-                <button
-                  type="button"
-                  aria-expanded={isActionsExpanded}
-                  onClick={() => setExpandedActionDate(isActionsExpanded ? null : date)}
-                  disabled={isPastDay}
-                  className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3 text-xs font-bold text-panel-text shadow-sm transition-colors duration-150 hover:bg-panel-surface-soft disabled:cursor-not-allowed disabled:bg-panel-surface-soft disabled:text-panel-text-muted disabled:shadow-none"
-                >
-                  Diğer
-                  <ChevronDown
-                    size={16}
-                    className={`transition-transform duration-150 ${isActionsExpanded ? 'rotate-180' : ''}`}
-                    aria-hidden="true"
-                  />
-                </button>
+                {typeof onAddTask === 'function' ? (
+                  <button
+                    type="button"
+                    aria-expanded={isActionsExpanded}
+                    onClick={() => setExpandedActionDate(isActionsExpanded ? null : date)}
+                    disabled={isPastDay}
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3 text-xs font-bold text-panel-text shadow-sm transition-colors duration-150 hover:bg-panel-surface-soft disabled:cursor-not-allowed disabled:bg-panel-surface-soft disabled:text-panel-text-muted disabled:shadow-none"
+                  >
+                    Diğer
+                    <ChevronDown
+                      size={16}
+                      className={`transition-transform duration-150 ${isActionsExpanded ? 'rotate-180' : ''}`}
+                      aria-hidden="true"
+                    />
+                  </button>
+                ) : null}
 
                 {isActionsExpanded ? (
                   <div className="grid gap-2 rounded-xl border border-panel-border bg-panel-surface-soft p-2">

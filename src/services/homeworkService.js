@@ -22,6 +22,12 @@ import { authRequest } from './authClient'
  * @property {string} status  // 'bekliyor' | 'devam-ediyor' | 'tamamlandi'
  * @property {boolean} isSplit
  * @property {HomeworkDayPlan[]} [dayPlans]
+ * @property {boolean} hasTask
+ * @property {string} [taskId]
+ * @property {string} [taskDate]
+ * @property {string} [taskStartTime]
+ * @property {string} [taskEndTime]
+ * @property {number} [taskDurationMinutes]
  */
 
 /** @returns {Promise<Homework[]>} */
@@ -70,6 +76,15 @@ export async function updateHomework(id, updates) {
   const data = await authRequest(`/api/panel/homeworks/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(updates),
+  })
+  return data.homework
+}
+
+/** @returns {Promise<Homework>} */
+export async function assignHomeworkTask(id, { date, startTime, durationMinutes }) {
+  const data = await authRequest(`/api/panel/homeworks/${id}/task`, {
+    method: 'PUT',
+    body: JSON.stringify({ date, startTime, durationMinutes }),
   })
   return data.homework
 }

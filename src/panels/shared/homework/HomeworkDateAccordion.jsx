@@ -3,7 +3,14 @@ import { cn } from '../../ui/utils'
 import { formatGroupDate } from './homeworkDisplay'
 import HomeworkSubjectGroup from './HomeworkSubjectGroup'
 
-export default function HomeworkDateAccordion({ dateGroup, isOpen, onToggle, onDeleteRequest, isPast = false }) {
+export default function HomeworkDateAccordion({
+  dateGroup,
+  isOpen,
+  onToggle,
+  onDeleteRequest,
+  onAssignTaskRequest,
+  isPast = false,
+}) {
   const isUnassigned = !dateGroup.dueDate
   const contentId = `homework-date-${isUnassigned ? 'unassigned' : dateGroup.dueDate.replace(/[^a-zA-Z0-9-]/g, '-')}`
 
@@ -67,6 +74,7 @@ export default function HomeworkDateAccordion({ dateGroup, isOpen, onToggle, onD
               subject={subjectGroup.subject}
               items={subjectGroup.items}
               onDeleteRequest={onDeleteRequest}
+              onAssignTaskRequest={onAssignTaskRequest}
             />
           ))}
         </div>

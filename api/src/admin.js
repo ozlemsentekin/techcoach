@@ -1,7 +1,8 @@
 const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
-const { clearSessionHeaders, json } = require('./http')
+const { clearSessionHeaders, createSessionHeaders, json } = require('./http')
 const {
+  createSessionToken,
   defaultPasswordForPhone,
   hashPassword,
   isSessionError,
@@ -183,8 +184,123 @@ async function updateUserHandler(request) {
   }
 }
 
+// Admin bir üyenin panelini kendi hesabıyla görüntüleyebilsin diye o üye adına yeni bir
+// oturum jetonu üretir (payload'a actingAdminId/actingAdminName eklenerek — bkz.
+// security.js createSessionToken). "Yönetici Paneline Dön" bu iz sürülen bilgiyle geri döner.
+async function impersonateUserHandler(request) {
+  try {
+    const { error, session } = await requireAdmin(request)
+    if (error) {
+      return error
+    }
+
+    const targetId = request.params.userId
+    if (targetId === session.sub) {
+      return json(400, { error: 'Zaten bu hesapla oturum açık.' })
+    }
+
+    const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: targetId } })
+    const result = await requestDb.query(`
+      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.parent_id,
+             p.full_name AS parent_full_name, u.last_login_at, u.created_at,
+             e.status AS entitlement_status, e.source AS entitlement_source,
+             e.current_period_end AS entitlement_current_period_end
+      FROM dbo.Users u
+      LEFT JOIN dbo.Users p ON p.id = u.parent_id
+      LEFT JOIN dbo.Entitlements e ON e.parent_id = COALESCE(u.parent_id, u.id)
+      WHERE u.id = @id;
+    `)
+    const record = result.recordset[0]
+    if (!record) {
+      return json(404, { error: 'Kullanıcı bulunamadı.' })
+    }
+
+    const user = sanitizeUser(record)
+    const token = createSessionToken(user, {
+      actingAdminId: session.sub,
+      actingAdminName: session.fullName,
+    })
+
+    const responseUser = {
+      ...user,
+      actingAdmin: { id: session.sub, fullName: session.fullName },
+      entitlement: {
+        status: record.entitlement_status || 'none',
+        source: record.entitlement_source || null,
+        currentPeriodEnd: record.entitlement_current_period_end || null,
+      },
+    }
+
+    return json(200, { user: responseUser }, createSessionHeaders(token))
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('impersonateUserHandler failed', error)
+    return json(500, { error: 'Üyenin paneline giriş yapılamadı.' })
+  }
+}
+
+async function returnToAdminHandler(request) {
+  try {
+    const token = readSessionToken(request)
+    if (!token) {
+      return json(401, { error: 'Oturum bulunamadı.' })
+    }
+
+    const session = verifySessionToken(token)
+    if (!session.actingAdminId) {
+      return json(400, { error: 'Aktif bir yönetici görünümü yok.' })
+    }
+
+    const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: session.actingAdminId } })
+    const result = await requestDb.query(`
+      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.parent_id,
+             p.full_name AS parent_full_name, u.last_login_at, u.created_at,
+             e.status AS entitlement_status, e.source AS entitlement_source,
+             e.current_period_end AS entitlement_current_period_end
+      FROM dbo.Users u
+      LEFT JOIN dbo.Users p ON p.id = u.parent_id
+      LEFT JOIN dbo.Entitlements e ON e.parent_id = COALESCE(u.parent_id, u.id)
+      WHERE u.id = @id;
+    `)
+    const record = result.recordset[0]
+    if (!record || !record.is_admin) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    const user = sanitizeUser(record)
+    user.entitlement = {
+      status: record.entitlement_status || 'none',
+      source: record.entitlement_source || null,
+      currentPeriodEnd: record.entitlement_current_period_end || null,
+    }
+
+    const newToken = createSessionToken(user)
+    return json(200, { user }, createSessionHeaders(newToken))
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('returnToAdminHandler failed', error)
+    return json(500, { error: 'Yönetici paneline dönülemedi.' })
+  }
+}
+
 module.exports = {
   listUsersHandler,
   requireAdmin,
   updateUserHandler,
+  impersonateUserHandler,
+  returnToAdminHandler,
 }

@@ -240,6 +240,9 @@ async function meHandler(request) {
     if (session.actingParentId) {
       user.actingParent = { id: session.actingParentId, fullName: session.actingParentName }
     }
+    if (session.actingAdminId) {
+      user.actingAdmin = { id: session.actingAdminId, fullName: session.actingAdminName }
+    }
     user.entitlement = {
       status: record.entitlement_status || 'none',
       source: record.entitlement_source || null,

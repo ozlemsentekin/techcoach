@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Pencil, Search, ShieldCheck, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronDown, ChevronRight, LogIn, Pencil, Search, ShieldCheck, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { useAuth } from '../../../context/useAuth'
 import PageHeader from '../../layout/PageHeader'
@@ -13,13 +14,21 @@ import { MotionDiv } from '../../ui/motion'
 const ROLE_TONE = {
   ebeveyn: 'slate',
   ogrenci: 'sage',
+  ogretmen: 'blue',
 }
 
 const ROLE_FILTERS = [
   { value: 'all', label: 'Tümü' },
   { value: 'ebeveyn', label: 'Ebeveyn' },
   { value: 'ogrenci', label: 'Öğrenci' },
+  { value: 'ogretmen', label: 'Öğretmen' },
 ]
+
+const PANEL_PATH_BY_ROLE = {
+  ebeveyn: '/parent/dashboard',
+  ogretmen: '/teacher/students',
+  ogrenci: '/student/today',
+}
 
 function formatDate(value) {
   if (!value) return '—'
@@ -166,7 +175,34 @@ function EditUserModal({ user, isSelf, onSaved, onClose }) {
   )
 }
 
-function UserRow({ user, indent = false, onEdit }) {
+function RowActions({ user, isSelf, impersonating, onEdit, onImpersonate }) {
+  return (
+    <div className="flex items-center justify-end gap-3">
+      {!isSelf && PANEL_PATH_BY_ROLE[user.role] ? (
+        <button
+          type="button"
+          aria-label="Üyenin paneline giriş yap"
+          title="Panele Giriş Yap"
+          disabled={impersonating}
+          className="text-[#87a3a5] hover:text-[#253d3e] disabled:opacity-50"
+          onClick={() => onImpersonate(user)}
+        >
+          <LogIn size={14} aria-hidden="true" />
+        </button>
+      ) : null}
+      <button
+        type="button"
+        aria-label="Üyeyi düzenle"
+        className="text-[#87a3a5] hover:text-[#253d3e]"
+        onClick={() => onEdit(user)}
+      >
+        <Pencil size={14} aria-hidden="true" />
+      </button>
+    </div>
+  )
+}
+
+function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpersonate }) {
   return (
     <tr className="hover:bg-[#f8f7fb]">
       <td className="px-4 py-3 text-[#253d3e]">
@@ -189,20 +225,13 @@ function UserRow({ user, indent = false, onEdit }) {
       <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.createdAt)}</td>
       <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.lastLoginAt)}</td>
       <td className="px-4 py-3 text-right">
-        <button
-          type="button"
-          aria-label="Üyeyi düzenle"
-          className="text-[#87a3a5] hover:text-[#253d3e]"
-          onClick={() => onEdit(user)}
-        >
-          <Pencil size={14} aria-hidden="true" />
-        </button>
+        <RowActions user={user} isSelf={isSelf} impersonating={impersonating} onEdit={onEdit} onImpersonate={onImpersonate} />
       </td>
     </tr>
   )
 }
 
-function ParentRow({ user, students, onEdit }) {
+function ParentRow({ user, students, isSelf, impersonating, onEdit, onImpersonate }) {
   const [expanded, setExpanded] = useState(true)
   const hasStudents = students.length > 0
 
@@ -246,27 +275,33 @@ function ParentRow({ user, students, onEdit }) {
         <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.createdAt)}</td>
         <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.lastLoginAt)}</td>
         <td className="px-4 py-3 text-right" onClick={(event) => event.stopPropagation()}>
-          <button
-            type="button"
-            aria-label="Üyeyi düzenle"
-            className="text-[#87a3a5] hover:text-[#253d3e]"
-            onClick={() => onEdit(user)}
-          >
-            <Pencil size={14} aria-hidden="true" />
-          </button>
+          <RowActions user={user} isSelf={isSelf} impersonating={impersonating} onEdit={onEdit} onImpersonate={onImpersonate} />
         </td>
       </tr>
       {hasStudents && expanded
-        ? students.map((student) => <UserRow key={student.id} user={student} indent onEdit={onEdit} />)
+        ? students.map((student) => (
+            <UserRow
+              key={student.id}
+              user={student}
+              indent
+              isSelf={false}
+              impersonating={impersonating}
+              onEdit={onEdit}
+              onImpersonate={onImpersonate}
+            />
+          ))
         : null}
     </>
   )
 }
 
 export default function AdminUsersPage() {
-  const { authUser } = useAuth()
+  const { authUser, impersonateUser } = useAuth()
+  const navigate = useNavigate()
   const [users, setUsers] = useState(null)
   const [error, setError] = useState('')
+  const [actionError, setActionError] = useState('')
+  const [impersonatingId, setImpersonatingId] = useState('')
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [editingUser, setEditingUser] = useState(null)
@@ -286,6 +321,19 @@ export default function AdminUsersPage() {
       ignore = true
     }
   }, [])
+
+  const handleImpersonate = async (user) => {
+    setActionError('')
+    setImpersonatingId(user.id)
+    try {
+      const impersonatedUser = await impersonateUser(user.id)
+      navigate(PANEL_PATH_BY_ROLE[impersonatedUser.role] || '/')
+    } catch (err) {
+      setActionError(err.message)
+    } finally {
+      setImpersonatingId('')
+    }
+  }
 
   const handleUserUpdated = (updatedUser) => {
     setUsers((current) =>
@@ -359,6 +407,10 @@ export default function AdminUsersPage() {
         }
       />
 
+      {actionError ? (
+        <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{actionError}</div>
+      ) : null}
+
       {error ? (
         <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
       ) : users === null ? (
@@ -388,7 +440,10 @@ export default function AdminUsersPage() {
                       key={user.id}
                       user={user}
                       students={studentsByParentId.get(user.id) || []}
+                      isSelf={user.id === authUser?.id}
+                      impersonating={Boolean(impersonatingId)}
                       onEdit={setEditingUser}
+                      onImpersonate={handleImpersonate}
                     />
                   ))}
                 </tbody>

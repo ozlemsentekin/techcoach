@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { NotebookPen } from 'lucide-react'
-import { getHomeworks, addHomework, deleteHomework } from '../../../services/homeworkService'
+import { getHomeworks, addHomework, deleteHomework, assignHomeworkTask } from '../../../services/homeworkService'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import AddHomeworkModal from '../../student/components/AddHomeworkModal'
+import AssignTaskModal from '../../shared/homework/AssignTaskModal'
 import Button from '../../ui/Button'
 import { MotionDiv } from '../../ui/motion'
 import { groupHomeworksByDate } from '../../shared/homework/homeworkDisplay'
@@ -21,6 +22,7 @@ export default function HomeworkPage() {
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [deletingHomework, setDeletingHomework] = useState(null)
+  const [assigningTaskHomework, setAssigningTaskHomework] = useState(null)
   const [expandedDateOverrides, setExpandedDateOverrides] = useState({})
   const [filter, setFilter] = useState('active')
 
@@ -66,6 +68,12 @@ export default function HomeworkPage() {
     } catch (err) {
       setError(err.message)
     }
+  }
+
+  const handleAssignTaskSave = async ({ date, startTime, durationMinutes }) => {
+    await assignHomeworkTask(assigningTaskHomework.id, { date, startTime, durationMinutes })
+    setHomeworks(await getHomeworks())
+    setAssigningTaskHomework(null)
   }
 
   const handleDeleteConfirmed = async () => {
@@ -131,6 +139,7 @@ export default function HomeworkPage() {
                   isOpen={isDateOpen(dateGroup.dueDate, index)}
                   onToggle={() => toggleDate(dateGroup.dueDate, index)}
                   onDeleteRequest={setDeletingHomework}
+                  onAssignTaskRequest={setAssigningTaskHomework}
                 />
               ))}
             </MotionDiv>
@@ -139,6 +148,14 @@ export default function HomeworkPage() {
       )}
 
       {showModal ? <AddHomeworkModal onSave={handleSave} onClose={() => setShowModal(false)} /> : null}
+
+      {assigningTaskHomework ? (
+        <AssignTaskModal
+          homework={assigningTaskHomework}
+          onSave={handleAssignTaskSave}
+          onClose={() => setAssigningTaskHomework(null)}
+        />
+      ) : null}
 
       {deletingHomework ? (
         <ConfirmationDialog

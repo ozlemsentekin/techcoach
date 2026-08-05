@@ -665,4 +665,10 @@ module.exports = {
   getProgressOverviewHandler,
   getSmallGoalHandler,
   setSmallGoalHandler,
+  sanitizeProgressResourceBook,
+  sanitizeProgressTest,
+  sanitizeProgressTask,
+  sanitizeProgressSession,
+  sanitizeProgressHomework,
+  sanitizeWrongQuestion,
 }

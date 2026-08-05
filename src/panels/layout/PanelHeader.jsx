@@ -98,7 +98,7 @@ function StudentWellbeingMenu({
 }
 
 export default function PanelHeader({ role }) {
-  const { authUser, logout, enterStudent, returnToParent } = useAuth()
+  const { authUser, logout, enterStudent, returnToParent, returnToAdmin } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [open, setOpen] = useState(false)
@@ -117,6 +117,7 @@ export default function PanelHeader({ role }) {
   const isParent = authUser?.role === 'ebeveyn'
   const isStudentPanel = role === 'student'
   const actingParent = authUser?.actingParent
+  const actingAdmin = authUser?.actingAdmin
   const themeCtx = useContext(ThemeContext)
   const activeTheme = themeCtx ? THEMES.find((theme) => theme.id === themeCtx.theme) || THEMES[0] : null
 
@@ -187,6 +188,19 @@ export default function PanelHeader({ role }) {
     }
   }
 
+  const handleReturnToAdmin = async () => {
+    setSwitching(true)
+    try {
+      await returnToAdmin()
+      setOpen(false)
+      navigate('/parent/admin/users')
+    } catch {
+      // no-op: session stays as-is if the call fails
+    } finally {
+      setSwitching(false)
+    }
+  }
+
   const handleSelectEnergy = async (levelId) => {
     setWellbeingSaving(true)
     setWellbeingError('')
@@ -223,6 +237,18 @@ export default function PanelHeader({ role }) {
         >
           <Undo2 size={13} aria-hidden="true" />
           Ebeveyn Paneline Dön
+        </button>
+      ) : null}
+
+      {actingAdmin ? (
+        <button
+          type="button"
+          onClick={handleReturnToAdmin}
+          disabled={switching}
+          className="flex items-center gap-1.5 rounded-lg bg-panel-lilac-soft px-2.5 py-1 text-xs font-medium text-panel-lilac hover:opacity-80 disabled:opacity-60"
+        >
+          <Undo2 size={13} aria-hidden="true" />
+          Yönetici Paneline Dön
         </button>
       ) : null}
 

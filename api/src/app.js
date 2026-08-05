@@ -1,6 +1,6 @@
 const { app } = require('@azure/functions')
 const { loginHandler, logoutHandler, meHandler, registerHandler } = require('./auth')
-const { listUsersHandler, updateUserHandler } = require('./admin')
+const { listUsersHandler, updateUserHandler, impersonateUserHandler, returnToAdminHandler } = require('./admin')
 const {
   listStudentsHandler,
   createStudentHandler,
@@ -15,8 +15,21 @@ const {
   listTeacherResourceBooksForParentHandler,
   updateTeacherResourceBooksForParentHandler,
   listStudentTeachersForPanelHandler,
+  grantTeacherAccessHandler,
 } = require('./students')
 const { getStudentProfileHandler, updateStudentProfileHandler } = require('./studentProfile')
+const {
+  listTeacherStudentsHandler,
+  listTeacherParentsHandler,
+  getTeacherLessonPlanHandler,
+  listTeacherResourceBooksHandler,
+  listTeacherResourceBookTopicsHandler,
+  listTeacherStudentHomeworksHandler,
+  createTeacherHomeworkHandler,
+  assignTeacherHomeworkTaskHandler,
+  listTeacherStudentTasksHandler,
+  getTeacherStudentProgressOverviewHandler,
+} = require('./teacher')
 const { listProvincesHandler, listDistrictsHandler, listSchoolsHandler } = require('./geo')
 const {
   listSubjectsHandler,
@@ -45,7 +58,13 @@ const {
   bulkImportSchoolsHandler,
 } = require('./catalog')
 const { extractQuestionsFromImageHandler } = require('./questionExtraction')
-const { listHomeworksHandler, createHomeworkHandler, updateHomeworkHandler, deleteHomeworkHandler } = require('./homework')
+const {
+  listHomeworksHandler,
+  createHomeworkHandler,
+  updateHomeworkHandler,
+  assignHomeworkTaskHandler,
+  deleteHomeworkHandler,
+} = require('./homework')
 const {
   listTasksHandler,
   getTaskHandler,
@@ -151,6 +170,20 @@ app.http('panel-admin-users-update', {
   handler: updateUserHandler,
 })
 
+app.http('panel-admin-users-impersonate', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-admin/users/{userId}/impersonate',
+  handler: impersonateUserHandler,
+})
+
+app.http('panel-admin-return-to-admin', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-admin/return-to-admin',
+  handler: returnToAdminHandler,
+})
+
 app.http('parent-students-list', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -226,6 +259,83 @@ app.http('parent-student-teacher-resource-books-update', {
   methods: ['PUT'],
   route: 'parent/students/{studentId}/teachers/{teacherId}/resource-books',
   handler: updateTeacherResourceBooksForParentHandler,
+})
+
+app.http('parent-student-teacher-grant-access', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'parent/students/{studentId}/teachers/{teacherId}/grant-access',
+  handler: grantTeacherAccessHandler,
+})
+
+app.http('panel-teacher-students-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students',
+  handler: listTeacherStudentsHandler,
+})
+
+app.http('panel-teacher-parents-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/parents',
+  handler: listTeacherParentsHandler,
+})
+
+app.http('panel-teacher-lesson-plan', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/lesson-plan',
+  handler: getTeacherLessonPlanHandler,
+})
+
+app.http('panel-teacher-resource-books-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/resource-books',
+  handler: listTeacherResourceBooksHandler,
+})
+
+app.http('panel-teacher-resource-book-topics-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/resource-book-topics',
+  handler: listTeacherResourceBookTopicsHandler,
+})
+
+app.http('panel-teacher-homeworks-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/homeworks',
+  handler: listTeacherStudentHomeworksHandler,
+})
+
+app.http('panel-teacher-homeworks-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/students/{studentTeacherId}/homeworks',
+  handler: createTeacherHomeworkHandler,
+})
+
+app.http('panel-teacher-homeworks-assign-task', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel-teacher/students/{studentTeacherId}/homeworks/{homeworkId}/task',
+  handler: assignTeacherHomeworkTaskHandler,
+})
+
+app.http('panel-teacher-tasks-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/tasks',
+  handler: listTeacherStudentTasksHandler,
+})
+
+app.http('panel-teacher-progress-overview', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/progress-overview',
+  handler: getTeacherStudentProgressOverviewHandler,
 })
 
 app.http('parent-return', {
@@ -534,6 +644,13 @@ app.http('panel-homeworks-update', {
   methods: ['PATCH'],
   route: 'panel/homeworks/{homeworkId}',
   handler: updateHomeworkHandler,
+})
+
+app.http('panel-homeworks-assign-task', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel/homeworks/{homeworkId}/task',
+  handler: assignHomeworkTaskHandler,
 })
 
 app.http('panel-homeworks-delete', {

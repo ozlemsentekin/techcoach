@@ -3,8 +3,11 @@ const { isConfigError } = require('./config')
 const { clearSessionHeaders, createSessionHeaders, json } = require('./http')
 const {
   createSessionToken,
+  defaultPasswordForPhone,
+  hashPassword,
   isSessionError,
   normalizeEmail,
+  normalizePhone,
   readSessionToken,
   verifySessionToken,
 } = require('./security')
@@ -106,6 +109,8 @@ function sanitizeStudentTeacher(record) {
     schedule: parseScheduleJson(record.schedule_json),
     resourceBooks: record.resourceBooks || [],
     resourceCount: Number(record.resource_count) || 0,
+    teacherUserId: record.teacher_user_id || null,
+    accessGrantedAt: record.access_granted_at || null,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
   }
@@ -312,6 +317,7 @@ async function fetchStudentTeachers(studentId) {
   const result = await requestDb.query(`
     SELECT st.id, st.student_id, st.subject_id, s.name AS subject_name,
            st.teacher_full_name, st.phone, st.teacher_type, st.schedule_json,
+           st.teacher_user_id, st.access_granted_at,
            st.created_at, st.updated_at
     FROM dbo.StudentTeachers st
     LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
@@ -369,7 +375,8 @@ async function fetchParentTeachers(parentId) {
   const result = await requestDb.query(`
     SELECT st.id, st.student_id, u.full_name AS student_full_name, u.email AS student_email,
            st.subject_id, s.name AS subject_name, st.teacher_full_name, st.phone,
-           st.teacher_type, st.schedule_json, st.created_at, st.updated_at
+           st.teacher_type, st.schedule_json, st.teacher_user_id, st.access_granted_at,
+           st.created_at, st.updated_at
     FROM dbo.StudentTeachers st
     INNER JOIN dbo.Users u ON u.id = st.student_id
     LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
@@ -803,6 +810,130 @@ async function listParentTeachersHandler(request) {
   }
 }
 
+function normalizeTeacherNameForMatch(value) {
+  return String(value || '').trim().toLocaleLowerCase('tr-TR')
+}
+
+// Aynı veliye ait, aynı öğretmene (ad+telefon normalize edilerek eşleşen) bağlı
+// TÜM StudentTeachers satırlarının id'lerini döner — "Panele Yetki Ver" bunların
+// hepsini tek seferde aynı öğretmen hesabına bağlar.
+async function findMatchingTeacherRowIds(parentId, fullName, normalizedPhone) {
+  const requestDb = await withRequest({ parentId: { type: sql.UniqueIdentifier, value: parentId } })
+  const result = await requestDb.query(`
+    SELECT st.id, st.teacher_full_name, st.phone
+    FROM dbo.StudentTeachers st
+    INNER JOIN dbo.Users u ON u.id = st.student_id
+    WHERE u.parent_id = @parentId;
+  `)
+  return result.recordset
+    .filter(
+      (row) =>
+        normalizeTeacherNameForMatch(row.teacher_full_name) === normalizeTeacherNameForMatch(fullName) &&
+        normalizePhone(row.phone) === normalizedPhone,
+    )
+    .map((row) => row.id)
+}
+
+async function grantTeacherAccessHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const studentId = request.params.studentId
+    const teacherId = request.params.teacherId
+    const ownsTeacher = await verifyParentOwnsTeacher(parentId, studentId, teacherId)
+    if (!ownsTeacher) {
+      return json(404, { error: 'Öğretmen bulunamadı.' })
+    }
+
+    const rowDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: teacherId } })
+    const rowResult = await rowDb.query(`
+      SELECT id, teacher_full_name, phone, teacher_user_id FROM dbo.StudentTeachers WHERE id = @id;
+    `)
+    const row = rowResult.recordset[0]
+    if (!row) {
+      return json(404, { error: 'Öğretmen bulunamadı.' })
+    }
+
+    const teacherPhone = normalizePhone(row.phone)
+    if (!teacherPhone) {
+      return json(400, { error: 'Öğretmenin geçerli bir cep telefonu numarası olmalı ki panele giriş yapabilsin.' })
+    }
+
+    let teacherUserId
+    let isNewAccount = false
+    const existingDb = await withRequest({ phone: { type: sql.NVarChar(20), value: teacherPhone } })
+    const existingResult = await existingDb.query(`
+      SELECT TOP 1 id FROM dbo.Users WHERE role = 'ogretmen' AND phone_number = @phone;
+    `)
+
+    if (existingResult.recordset[0]) {
+      teacherUserId = existingResult.recordset[0].id
+    } else {
+      isNewAccount = true
+      const now = new Date()
+      const passwordHash = await hashPassword(defaultPasswordForPhone(teacherPhone))
+      const insertDb = await withRequest({
+        fullName: { type: sql.NVarChar(120), value: row.teacher_full_name },
+        phone: { type: sql.NVarChar(20), value: teacherPhone },
+        passwordHash: { type: sql.NVarChar(255), value: passwordHash },
+        role: { type: sql.NVarChar(20), value: 'ogretmen' },
+        consentAt: { type: sql.DateTime2, value: now },
+      })
+      try {
+        const insertResult = await insertDb.query(`
+          INSERT INTO dbo.Users (full_name, phone_number, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
+          OUTPUT inserted.id
+          VALUES (@fullName, @phone, @passwordHash, @role, @consentAt, @consentAt);
+        `)
+        teacherUserId = insertResult.recordset[0].id
+      } catch (insertError) {
+        // Yarış durumu: aynı telefonla eşzamanlı ikinci "yetki ver" isteği.
+        if (insertError.number === 2601 || insertError.number === 2627) {
+          const retryDb = await withRequest({ phone: { type: sql.NVarChar(20), value: teacherPhone } })
+          const retryResult = await retryDb.query(`SELECT TOP 1 id FROM dbo.Users WHERE phone_number = @phone;`)
+          teacherUserId = retryResult.recordset[0]?.id
+          isNewAccount = false
+        } else {
+          throw insertError
+        }
+      }
+    }
+
+    const matchingIds = await findMatchingTeacherRowIds(parentId, row.teacher_full_name, teacherPhone)
+    const idsToUpdate = matchingIds.length ? matchingIds : [teacherId]
+    const placeholders = idsToUpdate.map((_, index) => `@id${index}`)
+    const updateDb = await withRequest({
+      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+      ...Object.fromEntries(idsToUpdate.map((id, index) => [`id${index}`, { type: sql.UniqueIdentifier, value: id }])),
+    })
+    await updateDb.query(`
+      UPDATE dbo.StudentTeachers
+      SET teacher_user_id = @teacherUserId, access_granted_at = SYSUTCDATETIME()
+      WHERE id IN (${placeholders.join(', ')});
+    `)
+
+    const teachers = await fetchParentTeachers(parentId)
+    return json(200, {
+      teacher: teachers.find((item) => item.id === teacherId) || null,
+      teachers,
+      isNewAccount,
+      temporaryPassword: isNewAccount ? defaultPasswordForPhone(teacherPhone) : null,
+    })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+    console.error('grantTeacherAccessHandler failed', error)
+    return json(500, { error: 'Öğretmene panel yetkisi verilemedi.' })
+  }
+}
+
 async function createStudentTeacherHandler(request) {
   try {
     const { error, parentId } = await requireParentSession(request)
@@ -1089,6 +1220,8 @@ module.exports = {
   listTeacherResourceBooksForParentHandler,
   updateTeacherResourceBooksForParentHandler,
   listStudentTeachersForPanelHandler,
+  grantTeacherAccessHandler,
+  fetchTeacherResourceBooks,
   requireParentSession,
   verifyParentOwnsStudent,
 }

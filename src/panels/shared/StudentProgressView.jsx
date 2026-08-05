@@ -74,6 +74,10 @@ function resourceLabel(item) {
   return 'Kaynaksız çalışma'
 }
 
+function publisherLabel(item) {
+  return item?.publisherName || ''
+}
+
 function contentLabel(item) {
   return item?.topic || item?.taskTitle || item?.title || item?.description || 'Genel çalışma'
 }
@@ -151,6 +155,7 @@ function splitTestResults(item, testsById, { idPrefix, minutes, source }) {
         content: testName ? `${topic} · ${testName}` : topic,
         contentGroup: topic,
         resource: resourceLabel(item),
+        publisher: publisherLabel(item),
         questions,
         correct,
         wrong,
@@ -199,6 +204,7 @@ function buildActivityRecords(overview, testsById) {
       content: contentLabel(session),
       contentGroup: contentLabel(session),
       resource: resourceLabel(session),
+      publisher: publisherLabel(session),
       questions: asNumber(session.completedQuestionCount),
       correct: asNumber(session.correctCount),
       wrong: asNumber(session.wrongCount),
@@ -240,6 +246,7 @@ function buildActivityRecords(overview, testsById) {
       content: contentLabel(task),
       contentGroup: contentLabel(task),
       resource: resourceLabel(task),
+      publisher: publisherLabel(task),
       questions,
       correct: asNumber(task.correctCount),
       wrong: asNumber(task.wrongCount),
@@ -264,6 +271,7 @@ function buildActivityRecords(overview, testsById) {
       content: homework.title || contentLabel(homework),
       contentGroup: homework.title || contentLabel(homework),
       resource: resourceLabel(homework),
+      publisher: publisherLabel(homework),
       questions,
       correct: 0,
       wrong: 0,
@@ -310,6 +318,7 @@ function aggregateBy(records, keyReader) {
         blank: 0,
         minutes: 0,
         sessions: 0,
+        publishers: new Set(),
       })
     }
 
@@ -320,11 +329,13 @@ function aggregateBy(records, keyReader) {
     group.blank += record.blank
     group.minutes += record.minutes
     if (record.source === 'session') group.sessions += 1
+    if (record.publisher) group.publishers.add(record.publisher)
   })
 
   return Array.from(groups.values())
-    .map((group) => ({
+    .map(({ publishers, ...group }) => ({
       ...group,
+      publishers: Array.from(publishers),
       accuracy: group.correct + group.wrong > 0 ? (group.correct / (group.correct + group.wrong)) * 100 : NaN,
       net: calculateNet(group.correct, group.wrong),
     }))
@@ -569,6 +580,18 @@ function BreakdownRows({ rows, emptyLabel }) {
               </p>
               <span className="shrink-0 text-sm font-bold text-panel-text">{formatNumber(row.questions)} soru</span>
             </div>
+            {row.publishers?.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {row.publishers.map((publisher) => (
+                  <span
+                    key={publisher}
+                    className="inline-flex items-center rounded-full bg-panel-surface-soft px-2 py-0.5 text-[11px] font-semibold text-panel-text-muted"
+                  >
+                    {publisher}
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="mt-2 h-2 rounded-full bg-panel-surface-soft">
               <div
                 className="h-2 rounded-full bg-student-theme-primary"
@@ -656,6 +679,7 @@ export default function StudentProgressView({
   emptySubtitle = 'Ders ilerlemen burada görünecek.',
   buildSubtitle = (subjectLabelText) => `${subjectLabelText} için emek, doğruluk ve kaynak ilerlemen.`,
   headerActions,
+  fetchOverview = getProgressOverview,
 }) {
   const [overview, setOverview] = useState(null)
   const [error, setError] = useState('')
@@ -668,7 +692,7 @@ export default function StudentProgressView({
     setOverview(null)
     setError('')
 
-    getProgressOverview(studentId)
+    fetchOverview(studentId)
       .then((data) => {
         if (!ignore) setOverview(data)
       })
@@ -679,7 +703,7 @@ export default function StudentProgressView({
     return () => {
       ignore = true
     }
-  }, [studentId])
+  }, [studentId, fetchOverview])
 
   const testsById = useMemo(
     () => new Map((overview?.tests || []).map((test) => [test.id, test])),

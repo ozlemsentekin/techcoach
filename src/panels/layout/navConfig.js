@@ -37,6 +37,16 @@ export function isNavItemActive(to, location) {
   return location.search.replace(/^\?/, '') === search
 }
 
+export const TEACHER_PRIMARY_NAV = [
+  { to: '/teacher/students', label: 'Öğrencilerim', icon: 'Users' },
+  { to: '/teacher/lesson-plan', label: 'Ders Planım', icon: 'CalendarRange' },
+  { to: '/teacher/parents', label: 'Velilerim', icon: 'UserRound' },
+]
+
+export const TEACHER_MORE_NAV = []
+
+export const TEACHER_SIDEBAR_NAV = [...TEACHER_PRIMARY_NAV, ...TEACHER_MORE_NAV]
+
 export const PARENT_ADMIN_NAV = {
   label: 'Admin Paneli',
   icon: 'ShieldCheck',

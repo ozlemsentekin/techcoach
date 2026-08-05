@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, CalendarDays, Eye, GraduationCap, Mail, Phone, Search, UserRound, Users, X } from 'lucide-react'
+import { BookOpen, CalendarDays, Eye, GraduationCap, KeyRound, Mail, Phone, Search, UserRound, Users, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import PageHeader from '../../layout/PageHeader'
 import EmptyState from '../../shared/EmptyState'
@@ -10,6 +10,7 @@ import DataTable from '../../ui/DataTable'
 import { MotionDiv } from '../../ui/motion'
 import TeacherProfileModal from '../components/TeacherProfileModal'
 import TeacherResourceBooksModal from '../components/TeacherResourceBooksModal'
+import GrantTeacherAccessDialog from '../components/GrantTeacherAccessDialog'
 
 const WEEKDAY_SHORT_LABELS = {
   pazartesi: 'Pzt',
@@ -254,6 +255,7 @@ export default function TeachersPage() {
   const [profileModalTeacher, setProfileModalTeacher] = useState(null)
   const [detailTeacherId, setDetailTeacherId] = useState(null)
   const [openMenuTeacherId, setOpenMenuTeacherId] = useState(null)
+  const [grantAccessTeacher, setGrantAccessTeacher] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -407,7 +409,14 @@ export default function TeachersPage() {
                       return (
                         <tr key={teacher.id} className={detailSelected ? 'bg-[#f8f7fb]' : 'hover:bg-[#f8f7fb]'}>
                           <td className="px-4 py-3">
-                            <p className="text-sm font-semibold text-[#253d3e]">{teacher.fullName}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-sm font-semibold text-[#253d3e]">{teacher.fullName}</p>
+                              {teacher.teacherUserId ? (
+                                <span className="rounded-full bg-[#e8f3ee] px-2 py-0.5 text-[10px] font-semibold text-[#3f8f6c]">
+                                  Panelde
+                                </span>
+                              ) : null}
+                            </div>
                             <a
                               href={`tel:${teacher.phone.replace(/\s/g, '')}`}
                               className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[#667475]"
@@ -458,6 +467,15 @@ export default function TeachersPage() {
                                   { label: 'Detay', icon: Eye, onClick: () => toggleTeacherDetail(teacher) },
                                   { label: 'Profil', icon: UserRound, onClick: () => setProfileModalTeacher(teacher) },
                                   { label: 'Kaynak', icon: BookOpen, onClick: () => setResourceModalTeacher(teacher) },
+                                  ...(teacher.teacherUserId
+                                    ? []
+                                    : [
+                                        {
+                                          label: 'Panele Yetki Ver',
+                                          icon: KeyRound,
+                                          onClick: () => setGrantAccessTeacher(teacher),
+                                        },
+                                      ]),
                                 ]}
                               />
                             </div>
@@ -490,6 +508,15 @@ export default function TeachersPage() {
           teacher={profileModalTeacher}
           onSaved={handleTeacherProfileSaved}
           onClose={() => setProfileModalTeacher(null)}
+        />
+      ) : null}
+
+      {grantAccessTeacher ? (
+        <GrantTeacherAccessDialog
+          teacher={grantAccessTeacher}
+          associationCount={associationCounts.get(teacherGroupKey(grantAccessTeacher)) || 1}
+          onGranted={(updatedTeachers) => setTeachers(updatedTeachers)}
+          onClose={() => setGrantAccessTeacher(null)}
         />
       ) : null}
     </div>

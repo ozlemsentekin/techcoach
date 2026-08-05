@@ -22,7 +22,7 @@ function sanitizeHomework(record) {
     title: record.title,
     description: record.description || '',
     assignedDate: toISODate(record.assigned_date),
-    dueDate: record.has_task ? toISODate(record.due_date) : null,
+    dueDate: record.task_id ? toISODate(record.due_date) : null,
     totalQuestionCount: record.total_question_count,
     completedQuestionCount: record.completed_question_count,
     totalPageCount: record.total_page_count,
@@ -32,14 +32,35 @@ function sanitizeHomework(record) {
     dayPlans: record.day_plans_json ? JSON.parse(record.day_plans_json) : [],
     createdAt: record.created_at,
     updatedAt: record.updated_at,
+    hasTask: Boolean(record.task_id),
+    taskId: record.task_id || null,
+    taskDate: toISODate(record.task_date),
+    taskStartTime: record.task_start_time || null,
+    taskEndTime: record.task_end_time || null,
+    taskDurationMinutes: record.task_duration_minutes ?? null,
   }
 }
 
-async function getAssignedResourceBook(studentId, subjectId, resourceBookId) {
+function isValidTime(value) {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value || '')
+}
+
+function computeEndTime(startTime, durationMinutes) {
+  const [startHour, startMinute] = startTime.split(':').map(Number)
+  const startMinutes = startHour * 60 + startMinute
+  const endMinutes = (startMinutes + durationMinutes) % (24 * 60)
+  return `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`
+}
+
+// studentTeacherId verilirse (öğretmen tarafı çağrısı), kaynak ayrıca öğretmenin
+// StudentTeacherResourceBooks'ta takip ettiği kaynaklardan olmalı — öğretmen sadece
+// kendi eklediği/takip ettiği kaynaktan ödev verebilir.
+async function getAssignedResourceBook(studentId, subjectId, resourceBookId, { studentTeacherId } = {}) {
   const requestDb = await withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
     subjectId: { type: sql.UniqueIdentifier, value: subjectId },
     resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+    ...(studentTeacherId ? { studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId } } : {}),
   })
   const result = await requestDb.query(`
     SELECT TOP 1 rb.id, rb.resource_type
@@ -48,7 +69,15 @@ async function getAssignedResourceBook(studentId, subjectId, resourceBookId) {
     WHERE srb.student_id = @studentId
       AND srb.resource_book_id = @resourceBookId
       AND rb.subject_id = @subjectId
-      AND rb.is_active = 1;
+      AND rb.is_active = 1
+      ${
+        studentTeacherId
+          ? `AND EXISTS (
+               SELECT 1 FROM dbo.StudentTeacherResourceBooks strb
+               WHERE strb.teacher_id = @studentTeacherId AND strb.resource_book_id = @resourceBookId
+             )`
+          : ''
+      };
   `)
 
   const record = result.recordset[0]
@@ -111,18 +140,27 @@ async function createTaskForHomework(studentId, homework, taskDate, resourceBook
 // h.due_date is always populated (falls back to assigned_date when the parent
 // doesn't pick a day), so it alone can't tell an actually-scheduled homework
 // apart from one that only lives in this list. Whether a dbo.Tasks row is
-// linked back via homework_id is the real signal of "assigned to a day".
+// linked back via homework_id is the real signal of "assigned to a day"; the
+// OUTER APPLY also surfaces that task's own date/time/duration so the UI can
+// show and edit the actual schedule instead of just a yes/no flag.
 const SELECT_HOMEWORK = `
   SELECT h.id, h.student_id, h.subject_id, s.name AS subject_name, h.resource_book_id, rb.name AS resource_book_name,
          rb.resource_type AS resource_book_type, p.name AS publisher_name,
          h.title, h.description, h.assigned_date, h.due_date, h.total_question_count, h.completed_question_count,
          h.total_page_count,
          h.priority, h.status, h.is_split, h.day_plans_json, h.created_at, h.updated_at,
-         CASE WHEN EXISTS (SELECT 1 FROM dbo.Tasks t WHERE t.homework_id = h.id) THEN 1 ELSE 0 END AS has_task
+         t.id AS task_id, t.date AS task_date, t.start_time AS task_start_time, t.end_time AS task_end_time,
+         t.duration_minutes AS task_duration_minutes
   FROM dbo.Homeworks h
   INNER JOIN dbo.Subjects s ON s.id = h.subject_id
   LEFT JOIN dbo.ResourceBooks rb ON rb.id = h.resource_book_id
   LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+  OUTER APPLY (
+    SELECT TOP 1 tk.id, tk.date, tk.start_time, tk.end_time, tk.duration_minutes
+    FROM dbo.Tasks tk
+    WHERE tk.homework_id = h.id
+    ORDER BY tk.created_at DESC
+  ) t
 `
 
 // task_type = 'odev' olup hiçbir Homeworks kaydına bağlı olmayan (homework_id NULL) canlı
@@ -405,6 +443,133 @@ async function updateHomeworkHandler(request) {
   }
 }
 
+// Ödevlerim listesinde "Atama yapılmadı" altında kalan (henüz Tasks satırı
+// olmayan) ödevlere sonradan bir gün/saat/süre atamak veya var olan görevin
+// zamanlamasını düzenlemek için kullanılır. createTaskForHomework'ten farklı
+// olarak burada testIds bilgisi yok (ödev oluşturulduğunda seçilmemiş olabilir),
+// bu yüzden selected_test_ids_json boş bırakılır; bu sadece takvime yerleştirme
+// içindir, dijital cevap kağıdı testId eşlemesine dokunmaz.
+async function assignHomeworkTaskHandler(request) {
+  try {
+    const homeworkId = request.params.homeworkId
+    const payload = await request.json().catch(() => null)
+    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
+    if (error) {
+      return error
+    }
+
+    const date = payload?.date
+    const startTime = payload?.startTime
+    const durationMinutes = Number(payload?.durationMinutes)
+
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return json(400, { error: 'Geçerli bir tarih seçilmeli.' })
+    }
+    if (!isValidTime(startTime)) {
+      return json(400, { error: 'Geçerli bir başlangıç saati seçilmeli.' })
+    }
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
+      return json(400, { error: 'Süre 5 ile 480 dakika arasında olmalı.' })
+    }
+
+    const hwDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: homeworkId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const hwResult = await hwDb.query(`
+      SELECT h.id, h.resource_book_id, rb.resource_type, s.name AS subject_name,
+             h.title, h.total_question_count, h.completed_question_count, h.total_page_count, h.status
+      FROM dbo.Homeworks h
+      INNER JOIN dbo.Subjects s ON s.id = h.subject_id
+      LEFT JOIN dbo.ResourceBooks rb ON rb.id = h.resource_book_id
+      WHERE h.id = @id AND h.student_id = @studentId;
+    `)
+    const homework = hwResult.recordset[0]
+    if (!homework) {
+      return json(404, { error: 'Ödev bulunamadı.' })
+    }
+
+    const endTime = computeEndTime(startTime, durationMinutes)
+
+    const existingDb = await withRequest({
+      homeworkId: { type: sql.UniqueIdentifier, value: homeworkId },
+    })
+    const existingResult = await existingDb.query(`
+      SELECT TOP 1 id FROM dbo.Tasks WHERE homework_id = @homeworkId ORDER BY created_at DESC;
+    `)
+    const existingTaskId = existingResult.recordset[0]?.id
+
+    if (existingTaskId) {
+      const updateDb = await withRequest({
+        id: { type: sql.UniqueIdentifier, value: existingTaskId },
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        date: { type: sql.Date, value: date },
+        startTime: { type: sql.Char(5), value: startTime },
+        endTime: { type: sql.Char(5), value: endTime },
+        durationMinutes: { type: sql.Int, value: durationMinutes },
+      })
+      await updateDb.query(`
+        UPDATE dbo.Tasks
+        SET date = @date, start_time = @startTime, end_time = @endTime, duration_minutes = @durationMinutes
+        WHERE id = @id AND student_id = @studentId;
+      `)
+    } else {
+      const insertDb = await withRequest({
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        date: { type: sql.Date, value: date },
+        title: { type: sql.NVarChar(200), value: `${homework.subject_name} Ödevi` },
+        description: { type: sql.NVarChar(1000), value: homework.title },
+        subject: { type: sql.NVarChar(100), value: homework.subject_name },
+        taskType: { type: sql.NVarChar(40), value: 'odev' },
+        startTime: { type: sql.Char(5), value: startTime },
+        endTime: { type: sql.Char(5), value: endTime },
+        durationMinutes: { type: sql.Int, value: durationMinutes },
+        targetQuestionCount: { type: sql.Int, value: homework.total_question_count || null },
+        completedQuestionCount: { type: sql.Int, value: homework.completed_question_count || 0 },
+        status: { type: sql.NVarChar(30), value: homework.status || 'bekliyor' },
+        resourceBookId: { type: sql.UniqueIdentifier, value: homework.resource_book_id || null },
+        targetPageCount: {
+          type: sql.Int,
+          value: homework.resource_type === 'okuma_kitabi' ? homework.total_page_count || null : null,
+        },
+        homeworkId: { type: sql.UniqueIdentifier, value: homeworkId },
+      })
+      await insertDb.query(`
+        INSERT INTO dbo.Tasks (
+          student_id, date, title, description, subject, task_type, start_time, end_time,
+          duration_minutes, target_question_count, completed_question_count, status,
+          is_draft, resource_book_id, target_page_count, completed_page_count, homework_id
+        )
+        VALUES (
+          @studentId, @date, @title, @description, @subject, @taskType, @startTime, @endTime,
+          @durationMinutes, @targetQuestionCount, @completedQuestionCount, @status,
+          0, @resourceBookId, @targetPageCount, 0, @homeworkId
+        );
+      `)
+    }
+
+    const fetchDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: homeworkId },
+    })
+    const fetchResult = await fetchDb.query(`
+      ${SELECT_HOMEWORK}
+      WHERE h.id = @id;
+    `)
+
+    return json(200, { homework: sanitizeHomework(fetchResult.recordset[0]) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('assignHomeworkTaskHandler failed', error)
+    return json(500, { error: 'Görev oluşturulamadı.' })
+  }
+}
+
 async function deleteHomeworkHandler(request) {
   try {
     const homeworkId = request.params.homeworkId
@@ -461,5 +626,12 @@ module.exports = {
   listHomeworksHandler,
   createHomeworkHandler,
   updateHomeworkHandler,
+  assignHomeworkTaskHandler,
   deleteHomeworkHandler,
+  SELECT_HOMEWORK,
+  sanitizeHomework,
+  getAssignedResourceBook,
+  createTaskForHomework,
+  isValidTime,
+  computeEndTime,
 }

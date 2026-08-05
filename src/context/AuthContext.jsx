@@ -124,6 +124,24 @@ export function AuthProvider({ children }) {
     return data.user
   }
 
+  const impersonateUser = async (userId) => {
+    const data = await authRequest(`/api/panel-admin/users/${userId}/impersonate`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    setAuthUser(data.user)
+    return data.user
+  }
+
+  const returnToAdmin = async () => {
+    const data = await authRequest('/api/panel-admin/return-to-admin', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    setAuthUser(data.user)
+    return data.user
+  }
+
   const value = useMemo(
     () => ({
       authUser,
@@ -136,6 +154,8 @@ export function AuthProvider({ children }) {
       logout,
       enterStudent,
       returnToParent,
+      impersonateUser,
+      returnToAdmin,
       clearAuthFeedback,
       setAuthError,
     }),

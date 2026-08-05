@@ -544,6 +544,95 @@ function extractWeekNumber(name) {
   return match ? parseInt(match[1], 10) : null
 }
 
+async function fetchResourceBookTopicsWithTests(resourceBookId, studentId) {
+  const requestDb = await withRequest({
+    resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+  })
+  const topicsResult = await requestDb.query(`
+    SELECT id, resource_book_id, name, created_at
+    FROM dbo.ResourceBookTopics
+    WHERE resource_book_id = @resourceBookId;
+  `)
+
+  if (!topicsResult.recordset.length) {
+    return []
+  }
+
+  const testsRequestDb = await withRequest({
+    resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+  })
+  const testsResult = await testsRequestDb.query(`
+    SELECT tt.id, tt.topic_id, tt.topic_name, tt.name, tt.page_start, tt.page_end, tt.page_count, tt.question_count, tt.created_at
+    FROM dbo.ResourceBookTopicTests tt
+    INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
+    WHERE t.resource_book_id = @resourceBookId
+    ORDER BY tt.page_start ASC;
+  `)
+
+  const completedTestsDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+  })
+  const completedTestsResult = await completedTestsDb.query(`
+    SELECT test_results_json
+    FROM dbo.Tasks
+    WHERE student_id = @studentId AND resource_book_id = @resourceBookId AND test_results_json IS NOT NULL;
+  `)
+  const completedTestIds = new Set()
+  completedTestsResult.recordset.forEach((row) => {
+    let results
+    try {
+      results = JSON.parse(row.test_results_json)
+    } catch {
+      return
+    }
+    Object.keys(results || {}).forEach((testId) => completedTestIds.add(testId))
+  })
+
+  const testsByTopicId = new Map()
+  testsResult.recordset.forEach((test) => {
+    const list = testsByTopicId.get(test.topic_id) || []
+    list.push(test)
+    testsByTopicId.set(test.topic_id, list)
+  })
+
+  // Topics have no page number of their own, so order them by their earliest test's page — the
+  // order a student would actually encounter them in the book, not alphabetical.
+  return topicsResult.recordset
+    .map((topic) => {
+      const topicTests = testsByTopicId.get(topic.id) || []
+      const minPageStart = topicTests.length ? Math.min(...topicTests.map((t) => t.page_start)) : null
+      return { topic, topicTests, minPageStart }
+    })
+    .sort((a, b) => {
+      if (a.minPageStart === null && b.minPageStart === null) {
+        return new Date(a.topic.created_at) - new Date(b.topic.created_at)
+      }
+      if (a.minPageStart === null) return 1
+      if (b.minPageStart === null) return -1
+      if (a.minPageStart !== b.minPageStart) return a.minPageStart - b.minPageStart
+      // Tests independently paginated per topic (e.g. weekly denemeler each starting at
+      // page 1) tie on minPageStart — fall back to topic creation order in that case.
+      return new Date(a.topic.created_at) - new Date(b.topic.created_at)
+    })
+    .map(({ topic, topicTests }) => ({
+      ...sanitizeResourceBookTopic(topic),
+      // Weekly tests are independently paginated (each often starting at page 1), so they tie
+      // on page_start — sort by the week number embedded in the name (e.g. "05. Hafta - ...")
+      // instead, falling back to page_start when a name has no leading week number.
+      tests: [...topicTests]
+        .sort((a, b) => {
+          const weekA = extractWeekNumber(a.name)
+          const weekB = extractWeekNumber(b.name)
+          if (weekA !== null && weekB !== null && weekA !== weekB) return weekA - weekB
+          if (weekA !== null && weekB === null) return -1
+          if (weekA === null && weekB !== null) return 1
+          return a.page_start - b.page_start
+        })
+        .map((test) => sanitizeResourceBookTopicTest(test, completedTestIds)),
+    }))
+}
+
 async function listResourceBookTopicsForPanelHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
@@ -570,93 +659,7 @@ async function listResourceBookTopicsForPanelHandler(request) {
       return json(404, { error: 'Bu kaynak öğrenciye atanmamış.' })
     }
 
-    const requestDb = await withRequest({
-      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
-    })
-    const topicsResult = await requestDb.query(`
-      SELECT id, resource_book_id, name, created_at
-      FROM dbo.ResourceBookTopics
-      WHERE resource_book_id = @resourceBookId;
-    `)
-
-    if (!topicsResult.recordset.length) {
-      return json(200, { topics: [] })
-    }
-
-    const testsRequestDb = await withRequest({
-      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
-    })
-    const testsResult = await testsRequestDb.query(`
-      SELECT tt.id, tt.topic_id, tt.topic_name, tt.name, tt.page_start, tt.page_end, tt.page_count, tt.question_count, tt.created_at
-      FROM dbo.ResourceBookTopicTests tt
-      INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
-      WHERE t.resource_book_id = @resourceBookId
-      ORDER BY tt.page_start ASC;
-    `)
-
-    const completedTestsDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
-    })
-    const completedTestsResult = await completedTestsDb.query(`
-      SELECT test_results_json
-      FROM dbo.Tasks
-      WHERE student_id = @studentId AND resource_book_id = @resourceBookId AND test_results_json IS NOT NULL;
-    `)
-    const completedTestIds = new Set()
-    completedTestsResult.recordset.forEach((row) => {
-      let results
-      try {
-        results = JSON.parse(row.test_results_json)
-      } catch {
-        return
-      }
-      Object.keys(results || {}).forEach((testId) => completedTestIds.add(testId))
-    })
-
-    const testsByTopicId = new Map()
-    testsResult.recordset.forEach((test) => {
-      const list = testsByTopicId.get(test.topic_id) || []
-      list.push(test)
-      testsByTopicId.set(test.topic_id, list)
-    })
-
-    // Topics have no page number of their own, so order them by their earliest test's page — the
-    // order a student would actually encounter them in the book, not alphabetical.
-    const topics = topicsResult.recordset
-      .map((topic) => {
-        const topicTests = testsByTopicId.get(topic.id) || []
-        const minPageStart = topicTests.length ? Math.min(...topicTests.map((t) => t.page_start)) : null
-        return { topic, topicTests, minPageStart }
-      })
-      .sort((a, b) => {
-        if (a.minPageStart === null && b.minPageStart === null) {
-          return new Date(a.topic.created_at) - new Date(b.topic.created_at)
-        }
-        if (a.minPageStart === null) return 1
-        if (b.minPageStart === null) return -1
-        if (a.minPageStart !== b.minPageStart) return a.minPageStart - b.minPageStart
-        // Tests independently paginated per topic (e.g. weekly denemeler each starting at
-        // page 1) tie on minPageStart — fall back to topic creation order in that case.
-        return new Date(a.topic.created_at) - new Date(b.topic.created_at)
-      })
-      .map(({ topic, topicTests }) => ({
-        ...sanitizeResourceBookTopic(topic),
-        // Weekly tests are independently paginated (each often starting at page 1), so they tie
-        // on page_start — sort by the week number embedded in the name (e.g. "05. Hafta - ...")
-        // instead, falling back to page_start when a name has no leading week number.
-        tests: [...topicTests]
-          .sort((a, b) => {
-            const weekA = extractWeekNumber(a.name)
-            const weekB = extractWeekNumber(b.name)
-            if (weekA !== null && weekB !== null && weekA !== weekB) return weekA - weekB
-            if (weekA !== null && weekB === null) return -1
-            if (weekA === null && weekB !== null) return 1
-            return a.page_start - b.page_start
-          })
-          .map((test) => sanitizeResourceBookTopicTest(test, completedTestIds)),
-      }))
-
+    const topics = await fetchResourceBookTopicsWithTests(resourceBookId, studentId)
     return json(200, { topics })
   } catch (error) {
     if (isConfigError(error)) {
@@ -1424,6 +1427,7 @@ module.exports = {
   createResourceBookTopicHandler,
   updateResourceBookTopicHandler,
   listResourceBookTopicsForPanelHandler,
+  fetchResourceBookTopicsWithTests,
   listResourceBookTopicTestsHandler,
   createResourceBookTopicTestHandler,
   updateResourceBookTopicTestHandler,

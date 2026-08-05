@@ -1,10 +1,14 @@
-import { Trash2 } from 'lucide-react'
+import { CalendarPlus, Clock, Trash2 } from 'lucide-react'
 import { cn } from '../../ui/utils'
 import { isHomeworkCompleted, isHomeworkOverdue } from './homeworkDisplay'
 import PublisherBadge from './PublisherBadge'
 import HomeworkProgress from './HomeworkProgress'
 
-export default function HomeworkItemCard({ homework, onDeleteRequest }) {
+function formatShortDate(dateISO) {
+  return new Date(dateISO).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })
+}
+
+export default function HomeworkItemCard({ homework, onDeleteRequest, onAssignTaskRequest }) {
   const completed = isHomeworkCompleted(homework)
   const overdue = isHomeworkOverdue(homework)
 
@@ -45,6 +49,27 @@ export default function HomeworkItemCard({ homework, onDeleteRequest }) {
 
       <div className="flex shrink-0 items-center justify-between gap-2.5 sm:justify-end">
         <HomeworkProgress homework={homework} completed={completed} />
+        {onAssignTaskRequest && !homework.isTaskOnly ? (
+          homework.hasTask ? (
+            <button
+              type="button"
+              onClick={() => onAssignTaskRequest(homework)}
+              className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-panel-blue-soft px-2.5 py-1 text-[11px] font-semibold text-panel-blue hover:bg-panel-blue hover:text-white"
+            >
+              <Clock size={12} aria-hidden="true" />
+              {formatShortDate(homework.taskDate)}, {homework.taskStartTime}–{homework.taskEndTime}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onAssignTaskRequest(homework)}
+              className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-panel-border px-2.5 py-1 text-[11px] font-semibold text-panel-text-muted hover:border-panel-blue hover:text-panel-blue"
+            >
+              <CalendarPlus size={12} aria-hidden="true" />
+              Görev Oluştur
+            </button>
+          )
+        ) : null}
         {onDeleteRequest && !homework.isTaskOnly ? (
           <button
             type="button"

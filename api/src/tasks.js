@@ -50,6 +50,7 @@ function sanitizeTask(record) {
     reflectionAnswers: record.reflection_answers_json ? JSON.parse(record.reflection_answers_json) : undefined,
     completedSubGoals: record.completed_sub_goals_json ? JSON.parse(record.completed_sub_goals_json) : [],
     resourceBookId: record.resource_book_id || undefined,
+    resourceBookName: record.resource_book_name || undefined,
     resourceType: record.resource_type || undefined,
     hasAnswerKey: record.has_answer_key === null || record.has_answer_key === undefined ? undefined : Boolean(record.has_answer_key),
     publisherName: record.publisher_name || undefined,
@@ -107,7 +108,7 @@ const SELECT_TASK = `
          t.current_page_number, t.priority, t.status, t.description, t.parent_note, t.created_by,
          t.notes, t.completed_at, t.rescheduled_from, t.rescheduled_to, t.reschedule_reason, t.correct_count, t.wrong_count,
          t.blank_count, t.difficulty, t.emotion, t.reflection_answers_json, t.completed_sub_goals_json,
-         t.resource_book_id, t.selected_test_ids_json, t.answers_json, t.test_results_json, rb.resource_type, rb.has_answer_key, p.name AS publisher_name,
+         t.resource_book_id, t.selected_test_ids_json, t.answers_json, t.test_results_json, rb.name AS resource_book_name, rb.resource_type, rb.has_answer_key, p.name AS publisher_name,
          t.created_at, t.updated_at
   FROM dbo.Tasks t
   LEFT JOIN dbo.ResourceBooks rb ON rb.id = t.resource_book_id
@@ -1131,4 +1132,6 @@ module.exports = {
   removeTaskTestHandler,
   getWeeklyPlanStatusHandler,
   setWeeklyPlanStatusHandler,
+  SELECT_TASK,
+  sanitizeTask,
 }

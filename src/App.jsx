@@ -9,11 +9,14 @@ const AuthPage = lazy(() => import('./marketing/AuthPage'))
 const PaywallPage = lazy(() => import('./marketing/PaywallPage'))
 const StudentApp = lazy(() => import('./panels/student/StudentApp'))
 const ParentApp = lazy(() => import('./panels/parent/ParentApp'))
+const TeacherApp = lazy(() => import('./panels/teacher/TeacherApp'))
 
 const ALLOWED_ENTITLEMENT_STATUSES = new Set(['active', 'trial', 'grace_period'])
 
 function panelPathForRole(role) {
-  return role === 'ebeveyn' ? '/parent/dashboard' : '/student/today'
+  if (role === 'ebeveyn') return '/parent/dashboard'
+  if (role === 'ogretmen') return '/teacher/students'
+  return '/student/today'
 }
 
 function RootRoute() {
@@ -51,7 +54,10 @@ function RequireRole({ role, children }) {
     return <Navigate to={panelPathForRole(authUser.role)} replace />
   }
 
-  if (!authUser.isAdmin && !ALLOWED_ENTITLEMENT_STATUSES.has(authUser.entitlement?.status)) {
+  // Öğretmen ödeme yapan taraf değil (öğrencinin velisi ödüyor) — admin gibi paywall'dan muaf.
+  // Admin bir üyenin panelini "Panele Giriş Yap" ile görüntülüyorsa (actingAdmin) da muaf tutulur.
+  const bypassPaywall = authUser.isAdmin || authUser.role === 'ogretmen' || Boolean(authUser.actingAdmin)
+  if (!bypassPaywall && !ALLOWED_ENTITLEMENT_STATUSES.has(authUser.entitlement?.status)) {
     return <Navigate to="/paywall" replace />
   }
 
@@ -78,6 +84,14 @@ export default function App() {
           element={
             <RequireRole role="ebeveyn">
               <ParentApp />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/teacher/*"
+          element={
+            <RequireRole role="ogretmen">
+              <TeacherApp />
             </RequireRole>
           }
         />

@@ -78,6 +78,11 @@ function createSessionToken(user, options = {}) {
     payload.actingParentName = options.actingParentName
   }
 
+  if (options.actingAdminId) {
+    payload.actingAdminId = options.actingAdminId
+    payload.actingAdminName = options.actingAdminName
+  }
+
   return jwt.sign(payload, jwtSecret, {
     expiresIn: tokenTtlSeconds,
     issuer: 'techcoach-api',
