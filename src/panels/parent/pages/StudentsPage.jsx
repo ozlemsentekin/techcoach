@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Award, BookOpen, Check, GraduationCap, Search, UserRound, Users, X } from 'lucide-react'
+import { Award, BookOpen, Check, GraduationCap, ListChecks, Search, UserRound, Users, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
@@ -11,6 +11,7 @@ import { MotionDiv } from '../../ui/motion'
 import StudentTeacherModal from '../components/StudentTeacherModal'
 import StudentProfileModal from '../components/StudentProfileModal'
 import StudentReportCardModal from '../components/StudentReportCardModal'
+import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
 
 const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -342,6 +343,7 @@ export default function StudentsPage() {
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [resourceModalStudent, setResourceModalStudent] = useState(null)
+  const [libraryModalStudent, setLibraryModalStudent] = useState(null)
   const [teacherModalStudent, setTeacherModalStudent] = useState(null)
   const [profileModalStudent, setProfileModalStudent] = useState(null)
   const [reportCardStudent, setReportCardStudent] = useState(null)
@@ -443,6 +445,7 @@ export default function StudentsPage() {
                           items={[
                             { label: 'Öğretmenler', icon: GraduationCap, onClick: () => setTeacherModalStudent(student) },
                             { label: 'Kaynaklar', icon: BookOpen, onClick: () => setResourceModalStudent(student) },
+                            { label: 'İçerik Takibi', icon: ListChecks, onClick: () => setLibraryModalStudent(student) },
                             { label: 'Profil', icon: UserRound, onClick: () => setProfileModalStudent(student) },
                             { label: 'LGS Karnesi', icon: Award, onClick: () => setReportCardStudent(student) },
                           ]}
@@ -464,6 +467,9 @@ export default function StudentsPage() {
           onSaved={handleResourcesSaved}
           onClose={() => setResourceModalStudent(null)}
         />
+      ) : null}
+      {libraryModalStudent ? (
+        <StudentResourceLibraryModal student={libraryModalStudent} onClose={() => setLibraryModalStudent(null)} />
       ) : null}
       {teacherModalStudent ? (
         <StudentTeacherModal

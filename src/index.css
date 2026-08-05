@@ -51,13 +51,7 @@
   --color-student-theme-border: var(--color-panel-blue);
   --color-student-theme-text: var(--color-panel-blue);
   --color-student-theme-button-text: #ffffff;
-  /*
-   * Beyaz metinle birlikte kullanılan rozetler (ör. saat rozetleri) için tema ana
-   * rengini koyulaştırılmış hali. Açık tonlu temalarda (Pembe, Turuncu, Yeşil) çıplak
-   * primary + beyaz metin WCAG AA kontrastının (4.5:1) altında kalıyordu; bu token tüm
-   * temalarda ≥4.5:1 kontrast sağlayacak şekilde hesaplanmıştır.
-   */
-  --color-student-theme-badge-bg: color-mix(in srgb, var(--color-student-theme-primary) 65%, #1f2937);
+  --color-student-theme-badge-bg: #4d4b73;
 
   --shadow-panel-1: 0 1px 2px rgba(30, 27, 20, 0.05), 0 1px 6px rgba(30, 27, 20, 0.04);
   --shadow-panel-2: 0 2px 4px rgba(30, 27, 20, 0.06), 0 6px 16px rgba(30, 27, 20, 0.07);
@@ -115,6 +109,7 @@ body {
   --color-student-theme-border: #7a6758;
   --color-student-theme-text: #7a6758;
   --color-student-theme-button-text: #ffffff;
+  --color-student-theme-badge-bg: #5a514c;
 }
 
 [data-theme='pink'] {
@@ -140,6 +135,7 @@ body {
   --color-student-theme-border: #c98a9c;
   --color-student-theme-text: #c98a9c;
   --color-student-theme-button-text: #ffffff;
+  --color-student-theme-badge-bg: #8e6879;
 }
 
 [data-theme='blue'] {
@@ -165,6 +161,7 @@ body {
   --color-student-theme-border: #4f78a8;
   --color-student-theme-text: #4f78a8;
   --color-student-theme-button-text: #ffffff;
+  --color-student-theme-badge-bg: #3e5c80;
 }
 
 [data-theme='purple'] {
@@ -190,6 +187,7 @@ body {
   --color-student-theme-border: #6f63a8;
   --color-student-theme-text: #6f63a8;
   --color-student-theme-button-text: #ffffff;
+  --color-student-theme-badge-bg: #534f80;
 }
 
 [data-theme='green'] {
@@ -215,6 +213,7 @@ body {
   --color-student-theme-border: #71815c;
   --color-student-theme-text: #71815c;
   --color-student-theme-button-text: #ffffff;
+  --color-student-theme-badge-bg: #54624f;
 }
 
 [data-theme='orange'] {
@@ -240,6 +239,7 @@ body {
   --color-student-theme-border: #b85f22;
   --color-student-theme-text: #b85f22;
   --color-student-theme-button-text: #ffffff;
+  --color-student-theme-badge-bg: #854c29;
 }
 
 [data-theme='black'] {
@@ -265,6 +265,7 @@ body {
   --color-student-theme-border: #222831;
   --color-student-theme-text: #222831;
   --color-student-theme-button-text: #ffffff;
+  --color-student-theme-badge-bg: #212833;
 }
 
 /*
@@ -294,6 +295,7 @@ body {
   --color-student-theme-border: #1c2b5e;
   --color-student-theme-text: #1c2b5e;
   --color-student-theme-button-text: #ffffff;
+  --color-student-theme-badge-bg: #1d2a50;
 }
 
 .panel-card {
@@ -348,7 +350,22 @@ body {
 }
 
 .student-theme-section-muted {
-  color: rgba(255, 255, 255, 0.88);
+  color: rgba(255, 255, 255, 0.94);
+}
+
+/*
+ * Beyaz metinle kullanılan saat rozetleri için tema ana renginin koyulaştırılmış hali.
+ * Açık tonlu temalarda (Pembe, Turuncu, Yeşil) çıplak primary + beyaz metin WCAG AA
+ * kontrastının (4.5:1) altında kalıyordu (Pembe'de ~2.8:1). Her tema için önceden
+ * hesaplanmış sabit (literal) bir renk kullanılıyor — color-mix() KULLANILMIYOR, çünkü
+ * derleme boru hattı color-mix()'i statik/@supports ikiliye dönüştürüyor ve bu durum
+ * data-theme geçersiz kılmalarının tarayıcıda güvenilir şekilde uygulanmamasına yol
+ * açabiliyor. --color-student-theme-badge-bg her [data-theme] bloğunda ayrı ayrı
+ * tanımlıdır (bkz. yukarıdaki tema blokları).
+ */
+.student-theme-time-badge {
+  background-color: var(--color-student-theme-badge-bg);
+  color: #ffffff;
 }
 
 [data-theme='black'] .student-theme-banner,

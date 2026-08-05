@@ -394,7 +394,7 @@ export default function TaskListCard({
         {emphasizeTime && task.startTime && !timeline ? (
           <span
             className={`inline-flex h-7 items-center gap-1.5 rounded-[10px] px-2.5 text-xs font-bold sm:h-9 sm:px-3 sm:text-sm ${
-              isBreakTask ? 'bg-panel-sage text-white' : 'bg-student-theme-badge-bg text-student-theme-button-text'
+              isBreakTask ? 'bg-panel-sage text-white' : 'student-theme-time-badge'
             }`}
           >
             <Clock size={15} aria-hidden="true" />
@@ -497,7 +497,7 @@ export default function TaskListCard({
         {isCompactBreakRow ? null : (
           <div className="col-start-1 row-span-4 min-w-0 pt-0.5">
             <p className={`inline-flex h-7 min-w-14 items-center justify-center rounded-[10px] px-2 text-xs font-extrabold leading-none shadow-sm sm:h-9 sm:min-w-16 sm:px-2.5 sm:text-[15px] ${
-              isActivityTask ? SOFT_TIME_BADGE_CLASS : 'bg-student-theme-badge-bg text-student-theme-button-text'
+              isActivityTask ? SOFT_TIME_BADGE_CLASS : 'student-theme-time-badge'
             } ${isNowTask ? 'ring-2 ring-student-theme-primary ring-offset-2 ring-offset-panel-surface' : ''}`}>
               {task.startTime || '--:--'}
             </p>
@@ -506,8 +506,14 @@ export default function TaskListCard({
         )}
 
         <div className="relative col-start-2 row-span-4 flex justify-center">
-          {!isFirst ? <span className="absolute top-0 h-5 w-px bg-panel-border" aria-hidden="true" /> : null}
-          {!isLast ? <span className="absolute bottom-0 top-5 w-px bg-panel-border" aria-hidden="true" /> : null}
+          {isCompactBreakRow ? (
+            <span className="absolute inset-y-0 w-0 border-l-2 border-dashed border-panel-border-strong" aria-hidden="true" />
+          ) : (
+            <>
+              {!isFirst ? <span className="absolute top-0 h-5 w-0 border-l-2 border-dashed border-panel-border-strong" aria-hidden="true" /> : null}
+              {!isLast ? <span className="absolute bottom-0 top-5 w-0 border-l-2 border-dashed border-panel-border-strong" aria-hidden="true" /> : null}
+            </>
+          )}
           {isCompactBreakRow ? null : (
             <span
               className={`relative mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 bg-panel-surface sm:h-5 sm:w-5 ${

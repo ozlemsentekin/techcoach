@@ -3,7 +3,7 @@ const { isConfigError } = require('./config')
 const { clearSessionHeaders, json } = require('./http')
 const { requireAdmin } = require('./admin')
 const { isSessionError, readSessionToken, verifySessionToken } = require('./security')
-const { requireStudentContext } = require('./studentScope')
+const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
 
 function sanitizeSubject(record) {
   return {
@@ -77,7 +77,11 @@ function sanitizeResourceBookTopic(record) {
   }
 }
 
-function sanitizeResourceBookTopicTest(record, completedTestIds) {
+function sanitizeResourceBookTopicTest(record, completedTestIds, manualTestIds, testResultCounts, assignedTestIds) {
+  const isGraded = Boolean(completedTestIds && completedTestIds.has(record.id))
+  const isManual = Boolean(manualTestIds && manualTestIds.has(record.id))
+  const result = testResultCounts ? testResultCounts.get(record.id) : null
+  const completed = isGraded || isManual
   return {
     id: record.id,
     topicId: record.topic_id,
@@ -88,7 +92,14 @@ function sanitizeResourceBookTopicTest(record, completedTestIds) {
     pageCount: record.page_count,
     questionCount: record.question_count,
     createdAt: record.created_at,
-    completed: completedTestIds ? completedTestIds.has(record.id) : false,
+    completed,
+    completionSource: isGraded ? 'graded' : isManual ? 'manual' : null,
+    correctCount: result ? result.correct : undefined,
+    wrongCount: result ? result.wrong : undefined,
+    blankCount: result ? result.blank : undefined,
+    // Zaten bir göreve eklenmiş ama henüz tamamlanmamış testler (yeni bir ödeve tekrar
+    // eklenmeden önce panelde ayırt edilebilsin diye).
+    assignedPending: !completed && Boolean(assignedTestIds && assignedTestIds.has(record.id)),
   }
 }
 
@@ -626,25 +637,55 @@ async function fetchResourceBookTopicsWithTests(resourceBookId, studentId) {
     ORDER BY tt.page_start ASC;
   `)
 
-  const completedTestsDb = await withRequest({
+  const tasksDb = await withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
     resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
   })
-  const completedTestsResult = await completedTestsDb.query(`
-    SELECT test_results_json
+  const tasksResult = await tasksDb.query(`
+    SELECT selected_test_ids_json, test_results_json
     FROM dbo.Tasks
-    WHERE student_id = @studentId AND resource_book_id = @resourceBookId AND test_results_json IS NOT NULL;
+    WHERE student_id = @studentId AND resource_book_id = @resourceBookId AND selected_test_ids_json IS NOT NULL;
   `)
+  const assignedTestIds = new Set()
   const completedTestIds = new Set()
-  completedTestsResult.recordset.forEach((row) => {
+  const testResultCounts = new Map()
+  tasksResult.recordset.forEach((row) => {
+    let testIds
+    try {
+      testIds = JSON.parse(row.selected_test_ids_json) || []
+    } catch {
+      testIds = []
+    }
+    testIds.forEach((testId) => assignedTestIds.add(testId))
+
+    if (!row.test_results_json) return
     let results
     try {
       results = JSON.parse(row.test_results_json)
     } catch {
       return
     }
-    Object.keys(results || {}).forEach((testId) => completedTestIds.add(testId))
+    Object.entries(results || {}).forEach(([testId, result]) => {
+      completedTestIds.add(testId)
+      const existing = testResultCounts.get(testId)
+      if (!existing || (result?.gradedAt && (!existing.gradedAt || result.gradedAt > existing.gradedAt))) {
+        testResultCounts.set(testId, result)
+      }
+    })
   })
+
+  const manualCompletionsDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+  })
+  const manualCompletionsResult = await manualCompletionsDb.query(`
+    SELECT smtc.test_id
+    FROM dbo.StudentManualTestCompletions smtc
+    INNER JOIN dbo.ResourceBookTopicTests tt ON tt.id = smtc.test_id
+    INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
+    WHERE smtc.student_id = @studentId AND t.resource_book_id = @resourceBookId;
+  `)
+  const manualTestIds = new Set(manualCompletionsResult.recordset.map((row) => row.test_id))
 
   const testsByTopicId = new Map()
   testsResult.recordset.forEach((test) => {
@@ -686,7 +727,7 @@ async function fetchResourceBookTopicsWithTests(resourceBookId, studentId) {
           if (weekA === null && weekB !== null) return 1
           return a.page_start - b.page_start
         })
-        .map((test) => sanitizeResourceBookTopicTest(test, completedTestIds)),
+        .map((test) => sanitizeResourceBookTopicTest(test, completedTestIds, manualTestIds, testResultCounts, assignedTestIds)),
     }))
 }
 
@@ -729,6 +770,94 @@ async function listResourceBookTopicsForPanelHandler(request) {
 
     console.error('listResourceBookTopicsForPanelHandler failed', error)
     return json(500, { error: 'Konular yüklenemedi.' })
+  }
+}
+
+async function verifyStudentTestAssignment(studentId, testId) {
+  const requestDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    testId: { type: sql.UniqueIdentifier, value: testId },
+  })
+  const result = await requestDb.query(`
+    SELECT TOP 1 tt.id
+    FROM dbo.ResourceBookTopicTests tt
+    INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
+    INNER JOIN dbo.ResourceBooks rb ON rb.id = t.resource_book_id
+    INNER JOIN dbo.StudentResourceBooks srb ON srb.resource_book_id = rb.id AND srb.student_id = @studentId
+    WHERE tt.id = @testId AND rb.is_active = 1;
+  `)
+  return Boolean(result.recordset[0])
+}
+
+async function markResourceBookTopicTestCompletionHandler(request) {
+  try {
+    const { error, studentId, actorId } = await requireStudentWriteContext(request)
+    if (error) {
+      return error
+    }
+
+    const testId = request.params.testId
+    const isAssigned = await verifyStudentTestAssignment(studentId, testId)
+    if (!isAssigned) {
+      return json(404, { error: 'Test bu öğrenciye atanmış bir kaynakta bulunamadı.' })
+    }
+
+    const requestDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      testId: { type: sql.UniqueIdentifier, value: testId },
+      markedByUserId: { type: sql.UniqueIdentifier, value: actorId },
+    })
+    await requestDb.query(`
+      INSERT INTO dbo.StudentManualTestCompletions (student_id, test_id, marked_by_user_id)
+      SELECT @studentId, @testId, @markedByUserId
+      WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.StudentManualTestCompletions WHERE student_id = @studentId AND test_id = @testId
+      );
+    `)
+
+    return json(200, { success: true, completionSource: 'manual' })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('markResourceBookTopicTestCompletionHandler failed', error)
+    return json(500, { error: 'Test tamamlandı olarak işaretlenemedi.' })
+  }
+}
+
+async function unmarkResourceBookTopicTestCompletionHandler(request) {
+  try {
+    const { error, studentId } = await requireStudentWriteContext(request)
+    if (error) {
+      return error
+    }
+
+    const testId = request.params.testId
+    const requestDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      testId: { type: sql.UniqueIdentifier, value: testId },
+    })
+    await requestDb.query(`
+      DELETE FROM dbo.StudentManualTestCompletions WHERE student_id = @studentId AND test_id = @testId;
+    `)
+
+    return json(200, { success: true, completionSource: null })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('unmarkResourceBookTopicTestCompletionHandler failed', error)
+    return json(500, { error: 'İşaret kaldırılamadı.' })
   }
 }
 
@@ -1485,6 +1614,8 @@ module.exports = {
   createResourceBookTopicHandler,
   updateResourceBookTopicHandler,
   listResourceBookTopicsForPanelHandler,
+  markResourceBookTopicTestCompletionHandler,
+  unmarkResourceBookTopicTestCompletionHandler,
   fetchResourceBookTopicsWithTests,
   listResourceBookTopicTestsHandler,
   createResourceBookTopicTestHandler,

@@ -381,7 +381,9 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate }) {
                               className={`flex items-center gap-2 rounded-lg px-2 py-1 text-xs ${
                                 test.completed
                                   ? 'cursor-not-allowed opacity-50'
-                                  : 'hover:bg-student-theme-soft'
+                                  : test.assignedPending
+                                    ? 'bg-panel-accent-soft hover:bg-panel-accent-soft/80'
+                                    : 'hover:bg-student-theme-soft'
                               }`}
                             >
                               {test.completed ? (

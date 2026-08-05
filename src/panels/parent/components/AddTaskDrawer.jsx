@@ -50,6 +50,7 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
   }))
   const [error, setError] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const durationMinutes = computeDurationMinutes(form.startTime, form.endTime)
 
@@ -105,8 +106,9 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
     }
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
+    if (saving || deleting) return
 
     if (!form.title.trim()) {
       setError('Görev adı boş bırakılamaz.')
@@ -122,21 +124,27 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
     }
 
     setError('')
-    onSave({
-      title: form.title.trim(),
-      taskType: form.taskType,
-      subject: form.subject.trim() || undefined,
-      topic: form.topic.trim() || undefined,
-      date: form.date,
-      startTime: form.startTime,
-      endTime: form.endTime,
-      durationMinutes,
-      targetQuestionCount: form.targetQuestionCount ? Number(form.targetQuestionCount) : undefined,
-      targetPageCount: isReadingTask && form.targetPageCount ? Number(form.targetPageCount) : undefined,
-      priority: form.priority,
-      description: form.description.trim() || undefined,
-      parentNote: form.parentNote.trim() || undefined,
-    })
+    setSaving(true)
+    try {
+      await onSave({
+        title: form.title.trim(),
+        taskType: form.taskType,
+        subject: form.subject.trim() || undefined,
+        topic: form.topic.trim() || undefined,
+        date: form.date,
+        startTime: form.startTime,
+        endTime: form.endTime,
+        durationMinutes,
+        targetQuestionCount: form.targetQuestionCount ? Number(form.targetQuestionCount) : undefined,
+        targetPageCount: isReadingTask && form.targetPageCount ? Number(form.targetPageCount) : undefined,
+        priority: form.priority,
+        description: form.description.trim() || undefined,
+        parentNote: form.parentNote.trim() || undefined,
+      })
+    } catch (err) {
+      setError(err.message || 'Görev kaydedilirken bir hata oluştu, tekrar deneyin.')
+      setSaving(false)
+    }
   }
 
   return (
@@ -332,7 +340,7 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
             <button
               type="button"
               onClick={handleDelete}
-              disabled={deleting}
+              disabled={deleting || saving}
               className="flex h-12 items-center justify-center gap-2 rounded-xl border border-panel-warm/40 px-4 text-sm font-semibold text-panel-warm hover:bg-panel-warm/10 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} aria-hidden="true" />}
@@ -341,9 +349,10 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
           ) : null}
           <button
             type="submit"
-            disabled={deleting}
-            className="flex-1 rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+            disabled={deleting || saving}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
           >
+            {saving ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : null}
             {initialTask ? 'Değişiklikleri Kaydet' : 'Görevi Ekle'}
           </button>
         </div>

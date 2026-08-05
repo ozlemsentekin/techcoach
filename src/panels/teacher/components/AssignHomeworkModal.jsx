@@ -1,5 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, BookOpen, CalendarDays, Check, ChevronDown, ChevronRight, ListChecks, Loader2, Search, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  BookOpen,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ListChecks,
+  Loader2,
+  Search,
+  X,
+  XCircle,
+} from 'lucide-react'
 import { todayISODate } from '../../../utils/time'
 import Badge from '../../ui/Badge'
 import LoadingState from '../../shared/LoadingState'
@@ -58,21 +71,20 @@ function filterTopicsBySearch(topics, query) {
     .filter(Boolean)
 }
 
-function ResourceBookAvatar({ book, size = 'md' }) {
-  const dimension = size === 'lg' ? 'h-12 w-12' : 'h-8 w-8'
+function ResourceBookCover({ book }) {
   if (book?.imageUrl) {
     return (
       <img
         src={book.imageUrl}
         alt={`${book.name} görseli`}
-        className={`${dimension} shrink-0 rounded-lg border border-panel-border object-cover`}
+        className="aspect-[3/4] w-full rounded-lg border border-panel-border object-cover"
       />
     )
   }
 
   return (
-    <span className={`flex ${dimension} shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue`}>
-      <BookOpen size={size === 'lg' ? 20 : 15} aria-hidden="true" />
+    <span className="flex aspect-[3/4] w-full items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
+      <BookOpen size={28} aria-hidden="true" />
     </span>
   )
 }
@@ -227,7 +239,10 @@ export default function AssignHomeworkModal({ studentTeacherId, subjectName, def
     <div className="fixed inset-0 z-50 flex justify-center bg-black/40 sm:items-center sm:p-4">
       <form
         onSubmit={handleSubmit}
-        className="flex h-full w-full flex-col overflow-hidden bg-panel-surface sm:h-[85vh] sm:max-h-[720px] sm:max-w-xl sm:rounded-2xl sm:shadow-panel-2"
+        className={cn(
+          'flex h-full w-full flex-col overflow-hidden bg-panel-surface sm:h-auto sm:max-h-[90vh] sm:rounded-2xl sm:shadow-panel-2',
+          step === 'source' ? 'sm:max-w-3xl' : 'sm:max-w-xl',
+        )}
       >
         {/* Koyu başlık çubuğu */}
         <div className="flex shrink-0 items-center justify-between gap-3 bg-panel-blue px-4 py-3 text-white">
@@ -292,23 +307,23 @@ export default function AssignHomeworkModal({ studentTeacherId, subjectName, def
               ) : resourceBooks.length === 0 ? (
                 <p className="p-2 text-sm text-panel-text-muted">Bu öğrenci için takip edilen kaynak yok.</p>
               ) : (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                   {resourceBooks.map((book) => (
                     <button
                       key={book.id}
                       type="button"
                       onClick={() => handleSelectResourceBook(book)}
-                      className="flex items-center gap-2.5 rounded-xl border border-panel-border p-2.5 text-left hover:border-panel-blue"
+                      className="flex flex-col items-stretch gap-2 rounded-xl border border-panel-border p-2.5 text-left transition-colors hover:border-panel-blue hover:bg-panel-blue-soft/40"
                     >
-                      <ResourceBookAvatar book={book} />
-                      <div className="min-w-0">
+                      <ResourceBookCover book={book} />
+                      <div className="flex min-w-0 flex-col gap-1">
                         {book.publisherName ? (
-                          <Badge tone="lilac" className="mb-0.5 w-fit">
+                          <Badge tone="lilac" className="w-fit">
                             {book.publisherName}
                           </Badge>
                         ) : null}
-                        <p className="truncate text-sm font-semibold text-panel-text">{book.name}</p>
-                        {book.subjectName ? <p className="truncate text-xs text-panel-text-muted">{book.subjectName}</p> : null}
+                        <p className="text-sm font-semibold leading-snug text-panel-text">{book.name}</p>
+                        {book.subjectName ? <p className="text-xs text-panel-text-muted">{book.subjectName}</p> : null}
                       </div>
                     </button>
                   ))}
@@ -359,7 +374,11 @@ export default function AssignHomeworkModal({ studentTeacherId, subjectName, def
                                   <label
                                     key={test.id}
                                     className={`flex items-center gap-2 rounded-lg px-2 py-0.5 text-xs ${
-                                      test.completed ? 'cursor-not-allowed opacity-50' : 'hover:bg-panel-blue-soft'
+                                      test.completed
+                                        ? 'cursor-not-allowed opacity-50'
+                                        : test.assignedPending
+                                          ? 'bg-panel-accent-soft hover:bg-panel-accent-soft/80'
+                                          : 'hover:bg-panel-blue-soft'
                                     }`}
                                   >
                                     {test.completed ? (
@@ -381,6 +400,21 @@ export default function AssignHomeworkModal({ studentTeacherId, subjectName, def
                                       ) : null}
                                       <span className="truncate">
                                         {test.name} · s.{test.pageStart}-{test.pageEnd} · {test.questionCount} soru
+                                        {test.completed && test.correctCount != null ? (
+                                          <span className="ml-1 text-[10px] text-panel-text-muted">
+                                            {'('}
+                                            <span className="inline-flex items-center gap-0.5 align-middle text-panel-sage">
+                                              <CheckCircle2 size={9} aria-hidden="true" />
+                                              {test.correctCount}D
+                                            </span>
+                                            {', '}
+                                            <span className="inline-flex items-center gap-0.5 align-middle text-panel-red">
+                                              <XCircle size={9} aria-hidden="true" />
+                                              {test.wrongCount}Y
+                                            </span>
+                                            {`, ${test.blankCount}B)`}
+                                          </span>
+                                        ) : null}
                                       </span>
                                     </span>
                                   </label>

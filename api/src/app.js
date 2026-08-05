@@ -61,6 +61,8 @@ const {
   createResourceBookTopicHandler,
   updateResourceBookTopicHandler,
   listResourceBookTopicsForPanelHandler,
+  markResourceBookTopicTestCompletionHandler,
+  unmarkResourceBookTopicTestCompletionHandler,
   listResourceBookTopicTestsHandler,
   createResourceBookTopicTestHandler,
   updateResourceBookTopicTestHandler,
@@ -669,6 +671,20 @@ app.http('panel-resource-book-topics', {
   methods: ['GET'],
   route: 'panel/resource-book-topics',
   handler: listResourceBookTopicsForPanelHandler,
+})
+
+app.http('panel-resource-book-topic-test-completion-mark', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel/resource-book-topic-tests/{testId}/completion',
+  handler: markResourceBookTopicTestCompletionHandler,
+})
+
+app.http('panel-resource-book-topic-test-completion-unmark', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel/resource-book-topic-tests/{testId}/completion',
+  handler: unmarkResourceBookTopicTestCompletionHandler,
 })
 
 app.http('panel-admin-resource-book-topic-tests-list', {

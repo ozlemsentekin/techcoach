@@ -56,11 +56,13 @@ export async function getDayPlan(date) {
 export async function cleanupUnlinkedHomeworkTasksForWeek(weekStartDateISO) {
   const weekDates = getWeekDates(weekStartDateISO)
 
-  for (const date of weekDates) {
-    const { draftTasks, liveTasks } = await fetchDayTasks(date)
-    const unlinkedHomeworkTasks = [...draftTasks, ...liveTasks].filter((task) => task.taskType === 'odev' && !task.homeworkId)
-    await Promise.all(unlinkedHomeworkTasks.map((task) => removeTask(task.id)))
-  }
+  await Promise.all(
+    weekDates.map(async (date) => {
+      const { draftTasks, liveTasks } = await fetchDayTasks(date)
+      const unlinkedHomeworkTasks = [...draftTasks, ...liveTasks].filter((task) => task.taskType === 'odev' && !task.homeworkId)
+      await Promise.all(unlinkedHomeworkTasks.map((task) => removeTask(task.id)))
+    }),
+  )
 }
 
 /**
