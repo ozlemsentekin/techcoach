@@ -7,14 +7,12 @@ import {
   CheckCircle2,
   Clock3,
   Layers3,
-  LineChart,
   Target,
   Trophy,
-  XCircle,
 } from 'lucide-react'
 import { getProgressOverview } from '../../services/progressService'
 import { calculateNet } from '../../utils/netCalculator'
-import { addDaysISO, dateToISO, getMondayOfWeek, todayISODate } from '../../utils/time'
+import { dateToISO, getMondayOfWeek, todayISODate } from '../../utils/time'
 import PageHeader from '../layout/PageHeader'
 import LoadingState from './LoadingState'
 
@@ -55,11 +53,6 @@ function toDateKey(value) {
   return dateToISO(new Date(value))
 }
 
-function toMonthKey(value) {
-  const dateKey = toDateKey(value)
-  return dateKey ? dateKey.slice(0, 7) : ''
-}
-
 function subjectLabel(item) {
   return item?.subjectName || item?.subject || 'Genel'
 }
@@ -97,35 +90,6 @@ function dateInRange(dateKey, rangeId, today) {
   }
   if (rangeId === 'month') return dateKey.slice(0, 7) === today.slice(0, 7)
   return true
-}
-
-function dateRangeKeys(rangeId, today, records) {
-  if (rangeId === 'today') return [today]
-
-  if (rangeId === 'week') {
-    const start = getMondayOfWeek(today)
-    const days = []
-    let day = start
-    while (day <= today) {
-      days.push(day)
-      day = addDaysISO(day, 1)
-    }
-    return days
-  }
-
-  if (rangeId === 'month') {
-    const start = `${today.slice(0, 7)}-01`
-    const days = []
-    let day = start
-    while (day <= today) {
-      days.push(day)
-      day = addDaysISO(day, 1)
-    }
-    return days
-  }
-
-  const monthKeys = Array.from(new Set(records.map((record) => toMonthKey(record.date)).filter(Boolean))).sort()
-  return monthKeys.length ? monthKeys.slice(-10) : [today.slice(0, 7)]
 }
 
 function formatDateLabel(dateKey, rangeId) {
@@ -355,28 +319,6 @@ function sumRecords(records) {
   )
 }
 
-function buildTimeline(records, rangeId, today) {
-  const keys = dateRangeKeys(rangeId, today, records)
-  const rows = keys.map((key) => ({
-    key,
-    label: formatDateLabel(key, rangeId),
-    questions: 0,
-    minutes: 0,
-  }))
-  const rowMap = new Map(rows.map((row) => [row.key, row]))
-
-  records.forEach((record) => {
-    const key = rangeId === 'all' ? toMonthKey(record.date) : record.date
-    const row = rowMap.get(key)
-    if (!row) return
-    row.questions += record.questions
-    row.minutes += record.minutes
-  })
-
-  const maxValue = Math.max(...rows.map((row) => row.questions + row.minutes), 1)
-  return rows.map((row) => ({ ...row, ratio: (row.questions + row.minutes) / maxValue }))
-}
-
 function buildInsights({ stats, contentRows, wrongRows }) {
   const insights = []
   const answeredQuestions = stats.correct + stats.wrong
@@ -492,40 +434,6 @@ function RangeFilter({ selectedRange, onSelect }) {
         </button>
       ))}
     </div>
-  )
-}
-
-function TimelineChart({ rows }) {
-  return (
-    <section className="panel-card p-5">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-bold text-panel-text">Çalışma Ritmi</h2>
-          <p className="mt-1 text-sm text-panel-text-muted">Soru ve süre yoğunluğu</p>
-        </div>
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-student-theme-soft text-student-theme-text">
-          <LineChart size={18} aria-hidden="true" />
-        </span>
-      </div>
-
-      <div className="mt-5 flex min-h-[188px] items-end gap-2 overflow-x-auto pb-1">
-        {rows.map((row) => {
-          const hasActivity = row.questions + row.minutes > 0
-          return (
-            <div key={row.key} className="flex min-w-[44px] flex-1 flex-col items-center justify-end gap-2">
-              <div className="flex h-32 w-full items-end rounded-lg bg-panel-surface-soft px-1">
-                <div
-                  className={`w-full rounded-md ${hasActivity ? 'bg-student-theme-primary' : 'bg-panel-border-strong'}`}
-                  style={{ height: hasActivity ? `${Math.max(8, row.ratio * 100)}%` : '4px' }}
-                  aria-label={`${row.label}: ${row.questions} soru, ${row.minutes} dakika`}
-                />
-              </div>
-              <span className="w-full truncate text-center text-[11px] font-semibold text-panel-text-muted">{row.label}</span>
-            </div>
-          )
-        })}
-      </div>
-    </section>
   )
 }
 
@@ -757,7 +665,6 @@ export default function StudentProgressView({
   const stats = useMemo(() => sumRecords(filteredRecords), [filteredRecords])
   const contentRows = useMemo(() => aggregateBy(filteredRecords, (record) => record.contentGroup || record.content), [filteredRecords])
   const bookRows = useMemo(() => aggregateBy(filteredRecords, (record) => record.resource), [filteredRecords])
-  const timelineRows = useMemo(() => buildTimeline(filteredRecords, selectedRange, today), [filteredRecords, selectedRange, today])
 
   const plannedTasks = filteredTasks.length
   const completedTasks = filteredTasks.filter((task) => COMPLETED_STATUSES.has(task.status)).length
@@ -829,10 +736,7 @@ export default function StudentProgressView({
         />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-        <TimelineChart rows={timelineRows} />
-        <InsightPanel insights={insights} />
-      </div>
+      <InsightPanel insights={insights} />
 
       <div className="grid gap-5 xl:grid-cols-2">
         <BreakdownPanel
@@ -851,32 +755,7 @@ export default function StudentProgressView({
         />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <BreakdownPanel
-          icon={XCircle}
-          title="Yanlış ve Tekrar"
-          subtitle={`${formatNumber(pendingWrongCount)} kayıt tekrar bekliyor`}
-          rows={aggregateBy(
-            filteredWrongRows.map((item) => ({
-              id: item.id,
-              date: toDateKey(item.createdAt),
-              subject: item.subject,
-              content: item.topic || item.errorType || 'Hata defteri',
-              contentGroup: item.topic || item.errorType || 'Hata defteri',
-              resource: 'Hata defteri',
-              questions: 1,
-              correct: item.reviewStatus === 'ogrenildi' ? 1 : 0,
-              wrong: item.reviewStatus === 'ogrenildi' ? 0 : 1,
-              blank: 0,
-              minutes: 0,
-              source: 'wrong',
-            })),
-            (record) => record.content,
-          )}
-          emptyLabel="Bu filtrede yanlış kaydı yok."
-        />
-        <RecentActivity records={filteredRecords} />
-      </div>
+      <RecentActivity records={filteredRecords} />
     </div>
   )
 }

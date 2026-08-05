@@ -9,122 +9,8 @@ const NAV_ITEMS = [
   { id: 'paneller', label: 'Paneller' },
 ]
 
-function getLgsCountdown() {
-  const today = new Date()
-  const currentYear = today.getFullYear()
-  const target = new Date(currentYear, 5, 14)
-
-  if (today > target) {
-    target.setFullYear(currentYear + 1)
-  }
-
-  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  const startOfTarget = new Date(target.getFullYear(), target.getMonth(), target.getDate())
-  const msPerDay = 24 * 60 * 60 * 1000
-
-  return Math.max(0, Math.ceil((startOfTarget - startOfToday) / msPerDay))
-}
-
 function BrandIcon() {
   return <img src="/logo-mark.png" alt="" className="logo-mark-img" />
-}
-
-function TecoMessageIcon() {
-  return (
-    <svg viewBox="0 0 64 64" aria-hidden="true">
-      <defs>
-        <linearGradient id="tecoMessageGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#3ED6C3" />
-          <stop offset="100%" stopColor="#2B2F77" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M12 14 Q12 8 18 8 L46 8 Q52 8 52 14 L52 34 Q52 40 46 40 L28 40 L20 48 L20 40 L18 40 Q12 40 12 34 Z"
-        fill="url(#tecoMessageGradient)"
-      />
-      <circle cx="24" cy="24" r="3" fill="white" />
-      <circle cx="32" cy="24" r="3" fill="white" />
-      <circle cx="40" cy="24" r="3" fill="white" />
-    </svg>
-  )
-}
-
-function DashboardPreview({ days, compact = false }) {
-  return (
-    <div className={`plan-dashboard ${compact ? 'plan-dashboard-compact' : 'plan-dashboard-desktop'}`}>
-      <div className="plan-dashboard-shell">
-        <div className="plan-dashboard-banner">
-          <span>TECHCOACH</span>
-          <strong>Aylin, bugünkü planın hazır.</strong>
-        </div>
-
-        <div className="plan-dashboard-rhythm">
-          <span>BUGÜNÜN RİTMİ</span>
-          <b>CANLI</b>
-        </div>
-
-        <div className="plan-dashboard-score">
-          <div className="plan-dashboard-score-line">
-            <strong>%82</strong>
-            <span>Tamamlandı</span>
-          </div>
-          <p>Başlamak işin yarısını tamamlamaktır.</p>
-        </div>
-
-        <div className="plan-dashboard-progress" aria-hidden="true">
-          <span />
-        </div>
-
-        <div className="plan-dashboard-countdown">
-          <div>
-            <strong>14 Haziran&apos;da LGS var</strong>
-            <span>Hazırlık ritmini koru.</span>
-          </div>
-          <b>{days} gün</b>
-        </div>
-
-        <div className="plan-dashboard-discipline">
-          <div className="plan-dashboard-discipline-head">
-            <strong>Disiplin skoru</strong>
-            <b>%74</b>
-          </div>
-          <div className="plan-dashboard-discipline-progress" aria-hidden="true">
-            <span />
-          </div>
-          <p>48 dk / 120 dk · 5 gün seri</p>
-        </div>
-
-        <div className="plan-dashboard-message">
-          <div className="plan-dashboard-message-head">
-            <div className="plan-dashboard-message-icon">
-              <TecoMessageIcon />
-            </div>
-            <strong>
-              <span className="teco-accent">Teco</span>&apos;dan mesajın var!
-            </strong>
-          </div>
-
-          <div className="plan-dashboard-guidance">
-            <div className="plan-dashboard-guidance-path" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className="plan-dashboard-guidance-copy">
-              <small>Matematik sınavına 3 gün kaldı</small>
-              <strong>Önce olasılık tekrarını tamamla.</strong>
-              <p>25 dakikalık kısa tekrar ve 8 soruluk mini turla ritmi başlat.</p>
-            </div>
-          </div>
-
-          <div className="plan-dashboard-tags" aria-hidden="true">
-            <span>ÖNCELİK: OLASILIK</span>
-            <span>BUGÜN · 25 DK</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
 }
 
 function panelPathForRole(role) {
@@ -137,7 +23,6 @@ export default function LandingPage() {
 
   const [activeSection, setActiveSection] = useState('nasil')
   const showPricing = false
-  const lgsCountdown = getLgsCountdown()
 
   const handlePrimaryCta = (event) => {
     event.preventDefault()
@@ -217,6 +102,7 @@ export default function LandingPage() {
           <a className="btn btn-primary nav-cta" href="#" onClick={handlePrimaryCta}>
             <span className="cta-full">{primaryCtaLabel}</span>
             <span className="cta-short">{authUser ? 'Hesap' : 'Başla'}</span>
+            <span className="nav-cta-icon" aria-hidden="true">→</span>
           </a>
         </div>
       </header>
@@ -227,23 +113,6 @@ export default function LandingPage() {
             <div className="hero-copy">
               <div className="hero-copy-main">
                 <div className="eyebrow">Akademik performansın dijital sistemi</div>
-                <div className="hero-mobile-device" aria-hidden="true">
-                  <span className="hero-mobile-device-notch" />
-                  <span className="hero-mobile-device-side hero-mobile-device-side-top" />
-                  <span className="hero-mobile-device-side hero-mobile-device-side-bottom" />
-                  <div className="hero-mobile-device-screen">
-                    <div className="hero-mobile-statusbar">
-                      <span>9:41</span>
-                      <div className="hero-mobile-status-icons">
-                        <i className="hero-mobile-signal" />
-                        <i className="hero-mobile-wifi" />
-                        <i className="hero-mobile-battery" />
-                      </div>
-                    </div>
-                    <DashboardPreview days={lgsCountdown} compact />
-                    <span className="hero-mobile-home-indicator" />
-                  </div>
-                </div>
               </div>
             </div>
           </div>

@@ -9,7 +9,7 @@ const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY
 
 const INITIAL_FORM = {
   fullName: '',
-  phone: '0',
+  phone: '',
   email: '',
   password: '',
   acceptAydinlatma: false,
