@@ -8,6 +8,7 @@ const {
   defaultPasswordForPhone,
   hashPassword,
   isSessionError,
+  needsPasswordRehash,
   normalizePhone,
   readSessionToken,
   verifyPassword,
@@ -190,8 +191,15 @@ async function loginHandler(request) {
       return json(401, { error: 'Telefon numarası veya şifre hatalı.' })
     }
 
+    const rehashedPassword = needsPasswordRehash(record.password_hash)
+      ? await hashPassword(password)
+      : null
+
     const successRequest = await withRequest({
       id: { type: sql.UniqueIdentifier, value: record.id },
+      ...(rehashedPassword
+        ? { passwordHash: { type: sql.NVarChar(255), value: rehashedPassword } }
+        : {}),
     })
 
     await successRequest.query(`
@@ -199,6 +207,7 @@ async function loginHandler(request) {
       SET failed_login_count = 0,
           lockout_until = NULL,
           last_login_at = SYSUTCDATETIME()
+          ${rehashedPassword ? ', password_hash = @passwordHash' : ''}
       WHERE id = @id;
     `)
 

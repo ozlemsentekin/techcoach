@@ -35,12 +35,25 @@ function defaultPasswordForPhone(phone) {
   return String(phone || '').replace(/\D/g, '').slice(-6)
 }
 
+// bcryptjs is a pure-JS implementation with no libuv thread-pool offload, so
+// hashing/comparing blocks the Node.js event loop for the full duration —
+// cost 12 runs ~4x longer than cost 10 and directly hurts login throughput
+// under concurrent traffic. Old cost-12 hashes keep verifying correctly
+// (bcrypt encodes the cost used at hash time in the hash itself); use
+// needsPasswordRehash() to migrate them down to BCRYPT_COST on next login.
+const BCRYPT_COST = 10
+
 async function hashPassword(password) {
-  return bcrypt.hash(password, 12)
+  return bcrypt.hash(password, BCRYPT_COST)
 }
 
 async function verifyPassword(password, hash) {
   return bcrypt.compare(password, hash)
+}
+
+function needsPasswordRehash(hash) {
+  const match = /^\$2[aby]\$(\d+)\$/.exec(String(hash || ''))
+  return Boolean(match) && Number(match[1]) > BCRYPT_COST
 }
 
 function generateOtpCode() {
@@ -125,6 +138,7 @@ module.exports = {
   hashOtpCode,
   hashPassword,
   isSessionError,
+  needsPasswordRehash,
   normalizeEmail,
   normalizePhone,
   readSessionToken,

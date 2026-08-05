@@ -54,8 +54,12 @@ async function listMessagesHandler(request) {
     })
     const result = await requestDb.query(`
       SELECT id, student_id, from_role, text, read_at, created_at
-      FROM dbo.Messages
-      WHERE student_id = @studentId
+      FROM (
+        SELECT TOP (200) id, student_id, from_role, text, read_at, created_at
+        FROM dbo.Messages
+        WHERE student_id = @studentId
+        ORDER BY created_at DESC
+      ) recent
       ORDER BY created_at ASC;
     `)
 
@@ -160,8 +164,12 @@ async function listCoachNotesHandler(request) {
     })
     const result = await requestDb.query(`
       SELECT id, student_id, text, created_at
-      FROM dbo.CoachNotes
-      WHERE student_id = @studentId
+      FROM (
+        SELECT TOP (200) id, student_id, text, created_at
+        FROM dbo.CoachNotes
+        WHERE student_id = @studentId
+        ORDER BY created_at DESC
+      ) recent
       ORDER BY created_at ASC;
     `)
 

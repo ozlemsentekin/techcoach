@@ -52,28 +52,37 @@ async function recordTaskActivities({ studentId, taskId, actorRole, actorUserId,
   if (!activityEntries.length) return
 
   const baseTime = Date.now()
+  const bindings = {
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    taskId: { type: sql.UniqueIdentifier, value: taskId },
+    actorRole: { type: sql.NVarChar(20), value: actorRole || 'ogrenci' },
+    actorUserId: { type: sql.UniqueIdentifier, value: actorUserId || null },
+  }
 
-  for (const [index, entry] of activityEntries.entries()) {
-    try {
-      const requestDb = await withRequest({
-        studentId: { type: sql.UniqueIdentifier, value: studentId },
-        taskId: { type: sql.UniqueIdentifier, value: taskId },
-        action: { type: sql.NVarChar(40), value: entry.action },
-        actorRole: { type: sql.NVarChar(20), value: actorRole || 'ogrenci' },
-        actorUserId: { type: sql.UniqueIdentifier, value: actorUserId || null },
-        metadataJson: { type: sql.NVarChar(sql.MAX), value: entry.metadata ? JSON.stringify(entry.metadata) : null },
-        createdAt: { type: sql.DateTime2, value: new Date(baseTime + index) },
-      })
-
-      await requestDb.query(`
-        INSERT INTO dbo.TaskActivityLogs (student_id, task_id, action, actor_role, actor_user_id, metadata_json, created_at)
-        VALUES (@studentId, @taskId, @action, @actorRole, @actorUserId, @metadataJson, @createdAt);
-      `)
-    } catch (error) {
-      if (error.number !== 208) {
-        console.warn('recordTaskActivities skipped', error)
+  // Single multi-row INSERT instead of one round-trip per entry — this is called
+  // on every task status update (the busiest student-facing write path), and most
+  // calls pass just one entry anyway, so this also keeps the common case at 1 round-trip.
+  const valuesSql = activityEntries
+    .map((entry, index) => {
+      bindings[`action${index}`] = { type: sql.NVarChar(40), value: entry.action }
+      bindings[`metadataJson${index}`] = {
+        type: sql.NVarChar(sql.MAX),
+        value: entry.metadata ? JSON.stringify(entry.metadata) : null,
       }
-      return
+      bindings[`createdAt${index}`] = { type: sql.DateTime2, value: new Date(baseTime + index) }
+      return `(@studentId, @taskId, @action${index}, @actorRole, @actorUserId, @metadataJson${index}, @createdAt${index})`
+    })
+    .join(',\n')
+
+  try {
+    const requestDb = await withRequest(bindings)
+    await requestDb.query(`
+      INSERT INTO dbo.TaskActivityLogs (student_id, task_id, action, actor_role, actor_user_id, metadata_json, created_at)
+      VALUES ${valuesSql};
+    `)
+  } catch (error) {
+    if (error.number !== 208) {
+      console.warn('recordTaskActivities skipped', error)
     }
   }
 }

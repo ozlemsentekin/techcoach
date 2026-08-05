@@ -210,28 +210,43 @@ async function autoCompleteExpiredBreaks({ studentId, date, isDraft }) {
 
   const completedAt = new Date().toISOString()
 
-  for (const row of expired) {
-    const updateDb = await withRequest({
-      id: { type: sql.UniqueIdentifier, value: row.id },
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-      completedAt: { type: sql.DateTime2, value: completedAt },
-    })
-    const updateResult = await updateDb.query(`
-      UPDATE dbo.Tasks
-      SET status = 'tamamlandi', completed_at = @completedAt
-      WHERE id = @id AND student_id = @studentId AND status = 'bekliyor';
-    `)
+  // Batch the update and the activity log insert into one round-trip each
+  // instead of two round-trips per expired row — this runs on every task
+  // list load (listTasksHandler calls this before returning), so it's on
+  // the busiest read path in the app.
+  const updateBindings = {
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    completedAt: { type: sql.DateTime2, value: completedAt },
+  }
+  const idParamNames = expired.map((row, index) => {
+    const paramName = `id${index}`
+    updateBindings[paramName] = { type: sql.UniqueIdentifier, value: row.id }
+    return `@${paramName}`
+  })
 
-    if (!updateResult.rowsAffected[0]) continue
+  const updateDb = await withRequest(updateBindings)
+  const updateResult = await updateDb.query(`
+    UPDATE dbo.Tasks
+    SET status = 'tamamlandi', completed_at = @completedAt
+    OUTPUT INSERTED.id
+    WHERE id IN (${idParamNames.join(', ')}) AND student_id = @studentId AND status = 'bekliyor';
+  `)
 
-    await recordTaskActivities({
-      studentId,
-      taskId: row.id,
-      actorRole: SYSTEM_ACTIVITY_ACTOR_ROLE,
-      actorUserId: null,
-      entries: [{
-        action: 'task_completed',
-        metadata: {
+  const updatedIds = new Set(updateResult.recordset.map((updatedRow) => updatedRow.id))
+  const completedRows = expired.filter((row) => updatedIds.has(row.id))
+  if (!completedRows.length) return
+
+  const baseTime = Date.now()
+  const activityBindings = {
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    actorRole: { type: sql.NVarChar(20), value: SYSTEM_ACTIVITY_ACTOR_ROLE },
+  }
+  const activityValuesSql = completedRows
+    .map((row, index) => {
+      activityBindings[`taskId${index}`] = { type: sql.UniqueIdentifier, value: row.id }
+      activityBindings[`metadataJson${index}`] = {
+        type: sql.NVarChar(sql.MAX),
+        value: JSON.stringify({
           taskTitle: row.title || 'Görev',
           taskSummary: row.title || 'Görev',
           taskType: row.task_type,
@@ -241,9 +256,23 @@ async function autoCompleteExpiredBreaks({ studentId, date, isDraft }) {
           previousStatus: 'bekliyor',
           nextStatus: 'tamamlandi',
           auto: true,
-        },
-      }],
+        }),
+      }
+      activityBindings[`createdAt${index}`] = { type: sql.DateTime2, value: new Date(baseTime + index) }
+      return `(@studentId, @taskId${index}, 'task_completed', @actorRole, NULL, @metadataJson${index}, @createdAt${index})`
     })
+    .join(',\n')
+
+  try {
+    const activityDb = await withRequest(activityBindings)
+    await activityDb.query(`
+      INSERT INTO dbo.TaskActivityLogs (student_id, task_id, action, actor_role, actor_user_id, metadata_json, created_at)
+      VALUES ${activityValuesSql};
+    `)
+  } catch (error) {
+    if (error.number !== 208) {
+      console.warn('autoCompleteExpiredBreaks activity log skipped', error)
+    }
   }
 }
 
