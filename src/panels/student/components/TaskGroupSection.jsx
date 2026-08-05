@@ -21,6 +21,7 @@ export default function TaskGroupSection({
   defaultExpanded = true,
   timeline = false,
   highlightTaskId = null,
+  showDateOnCards = false,
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const style = SUBJECT_STYLES[subject] || DEFAULT_SUBJECT_STYLE
@@ -71,6 +72,7 @@ export default function TaskGroupSection({
               showLessonLabel={showLessonLabel}
               emphasizeTime={emphasizeTime}
               timeline={timeline}
+              showDateBadge={showDateOnCards}
               isFirst={index === 0}
               isLast={index === tasks.length - 1}
               highlight={task.id === highlightTaskId}

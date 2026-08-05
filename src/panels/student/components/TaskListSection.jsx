@@ -3,7 +3,7 @@ import { BookOpen, CheckCircle2, Circle, Clock, ListChecks, SlidersHorizontal } 
 import { getSortedTasks } from '../../../utils/taskSelectors'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { TASK_TYPES, BREAK_TASK_TYPES } from '../../../data/taskTypes'
-import { addDaysISO, formatDateLong, todayISODate } from '../../../utils/time'
+import { addDaysISO, daysLate, formatDateLong, todayISODate } from '../../../utils/time'
 import TaskGroupSection from './TaskGroupSection'
 import TaskDetailsDrawer from './TaskDetailsDrawer'
 import TaskAnswerSheetModal from './TaskAnswerSheetModal'
@@ -32,6 +32,10 @@ const SUBJECT_ORDER = ['Türkçe', 'Matematik', 'Fen Bilimleri', 'T.C. İnkılap
 
 function lessonLabelFor(task) {
   return task.subject || TASK_TYPES[task.taskType]?.label || 'Genel'
+}
+
+function isOverdueIncomplete(task) {
+  return daysLate(task.date) > 0 && !['tamamlandi', 'yeniden-planlandi'].includes(task.status)
 }
 
 function dateGroupLabel(dateISO) {
@@ -175,8 +179,11 @@ export default function TaskListSection({
   }, [filtered])
 
   const groupedByDate = useMemo(() => {
+    const overdueTasks = filter === 'pending' ? filtered.filter(isOverdueIncomplete) : []
+    const remaining = overdueTasks.length ? filtered.filter((task) => !isOverdueIncomplete(task)) : filtered
+
     const byDate = new Map()
-    filtered.forEach((task) => {
+    remaining.forEach((task) => {
       const key = task.date || ''
       if (!byDate.has(key)) byDate.set(key, [])
       byDate.get(key).push(task)
@@ -185,7 +192,10 @@ export default function TaskListSection({
     if (filter === 'done') {
       entries = entries.reverse().map(([date, dateTasks]) => [date, [...dateTasks].reverse()])
     }
-    return entries.map(([date, dateTasks]) => ({ label: dateGroupLabel(date), date, tasks: dateTasks }))
+    const dateGroups = entries.map(([date, dateTasks]) => ({ label: dateGroupLabel(date), date, tasks: dateTasks }))
+
+    if (!overdueTasks.length) return dateGroups
+    return [{ label: 'Geciken Görevler', date: null, tasks: overdueTasks, isOverdueGroup: true }, ...dateGroups]
   }, [filtered, filter])
 
   const visibleGroups = viewMode === 'subject' ? grouped : groupedByDate
@@ -200,7 +210,7 @@ export default function TaskListSection({
           </span>
           <div className="min-w-0">
             <h2 className="student-theme-section-title text-lg font-bold leading-tight text-white sm:text-xl">Görev Akışı</h2>
-            <p className="student-theme-section-muted text-xs font-medium text-white/70 sm:text-sm">
+            <p className="student-theme-section-muted text-xs font-medium sm:text-sm">
               {filtered.length} görev
             </p>
           </div>
@@ -236,6 +246,7 @@ export default function TaskListSection({
               emphasizeTime={viewMode === 'time'}
               timeline={viewMode === 'time'}
               highlightTaskId={highlightTaskId}
+              showDateOnCards={Boolean(group.isOverdueGroup)}
               defaultExpanded={shouldExpandGroup({ filter, viewMode, index })}
             />
           ))}

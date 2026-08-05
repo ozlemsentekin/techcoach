@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import { Loader2, Trash2, X } from 'lucide-react'
 import Badge from '../../ui/Badge'
 import { TASK_TYPES } from '../../../data/taskTypes'
 import { TASK_TEMPLATES } from '../../../data/taskTemplates'
@@ -27,7 +27,7 @@ function addMinutesToTime(startTime, minutes) {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
-export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDate, onSave, onClose, getExistingTasksForDate }) {
+export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDate, onSave, onDelete, onClose, getExistingTasksForDate }) {
   const seed = { ...initialTemplate?.task, ...initialTask }
   const seedStartTime = seed.startTime || '16:00'
   const seedEndTime = seed.endTime || (seed.durationMinutes ? addMinutesToTime(seedStartTime, seed.durationMinutes) : '16:45')
@@ -49,6 +49,7 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
     parentNote: seed.parentNote || '',
   }))
   const [error, setError] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   const durationMinutes = computeDurationMinutes(form.startTime, form.endTime)
 
@@ -90,6 +91,18 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
         template.task.endTime || (template.task.durationMinutes ? addMinutesToTime(startTime, template.task.durationMinutes) : current.endTime)
       return { ...current, ...template.task, startTime, endTime }
     })
+  }
+
+  const handleDelete = async () => {
+    if (deleting) return
+    setDeleting(true)
+    setError('')
+    try {
+      await onDelete(initialTask)
+    } catch (err) {
+      setError(err.message || 'Görev silinirken bir hata oluştu, tekrar deneyin.')
+      setDeleting(false)
+    }
   }
 
   const handleSubmit = (event) => {
@@ -314,12 +327,26 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
           />
         </label>
 
-        <button
-          type="submit"
-          className="mt-auto rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white"
-        >
-          {initialTask ? 'Değişiklikleri Kaydet' : 'Görevi Ekle'}
-        </button>
+        <div className="mt-auto flex gap-3">
+          {initialTask && onDelete ? (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex h-12 items-center justify-center gap-2 rounded-xl border border-panel-warm/40 px-4 text-sm font-semibold text-panel-warm hover:bg-panel-warm/10 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} aria-hidden="true" />}
+              Görevi Sil
+            </button>
+          ) : null}
+          <button
+            type="submit"
+            disabled={deleting}
+            className="flex-1 rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {initialTask ? 'Değişiklikleri Kaydet' : 'Görevi Ekle'}
+          </button>
+        </div>
       </form>
     </div>
   )

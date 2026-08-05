@@ -152,6 +152,13 @@ export default function WeeklyPlanPage() {
     showBanner(targetStatus === 'yayinlandi' ? 'Görev plana kaydedildi.' : 'Görev taslağa kaydedildi.')
   }
 
+  const handleDeleteTask = async (task) => {
+    await removeTask(task.id)
+    await refresh()
+    setDrawerState(null)
+    showBanner('Görev silindi.')
+  }
+
   const handleSaveHomework = async (payload) => {
     const scheduledDate = payload.taskDate || homeworkModalDate
     await addHomework({
@@ -305,6 +312,7 @@ export default function WeeklyPlanPage() {
               defaultDate={drawerState.defaultDate}
               getExistingTasksForDate={(date) => tasksByDate[date] || getDraftTasksForDate(date)}
               onSave={handleSaveDrawerTask}
+              onDelete={handleDeleteTask}
               onClose={() => setDrawerState(null)}
             />
           ) : null}

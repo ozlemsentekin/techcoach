@@ -179,6 +179,7 @@ export default function TaskListCard({
   isFirst = false,
   isLast = false,
   highlight = false,
+  showDateBadge = false,
 }) {
   const isBreakTask = BREAK_TASK_TYPES.has(task.taskType)
   const isFreeTimeTask = task.taskType === 'serbest-zaman'
@@ -393,7 +394,7 @@ export default function TaskListCard({
         {emphasizeTime && task.startTime && !timeline ? (
           <span
             className={`inline-flex h-7 items-center gap-1.5 rounded-[10px] px-2.5 text-xs font-bold sm:h-9 sm:px-3 sm:text-sm ${
-              isBreakTask ? 'bg-panel-sage text-white' : 'bg-student-theme-primary text-student-theme-button-text'
+              isBreakTask ? 'bg-panel-sage text-white' : 'bg-student-theme-badge-bg text-student-theme-button-text'
             }`}
           >
             <Clock size={15} aria-hidden="true" />
@@ -425,19 +426,19 @@ export default function TaskListCard({
           </span>
         ) : null}
 
+        {task.date && (!emphasizeTime || showDateBadge) ? (
+          <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-surface-soft px-2 py-0.5 text-[10px] font-medium text-panel-text-muted sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-xs">
+            {formatDateShort(task.date)}
+            {task.startTime ? ` - ${task.startTime}` : ''}
+          </span>
+        ) : null}
+
         {showStatusBadge ? (
           <span
             className={`inline-flex min-h-6 items-center gap-1.5 rounded-[10px] px-2 py-0.5 text-[10px] font-semibold sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-xs ${STATUS_TONE_CLASSES[status.tone]}`}
           >
             {StatusIcon ? <StatusIcon size={14} aria-hidden="true" /> : null}
             {status.label}
-          </span>
-        ) : null}
-
-        {task.date && !emphasizeTime ? (
-          <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-surface-soft px-2 py-0.5 text-[10px] font-medium text-panel-text-muted sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-xs">
-            {formatDateShort(task.date)}
-            {task.startTime ? ` - ${task.startTime}` : ''}
           </span>
         ) : null}
       </div>
@@ -496,7 +497,7 @@ export default function TaskListCard({
         {isCompactBreakRow ? null : (
           <div className="col-start-1 row-span-4 min-w-0 pt-0.5">
             <p className={`inline-flex h-7 min-w-14 items-center justify-center rounded-[10px] px-2 text-xs font-extrabold leading-none shadow-sm sm:h-9 sm:min-w-16 sm:px-2.5 sm:text-[15px] ${
-              isActivityTask ? SOFT_TIME_BADGE_CLASS : 'bg-student-theme-primary text-student-theme-button-text'
+              isActivityTask ? SOFT_TIME_BADGE_CLASS : 'bg-student-theme-badge-bg text-student-theme-button-text'
             } ${isNowTask ? 'ring-2 ring-student-theme-primary ring-offset-2 ring-offset-panel-surface' : ''}`}>
               {task.startTime || '--:--'}
             </p>
