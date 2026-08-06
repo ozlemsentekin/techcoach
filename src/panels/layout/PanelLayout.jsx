@@ -1,5 +1,4 @@
-import { Outlet } from 'react-router-dom'
-import { useAuth } from '../../context/useAuth'
+import { Outlet, useLocation } from 'react-router-dom'
 import StudentSidebar from './StudentSidebar'
 import ParentSidebar from './ParentSidebar'
 import TeacherSidebar from './TeacherSidebar'
@@ -16,14 +15,23 @@ import {
 } from './navConfig'
 
 const SIDEBAR_BY_ROLE = { parent: ParentSidebar, student: StudentSidebar, teacher: TeacherSidebar }
+const RETURN_TO_PANEL_ITEM = { to: '/parent/dashboard', label: 'Panele Dön', icon: 'Undo2' }
 
 export default function PanelLayout({ role }) {
-  const { authUser } = useAuth()
+  const location = useLocation()
   const Sidebar = SIDEBAR_BY_ROLE[role] || StudentSidebar
-  const primaryItems = role === 'parent' ? PARENT_PRIMARY_NAV : role === 'teacher' ? TEACHER_PRIMARY_NAV : STUDENT_PRIMARY_NAV
-  const moreItems =
-    role === 'parent'
-      ? [...PARENT_MORE_NAV, ...(authUser?.isAdmin ? PARENT_ADMIN_NAV.children : [])]
+  const isAdminSection = role === 'parent' && location.pathname.startsWith('/parent/admin')
+  const primaryItems = isAdminSection
+    ? [RETURN_TO_PANEL_ITEM]
+    : role === 'parent'
+      ? PARENT_PRIMARY_NAV
+      : role === 'teacher'
+        ? TEACHER_PRIMARY_NAV
+        : STUDENT_PRIMARY_NAV
+  const moreItems = isAdminSection
+    ? PARENT_ADMIN_NAV.children
+    : role === 'parent'
+      ? PARENT_MORE_NAV
       : role === 'teacher'
         ? TEACHER_MORE_NAV
         : STUDENT_MORE_NAV

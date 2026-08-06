@@ -18,6 +18,19 @@ function buildPoolConfig(connectionString) {
     min: 5,
     idleTimeoutMillis: 60000,
   }
+
+  // techcoach-db runs on Azure SQL Serverless, which auto-pauses after an idle period.
+  // The first login after a pause gets a transient "database is resuming, retry" error
+  // (40613) instead of connecting; tedious's default retry budget (3 tries, 500ms apart)
+  // gives up long before a resume finishes, which surfaced as "Görevler yüklenemedi."
+  // Widening it here lets tedious's own transient-error retry (already built in) ride
+  // out a resume instead of failing the whole request.
+  config.options = {
+    ...config.options,
+    maxRetriesOnTransientErrors: 8,
+    connectionRetryInterval: 3000,
+  }
+
   return config
 }
 

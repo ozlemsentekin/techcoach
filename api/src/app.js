@@ -1,5 +1,5 @@
 const { app } = require('@azure/functions')
-const { loginHandler, logoutHandler, meHandler, registerHandler, acceptConsentHandler } = require('./auth')
+const { changePasswordHandler, loginHandler, logoutHandler, meHandler, registerHandler, acceptConsentHandler } = require('./auth')
 const {
   listUsersHandler,
   updateUserHandler,
@@ -174,6 +174,13 @@ app.http('auth-consent', {
   methods: ['POST'],
   route: 'auth/consent',
   handler: acceptConsentHandler,
+})
+
+app.http('auth-change-password', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'auth/change-password',
+  handler: changePasswordHandler,
 })
 
 app.http('billing-revenuecat-webhook', {

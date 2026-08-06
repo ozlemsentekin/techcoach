@@ -14,6 +14,7 @@ const RESOURCE_BOOK_TYPES = [
   { value: 'konu_anlatimi', label: 'Konu Anlatımı' },
   { value: 'soru_bankasi', label: 'Soru Bankası' },
   { value: 'okuma_kitabi', label: 'Okuma Kitabı' },
+  { value: 'etkinlik', label: 'Etkinlik & Soru Bankası' },
 ]
 
 const RESOURCE_BOOK_TYPE_LABELS = Object.fromEntries(RESOURCE_BOOK_TYPES.map((item) => [item.value, item.label]))
@@ -89,6 +90,7 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
   const [pageCount, setPageCount] = useState(book ? String(book.pageCount) : '')
   const [subjectId, setSubjectId] = useState(book?.subjectId || '')
   const [type, setType] = useState(book?.type || '')
+  const [publishMonthYear, setPublishMonthYear] = useState(book?.publishMonthYear || '')
   const [isActive, setIsActive] = useState(book ? book.isActive : true)
   const [hasAnswerKey, setHasAnswerKey] = useState(book ? book.hasAnswerKey : true)
   const [imageUrl, setImageUrl] = useState(book?.imageUrl || '')
@@ -126,6 +128,7 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
         pageCount: pageCountNumber,
         isActive,
         type,
+        publishMonthYear: publishMonthYear.trim() || null,
         hasAnswerKey: type === 'soru_bankasi' ? hasAnswerKey : true,
         imageUrl: imageUrl.trim() || null,
       }
@@ -150,105 +153,135 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md panel-card p-5"
+        className="w-full max-w-2xl panel-card p-5 sm:p-6"
       >
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-panel-text">{isEdit ? 'Kaynağı Düzenle' : 'Kaynak Kitap Ekle'}</h2>
-          <button type="button" aria-label="Kapat" onClick={onClose}>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold text-[#12142a]">
+              {publisher?.name || (isEdit ? 'Kaynağı Düzenle' : 'Kaynak Kitap Ekle')}
+            </h2>
+            <p className="mt-0.5 text-sm text-panel-text-muted">
+              {isEdit ? 'Kaynak kitabı düzenle' : 'Bu yayın evine kaynak kitap ekle'}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Kapat"
+            onClick={onClose}
+            className="shrink-0 rounded-full p-1 text-panel-text-muted hover:bg-[#faf3ec] hover:text-[#b85f22]"
+          >
             <X size={20} />
           </button>
         </div>
-
-        {publisher ? (
-          <p className="mb-3 text-sm text-panel-text-muted">
-            Yayın evi: <span className="font-medium text-panel-text">{publisher.name}</span>
-          </p>
-        ) : null}
 
         {error ? (
           <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
         ) : null}
 
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">Kitap Adı</span>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+        <div className="grid gap-5 sm:grid-cols-[200px_1fr]">
+          <div className="flex justify-center sm:justify-start">
+            <ResourceImageField
+              value={imageUrl}
+              onChange={setImageUrl}
+              compact
+              size={200}
+              showUrlToggle
+              accent="#b85f22"
+              accentSoft="#f8e3d0"
             />
-          </label>
+          </div>
 
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">Ders</span>
-            <select
-              value={subjectId}
-              onChange={(event) => setSubjectId(event.target.value)}
-              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-            >
-              <option value="" disabled>
-                Ders seçin
-              </option>
-              {subjects?.map((subject) => (
-                <option key={subject.id} value={subject.id}>
-                  {subject.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">Tip</span>
-            <select
-              value={type}
-              onChange={(event) => setType(event.target.value)}
-              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-            >
-              <option value="" disabled>
-                Tip seçin
-              </option>
-              {RESOURCE_BOOK_TYPES.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">Sayfa Sayısı</span>
-            <input
-              type="number"
-              min="1"
-              value={pageCount}
-              onChange={(event) => setPageCount(event.target.value)}
-              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-            />
-          </label>
-
-          <ResourceImageField value={imageUrl} onChange={setImageUrl} />
-
-          <label className="flex items-center gap-2.5">
-            <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} className="h-4 w-4" />
-            <span className="text-sm font-medium text-panel-text">Aktif</span>
-          </label>
-
-          {type === 'soru_bankasi' ? (
-            <label className="flex items-center gap-2.5">
+          <div className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-panel-text-muted">Kitap Adı</span>
               <input
-                type="checkbox"
-                checked={hasAnswerKey}
-                onChange={(event) => setHasAnswerKey(event.target.checked)}
-                className="h-4 w-4"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
               />
-              <span className="text-sm font-medium text-panel-text">Cevap Anahtarı Var</span>
             </label>
-          ) : null}
 
-          <Button type="submit" disabled={loading} size="md" className="w-full">
-            {loading ? 'Kaydediliyor...' : isEdit ? 'Kaydet' : 'Kaynak Kitap Oluştur'}
-          </Button>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-panel-text-muted">Ders</span>
+              <select
+                value={subjectId}
+                onChange={(event) => setSubjectId(event.target.value)}
+                className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+              >
+                <option value="" disabled>
+                  Ders seçin
+                </option>
+                {subjects?.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Basım Ay/Yıl</span>
+                <input
+                  value={publishMonthYear}
+                  onChange={(event) => setPublishMonthYear(event.target.value)}
+                  placeholder="Örn. Eylül 2024"
+                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Sayfa Sayısı</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={pageCount}
+                  onChange={(event) => setPageCount(event.target.value)}
+                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+                />
+              </label>
+            </div>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-panel-text-muted">Kaynak Tipi</span>
+              <select
+                value={type}
+                onChange={(event) => setType(event.target.value)}
+                className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+              >
+                <option value="" disabled>
+                  Tip seçin
+                </option>
+                {RESOURCE_BOOK_TYPES.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex items-center gap-2.5">
+              <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} className="h-4 w-4" />
+              <span className="text-sm font-medium text-panel-text">Aktif</span>
+            </label>
+
+            {type === 'soru_bankasi' ? (
+              <label className="flex items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={hasAnswerKey}
+                  onChange={(event) => setHasAnswerKey(event.target.checked)}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm font-medium text-panel-text">Cevap Anahtarı Var</span>
+              </label>
+            ) : null}
+          </div>
         </div>
+
+        <Button type="submit" disabled={loading} size="md" className="mt-5 w-full">
+          {loading ? 'Kaydediliyor...' : isEdit ? 'Kaydet' : 'Kaynak Kitap Oluştur'}
+        </Button>
       </form>
     </div>
   )
@@ -620,7 +653,7 @@ function AddQuestionsFromImageModal({ test, onClose, onQuestionsSaved }) {
 
           {!draftQuestions ? (
             <div className="flex flex-col gap-3">
-              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-[#dfe4e5] px-4 py-8 text-center hover:bg-[#f8f7fb]">
+              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-[#dfe4e5] px-4 py-8 text-center hover:bg-[#faf3ec]">
                 <ImagePlus size={24} className="text-[#87a3a5]" aria-hidden="true" />
                 <span className="text-sm font-medium text-[#253d3e]">
                   {file ? file.name : 'Sayfa fotoğrafını seçmek için tıkla'}
@@ -644,7 +677,7 @@ function AddQuestionsFromImageModal({ test, onClose, onQuestionsSaved }) {
                 draftQuestions.map((question, questionIndex) => (
                   <div key={questionIndex} className="flex flex-col gap-2.5 rounded-xl border border-[#e5e8e9] p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <label className="flex items-center gap-2 text-sm font-semibold text-[#655e94]">
+                      <label className="flex items-center gap-2 text-sm font-semibold text-[#b85f22]">
                         Soru No
                         <input
                           type="number"
@@ -807,7 +840,7 @@ function AnswerKeyModal({ test, onClose }) {
               <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-6">
                 {entries.map((label, index) => (
                   <label key={index} className="flex flex-col items-center gap-1">
-                    <span className="text-xs font-semibold text-[#655e94]">{index + 1}</span>
+                    <span className="text-xs font-semibold text-[#b85f22]">{index + 1}</span>
                     <select
                       value={label}
                       onChange={(event) => setLabel(index, event.target.value)}
@@ -870,7 +903,7 @@ function TestQuestionsModal({ test, resourceBookType, onClose }) {
                 type="button"
                 variant="secondary"
                 size="sm"
-                className="h-[34px] rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#f8f7fb]"
+                className="h-[34px] rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#faf3ec]"
                 onClick={() => setShowAnswerKey(true)}
               >
                 <KeyRound size={14} className="mr-1.5 inline" aria-hidden="true" />
@@ -881,7 +914,7 @@ function TestQuestionsModal({ test, resourceBookType, onClose }) {
               type="button"
               variant="secondary"
               size="sm"
-              className="h-[34px] rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#f8f7fb]"
+              className="h-[34px] rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#faf3ec]"
               onClick={() => setShowAddFromImage(true)}
             >
               <ImagePlus size={14} className="mr-1.5 inline" aria-hidden="true" />
@@ -905,7 +938,7 @@ function TestQuestionsModal({ test, resourceBookType, onClose }) {
               {questions.map((question) => (
                 <div key={question.id} className="flex flex-col gap-2.5">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-sm font-semibold text-[#655e94]">{question.orderNo}.</span>
+                    <span className="text-sm font-semibold text-[#b85f22]">{question.orderNo}.</span>
                     {question.passageText ? (
                       <p className="whitespace-pre-line text-sm leading-relaxed text-[#253d3e]">{question.passageText}</p>
                     ) : null}
@@ -948,7 +981,7 @@ function TestQuestionsModal({ test, resourceBookType, onClose }) {
 function StatBadge({ icon, value }) {
   const Icon = icon
   return (
-    <span className="inline-flex w-[76px] shrink-0 items-center justify-center gap-1 rounded-full bg-[#f8f7fb] px-2 py-0.5 text-[11px] font-medium text-[#655e94]">
+    <span className="inline-flex w-[76px] shrink-0 items-center justify-center gap-1 rounded-full bg-[#faf3ec] px-2 py-0.5 text-[11px] font-medium text-[#b85f22]">
       <Icon size={11} className="shrink-0" aria-hidden="true" />
       {value}
     </span>
@@ -972,7 +1005,7 @@ function TopicBlock({ topic, tests, expanded, onToggle, onAddTest, onEditTopic, 
           ) : (
             <ChevronRight size={15} className="shrink-0 text-[#87a3a5]" aria-hidden="true" />
           )}
-          <FileText size={15} className="shrink-0 text-[#655e94]" aria-hidden="true" />
+          <FileText size={15} className="shrink-0 text-[#b85f22]" aria-hidden="true" />
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-[#253d3e]">{topic.name}</span>
             <button
@@ -997,7 +1030,7 @@ function TopicBlock({ topic, tests, expanded, onToggle, onAddTest, onEditTopic, 
           <Button
             variant="secondary"
             size="sm"
-            className="h-[34px] shrink-0 rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#f8f7fb]"
+            className="h-[34px] shrink-0 rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#faf3ec]"
             onClick={(event) => {
               event.stopPropagation()
               onAddTest(topic)
@@ -1015,7 +1048,7 @@ function TopicBlock({ topic, tests, expanded, onToggle, onAddTest, onEditTopic, 
           <div className="mt-3 overflow-x-auto rounded-[10px] border border-[#e5e8e9]">
             <table className="w-full min-w-[600px] text-left text-xs">
               <thead>
-                <tr className="bg-[#f8f7fb] text-[12px] font-semibold text-[#655e94]">
+                <tr className="bg-[#faf3ec] text-[12px] font-semibold text-[#b85f22]">
                   <th className="px-3 py-1.5">Test Konusu</th>
                   <th className="px-3 py-1.5">Test Adı</th>
                   <th className="px-3 py-1.5">Sayfa Sayısı</th>
@@ -1027,7 +1060,7 @@ function TopicBlock({ topic, tests, expanded, onToggle, onAddTest, onEditTopic, 
                 {tests.map((test) => (
                   <tr
                     key={test.id}
-                    className="cursor-pointer border-t border-[#edf0f1] hover:bg-[#f8f7fb]"
+                    className="cursor-pointer border-t border-[#edf0f1] hover:bg-[#faf3ec]"
                     onClick={() => onViewTest(test)}
                   >
                     <td className="px-3 py-1.5 font-medium text-[#253d3e]">
@@ -1092,7 +1125,7 @@ function BookBlock({ book, subjectsById, topics, tests, isFocused, missingAnswer
     <div
       ref={blockRef}
       className={`overflow-hidden rounded-xl border border-[#e7e8ed] border-l-2 border-l-[#c9bfec] bg-white shadow-[0_1px_4px_rgba(20,25,40,0.03)] ${
-        isFocused ? 'ring-2 ring-[#655e94] ring-offset-2' : ''
+        isFocused ? 'ring-2 ring-[#b85f22] ring-offset-2' : ''
       }`}
     >
       <div
@@ -1103,7 +1136,7 @@ function BookBlock({ book, subjectsById, topics, tests, isFocused, missingAnswer
           <button
             type="button"
             aria-label={expanded ? 'İçerikleri gizle' : 'İçerikleri göster'}
-            className="shrink-0 text-[#b6aedb] hover:text-[#6f63a8]"
+            className="shrink-0 text-[#e3b98a] hover:text-[#c9772f]"
             onClick={(event) => {
               event.stopPropagation()
               setExpanded((value) => !value)
@@ -1118,7 +1151,7 @@ function BookBlock({ book, subjectsById, topics, tests, isFocused, missingAnswer
               className="h-11 w-11 shrink-0 rounded-[10px] border border-[#e4e5ec] object-cover"
             />
           ) : (
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#f5f2fb] text-[#6f63a8]">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#f8e3d0] text-[#c9772f]">
               <BookOpen size={16} aria-hidden="true" />
             </span>
           )}
@@ -1128,7 +1161,7 @@ function BookBlock({ book, subjectsById, topics, tests, isFocused, missingAnswer
               <button
                 type="button"
                 aria-label="Kaynağı düzenle"
-                className="shrink-0 rounded-full p-0.5 text-[#b6aedb] hover:bg-[#f5f2fb] hover:text-[#6f63a8]"
+                className="shrink-0 rounded-full p-0.5 text-[#e3b98a] hover:bg-[#f8e3d0] hover:text-[#c9772f]"
                 onClick={(event) => {
                   event.stopPropagation()
                   onEditBook(book)
@@ -1142,7 +1175,7 @@ function BookBlock({ book, subjectsById, topics, tests, isFocused, missingAnswer
                 Ders: <span className="font-medium text-[#263a39]">{subjectsById[book.subjectId]?.name || '—'}</span>
               </span>
               {book.type ? (
-                <span className="inline-flex items-center rounded-full bg-[#f5f2fb] px-2.5 py-1 text-[11px] font-medium text-[#6f63a8]">
+                <span className="inline-flex items-center rounded-full bg-[#f8e3d0] px-2.5 py-1 text-[11px] font-medium text-[#c9772f]">
                   {RESOURCE_BOOK_TYPE_LABELS[book.type] || book.type}
                 </span>
               ) : null}
@@ -1174,7 +1207,7 @@ function BookBlock({ book, subjectsById, topics, tests, isFocused, missingAnswer
         <Button
           variant="secondary"
           size="sm"
-          className="h-10 w-full shrink-0 rounded-[10px] border-[#e1e4ea] bg-white text-[#6f63a8] hover:bg-[#f5f2fb] sm:w-auto"
+          className="h-10 w-full shrink-0 rounded-[10px] border-[#e1e4ea] bg-white text-[#c9772f] hover:bg-[#f8e3d0] sm:w-auto"
           onClick={(event) => {
             event.stopPropagation()
             onAddTopic(book)
@@ -1244,13 +1277,13 @@ function PublisherRow({
           ) : (
             <ChevronRight size={16} className="shrink-0 text-[#9aa1ab]" aria-hidden="true" />
           )}
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f1eefa] text-[#6f63a8]">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f8e3d0] text-[#c9772f]">
             <Building2 size={19} aria-hidden="true" />
           </span>
           <span className="truncate text-[17px] font-bold text-[#263a39]">{publisher.name}</span>
         </div>
         <div className="flex shrink-0 items-center gap-2.5" onClick={(event) => event.stopPropagation()}>
-          <span className="inline-flex items-center rounded-full bg-[#f5f2fb] px-2.5 py-1 text-[11px] font-medium text-[#6f63a8]">
+          <span className="inline-flex items-center rounded-full bg-[#f8e3d0] px-2.5 py-1 text-[11px] font-medium text-[#c9772f]">
             {books.length} kitap
           </span>
           <Button
@@ -1459,7 +1492,7 @@ export default function AdminPublishersPage() {
   }, [viewingTest, topics, resourceBooks])
 
   return (
-    <div className="-mx-4 -mt-5 -mb-24 bg-[#F7F8FA] px-4 pb-24 pt-5 md:-mx-6 md:-mb-6 md:px-6 md:pb-6">
+    <div data-theme="orange" className="-mx-4 -mt-5 -mb-24 bg-[#F7F8FA] px-4 pb-24 pt-5 md:-mx-6 md:-mb-6 md:px-6 md:pb-6">
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
       <PageHeader
         title="Yayın Evleri"
@@ -1476,7 +1509,7 @@ export default function AdminPublishersPage() {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Yayın evi ara..."
-                  className="w-48 rounded-lg border border-[#dfe4e5] bg-white py-1.5 pl-8 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#655e94]/20 sm:w-56"
+                  className="w-48 rounded-lg border border-[#dfe4e5] bg-white py-1.5 pl-8 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#b85f22]/20 sm:w-56"
                 />
               </div>
             ) : null}
@@ -1491,7 +1524,7 @@ export default function AdminPublishersPage() {
             </label>
             <Button
               onClick={() => setShowPublisherModal(true)}
-              className="h-10 rounded-[10px] bg-[#655e94] px-4 text-sm font-medium text-white hover:opacity-90"
+              className="h-10 rounded-[10px] bg-[#b85f22] px-4 text-sm font-medium text-white hover:opacity-90"
             >
               + Yayın Evi Ekle
             </Button>

@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Check, ChevronDown, HeartPulse, LifeBuoy, LogOut, RefreshCw, Undo2, Users } from 'lucide-react'
+import { Check, ChevronDown, HeartPulse, KeyRound, LifeBuoy, LogOut, RefreshCw, ShieldCheck, Undo2, Users } from 'lucide-react'
 import { useAuth } from '../../context/useAuth'
 import { authRequest } from '../../services/authClient'
 import { getCheckIn, saveCheckIn } from '../../services/checkInService'
@@ -8,6 +8,7 @@ import { ENERGY_LEVELS, ENERGY_MESSAGES } from '../../data/taskTypes'
 import { todayISODate } from '../../utils/time'
 import ThemeContext from '../../theme/themeContextObject'
 import { THEMES } from '../../theme/themes'
+import ChangePasswordDialog from './ChangePasswordDialog'
 
 const STUDENT_SUPPORT_EVENT = 'student-support-requested'
 const STUDENT_ENERGY_UPDATED_EVENT = 'student-energy-updated'
@@ -109,6 +110,7 @@ export default function PanelHeader({ role }) {
   const [wellbeingError, setWellbeingError] = useState('')
   const [students, setStudents] = useState(null)
   const [switching, setSwitching] = useState(false)
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const menuRef = useRef(null)
   const themeMenuRef = useRef(null)
   const wellbeingMenuRef = useRef(null)
@@ -399,6 +401,35 @@ export default function PanelHeader({ role }) {
               </>
             ) : null}
 
+            {isParent && authUser?.isAdmin ? (
+              <div className="px-3 pb-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false)
+                    navigate('/parent/admin/users')
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-panel-blue px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
+                >
+                  <ShieldCheck size={16} aria-hidden="true" />
+                  Admin Paneli
+                </button>
+                <div className="mt-2 border-t border-panel-border" />
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                setChangePasswordOpen(true)
+              }}
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-panel-text hover:bg-panel-surface-soft"
+            >
+              <KeyRound size={16} className="text-panel-text-muted" aria-hidden="true" />
+              Şifremi Değiştir
+            </button>
+
             <button
               type="button"
               onClick={() => {
@@ -413,6 +444,8 @@ export default function PanelHeader({ role }) {
           </div>
         ) : null}
       </div>
+
+      {changePasswordOpen ? <ChangePasswordDialog onClose={() => setChangePasswordOpen(false)} /> : null}
     </header>
   )
 }

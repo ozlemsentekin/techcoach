@@ -229,6 +229,10 @@ a {
   padding-bottom: 0;
 }
 
+#nasil.section {
+  padding-top: 28px;
+}
+
 .hero-grid {
   display: grid;
   grid-template-columns: 1fr;

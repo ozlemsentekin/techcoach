@@ -303,6 +303,71 @@ async function meHandler(request) {
   }
 }
 
+async function changePasswordHandler(request) {
+  try {
+    const token = readSessionToken(request)
+    if (!token) {
+      return json(401, { error: 'Oturum bulunamadı.' })
+    }
+
+    const session = verifySessionToken(token)
+    const payload = await request.json().catch(() => null)
+    if (!payload) {
+      return json(400, { error: 'Geçersiz istek gövdesi.' })
+    }
+
+    const currentPassword = String(payload.currentPassword || '')
+    const newPassword = String(payload.newPassword || '')
+    if (!currentPassword || !newPassword) {
+      return json(400, { error: 'Mevcut ve yeni şifreyi girin.' })
+    }
+
+    if (newPassword.length < 6 || newPassword.length > 72) {
+      return json(400, { error: 'Yeni şifre 6 ile 72 karakter arasında olmalı.' })
+    }
+
+    if (!(await consumeRateLimit(`change-password:${session.sub}`))) {
+      return json(429, { error: 'Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.' })
+    }
+
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: session.sub },
+    })
+    const result = await requestDb.query(`
+      SELECT TOP 1 password_hash FROM dbo.Users WHERE id = @id;
+    `)
+    const record = result.recordset[0]
+    if (!record) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    const isPasswordValid = await verifyPassword(currentPassword, record.password_hash)
+    if (!isPasswordValid) {
+      return json(401, { error: 'Mevcut şifre hatalı.' })
+    }
+
+    const newPasswordHash = await hashPassword(newPassword)
+    const updateDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: session.sub },
+      passwordHash: { type: sql.NVarChar(255), value: newPasswordHash },
+    })
+    await updateDb.query(`
+      UPDATE dbo.Users
+      SET password_hash = @passwordHash,
+          failed_login_count = 0,
+          lockout_until = NULL
+      WHERE id = @id;
+    `)
+
+    return json(200, { ok: true })
+  } catch (error) {
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+    return createAuthServiceErrorResponse(error, 'changePasswordHandler failed')
+  }
+}
+
 async function logoutHandler() {
   return json(200, { ok: true }, clearSessionHeaders())
 }
@@ -343,6 +408,7 @@ async function acceptConsentHandler(request) {
 }
 
 module.exports = {
+  changePasswordHandler,
   loginHandler,
   logoutHandler,
   meHandler,

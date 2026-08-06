@@ -57,6 +57,10 @@ export default function ResourceImageField({
   shape = 'square',
   label = 'Kapak / Profil Görseli',
   compact = false,
+  size = 96,
+  showUrlToggle = false,
+  accent = '#655e94',
+  accentSoft = '#f5f2fb',
 }) {
   const inputId = useId()
   const previewShapeClass = shape === 'circle' ? 'rounded-full' : 'rounded-xl'
@@ -91,27 +95,37 @@ export default function ResourceImageField({
   }
 
   if (compact) {
+    const iconSize = Math.round(size * 0.27)
     return (
-      <div className="flex flex-col items-center gap-1">
-        <div className="relative shrink-0" onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
+      <div className="flex flex-col items-center gap-1.5">
+        <div
+          className="relative shrink-0"
+          style={{ width: size, height: size }}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={handleDrop}
+        >
           {value ? (
             <img
               src={value}
               alt="Görsel"
-              className={`h-24 w-24 border border-[#e5e8e9] object-cover shadow-sm ${previewShapeClass}`}
+              className={`h-full w-full border border-[#e5e8e9] object-cover shadow-sm ${previewShapeClass}`}
             />
           ) : (
-            <span className={`flex h-24 w-24 items-center justify-center bg-[#f5f2fb] text-[#655e94] ${previewShapeClass}`}>
-              <ImagePlus size={26} aria-hidden="true" />
+            <span
+              className={`flex h-full w-full items-center justify-center ${previewShapeClass}`}
+              style={{ backgroundColor: accentSoft, color: accent }}
+            >
+              <ImagePlus size={iconSize} aria-hidden="true" />
             </span>
           )}
 
           <label
             htmlFor={inputId}
             aria-label={value ? 'Görseli değiştir' : 'Görsel yükle'}
-            className="absolute bottom-0 right-0 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-[#655e94] text-white shadow ring-2 ring-white hover:opacity-90"
+            className="absolute bottom-0 right-0 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-white shadow ring-2 ring-white hover:opacity-90"
+            style={{ backgroundColor: accent }}
           >
-            <UploadCloud size={14} aria-hidden="true" />
+            <UploadCloud size={16} aria-hidden="true" />
           </label>
           <input
             id={inputId}
@@ -120,6 +134,17 @@ export default function ResourceImageField({
             className="hidden"
             onChange={handleFileChange}
           />
+
+          {showUrlToggle ? (
+            <button
+              type="button"
+              aria-label="URL ile ekle"
+              onClick={() => setShowUrlInput((current) => !current)}
+              className="absolute bottom-0 left-0 flex h-9 w-9 items-center justify-center rounded-full border border-panel-border bg-white text-panel-text-muted shadow ring-2 ring-white hover:text-panel-text"
+            >
+              <Link size={14} aria-hidden="true" />
+            </button>
+          ) : null}
 
           {value ? (
             <button
@@ -132,6 +157,16 @@ export default function ResourceImageField({
             </button>
           ) : null}
         </div>
+
+        {showUrlToggle && showUrlInput ? (
+          <input
+            value={value || ''}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder="https://..."
+            className="w-full rounded-xl border border-panel-border p-2 text-xs text-panel-text"
+            style={{ maxWidth: size + 48 }}
+          />
+        ) : null}
 
         {uploading ? <span className="text-xs text-panel-text-muted">Yükleniyor...</span> : null}
         {error ? <span className="text-xs text-panel-warm">{error}</span> : null}
@@ -154,7 +189,10 @@ export default function ResourceImageField({
             className={`h-20 w-20 border border-[#e5e8e9] object-cover shadow-sm ${previewShapeClass}`}
           />
         ) : (
-          <span className={`flex h-20 w-20 items-center justify-center bg-[#f5f2fb] text-[#655e94] ${previewShapeClass}`}>
+          <span
+            className={`flex h-20 w-20 items-center justify-center ${previewShapeClass}`}
+            style={{ backgroundColor: accentSoft, color: accent }}
+          >
             <ImagePlus size={24} aria-hidden="true" />
           </span>
         )}
@@ -163,7 +201,8 @@ export default function ResourceImageField({
           <div className="flex flex-wrap gap-2">
             <label
               htmlFor={inputId}
-              className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#655e94] px-4 text-sm font-medium text-white transition-colors hover:opacity-90"
+              className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium text-white transition-colors hover:opacity-90"
+              style={{ backgroundColor: accent }}
             >
               <UploadCloud size={15} aria-hidden="true" />
               {uploading ? 'Yükleniyor...' : value ? 'Görseli Değiştir' : 'Görsel Yükle'}

@@ -23,6 +23,7 @@ import {
   GraduationCap,
   School,
   UserRound,
+  Undo2,
 } from 'lucide-react'
 
 const ICONS = {
@@ -50,6 +51,7 @@ const ICONS = {
   GraduationCap,
   School,
   UserRound,
+  Undo2,
 }
 
 export default function NavIcon({ name, size = 20, className }) {

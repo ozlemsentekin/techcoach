@@ -225,11 +225,16 @@ async function autoCompleteExpiredBreaks({ studentId, date, isDraft }) {
   })
 
   const updateDb = await withRequest(updateBindings)
+  // dbo.Tasks has an enabled trigger (TR_Tasks_SetUpdatedAt), and SQL Server rejects
+  // "OUTPUT ... " without an INTO target on triggered tables — so the ids have to land
+  // in a table variable first and get SELECTed back out as a separate statement.
   const updateResult = await updateDb.query(`
+    DECLARE @UpdatedIds TABLE (id UNIQUEIDENTIFIER);
     UPDATE dbo.Tasks
     SET status = 'tamamlandi', completed_at = @completedAt
-    OUTPUT INSERTED.id
+    OUTPUT INSERTED.id INTO @UpdatedIds
     WHERE id IN (${idParamNames.join(', ')}) AND student_id = @studentId AND status = 'bekliyor';
+    SELECT id FROM @UpdatedIds;
   `)
 
   const updatedIds = new Set(updateResult.recordset.map((updatedRow) => updatedRow.id))

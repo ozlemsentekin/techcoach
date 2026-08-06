@@ -21,7 +21,7 @@ export default function TeacherSidebar() {
             className={() =>
               `flex items-center gap-3 rounded-xl px-2.5 py-2 text-base font-medium transition-colors md:justify-center lg:justify-start ${
                 isNavItemActive(item.to, location)
-                  ? 'bg-panel-blue-soft text-panel-blue'
+                  ? 'bg-[#f8e3d0] text-[#b85f22]'
                   : 'text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-text'
               }`
             }

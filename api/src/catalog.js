@@ -21,7 +21,7 @@ function sanitizePublisher(record) {
   }
 }
 
-const RESOURCE_BOOK_TYPES = ['konu_anlatimi', 'soru_bankasi', 'okuma_kitabi']
+const RESOURCE_BOOK_TYPES = ['konu_anlatimi', 'soru_bankasi', 'okuma_kitabi', 'etkinlik']
 const MAX_RESOURCE_IMAGE_LENGTH = 350000
 const RESOURCE_IMAGE_DATA_URL_PATTERN = /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\s]+$/i
 
@@ -57,8 +57,20 @@ function sanitizeResourceBook(record) {
     type: record.resource_type,
     hasAnswerKey: Boolean(record.has_answer_key),
     imageUrl: record.image_url || null,
+    publishMonthYear: record.publish_month_year || null,
     createdAt: record.created_at,
   }
+}
+
+function sanitizeResourceBookPublishMonthYear(value) {
+  const publishMonthYear = value?.trim() || null
+  if (!publishMonthYear) return { value: null }
+
+  if (publishMonthYear.length > 20) {
+    return { error: 'Basım ay/yıl bilgisi en fazla 20 karakter olmalı.' }
+  }
+
+  return { value: publishMonthYear }
 }
 
 function sanitizeTestAnswerKeyEntry(record) {
@@ -233,7 +245,7 @@ async function listResourceBooksHandler(request) {
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
       SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.created_at
+             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.publish_month_year, rb.created_at
       FROM dbo.ResourceBooks rb
       LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
       LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
@@ -277,7 +289,7 @@ async function listResourceBooksMissingAnswerKeyHandler(request) {
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
       SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.created_at,
+             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.publish_month_year, rb.created_at,
              COUNT(tt.id) AS total_test_count,
              SUM(CASE WHEN tt.question_count > ISNULL(ak.answer_count, 0) THEN 1 ELSE 0 END) AS incomplete_test_count
       FROM dbo.ResourceBooks rb
@@ -292,7 +304,7 @@ async function listResourceBooksMissingAnswerKeyHandler(request) {
       ) ak ON ak.test_id = tt.id
       WHERE rb.resource_type = 'soru_bankasi' AND rb.has_answer_key = 1
       GROUP BY rb.id, rb.publisher_id, p.name, rb.subject_id, s.name, rb.name, rb.page_count,
-               rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.created_at
+               rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.publish_month_year, rb.created_at
       HAVING SUM(CASE WHEN tt.question_count > ISNULL(ak.answer_count, 0) THEN 1 ELSE 0 END) > 0
       ORDER BY s.name ASC, rb.name ASC;
     `)
@@ -329,7 +341,7 @@ async function listResourceBooksForPanelHandler(request) {
     )
     const result = await requestDb.query(`
       SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.created_at
+             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.publish_month_year, rb.created_at
       FROM dbo.StudentResourceBooks srb
       INNER JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id
       LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
@@ -369,6 +381,7 @@ async function createResourceBookHandler(request) {
     const type = payload?.type
     const hasAnswerKey = payload?.hasAnswerKey !== false
     const imageResult = sanitizeResourceBookImageUrl(payload?.imageUrl)
+    const publishMonthYearResult = sanitizeResourceBookPublishMonthYear(payload?.publishMonthYear)
 
     if (!publisherId) {
       return json(400, { error: 'Yayın evi seçilmeli.' })
@@ -385,6 +398,9 @@ async function createResourceBookHandler(request) {
     if (imageResult.error) {
       return json(400, { error: imageResult.error })
     }
+    if (publishMonthYearResult.error) {
+      return json(400, { error: publishMonthYearResult.error })
+    }
 
     const requestDb = await withRequest({
       publisherId: { type: sql.UniqueIdentifier, value: publisherId },
@@ -395,12 +411,13 @@ async function createResourceBookHandler(request) {
       resourceType: { type: sql.NVarChar(30), value: type },
       hasAnswerKey: { type: sql.Bit, value: hasAnswerKey },
       imageUrl: { type: sql.NVarChar(sql.MAX), value: imageResult.value },
+      publishMonthYear: { type: sql.NVarChar(20), value: publishMonthYearResult.value },
     })
 
     const result = await requestDb.query(`
-      INSERT INTO dbo.ResourceBooks (publisher_id, subject_id, name, page_count, is_active, resource_type, has_answer_key, image_url)
-      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.page_count, inserted.is_active, inserted.resource_type, inserted.has_answer_key, inserted.image_url, inserted.created_at
-      VALUES (@publisherId, @subjectId, @name, @pageCount, @isActive, @resourceType, @hasAnswerKey, @imageUrl);
+      INSERT INTO dbo.ResourceBooks (publisher_id, subject_id, name, page_count, is_active, resource_type, has_answer_key, image_url, publish_month_year)
+      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.page_count, inserted.is_active, inserted.resource_type, inserted.has_answer_key, inserted.image_url, inserted.publish_month_year, inserted.created_at
+      VALUES (@publisherId, @subjectId, @name, @pageCount, @isActive, @resourceType, @hasAnswerKey, @imageUrl, @publishMonthYear);
     `)
 
     return json(201, { resourceBook: sanitizeResourceBook(result.recordset[0]) })
@@ -435,6 +452,7 @@ async function updateResourceBookHandler(request) {
     const type = payload?.type
     const hasAnswerKey = payload?.hasAnswerKey !== false
     const imageResult = sanitizeResourceBookImageUrl(payload?.imageUrl)
+    const publishMonthYearResult = sanitizeResourceBookPublishMonthYear(payload?.publishMonthYear)
 
     if (!publisherId) {
       return json(400, { error: 'Yayın evi seçilmeli.' })
@@ -451,6 +469,9 @@ async function updateResourceBookHandler(request) {
     if (imageResult.error) {
       return json(400, { error: imageResult.error })
     }
+    if (publishMonthYearResult.error) {
+      return json(400, { error: publishMonthYearResult.error })
+    }
 
     const requestDb = await withRequest({
       id: { type: sql.UniqueIdentifier, value: resourceBookId },
@@ -462,12 +483,13 @@ async function updateResourceBookHandler(request) {
       resourceType: { type: sql.NVarChar(30), value: type },
       hasAnswerKey: { type: sql.Bit, value: hasAnswerKey },
       imageUrl: { type: sql.NVarChar(sql.MAX), value: imageResult.value },
+      publishMonthYear: { type: sql.NVarChar(20), value: publishMonthYearResult.value },
     })
 
     const result = await requestDb.query(`
       UPDATE dbo.ResourceBooks
-      SET publisher_id = @publisherId, subject_id = @subjectId, name = @name, page_count = @pageCount, is_active = @isActive, resource_type = @resourceType, has_answer_key = @hasAnswerKey, image_url = @imageUrl
-      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.page_count, inserted.is_active, inserted.resource_type, inserted.has_answer_key, inserted.image_url, inserted.created_at
+      SET publisher_id = @publisherId, subject_id = @subjectId, name = @name, page_count = @pageCount, is_active = @isActive, resource_type = @resourceType, has_answer_key = @hasAnswerKey, image_url = @imageUrl, publish_month_year = @publishMonthYear
+      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.page_count, inserted.is_active, inserted.resource_type, inserted.has_answer_key, inserted.image_url, inserted.publish_month_year, inserted.created_at
       WHERE id = @id;
     `)
 
