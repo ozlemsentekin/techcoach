@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { LogIn, UserPlus, Quote } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
+import { panelPathForRole } from '../utils/panelPath'
 import './LandingPage.css'
 
 const NAV_ITEMS = [
@@ -11,10 +13,6 @@ const NAV_ITEMS = [
 
 function BrandIcon() {
   return <img src="/logo-mark.png" alt="" className="logo-mark-img" />
-}
-
-function panelPathForRole(role) {
-  return role === 'ebeveyn' ? '/parent/dashboard' : '/student/today'
 }
 
 export default function LandingPage() {
@@ -64,8 +62,8 @@ export default function LandingPage() {
   const primaryCtaLabel = sessionLoading
     ? 'Oturum Kontrol Ediliyor'
     : authUser
-      ? `${authUser.fullName.split(' ')[0]}`
-      : 'Başla'
+      ? authUser.fullName.split(' ')[0]
+      : ''
 
   return (
     <div className="landing-page">
@@ -99,43 +97,63 @@ export default function LandingPage() {
               </button>
             </div>
           ) : null}
-          <a className="btn btn-primary nav-cta" href="#" onClick={handlePrimaryCta}>
-            <span className="cta-full">{primaryCtaLabel}</span>
-            <span className="cta-short">{authUser ? 'Hesap' : 'Başla'}</span>
-            <span className="nav-cta-icon" aria-hidden="true">→</span>
-          </a>
+          {sessionLoading ? (
+            <a className="btn btn-primary nav-cta" href="#" aria-disabled="true">
+              <span>{primaryCtaLabel}</span>
+            </a>
+          ) : authUser ? (
+            <a className="btn btn-primary nav-cta" href="#" onClick={handlePrimaryCta}>
+              <span className="cta-full">{primaryCtaLabel}</span>
+              <span className="cta-short">Hesap</span>
+              <span className="nav-cta-icon" aria-hidden="true">→</span>
+            </a>
+          ) : (
+            <div className="nav-cta-group">
+              <Link className="btn btn-outline nav-cta nav-cta-secondary" to="/uye-ol">
+                <UserPlus size={17} aria-hidden="true" />
+                <span className="cta-full">Üye Ol</span>
+                <span className="cta-short">Üye</span>
+              </Link>
+              <Link className="btn btn-primary nav-cta" to="/login">
+                <LogIn size={17} aria-hidden="true" />
+                <span className="cta-full">Giriş Yap</span>
+                <span className="cta-short">Giriş</span>
+              </Link>
+            </div>
+          )}
         </div>
       </header>
 
       <main>
         <section className="section hero" id="hero">
-          <div className="container hero-grid">
-            <div className="hero-copy">
-              <div className="hero-copy-main">
-                <div className="eyebrow">Akademik performansın dijital sistemi</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="container quote">
-            <strong>“Ölçemediğiniz şeyi geliştiremezsiniz.”</strong>
-            Peter Drucker
+          <div className="container">
+            <figure className="quote">
+              <blockquote>
+                <Quote className="quote-mark quote-mark-open" aria-hidden="true" />
+                Ölçemediğiniz şeyi geliştiremezsiniz.
+                <Quote className="quote-mark quote-mark-close" aria-hidden="true" />
+              </blockquote>
+              <figcaption>Peter Drucker</figcaption>
+            </figure>
           </div>
         </section>
 
         <section className="section" id="nasil">
           <div className="container">
             <div className="about-shell">
-              <h2 className="section-title">TechCoach Nedir?</h2>
+              <p className="about-kicker">8. Sınıf • LGS Hazırlık Platformu</p>
+              <h2 className="section-title">
+                LGS Hazırlığını Planlı, Ölçülebilir ve Birlikte Yönetin
+              </h2>
               <p className="section-subtitle about-subtitle">
-                TechCoach; öğrencinin hedeflerini planlara dönüştüren, ilerlemesini görünür hâle
-                getiren ve öğrenci, veli ile öğretmeni aynı gelişim sürecinde buluşturan akademik
-                gelişim platformudur.
+                TechCoach; 8. sınıf öğrencisinin günlük çalışmalarını LGS hedeflerine göre
+                planlayan, konu ve soru bazlı gelişimini görünür hâle getiren; öğrenci, veli ve
+                öğretmeni aynı hazırlık sürecinde buluşturan akademik gelişim platformudur.
               </p>
               <div className="about-highlights">
-                <span>Planlı çalışma süreci</span>
-                <span>Görünür akademik gelişim</span>
-                <span>Öğrenci • Veli • Öğretmen iş birliği.</span>
+                <span>LGS’ye özel çalışma planı</span>
+                <span>Konu ve soru bazlı gelişim takibi</span>
+                <span>Öğrenci • Veli • Öğretmen iş birliği</span>
               </div>
             </div>
 
@@ -146,8 +164,9 @@ export default function LandingPage() {
                   <h3>Amacı</h3>
                 </div>
                 <p>
-                  Öğrencinin ne çalışacağını, ne kadar ilerlediğini ve nerede zorlandığını görünür
-                  hale getirerek sürdürülebilir çalışma disiplini oluşturmak.
+                  Her öğrencinin LGS hazırlığını kendi gelişimine, ihtiyaçlarına ve öğrenme hızına
+                  göre planlamak; öğrenciyi başkalarıyla değil, kendi ilerlemesiyle değerlendirerek
+                  potansiyelini en yüksek seviyede ortaya çıkarmasına yardımcı olmak.
                 </p>
               </article>
 
@@ -157,19 +176,24 @@ export default function LandingPage() {
                   <h3>Vizyonu</h3>
                 </div>
                 <p>
-                  Sınava hazırlık sürecini ezbere ve baskıyla değil; ölçüm, analiz ve kişiselleştirilmiş
-                  yönlendirme ile yönetilen bir standarda dönüştürmek.
+                  Her öğrencinin LGS hazırlığını kendi gelişimine uygun bir planla sürdürebildiği;
+                  ilerlemenin düzenli olarak takip edildiği, eksiklerin zamanında fark edildiği ve
+                  doğru yönlendirmeyle desteklendiği bir eğitim süreci oluşturmak.
                 </p>
               </article>
 
               <article className="step">
                 <div className="step-head">
                   <div className="step-num">3</div>
-                  <h3>Özet Değer</h3>
+                  <h3>Çalışma Modeli</h3>
                 </div>
                 <p>
-                  Öğrenci uygular, veli takip eder, öğretmen yön verir. TechCoach bu üç rolü tek bir
-                  veri diliyle birleştirir.
+                  TechCoach; öğrencinin tamamladığı görevleri, çalışma sürelerini, çözdüğü
+                  soruları, konu bazlı başarı durumunu ve verdiği geri bildirimleri bir araya
+                  getirerek gelişim sürecini görünür hâle getirir. Bu veriler doğrultusunda
+                  öğrencinin ihtiyaçlarına ve öğrenme hızına uygun bir yol haritası oluşturulur;
+                  öğrenci planını uygular, veli süreci takip eder, öğretmen ise ihtiyaç duyulan
+                  noktada yönlendirme yapar.
                 </p>
               </article>
             </div>
@@ -301,7 +325,20 @@ export default function LandingPage() {
       </main>
 
       <footer id="sss">
-        <div className="container">© 2026 TechCoach · Disiplin. Analiz. Başarı.</div>
+        <div className="container footer-inner">
+          <nav className="footer-links" aria-label="Yasal bağlantılar">
+            <Link to="/hakkimizda">Hakkımızda</Link>
+            <Link to="/gizlilik-sozlesmesi">Gizlilik Sözleşmesi</Link>
+            <Link to="/mesafeli-satis-sozlesmesi">Mesafeli Satış Sözleşmesi</Link>
+            <Link to="/teslimat-iade-sartlari">Teslimat ve İade Şartları</Link>
+          </nav>
+          <div className="footer-payment-logos" aria-label="Kabul edilen ödeme yöntemleri">
+            <img src="/payment-visa.svg" alt="Visa" height="20" />
+            <img src="/payment-mastercard.svg" alt="Mastercard" height="20" />
+            <img src="/payment-iyzico.svg" alt="iyzico ile öde" height="20" />
+          </div>
+          <div className="footer-copyright">© 2026 TechCoach · Disiplin. Analiz. Başarı.</div>
+        </div>
       </footer>
     </div>
   )

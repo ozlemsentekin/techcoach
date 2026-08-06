@@ -86,6 +86,9 @@ async function registerHandler(request) {
 
   const passwordHash = await hashPassword(defaultPasswordForPhone(phone))
   const now = new Date()
+  // Herkese açık kayıt formu yalnızca ebeveyn veya öğretmen hesabı oluşturur; öğrenciler
+  // yalnızca bir ebeveynin "Öğrenci Profillerim" ekranından eklenebilir.
+  const role = payload.role === 'ogretmen' ? 'ogretmen' : 'ebeveyn'
 
   try {
     const requestDb = await withRequest({
@@ -93,9 +96,7 @@ async function registerHandler(request) {
       email: { type: sql.NVarChar(320), value: email },
       phone: { type: sql.NVarChar(20), value: phone },
       passwordHash: { type: sql.NVarChar(255), value: passwordHash },
-      // Herkese açık kayıt formu yalnızca ebeveyn hesabı oluşturur; öğrenciler
-      // yalnızca bir ebeveynin "Öğrenci Profillerim" ekranından eklenebilir.
-      role: { type: sql.NVarChar(20), value: 'ebeveyn' },
+      role: { type: sql.NVarChar(20), value: role },
       consentAt: { type: sql.DateTime2, value: now },
     })
 
@@ -108,6 +109,19 @@ async function registerHandler(request) {
     `)
 
     const user = sanitizeUser(result.recordset[0])
+
+    if (role === 'ogretmen') {
+      // Web üzerinden kart tahsilatı henüz entegre değil; öğretmen deneme durumuyla
+      // kaydolur, gerçek ödeme altyapısı eklendiğinde bu durum güncellenecek.
+      const entitlementDb = await withRequest({
+        teacherId: { type: sql.UniqueIdentifier, value: user.id },
+      })
+      await entitlementDb.query(`
+        INSERT INTO dbo.TeacherEntitlements (teacher_id, status, source, base_seats, purchased_seats, granted_reason)
+        VALUES (@teacherId, 'trial', 'comp', 4, 0, 'self_service_signup');
+      `)
+    }
+
     const token = createSessionToken(user)
 
     return json(201, { user }, createSessionHeaders(token))
