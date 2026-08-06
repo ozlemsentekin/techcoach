@@ -5676,7 +5676,7 @@ footer {
   }
 
   .quote {
-    display: none;
+    padding: 24px 20px 20px;
   }
 }
 
