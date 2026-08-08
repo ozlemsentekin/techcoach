@@ -50,7 +50,6 @@ export function AuthProvider({ children }) {
       const data = await authRequest('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify(payload),
-        timeoutMs: 10000,
       })
       setAuthUser(data.user)
       setAuthMessage('Giriş başarılı.')
