@@ -281,6 +281,7 @@ async function createHomeworkHandler(request) {
     const dayPlans = Array.isArray(payload?.dayPlans) ? payload.dayPlans : []
     const taskDate = payload?.taskDate || null
     const taskTime = payload?.taskTime || null
+    const taskDurationMinutes = Number(payload?.taskDurationMinutes) || null
 
     if (!subjectId) {
       return json(400, { error: 'Ders seçilmeli.' })
@@ -361,7 +362,7 @@ async function createHomeworkHandler(request) {
 
     const homework = sanitizeHomework(fetchResult.recordset[0])
     if (taskDate) {
-      await createTaskForHomework(studentId, homework, taskDate, resourceBookId, testIds, taskTime)
+      await createTaskForHomework(studentId, homework, taskDate, resourceBookId, testIds, taskTime, taskDurationMinutes)
     }
 
     return json(201, { homework })
@@ -409,6 +410,26 @@ async function updateHomeworkHandler(request) {
     if (payload?.dueDate !== undefined) {
       updates.push('due_date = @dueDate')
       bindings.dueDate = { type: sql.Date, value: payload.dueDate }
+    }
+    if (payload?.totalQuestionCount !== undefined) {
+      updates.push('total_question_count = @totalQuestionCount')
+      bindings.totalQuestionCount = { type: sql.Int, value: Number(payload.totalQuestionCount) || 0 }
+    }
+    if (payload?.totalPageCount !== undefined) {
+      updates.push('total_page_count = @totalPageCount')
+      bindings.totalPageCount = { type: sql.Int, value: Number(payload.totalPageCount) || 0 }
+    }
+    if (payload?.subjectId !== undefined || payload?.resourceBookId !== undefined) {
+      if (!payload?.subjectId || !payload?.resourceBookId) {
+        return json(400, { error: 'Ders ve kaynak birlikte gönderilmeli.' })
+      }
+      const assignedResource = await getAssignedResourceBook(studentId, payload.subjectId, payload.resourceBookId)
+      if (!assignedResource) {
+        return json(400, { error: 'Seçilen kaynak bu öğrenciye bu ders için atanmamış.' })
+      }
+      updates.push('subject_id = @subjectId', 'resource_book_id = @resourceBookId')
+      bindings.subjectId = { type: sql.UniqueIdentifier, value: payload.subjectId }
+      bindings.resourceBookId = { type: sql.UniqueIdentifier, value: payload.resourceBookId }
     }
 
     if (updates.length === 0) {

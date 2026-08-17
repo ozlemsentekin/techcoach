@@ -50,27 +50,27 @@ function ResourceCover({ book, className = 'h-20 w-16' }) {
 }
 
 function SubjectShelfCard({ group, onOpen }) {
-  const previewBooks = group.books.slice(0, 4)
+  const previewBooks = group.books.slice(0, 6)
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="flex min-h-[178px] flex-col justify-between rounded-xl border border-[#e5e8e9] bg-white px-4 py-4 text-left shadow-[0_2px_10px_rgba(20,25,40,0.04)] transition-colors hover:border-student-theme-primary hover:bg-student-theme-soft/40"
+      className="flex min-h-[220px] flex-col justify-between rounded-2xl border border-[#e5e8e9] bg-white px-5 py-5 text-left shadow-[0_2px_10px_rgba(20,25,40,0.04)] transition-colors hover:border-student-theme-primary hover:bg-student-theme-soft/40 sm:min-h-[260px] sm:px-6 sm:py-6"
     >
       <span className="flex items-start justify-between gap-3">
         <span className="min-w-0">
-          <span className="block truncate text-base font-bold text-panel-text">{group.name}</span>
-          <span className="mt-1 block text-xs font-medium text-panel-text-muted">{group.books.length} kaynak</span>
+          <span className="block truncate text-lg font-bold text-panel-text sm:text-xl">{group.name}</span>
+          <span className="mt-1 block text-sm font-medium text-panel-text-muted">{group.books.length} kaynak</span>
         </span>
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-student-theme-soft text-student-theme-text">
-          <BookOpen size={18} aria-hidden="true" />
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-student-theme-soft text-student-theme-text">
+          <BookOpen size={22} aria-hidden="true" />
         </span>
       </span>
 
-      <span className="mt-5 flex items-end gap-2 overflow-hidden border-b-4 border-[#d9e2e3] pb-2">
+      <span className="mt-5 flex flex-wrap items-end gap-3 overflow-hidden border-b-4 border-[#d9e2e3] pb-3 sm:gap-4">
         {previewBooks.map((book) => (
-          <ResourceCover key={book.id} book={book} className="h-20 w-14" />
+          <ResourceCover key={book.id} book={book} className="h-28 w-20 sm:h-32 sm:w-24" />
         ))}
       </span>
     </button>
@@ -156,7 +156,7 @@ export default function CoursesPage() {
           ))}
         </MotionDiv>
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6">
           {subjectGroups.map((group) => (
             <SubjectShelfCard key={group.id} group={group} onOpen={() => setSelectedSubjectId(group.id)} />
           ))}

@@ -1,4 +1,4 @@
-import { CalendarPlus, Clock, Trash2 } from 'lucide-react'
+import { CalendarPlus, Clock, Pencil, Trash2 } from 'lucide-react'
 import { cn } from '../../ui/utils'
 import { isHomeworkCompleted, isHomeworkOverdue } from './homeworkDisplay'
 import PublisherBadge from './PublisherBadge'
@@ -8,7 +8,7 @@ function formatShortDate(dateISO) {
   return new Date(dateISO).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })
 }
 
-export default function HomeworkItemCard({ homework, onDeleteRequest, onAssignTaskRequest }) {
+export default function HomeworkItemCard({ homework, onDeleteRequest, onEditRequest, onAssignTaskRequest }) {
   const completed = isHomeworkCompleted(homework)
   const overdue = isHomeworkOverdue(homework)
 
@@ -69,6 +69,16 @@ export default function HomeworkItemCard({ homework, onDeleteRequest, onAssignTa
               Görev Oluştur
             </button>
           )
+        ) : null}
+        {onEditRequest && !homework.isTaskOnly ? (
+          <button
+            type="button"
+            aria-label="Ödevi düzenle"
+            onClick={() => onEditRequest(homework)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-panel-text-muted transition-colors hover:bg-panel-blue-soft hover:text-panel-blue"
+          >
+            <Pencil size={16} aria-hidden="true" />
+          </button>
         ) : null}
         {onDeleteRequest && !homework.isTaskOnly ? (
           <button

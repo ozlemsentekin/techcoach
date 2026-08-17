@@ -1,75 +1,146 @@
 import { useEffect, useState } from 'react'
-import { Award, BookOpen, Check, GraduationCap, ListChecks, Search, UserRound, Users, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import {
+  BookOpen,
+  Calendar,
+  Check,
+  GraduationCap,
+  Palette,
+  Phone,
+  Plus,
+  School,
+  Trophy,
+  TrendingUp,
+  UserRound,
+  Users,
+  X,
+} from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
+import { useParentStudentsGate } from '../useParentStudentsGate'
+import { THEMES } from '../../../theme/themes'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
-import DataTable from '../../ui/DataTable'
-import ActionsMenu from '../../ui/ActionsMenu'
 import { MotionDiv } from '../../ui/motion'
 import StudentTeacherModal from '../components/StudentTeacherModal'
-import StudentProfileModal from '../components/StudentProfileModal'
-import StudentReportCardModal from '../components/StudentReportCardModal'
+import StudentProfileModal, { InterestPicker } from '../components/StudentProfileModal'
 import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
+import SchoolPicker from '../components/SchoolPicker'
+import ResourceImageField from '../components/ResourceImageField'
+import { COMMON_ARTS, COMMON_SPORTS } from '../components/studentInterestCatalog'
 
-const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const GENDER_OPTIONS = [
+  { value: 'kiz', label: 'Kız' },
+  { value: 'erkek', label: 'Erkek' },
+]
 
-const RESOURCE_BOOK_TYPE_LABELS = {
-  konu_anlatimi: 'Konu Anlatımı',
-  soru_bankasi: 'Soru Bankası',
-  okuma_kitabi: 'Okuma Kitabı',
+const GRADE_OPTIONS = ['1', '2', '3', '4', '5', '6', '7', '8']
+
+// Bir sınıf seviyesindeki öğrencilerin tipik doğum yılı, o sınıfa göre ± 1 yıllık bir
+// aralığa denk gelir (ör. bugün 7. sınıf öğrencisi genelde 12 yaşında olur).
+function getGradeBirthYearRange(grade) {
+  const gradeNumber = Number(grade)
+  if (!Number.isInteger(gradeNumber) || gradeNumber < 1 || gradeNumber > 8) {
+    return null
+  }
+  const expectedBirthYear = new Date().getFullYear() - gradeNumber - 5
+  return { min: expectedBirthYear - 1, max: expectedBirthYear + 1 }
 }
 
+const WIZARD_STEPS = [
+  { key: 1, label: 'Temel Bilgiler' },
+  { key: 2, label: 'Okul Bilgileri' },
+  { key: 3, label: 'Panel ve Hobiler' },
+]
+
 const INITIAL_FORM = {
-  fullName: '',
-  email: '',
+  firstName: '',
+  lastName: '',
+  birthDate: '',
+  phone: '',
+  gender: '',
+  grade: '',
   acceptConsent: false,
 }
 
-function formatDate(value) {
-  if (!value) return '—'
-  return new Date(value).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-function groupResourceBooksBySubject(resourceBooks) {
-  const groups = new Map()
-
-  resourceBooks.forEach((book) => {
-    const key = book.subjectId || 'no-subject'
-    if (!groups.has(key)) {
-      groups.set(key, {
-        id: key,
-        name: book.subjectName || 'Derssiz Kaynaklar',
-        books: [],
-      })
-    }
-    groups.get(key).books.push(book)
-  })
-
-  return Array.from(groups.values())
-}
-
-function ResourceAvatar({ book }) {
-  if (book.imageUrl) {
+function StudentAvatar({ student }) {
+  if (student.photoUrl) {
     return (
       <img
-        src={book.imageUrl}
-        alt={`${book.name} görseli`}
-        className="h-14 w-14 shrink-0 rounded-xl border border-[#e5e8e9] object-cover"
+        src={student.photoUrl}
+        alt={`${student.fullName} fotoğrafı`}
+        className="h-12 w-12 shrink-0 rounded-xl border border-panel-border object-cover"
       />
     )
   }
 
   return (
-    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#f5f2fb] text-[#655e94]">
-      <BookOpen size={22} aria-hidden="true" />
+    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
+      <GraduationCap size={24} aria-hidden="true" />
     </span>
   )
 }
 
+function WizardSteps({ step }) {
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto bg-panel-accent-soft px-4 py-3 sm:gap-3 sm:px-6 sm:py-3.5">
+      {WIZARD_STEPS.map((item, index) => {
+        const isActive = item.key === step
+        const isDone = item.key < step
+        return (
+          <div key={item.key} className="flex shrink-0 items-center gap-2 sm:flex-1 sm:gap-3">
+            <span
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors sm:h-8 sm:w-8 sm:text-sm ${
+                isActive
+                  ? 'bg-panel-warm text-white shadow-[0_4px_10px_rgba(201,106,31,0.35)]'
+                  : isDone
+                    ? 'bg-panel-warm text-white'
+                    : 'border border-panel-border-strong bg-white text-panel-text-muted'
+              }`}
+            >
+              {isDone ? <Check size={14} aria-hidden="true" /> : item.key}
+            </span>
+            <span
+              className={`whitespace-nowrap text-xs font-semibold sm:text-sm ${
+                isActive ? 'text-panel-warm' : isDone ? 'text-panel-text' : 'text-panel-text-muted'
+              }`}
+            >
+              {item.label}
+            </span>
+            {index < WIZARD_STEPS.length - 1 ? (
+              <span className={`hidden h-0.5 flex-1 rounded-full sm:block ${isDone ? 'bg-panel-warm' : 'bg-panel-border-strong'}`} />
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function FieldIcon({ icon }) {
+  const Icon = icon
+  return (
+    <Icon
+      size={16}
+      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-panel-blue"
+      aria-hidden="true"
+    />
+  )
+}
+
 function AddStudentModal({ onCreated, onClose }) {
+  const [step, setStep] = useState(1)
+  const [studentId, setStudentId] = useState(null)
   const [form, setForm] = useState(INITIAL_FORM)
+  const [photoUrl, setPhotoUrl] = useState('')
+  const [provinceId, setProvinceId] = useState(null)
+  const [districtId, setDistrictId] = useState(null)
+  const [school, setSchool] = useState(null)
+  const [themeId, setThemeId] = useState('')
+  const [supportedTeam, setSupportedTeam] = useState('')
+  const [interestedSports, setInterestedSports] = useState([])
+  const [interestedArts, setInterestedArts] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -78,15 +149,36 @@ function AddStudentModal({ onCreated, onClose }) {
     setForm((current) => ({ ...current, [name]: type === 'checkbox' ? checked : value }))
   }
 
-  const handleSubmit = async (event) => {
+  const handleCreate = async (event) => {
     event.preventDefault()
 
-    if (form.fullName.trim().length < 3) {
-      setError('Ad soyad en az 3 karakter olmalı.')
+    const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim()
+    if (form.firstName.trim().length < 2 || form.lastName.trim().length < 2) {
+      setError('Ad ve soyad girilmeli.')
       return
     }
-    if (form.email && !EMAIL_RULE.test(form.email)) {
-      setError('Geçerli bir e-posta adresi girin.')
+    if (!form.birthDate) {
+      setError('Doğum tarihi seçilmeli.')
+      return
+    }
+    if (!form.gender) {
+      setError('Cinsiyet seçilmeli.')
+      return
+    }
+    if (!form.phone.trim()) {
+      setError('Telefon numarası girilmeli.')
+      return
+    }
+    if (!GRADE_OPTIONS.includes(form.grade)) {
+      setError('Sınıf seçilmeli.')
+      return
+    }
+    const birthYearRange = getGradeBirthYearRange(form.grade)
+    const birthYear = Number(form.birthDate.slice(0, 4))
+    if (birthYearRange && (birthYear < birthYearRange.min || birthYear > birthYearRange.max)) {
+      setError(
+        `${form.grade}. sınıf için doğum tarihi ${birthYearRange.min}-${birthYearRange.max} yılları arasında olmalı.`,
+      )
       return
     }
     if (!form.acceptConsent) {
@@ -99,9 +191,19 @@ function AddStudentModal({ onCreated, onClose }) {
     try {
       const data = await authRequest('/api/parent/students', {
         method: 'POST',
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          fullName,
+          birthDate: form.birthDate,
+          phone: form.phone.trim(),
+          gender: form.gender,
+          grade: form.grade,
+          photoUrl: photoUrl || null,
+          acceptConsent: form.acceptConsent,
+        }),
       })
+      setStudentId(data.student.id)
       onCreated(data.student)
+      setStep(2)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -109,245 +211,394 @@ function AddStudentModal({ onCreated, onClose }) {
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-md panel-card p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-panel-text">Öğrenci Ekle</h2>
-          <button type="button" aria-label="Kapat" onClick={onClose}>
-            <X size={20} />
-          </button>
-        </div>
-
-        {error ? (
-          <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-2.5 text-sm text-panel-warm">{error}</div>
-        ) : null}
-
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">Ad Soyad</span>
-            <input
-              name="fullName"
-              value={form.fullName}
-              onChange={handleChange}
-              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">E-posta (tercihen)</span>
-            <input
-              name="email"
-              type="email"
-              value={form.email}
-              onChange={handleChange}
-              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-            />
-          </label>
-
-          <label className="flex items-start gap-2 text-sm text-panel-text">
-            <input
-              type="checkbox"
-              name="acceptConsent"
-              checked={form.acceptConsent}
-              onChange={handleChange}
-              className="mt-0.5 h-5 w-5 rounded border-panel-border"
-            />
-            <span>Bu öğrenci için ebeveyn olarak KVKK ve aydınlatma metni onayını veriyorum.</span>
-          </label>
-
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading ? 'Oluşturuluyor...' : 'Öğrenci Profilini Oluştur'}
-          </Button>
-        </div>
-      </form>
-    </div>
-  )
-}
-
-function StudentResourceModal({ student, onSaved, onClose }) {
-  const [resourceBooks, setResourceBooks] = useState(null)
-  const [selectedIds, setSelectedIds] = useState(new Set())
-  const [query, setQuery] = useState('')
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    let ignore = false
-
-    authRequest(`/api/parent/students/${student.id}/resource-books`, { method: 'GET' })
-      .then((data) => {
-        if (ignore) return
-        setResourceBooks(data.resourceBooks)
-        setSelectedIds(new Set(data.resourceBooks.filter((book) => book.assigned).map((book) => book.id)))
-      })
-      .catch((err) => {
-        if (!ignore) setError(err.message)
-      })
-
-    return () => {
-      ignore = true
-    }
-  }, [student.id])
-
-  const filteredResourceBooks = (resourceBooks || []).filter((book) => {
-    const normalizedQuery = query.trim().toLocaleLowerCase('tr-TR')
-    if (!normalizedQuery) return true
-
-    return [book.name, book.publisherName, book.subjectName]
-      .filter(Boolean)
-      .some((value) => value.toLocaleLowerCase('tr-TR').includes(normalizedQuery))
-  })
-
-  const subjectGroups = groupResourceBooksBySubject(filteredResourceBooks)
-
-  const toggleResource = (bookId) => {
-    setSelectedIds((current) => {
-      const next = new Set(current)
-      if (next.has(bookId)) next.delete(bookId)
-      else next.add(bookId)
-      return next
+  const saveProfile = () =>
+    authRequest(`/api/parent/students/${studentId}/profile`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        provinceId,
+        districtId,
+        schoolId: school?.id || null,
+        birthDate: form.birthDate,
+        grade: form.grade,
+        phone: form.phone.trim(),
+        photoUrl: photoUrl || null,
+        supportedTeam: supportedTeam.trim() || null,
+        interestedSports,
+        interestedArts,
+        ...(themeId ? { themeId } : {}),
+      }),
     })
-  }
 
-  const handleSave = async () => {
-    setSaving(true)
+  const handleSaveSchool = async () => {
+    if (!school) {
+      setError('Okul seçilmeli.')
+      return
+    }
     setError('')
+    setLoading(true)
     try {
-      const data = await authRequest(`/api/parent/students/${student.id}/resource-books`, {
-        method: 'PUT',
-        body: JSON.stringify({ resourceBookIds: Array.from(selectedIds) }),
-      })
-      onSaved(student.id, data.resourceCount)
+      await saveProfile()
+      setStep(3)
     } catch (err) {
       setError(err.message)
     } finally {
-      setSaving(false)
+      setLoading(false)
     }
   }
 
+  const handleSkipSchool = () => {
+    setError('')
+    setStep(3)
+  }
+
+  const handleFinish = async () => {
+    setError('')
+    setLoading(true)
+    try {
+      await saveProfile()
+      onClose()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const defaultThemeLabel = form.gender === 'kiz' ? 'Mor Tema' : form.gender === 'erkek' ? 'Mavi Tema' : 'cinsiyete göre'
+  const gradeBirthYearRange = getGradeBirthYearRange(form.grade)
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-panel-2">
-        <div className="flex items-start justify-between gap-4 border-b border-[#edf0f1] px-5 py-4">
-          <div>
-            <h2 className="text-lg font-semibold text-panel-text">Kaynak Ekle</h2>
-            <p className="text-sm text-panel-text-muted">{student.fullName}</p>
-          </div>
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-panel-2">
+        <div className="flex items-center justify-between gap-4 px-4 pb-3 pt-3 sm:px-6 sm:pb-3.5 sm:pt-4">
+          <h2 className="text-lg font-semibold text-panel-text">Çocuk Ekle</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
             <X size={20} />
           </button>
         </div>
+        <WizardSteps step={step} />
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0f1] px-5 py-3">
-          <div className="relative w-full sm:w-80">
-            <Search
-              size={14}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#87a3a5]"
-              aria-hidden="true"
-            />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Kaynak, yayın evi veya ders ara..."
-              className="w-full rounded-xl border border-[#dfe4e5] bg-white py-2 pl-9 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#655e94]/20"
-            />
-          </div>
-          <span className="rounded-full bg-[#f5f2fb] px-3 py-1 text-xs font-semibold text-[#655e94]">
-            {selectedIds.size} kaynak seçili
-          </span>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="flex-1 overflow-y-auto border-t border-[#edf0f1] px-4 py-4 sm:px-6 sm:py-5">
           {error ? (
-            <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
+            <div className="mb-3 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
           ) : null}
 
-          {resourceBooks === null ? (
-            <LoadingState label="Kaynaklar yükleniyor..." />
-          ) : resourceBooks.length === 0 ? (
-            <EmptyState icon={BookOpen} title="Henüz kaynak yok" description="Admin panelinden kaynak ekleyebilirsiniz." />
-          ) : subjectGroups.length === 0 ? (
-            <p className="py-8 text-sm text-[#667475]">Aramayla eşleşen kaynak yok.</p>
-          ) : (
-            <div className="flex flex-col gap-6">
-              {subjectGroups.map((group) => (
-                <section key={group.id} className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between gap-3 border-b border-[#edf0f1] pb-2">
-                    <h3 className="text-sm font-bold text-[#253d3e]">{group.name}</h3>
-                    <span className="text-xs font-medium text-[#667475]">{group.books.length} kaynak</span>
+          {step === 1 ? (
+            <form id="add-student-step1" onSubmit={handleCreate} className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:gap-5">
+                <div className="flex justify-center sm:w-2/5 sm:items-start">
+                  <ResourceImageField value={photoUrl} onChange={setPhotoUrl} shape="circle" compact size={160} />
+                </div>
+
+                <div className="flex flex-col gap-2.5 sm:w-3/5">
+                  <div className="relative">
+                    <FieldIcon icon={UserRound} />
+                    <input
+                      name="firstName"
+                      value={form.firstName}
+                      onChange={handleChange}
+                      placeholder="Ad"
+                      aria-label="Ad"
+                      className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
+                    />
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    {group.books.map((book) => {
-                      const selected = selectedIds.has(book.id)
-                      return (
-                        <button
-                          key={book.id}
-                          type="button"
-                          aria-pressed={selected}
-                          onClick={() => toggleResource(book.id)}
-                          className={`flex min-h-[118px] items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
-                            selected
-                              ? 'border-[#655e94] bg-[#f8f7fb] shadow-[0_2px_10px_rgba(101,94,148,0.12)]'
-                              : 'border-[#e5e8e9] bg-white hover:border-[#c9bfec] hover:bg-[#fbfaff]'
-                          }`}
-                        >
-                          <ResourceAvatar book={book} />
-                          <span className="flex min-w-0 flex-1 flex-col gap-1">
-                            <span className="flex items-start justify-between gap-2">
-                              <span className="line-clamp-2 text-sm font-bold leading-snug text-[#253d3e]">{book.name}</span>
-                              <span
-                                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
-                                  selected ? 'border-[#655e94] bg-[#655e94] text-white' : 'border-[#cfd5d7] bg-white'
-                                }`}
-                              >
-                                {selected ? <Check size={13} aria-hidden="true" /> : null}
-                              </span>
-                            </span>
-                            <span className="truncate text-xs text-[#667475]">{book.publisherName || 'Yayın evi yok'}</span>
-                            <span className="flex flex-wrap items-center gap-1.5 pt-1">
-                              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#655e94]">
-                                {RESOURCE_BOOK_TYPE_LABELS[book.type] || book.type}
-                              </span>
-                              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#667475]">
-                                {book.pageCount} sayfa
-                              </span>
-                            </span>
-                          </span>
-                        </button>
-                      )
-                    })}
+                  <div className="relative">
+                    <FieldIcon icon={UserRound} />
+                    <input
+                      name="lastName"
+                      value={form.lastName}
+                      onChange={handleChange}
+                      placeholder="Soyad"
+                      aria-label="Soyad"
+                      className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
+                    />
                   </div>
-                </section>
-              ))}
+
+                  <div className="relative">
+                    <FieldIcon icon={GraduationCap} />
+                    <select
+                      name="grade"
+                      value={form.grade}
+                      onChange={handleChange}
+                      aria-label="Sınıf"
+                      className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
+                    >
+                      <option value="">Sınıf Seçin</option>
+                      {GRADE_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}. Sınıf
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <div className="relative">
+                      <FieldIcon icon={Calendar} />
+                      <input
+                        type="date"
+                        name="birthDate"
+                        value={form.birthDate}
+                        onChange={handleChange}
+                        min={gradeBirthYearRange ? `${gradeBirthYearRange.min}-01-01` : undefined}
+                        max={gradeBirthYearRange ? `${gradeBirthYearRange.max}-12-31` : undefined}
+                        aria-label="Doğum Tarihi"
+                        className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
+                      />
+                    </div>
+                    {gradeBirthYearRange ? (
+                      <span className="text-xs text-panel-text-muted">
+                        {form.grade}. sınıf için beklenen doğum yılı: {gradeBirthYearRange.min}–{gradeBirthYearRange.max}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="relative">
+                    <FieldIcon icon={Users} />
+                    <select
+                      name="gender"
+                      value={form.gender}
+                      onChange={handleChange}
+                      aria-label="Cinsiyet"
+                      className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
+                    >
+                      <option value="">Cinsiyet Seçin</option>
+                      {GENDER_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="relative">
+                    <FieldIcon icon={Phone} />
+                    <input
+                      name="phone"
+                      value={form.phone}
+                      onChange={handleChange}
+                      placeholder="Telefon (Örn. 05XX XXX XX XX)"
+                      aria-label="Telefon"
+                      className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <p className="-mt-1.5 text-xs text-panel-text-muted">
+                Öğrenci, telefon numarası ve varsayılan olarak telefonun son 6 hanesinden oluşan şifreyle, sizin
+                hesabınızdan bağımsız olarak doğrudan giriş yapabilir.
+              </p>
+
+              <label className="flex items-start gap-2 text-sm text-panel-text">
+                <input
+                  type="checkbox"
+                  name="acceptConsent"
+                  checked={form.acceptConsent}
+                  onChange={handleChange}
+                  className="mt-0.5 h-5 w-5 rounded border-panel-border"
+                />
+                <span>Bu çocuk için ebeveyn olarak KVKK ve aydınlatma metni onayını veriyorum.</span>
+              </label>
+            </form>
+          ) : null}
+
+          {step === 2 ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-panel-text-muted">
+                Çocuğunuzun okulunu il, ilçe ve okul adına göre seçin. Şu an bilmiyorsanız bu adımı atlayıp daha
+                sonra "Detay" ekranından ekleyebilirsiniz.
+              </p>
+              <SchoolPicker
+                provinceId={provinceId}
+                districtId={districtId}
+                school={school}
+                onProvinceChange={setProvinceId}
+                onDistrictChange={setDistrictId}
+                onSchoolChange={setSchool}
+              />
             </div>
-          )}
+          ) : null}
+
+          {step === 3 ? (
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-panel-text-muted">
+                Bu adımdaki bilgiler zorunlu değildir, istediğiniz zaman "Detay" ekranından güncelleyebilirsiniz.
+              </p>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-panel-text-muted">Panel Stili</span>
+                <div className="relative">
+                  <FieldIcon icon={Palette} />
+                  <select
+                    value={themeId}
+                    onChange={(event) => setThemeId(event.target.value)}
+                    className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
+                  >
+                    <option value="">Otomatik ({defaultThemeLabel})</option>
+                    {THEMES.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-panel-text-muted">Tuttuğu Takım (opsiyonel)</span>
+                <div className="relative">
+                  <FieldIcon icon={Trophy} />
+                  <input
+                    value={supportedTeam}
+                    onChange={(event) => setSupportedTeam(event.target.value)}
+                    placeholder="Örn. Galatasaray"
+                    className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
+                  />
+                </div>
+              </label>
+
+              <InterestPicker
+                label="Spor İlgi Alanları (opsiyonel)"
+                catalog={COMMON_SPORTS}
+                selected={interestedSports}
+                onChange={setInterestedSports}
+              />
+
+              <InterestPicker
+                label="Sanat İlgi Alanları (opsiyonel)"
+                catalog={COMMON_ARTS}
+                selected={interestedArts}
+                onChange={setInterestedArts}
+              />
+            </div>
+          ) : null}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-[#edf0f1] px-5 py-4">
-          <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={saving}>
-            Vazgeç
-          </Button>
-          <Button type="button" size="md" onClick={handleSave} disabled={saving || resourceBooks === null}>
-            {saving ? 'Kaydediliyor...' : 'Kaynakları Kaydet'}
-          </Button>
+        <div className="flex items-center justify-end gap-2 border-t border-[#edf0f1] px-4 py-3 sm:px-6 sm:py-4">
+          {step === 1 ? (
+            <>
+              <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={loading}>
+                Vazgeç
+              </Button>
+              <Button type="submit" form="add-student-step1" size="md" disabled={loading}>
+                {loading ? 'Kaydediliyor...' : 'Kaydet ve Devam Et'}
+              </Button>
+            </>
+          ) : null}
+
+          {step === 2 ? (
+            <>
+              <Button type="button" variant="secondary" size="md" onClick={handleSkipSchool} disabled={loading}>
+                Atla
+              </Button>
+              <Button type="button" size="md" onClick={handleSaveSchool} disabled={loading}>
+                {loading ? 'Kaydediliyor...' : 'Kaydet ve Devam Et'}
+              </Button>
+            </>
+          ) : null}
+
+          {step === 3 ? (
+            <>
+              <Button type="button" variant="secondary" size="md" onClick={() => setStep(2)} disabled={loading}>
+                Geri
+              </Button>
+              <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={loading}>
+                Atla ve Bitir
+              </Button>
+              <Button type="button" size="md" onClick={handleFinish} disabled={loading}>
+                {loading ? 'Kaydediliyor...' : 'Kaydet ve Bitir'}
+              </Button>
+            </>
+          ) : null}
         </div>
       </div>
     </div>
   )
 }
 
+function StudentCard({ student, onOpenLibrary, onOpenProfile, onOpenTeachers }) {
+  const navigate = useNavigate()
+
+  const gradeText = student.grade ? (/^\d+$/.test(student.grade) ? `${student.grade}. Sınıf` : student.grade) : null
+  const schoolText = [student.schoolName, gradeText].filter(Boolean).join(' · ')
+
+  return (
+    <div className="flex flex-col gap-4 rounded-2xl border border-panel-border bg-panel-surface p-5 shadow-panel-1">
+      <div className="flex min-w-0 items-center gap-3">
+        <StudentAvatar student={student} />
+        <div className="min-w-0">
+          <p className="truncate text-base font-bold text-panel-text">{student.fullName}</p>
+          {student.phone ? (
+            <p className="mt-0.5 inline-flex items-center gap-1.5 text-sm text-panel-text-muted">
+              <Phone size={13} className="shrink-0" aria-hidden="true" />
+              <span className="truncate">{student.phone}</span>
+            </p>
+          ) : null}
+          {schoolText ? (
+            <p className="mt-1.5 inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-panel-accent-soft px-2.5 py-1 text-xs font-medium text-panel-warm">
+              <School size={13} className="shrink-0" aria-hidden="true" />
+              <span className="truncate">{schoolText}</span>
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => onOpenProfile(student)}
+          className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+        >
+          <UserRound size={16} className="shrink-0" aria-hidden="true" />
+          Detay
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => onOpenLibrary(student)}
+          className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+        >
+          <BookOpen size={16} className="shrink-0" aria-hidden="true" />
+          Kaynaklar
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => navigate(`/parent/progress?studentId=${student.id}`)}
+          className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+        >
+          <TrendingUp size={16} className="shrink-0" aria-hidden="true" />
+          Gelişim Analizi
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => onOpenTeachers(student)}
+          className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+        >
+          <GraduationCap size={16} className="shrink-0" aria-hidden="true" />
+          Öğretmenler
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export default function StudentsPage() {
+  const { markHasStudents } = useParentStudentsGate()
   const [students, setStudents] = useState(null)
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const [resourceModalStudent, setResourceModalStudent] = useState(null)
   const [libraryModalStudent, setLibraryModalStudent] = useState(null)
   const [teacherModalStudent, setTeacherModalStudent] = useState(null)
   const [profileModalStudent, setProfileModalStudent] = useState(null)
-  const [reportCardStudent, setReportCardStudent] = useState(null)
-  const [openMenuStudentId, setOpenMenuStudentId] = useState(null)
 
   const loadStudents = () => {
     authRequest('/api/parent/students', { method: 'GET' })
@@ -361,14 +612,12 @@ export default function StudentsPage() {
 
   const handleCreated = (student) => {
     setStudents((current) => [...(current || []), student])
-    setShowModal(false)
+    markHasStudents()
   }
 
-  const handleResourcesSaved = (studentId, resourceCount) => {
-    setStudents((current) =>
-      (current || []).map((student) => (student.id === studentId ? { ...student, resourceCount } : student)),
-    )
-    setResourceModalStudent(null)
+  const handleWizardClose = () => {
+    setShowModal(false)
+    loadStudents()
   }
 
   const handleTeachersSaved = (studentId, teacherCount) => {
@@ -380,13 +629,12 @@ export default function StudentsPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Öğrenci Profillerim"
+        title="Çocuklarım"
+        subtitle="Çocuklarınızın profillerini yönetin, gelişimlerini takip edin ve onlara özel kaynaklara ulaşın."
         actions={
-          <Button
-            onClick={() => setShowModal(true)}
-            className="h-10 rounded-[10px] bg-[#655e94] px-4 text-sm font-medium text-white hover:opacity-90"
-          >
-            + Öğrenci Ekle
+          <Button onClick={() => setShowModal(true)}>
+            <Plus size={16} aria-hidden="true" />
+            Çocuk Profili Ekle
           </Button>
         }
       />
@@ -394,80 +642,30 @@ export default function StudentsPage() {
       {error ? (
         <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
       ) : students === null ? (
-        <LoadingState label="Öğrenciler yükleniyor..." />
+        <LoadingState label="Çocuklar yükleniyor..." />
       ) : students.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="Henüz öğrenci profili yok"
-          description="Yukarıdaki butonla ilk öğrenci profilini oluşturabilirsiniz."
+          title="İlk çocuk profilinizi oluşturun"
+          description="Çocuğunuza özel içerik ve gelişim takibi için bir profil ekleyerek başlayın."
         />
       ) : (
         <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-          <DataTable>
-            <table className="w-full min-w-[920px] text-left">
-              <thead>
-                <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#655e94]">
-                  <th className="px-4 py-3">Ad Soyad</th>
-                  <th className="px-4 py-3">E-posta</th>
-                  <th className="px-4 py-3">Kaynak</th>
-                  <th className="px-4 py-3">Öğretmen</th>
-                  <th className="px-4 py-3">Kayıt Tarihi</th>
-                  <th className="px-4 py-3">Son Giriş</th>
-                  <th className="px-4 py-3 text-right">İşlemler</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#edf0f1]">
-                {students.map((student) => (
-                  <tr key={student.id} className="hover:bg-[#f8f7fb]">
-                    <td className="px-4 py-3 text-sm font-semibold text-[#253d3e]">{student.fullName}</td>
-                    <td className="px-4 py-3 text-sm text-[#667475]">{student.email}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">
-                      {student.resourceCount || 0} kaynak
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">
-                      {student.teacherCount || 0} öğretmen
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">
-                      {formatDate(student.createdAt)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">
-                      {formatDate(student.lastLoginAt)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end">
-                        <ActionsMenu
-                          isOpen={openMenuStudentId === student.id}
-                          onToggle={() =>
-                            setOpenMenuStudentId((current) => (current === student.id ? null : student.id))
-                          }
-                          onClose={() => setOpenMenuStudentId(null)}
-                          triggerLabel="Öğrenci işlemleri"
-                          items={[
-                            { label: 'Öğretmenler', icon: GraduationCap, onClick: () => setTeacherModalStudent(student) },
-                            { label: 'Kaynaklar', icon: BookOpen, onClick: () => setResourceModalStudent(student) },
-                            { label: 'İçerik Takibi', icon: ListChecks, onClick: () => setLibraryModalStudent(student) },
-                            { label: 'Profil', icon: UserRound, onClick: () => setProfileModalStudent(student) },
-                            { label: 'LGS Karnesi', icon: Award, onClick: () => setReportCardStudent(student) },
-                          ]}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </DataTable>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {students.map((student) => (
+              <StudentCard
+                key={student.id}
+                student={student}
+                onOpenLibrary={setLibraryModalStudent}
+                onOpenProfile={setProfileModalStudent}
+                onOpenTeachers={setTeacherModalStudent}
+              />
+            ))}
+          </div>
         </MotionDiv>
       )}
 
-      {showModal ? <AddStudentModal onCreated={handleCreated} onClose={() => setShowModal(false)} /> : null}
-      {resourceModalStudent ? (
-        <StudentResourceModal
-          student={resourceModalStudent}
-          onSaved={handleResourcesSaved}
-          onClose={() => setResourceModalStudent(null)}
-        />
-      ) : null}
+      {showModal ? <AddStudentModal onCreated={handleCreated} onClose={handleWizardClose} /> : null}
       {libraryModalStudent ? (
         <StudentResourceLibraryModal student={libraryModalStudent} onClose={() => setLibraryModalStudent(null)} />
       ) : null}
@@ -482,12 +680,6 @@ export default function StudentsPage() {
         <StudentProfileModal
           student={profileModalStudent}
           onClose={() => setProfileModalStudent(null)}
-        />
-      ) : null}
-      {reportCardStudent ? (
-        <StudentReportCardModal
-          student={reportCardStudent}
-          onClose={() => setReportCardStudent(null)}
         />
       ) : null}
     </div>

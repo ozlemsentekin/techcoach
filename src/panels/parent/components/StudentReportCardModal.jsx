@@ -157,7 +157,7 @@ export default function StudentReportCardModal({ student, onClose }) {
             <div className="overflow-hidden rounded-xl border border-[#edf0f1]">
               <table className="w-full min-w-[640px] text-left">
                 <thead>
-                  <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#655e94]">
+                  <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#1c2b5e]">
                     <th className="px-4 py-3">Ders</th>
                     <th className="px-4 py-3 text-right">Toplam Soru</th>
                     <th className="px-4 py-3 text-right">Doğru</th>
@@ -175,7 +175,7 @@ export default function StudentReportCardModal({ student, onClose }) {
                       <td className="px-4 py-3 text-right text-sm text-panel-sage">{formatNumber(row.correct)}</td>
                       <td className="px-4 py-3 text-right text-sm text-panel-red">{formatNumber(row.wrong)}</td>
                       <td className="px-4 py-3 text-right text-sm text-[#667475]">{formatNumber(row.blank)}</td>
-                      <td className="px-4 py-3 text-right text-sm font-semibold text-[#655e94]">{formatNet(row.net)}</td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-[#1c2b5e]">{formatNet(row.net)}</td>
                       <td className="px-4 py-3 text-right text-sm font-semibold text-[#253d3e]">
                         {formatPercent(row.correct, row.wrong)}
                       </td>
@@ -189,7 +189,7 @@ export default function StudentReportCardModal({ student, onClose }) {
                     <td className="px-4 py-3 text-right text-sm font-bold text-panel-sage">{formatNumber(totals.correct)}</td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-panel-red">{formatNumber(totals.wrong)}</td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-[#667475]">{formatNumber(totals.blank)}</td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-[#655e94]">
+                    <td className="px-4 py-3 text-right text-sm font-bold text-[#1c2b5e]">
                       {formatNet(calculateNet(totals.correct, totals.wrong))}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-[#253d3e]">

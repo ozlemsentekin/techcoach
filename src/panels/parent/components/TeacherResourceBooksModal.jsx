@@ -41,7 +41,7 @@ function ResourceAvatar({ book }) {
   }
 
   return (
-    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#f5f2fb] text-[#655e94]">
+    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#fbe9d7] text-[#c96a1f]">
       <BookOpen size={22} aria-hidden="true" />
     </span>
   )
@@ -134,10 +134,10 @@ export default function TeacherResourceBooksModal({ student, teacher, onSaved, o
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Kaynak, yayın evi veya ders ara..."
-              className="w-full rounded-xl border border-[#dfe4e5] bg-white py-2 pl-9 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#655e94]/20"
+              className="w-full rounded-xl border border-[#dfe4e5] bg-white py-2 pl-9 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#1c2b5e]/20"
             />
           </div>
-          <span className="rounded-full bg-[#f5f2fb] px-3 py-1 text-xs font-semibold text-[#655e94]">
+          <span className="rounded-full bg-[#fbe9d7] px-3 py-1 text-xs font-semibold text-[#c96a1f]">
             {selectedIds.size} kaynak seçili
           </span>
         </div>
@@ -177,8 +177,8 @@ export default function TeacherResourceBooksModal({ student, teacher, onSaved, o
                           onClick={() => toggleResource(book.id)}
                           className={`flex min-h-[118px] items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
                             selected
-                              ? 'border-[#655e94] bg-[#f8f7fb] shadow-[0_2px_10px_rgba(101,94,148,0.12)]'
-                              : 'border-[#e5e8e9] bg-white hover:border-[#c9bfec] hover:bg-[#fbfaff]'
+                              ? 'border-[#1c2b5e] bg-[#f8f7fb] shadow-[0_2px_10px_rgba(101,94,148,0.12)]'
+                              : 'border-[#e5e8e9] bg-white hover:border-[#c1c8e0] hover:bg-[#f7f8fc]'
                           }`}
                         >
                           <ResourceAvatar book={book} />
@@ -187,7 +187,7 @@ export default function TeacherResourceBooksModal({ student, teacher, onSaved, o
                               <span className="line-clamp-2 text-sm font-bold leading-snug text-[#253d3e]">{book.name}</span>
                               <span
                                 className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
-                                  selected ? 'border-[#655e94] bg-[#655e94] text-white' : 'border-[#cfd5d7] bg-white'
+                                  selected ? 'border-[#1c2b5e] bg-[#1c2b5e] text-white' : 'border-[#cfd5d7] bg-white'
                                 }`}
                               >
                                 {selected ? <Check size={13} aria-hidden="true" /> : null}
@@ -195,7 +195,7 @@ export default function TeacherResourceBooksModal({ student, teacher, onSaved, o
                             </span>
                             <span className="truncate text-xs text-[#667475]">{book.publisherName || 'Yayın evi yok'}</span>
                             <span className="flex flex-wrap items-center gap-1.5 pt-1">
-                              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#655e94]">
+                              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#1c2b5e]">
                                 {RESOURCE_BOOK_TYPE_LABELS[book.type] || book.type}
                               </span>
                               <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#667475]">

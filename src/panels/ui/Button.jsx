@@ -1,7 +1,8 @@
 import { cn } from './utils'
 
 const variants = {
-  primary: 'bg-panel-blue text-white shadow-sm hover:opacity-90 active:opacity-90',
+  primary:
+    'bg-gradient-to-br from-[#f07b31] to-[#cc682a] text-white shadow-[0_12px_30px_rgba(240,123,49,0.28)] hover:brightness-105 active:brightness-95',
   secondary: 'border border-panel-border bg-panel-surface text-panel-text hover:bg-panel-surface-soft',
   ghost: 'text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-text',
 }

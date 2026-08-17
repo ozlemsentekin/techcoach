@@ -5,9 +5,7 @@ import LoadingState from '../../shared/LoadingState'
 import Button from '../../ui/Button'
 import ResourceImageField from './ResourceImageField'
 import SchoolPicker from './SchoolPicker'
-
-const COMMON_SPORTS = ['Futbol', 'Basketbol', 'Voleybol', 'Yüzme', 'Tenis', 'Atletizm', 'Judo/Güreş', 'Binicilik', 'Bisiklet']
-const COMMON_ARTS = ['Resim', 'Müzik', 'Tiyatro', 'Dans', 'Fotoğrafçılık', 'El Sanatları', 'Yazarlık/Şiir']
+import { COMMON_ARTS, COMMON_SPORTS } from './studentInterestCatalog'
 
 const TABS = [
   { key: 'genel', label: 'Genel Bilgiler' },
@@ -24,7 +22,7 @@ function InfoChip({ icon, children }) {
   )
 }
 
-function InterestPicker({ label, catalog, selected, onChange }) {
+export function InterestPicker({ label, catalog, selected, onChange }) {
   const [customInput, setCustomInput] = useState('')
 
   const toggle = (item) => {
@@ -57,7 +55,7 @@ function InterestPicker({ label, catalog, selected, onChange }) {
               onClick={() => toggle(item)}
               className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors ${
                 isSelected
-                  ? 'border-[#655e94] bg-[#f5f2fb] text-[#655e94]'
+                  ? 'border-[#c96a1f] bg-[#fbe9d7] text-[#c96a1f]'
                   : 'border-panel-border bg-white text-panel-text hover:bg-[#f8f7fb]'
               }`}
             >
@@ -71,7 +69,7 @@ function InterestPicker({ label, catalog, selected, onChange }) {
             key={item}
             type="button"
             onClick={() => toggle(item)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-[#655e94] bg-[#f5f2fb] px-3 py-1.5 text-sm text-[#655e94]"
+            className="inline-flex items-center gap-1.5 rounded-full border border-[#c96a1f] bg-[#fbe9d7] px-3 py-1.5 text-sm text-[#c96a1f]"
           >
             <Check size={13} aria-hidden="true" />
             {item}
@@ -221,7 +219,7 @@ export default function StudentProfileModal({ student, onClose }) {
                     onClick={() => setActiveTab(tab.key)}
                     className={`-mb-px border-b-2 px-0.5 pb-2.5 text-sm font-medium transition-colors ${
                       activeTab === tab.key
-                        ? 'border-[#655e94] text-[#655e94]'
+                        ? 'border-[#1c2b5e] text-[#1c2b5e]'
                         : 'border-transparent text-panel-text-muted hover:text-panel-text'
                     }`}
                   >

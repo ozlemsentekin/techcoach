@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronRight, LogIn, Pencil, Search, ShieldCheck, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, LogIn, Pencil, Search, ShieldCheck, Trash2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { useAuth } from '../../../context/useAuth'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
+import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import Badge from '../../ui/Badge'
 import Button from '../../ui/Button'
 import DataTable from '../../ui/DataTable'
@@ -175,7 +176,7 @@ function EditUserModal({ user, isSelf, onSaved, onClose }) {
   )
 }
 
-function RowActions({ user, isSelf, impersonating, onEdit, onImpersonate }) {
+function RowActions({ user, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
   return (
     <div className="flex items-center justify-end gap-3">
       {!isSelf && PANEL_PATH_BY_ROLE[user.role] ? (
@@ -198,11 +199,22 @@ function RowActions({ user, isSelf, impersonating, onEdit, onImpersonate }) {
       >
         <Pencil size={14} aria-hidden="true" />
       </button>
+      {!isSelf ? (
+        <button
+          type="button"
+          aria-label="Üyeyi sil"
+          title="Üyeyi Sil"
+          className="text-[#87a3a5] hover:text-panel-warm"
+          onClick={() => onDelete(user)}
+        >
+          <Trash2 size={14} aria-hidden="true" />
+        </button>
+      ) : null}
     </div>
   )
 }
 
-function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpersonate }) {
+function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
   return (
     <tr className="hover:bg-[#f8f7fb]">
       <td className="px-4 py-3 text-[#253d3e]">
@@ -225,13 +237,20 @@ function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpers
       <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.createdAt)}</td>
       <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.lastLoginAt)}</td>
       <td className="px-4 py-3 text-right">
-        <RowActions user={user} isSelf={isSelf} impersonating={impersonating} onEdit={onEdit} onImpersonate={onImpersonate} />
+        <RowActions
+          user={user}
+          isSelf={isSelf}
+          impersonating={impersonating}
+          onEdit={onEdit}
+          onImpersonate={onImpersonate}
+          onDelete={onDelete}
+        />
       </td>
     </tr>
   )
 }
 
-function ParentRow({ user, students, isSelf, impersonating, onEdit, onImpersonate }) {
+function ParentRow({ user, students, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
   const [expanded, setExpanded] = useState(true)
   const hasStudents = students.length > 0
 
@@ -260,7 +279,7 @@ function ParentRow({ user, students, isSelf, impersonating, onEdit, onImpersonat
               </Badge>
             ) : null}
             {hasStudents ? (
-              <span className="inline-flex items-center rounded-full bg-[#f8f7fb] px-2.5 py-1 text-xs font-medium text-[#655e94]">
+              <span className="inline-flex items-center rounded-full bg-[#f8f7fb] px-2.5 py-1 text-xs font-medium text-[#1c2b5e]">
                 {students.length} öğrenci
               </span>
             ) : null}
@@ -275,7 +294,14 @@ function ParentRow({ user, students, isSelf, impersonating, onEdit, onImpersonat
         <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.createdAt)}</td>
         <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.lastLoginAt)}</td>
         <td className="px-4 py-3 text-right" onClick={(event) => event.stopPropagation()}>
-          <RowActions user={user} isSelf={isSelf} impersonating={impersonating} onEdit={onEdit} onImpersonate={onImpersonate} />
+          <RowActions
+            user={user}
+            isSelf={isSelf}
+            impersonating={impersonating}
+            onEdit={onEdit}
+            onImpersonate={onImpersonate}
+            onDelete={onDelete}
+          />
         </td>
       </tr>
       {hasStudents && expanded
@@ -288,6 +314,7 @@ function ParentRow({ user, students, isSelf, impersonating, onEdit, onImpersonat
               impersonating={impersonating}
               onEdit={onEdit}
               onImpersonate={onImpersonate}
+              onDelete={onDelete}
             />
           ))
         : null}
@@ -305,6 +332,9 @@ export default function AdminUsersPage() {
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [editingUser, setEditingUser] = useState(null)
+  const [deletingUser, setDeletingUser] = useState(null)
+  const [deletingUserError, setDeletingUserError] = useState('')
+  const [deletingUserLoading, setDeletingUserLoading] = useState(false)
 
   useEffect(() => {
     let ignore = false
@@ -340,6 +370,21 @@ export default function AdminUsersPage() {
       (current || []).map((item) => (item.id === updatedUser.id ? { ...item, ...updatedUser } : item)),
     )
     setEditingUser(null)
+  }
+
+  const handleDeleteUser = async () => {
+    if (!deletingUser) return
+    setDeletingUserLoading(true)
+    setDeletingUserError('')
+    try {
+      await authRequest(`/api/panel-admin/users/${deletingUser.id}`, { method: 'DELETE' })
+      setUsers((current) => (current || []).filter((item) => item.id !== deletingUser.id))
+      setDeletingUser(null)
+    } catch (err) {
+      setDeletingUserError(err.message)
+    } finally {
+      setDeletingUserLoading(false)
+    }
   }
 
   const filteredUsers = useMemo(() => {
@@ -388,13 +433,13 @@ export default function AdminUsersPage() {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Ad, e-posta veya telefon ara..."
-                  className="w-48 rounded-lg border border-[#dfe4e5] bg-white py-1.5 pl-8 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#655e94]/20 sm:w-56"
+                  className="w-48 rounded-lg border border-[#dfe4e5] bg-white py-1.5 pl-8 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#1c2b5e]/20 sm:w-56"
                 />
               </div>
               <select
                 value={roleFilter}
                 onChange={(event) => setRoleFilter(event.target.value)}
-                className="rounded-lg border border-[#dfe4e5] bg-white px-3 py-1.5 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#655e94]/20"
+                className="rounded-lg border border-[#dfe4e5] bg-white px-3 py-1.5 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#1c2b5e]/20"
               >
                 {ROLE_FILTERS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -425,7 +470,7 @@ export default function AdminUsersPage() {
             ) : (
               <table className="w-full min-w-[760px] text-left">
                 <thead>
-                  <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#655e94]">
+                  <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#1c2b5e]">
                     <th className="px-4 py-3">Ad Soyad</th>
                     <th className="px-4 py-3">İletişim</th>
                     <th className="px-4 py-3">Rol</th>
@@ -444,6 +489,7 @@ export default function AdminUsersPage() {
                       impersonating={Boolean(impersonatingId)}
                       onEdit={setEditingUser}
                       onImpersonate={handleImpersonate}
+                      onDelete={setDeletingUser}
                     />
                   ))}
                 </tbody>
@@ -459,6 +505,23 @@ export default function AdminUsersPage() {
           isSelf={editingUser.id === authUser?.id}
           onSaved={handleUserUpdated}
           onClose={() => setEditingUser(null)}
+        />
+      ) : null}
+
+      {deletingUser ? (
+        <ConfirmationDialog
+          title="Üyeyi Sil"
+          description={
+            deletingUserError ||
+            `"${deletingUser.fullName}" adlı üyeyi silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`
+          }
+          confirmLabel={deletingUserLoading ? 'Siliniyor...' : 'Sil'}
+          cancelLabel="Vazgeç"
+          onConfirm={handleDeleteUser}
+          onCancel={() => {
+            setDeletingUser(null)
+            setDeletingUserError('')
+          }}
         />
       ) : null}
     </div>

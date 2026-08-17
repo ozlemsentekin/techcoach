@@ -104,7 +104,7 @@ function SchoolModal({ school, onSaved, onClose }) {
                   onClick={() => setType(value)}
                   className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
                     type === value
-                      ? 'border-[#655e94] bg-[#f5f2fb] text-[#655e94]'
+                      ? 'border-[#c96a1f] bg-[#fbe9d7] text-[#c96a1f]'
                       : 'border-panel-border bg-white text-panel-text hover:bg-[#f8f7fb]'
                   }`}
                 >
@@ -292,7 +292,7 @@ export default function AdminSchoolsPage() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Okul ara..."
-                className="w-48 rounded-lg border border-[#dfe4e5] bg-white py-1.5 pl-8 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#655e94]/20 sm:w-56"
+                className="w-48 rounded-lg border border-[#dfe4e5] bg-white py-1.5 pl-8 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#1c2b5e]/20 sm:w-56"
               />
             </div>
             <Button
@@ -305,7 +305,7 @@ export default function AdminSchoolsPage() {
             </Button>
             <Button
               onClick={() => setShowSchoolModal(true)}
-              className="h-10 rounded-[10px] bg-[#655e94] px-4 text-sm font-medium text-white hover:opacity-90"
+              className="h-10 rounded-[10px] bg-[#1c2b5e] px-4 text-sm font-medium text-white hover:opacity-90"
             >
               + Okul Ekle
             </Button>
@@ -336,7 +336,7 @@ export default function AdminSchoolsPage() {
           <DataTable>
             <table className="w-full min-w-[760px] text-left">
               <thead>
-                <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#655e94]">
+                <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#1c2b5e]">
                   <th className="px-4 py-3">Okul Adı</th>
                   <th className="px-4 py-3">İl</th>
                   <th className="px-4 py-3">İlçe</th>

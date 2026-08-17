@@ -2,7 +2,7 @@ const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
 const { clearSessionHeaders, json } = require('./http')
 const { defaultPasswordForPhone, hashPassword, isSessionError, normalizePhone } = require('./security')
-const { requireParentSession, verifyParentOwnsStudent } = require('./students')
+const { requireParentSession, verifyParentOwnsStudent, STUDENT_THEME_IDS } = require('./students')
 
 const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -86,6 +86,7 @@ function sanitizeStudentProfile(record) {
     birthDate: record.birth_date || null,
     supportedTeam: record.supported_team || null,
     grade: record.grade || null,
+    themeId: record.theme_id || null,
     phone: record.phone || null,
     photoUrl: record.photo_url || null,
     interestedSports: parseJsonStringArray(record.interested_sports_json),
@@ -101,7 +102,7 @@ async function fetchStudentProfile(studentId) {
   const result = await requestDb.query(`
     SELECT sp.province_id, pr.name AS province_name, sp.district_id, d.name AS district_name,
            sp.school_id, s.name AS school_name, s.school_type,
-           sp.birth_date, sp.supported_team, sp.grade, sp.phone, sp.photo_url,
+           sp.birth_date, sp.supported_team, sp.grade, sp.phone, sp.photo_url, sp.theme_id,
            sp.interested_sports_json, sp.interested_arts_json, sp.updated_at
     FROM dbo.StudentProfiles sp
     LEFT JOIN dbo.Provinces pr ON pr.id = sp.province_id
@@ -206,6 +207,14 @@ function validateProfilePayload(payload) {
     return { error: 'Sınıf bilgisi en fazla 20 karakter olmalı.' }
   }
 
+  // themeId gönderilmezse mevcut değer korunur (ör. oluşturma sırasında cinsiyete göre
+  // atanan varsayılan tema, sihirbazın sonraki adımlarında sessizce silinmemeli).
+  const themeIdProvided = typeof payload.themeId === 'string' && payload.themeId.trim() !== ''
+  const themeId = themeIdProvided ? payload.themeId.trim() : null
+  if (themeIdProvided && !STUDENT_THEME_IDS.has(themeId)) {
+    return { error: 'Geçersiz panel stili seçimi.' }
+  }
+
   let phone = null
   if (payload.phone && payload.phone.trim()) {
     phone = normalizePhone(payload.phone)
@@ -241,6 +250,8 @@ function validateProfilePayload(payload) {
       photoUrl: photoResult.value,
       interestedSports: sportsResult.value,
       interestedArts: artsResult.value,
+      themeId,
+      themeIdProvided,
     },
   }
 }
@@ -315,6 +326,8 @@ async function updateStudentProfileHandler(request) {
       phone: { type: sql.NVarChar(30), value: profile.phone },
       passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       photoUrl: { type: sql.NVarChar(sql.MAX), value: profile.photoUrl },
+      themeId: { type: sql.NVarChar(20), value: profile.themeId },
+      themeIdProvided: { type: sql.Bit, value: profile.themeIdProvided },
       interestedSportsJson: {
         type: sql.NVarChar(sql.MAX),
         value: profile.interestedSports.length ? JSON.stringify(profile.interestedSports) : null,
@@ -328,7 +341,10 @@ async function updateStudentProfileHandler(request) {
     await requestDb.query(`
       UPDATE dbo.Users
       SET phone_number = @phone,
-          password_hash = CASE WHEN @phone IS NOT NULL THEN @passwordHash ELSE password_hash END
+          password_hash = CASE
+            WHEN @phone IS NOT NULL AND (phone_number IS NULL OR phone_number <> @phone) THEN @passwordHash
+            ELSE password_hash
+          END
       WHERE id = @studentId;
 
       MERGE dbo.StudentProfiles AS target
@@ -343,11 +359,12 @@ async function updateStudentProfileHandler(request) {
         grade = @grade,
         phone = @phone,
         photo_url = @photoUrl,
+        theme_id = CASE WHEN @themeIdProvided = 1 THEN @themeId ELSE target.theme_id END,
         interested_sports_json = @interestedSportsJson,
         interested_arts_json = @interestedArtsJson
       WHEN NOT MATCHED THEN INSERT
-        (student_id, province_id, district_id, school_id, birth_date, supported_team, grade, phone, photo_url, interested_sports_json, interested_arts_json)
-        VALUES (@studentId, @provinceId, @districtId, @schoolId, @birthDate, @supportedTeam, @grade, @phone, @photoUrl, @interestedSportsJson, @interestedArtsJson);
+        (student_id, province_id, district_id, school_id, birth_date, supported_team, grade, phone, photo_url, theme_id, interested_sports_json, interested_arts_json)
+        VALUES (@studentId, @provinceId, @districtId, @schoolId, @birthDate, @supportedTeam, @grade, @phone, @photoUrl, @themeId, @interestedSportsJson, @interestedArtsJson);
     `)
 
     const savedProfile = await fetchStudentProfile(studentId)

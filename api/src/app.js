@@ -3,6 +3,7 @@ const { changePasswordHandler, loginHandler, logoutHandler, meHandler, registerH
 const {
   listUsersHandler,
   updateUserHandler,
+  deleteUserHandler,
   impersonateUserHandler,
   returnToAdminHandler,
   grantTeacherEntitlementHandler,
@@ -202,6 +203,13 @@ app.http('panel-admin-users-update', {
   methods: ['PATCH'],
   route: 'panel-admin/users/{userId}',
   handler: updateUserHandler,
+})
+
+app.http('panel-admin-users-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-admin/users/{userId}',
+  handler: deleteUserHandler,
 })
 
 app.http('panel-admin-users-impersonate', {

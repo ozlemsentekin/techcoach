@@ -45,7 +45,7 @@ function TeacherCard({ teacher, onEditResources }) {
   return (
     <article className="flex flex-col gap-3 rounded-xl border border-[#e5e8e9] bg-white p-4 shadow-[0_2px_10px_rgba(20,25,40,0.04)]">
       <div className="flex items-start gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#f5f2fb] text-[#655e94]">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#fbe9d7] text-[#c96a1f]">
           <GraduationCap size={22} aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
@@ -252,14 +252,14 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
               <section className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="text-sm font-bold uppercase text-[#667475]">Kayıtlı Öğretmenler</h3>
-                  <span className="rounded-full bg-[#f5f2fb] px-3 py-1 text-xs font-semibold text-[#655e94]">
+                  <span className="rounded-full bg-[#fbe9d7] px-3 py-1 text-xs font-semibold text-[#c96a1f]">
                     {teachers.length} öğretmen
                   </span>
                 </div>
 
                 {teachers.length === 0 ? (
                   <div className="flex min-h-[180px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[#dfe4e5] bg-[#fbfcfc] px-5 py-8 text-center">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#f5f2fb] text-[#655e94]">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#fbe9d7] text-[#c96a1f]">
                       <GraduationCap size={22} aria-hidden="true" />
                     </span>
                     <div>
@@ -329,7 +329,7 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
                           onClick={() => handleTypeChange(option.value)}
                           className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
                             selected
-                              ? 'border-[#655e94] bg-[#f5f2fb] text-[#655e94]'
+                              ? 'border-[#c96a1f] bg-[#fbe9d7] text-[#c96a1f]'
                               : 'border-panel-border bg-white text-panel-text-muted hover:bg-panel-surface-soft'
                           }`}
                         >

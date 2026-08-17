@@ -4294,7 +4294,7 @@ a {
   margin-top: 24px;
 }
 
-.panel-card {
+.landing-panel-card {
   background:
     radial-gradient(circle at top left, rgba(240, 123, 49, 0.12), transparent 34%),
     linear-gradient(180deg, #ffffff, #f7f9ff);
@@ -4306,7 +4306,7 @@ a {
   gap: 16px;
 }
 
-.panel-card-head {
+.landing-panel-card-head {
   display: grid;
   gap: 18px;
 }
@@ -4350,32 +4350,32 @@ a {
   border-radius: 0 0 18px 18px;
 }
 
-.panel-card-copy {
+.landing-panel-card-copy {
   display: grid;
   gap: 8px;
 }
 
-.panel-card h3 {
+.landing-panel-card h3 {
   margin: 0;
   font-size: 28px;
   color: var(--indigo);
   letter-spacing: -0.04em;
 }
 
-.panel-card p {
+.landing-panel-card p {
   margin: 0;
   color: var(--muted);
   font-size: 15px;
   line-height: 1.55;
 }
 
-.panel-card-tags {
+.landing-panel-card-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
 
-.panel-card-tags span {
+.landing-panel-card-tags span {
   display: inline-flex;
   align-items: center;
   min-height: 34px;
@@ -4545,6 +4545,7 @@ footer {
 
 .login-form input[type='text'],
 .login-form input[type='email'],
+.login-form input[type='tel'],
 .login-form input[type='password'] {
   width: 100%;
   border: 1px solid #d6def1;
@@ -4558,6 +4559,7 @@ footer {
 
 .login-form input[type='text']:focus,
 .login-form input[type='email']:focus,
+.login-form input[type='tel']:focus,
 .login-form input[type='password']:focus {
   border-color: #86dcd0;
   box-shadow: 0 0 0 3px rgba(240, 123, 49, 0.14);
@@ -4734,6 +4736,12 @@ footer {
 
 .signup-card {
   width: min(560px, 100%);
+}
+
+.signup-name-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .legal-page-card {
@@ -5612,13 +5620,13 @@ footer {
     padding: 20px 14px 14px;
   }
 
-  .panel-card {
+  .landing-panel-card {
     padding: 18px;
     border-radius: 24px;
     gap: 12px;
   }
 
-  .panel-card-head {
+  .landing-panel-card-head {
     grid-template-columns: 92px minmax(0, 1fr);
     align-items: center;
     gap: 14px;
@@ -5650,12 +5658,12 @@ footer {
     height: 8px;
   }
 
-  .panel-card h3 {
+  .landing-panel-card h3 {
     font-size: 26px;
     margin: 0;
   }
 
-  .panel-card p {
+  .landing-panel-card p {
     font-size: 15px;
     line-height: 1.4;
   }
@@ -5666,6 +5674,7 @@ footer {
 
   .login-form input[type='text'],
   .login-form input[type='email'],
+  .login-form input[type='tel'],
   .login-form input[type='password'] {
     padding: 11px 10px;
     font-size: 14px;
@@ -5884,36 +5893,36 @@ footer {
     height: 7px;
   }
 
-  .panel-card {
+  .landing-panel-card {
     padding: 16px;
     border-radius: 22px;
     gap: 10px;
   }
 
-  .panel-card-head {
+  .landing-panel-card-head {
     grid-template-columns: 76px minmax(0, 1fr);
     gap: 12px;
     align-items: center;
   }
 
-  .panel-card h3 {
+  .landing-panel-card h3 {
     font-size: 22px;
   }
 
-  .panel-card-copy {
+  .landing-panel-card-copy {
     gap: 6px;
   }
 
-  .panel-card p {
+  .landing-panel-card p {
     font-size: 14px;
     line-height: 1.4;
   }
 
-  .panel-card-tags {
+  .landing-panel-card-tags {
     gap: 8px;
   }
 
-  .panel-card-tags span {
+  .landing-panel-card-tags span {
     min-height: 30px;
     padding: 7px 10px;
     font-size: 10px;

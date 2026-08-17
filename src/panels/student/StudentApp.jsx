@@ -2,6 +2,8 @@ import { createElement, lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import PanelLayout from '../layout/PanelLayout'
 import ThemeProvider from '../../theme/ThemeProvider'
+import { DEFAULT_THEME, isValidTheme } from '../../theme/themes'
+import { useAuth } from '../../context/useAuth'
 import LoadingState from '../shared/LoadingState'
 
 const TodayPage = lazy(() => import('./pages/TodayPage'))
@@ -20,8 +22,11 @@ function pageElement(Page) {
 }
 
 export default function StudentApp() {
+  const { authUser } = useAuth()
+  const defaultTheme = isValidTheme(authUser?.themeId) ? authUser.themeId : DEFAULT_THEME
+
   return (
-    <ThemeProvider>
+    <ThemeProvider defaultTheme={defaultTheme}>
       <Routes>
         <Route element={<PanelLayout role="student" />}>
           <Route index element={<Navigate to="today" replace />} />

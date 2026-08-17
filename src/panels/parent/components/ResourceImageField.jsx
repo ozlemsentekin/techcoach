@@ -59,8 +59,8 @@ export default function ResourceImageField({
   compact = false,
   size = 96,
   showUrlToggle = false,
-  accent = '#655e94',
-  accentSoft = '#f5f2fb',
+  accent = '#c96a1f',
+  accentSoft = '#fbe9d7',
 }) {
   const inputId = useId()
   const previewShapeClass = shape === 'circle' ? 'rounded-full' : 'rounded-xl'

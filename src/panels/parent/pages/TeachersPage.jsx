@@ -94,7 +94,7 @@ function ResourceSummary({ teacher }) {
   return (
     <div className="flex max-w-[340px] flex-wrap gap-1.5">
       {visibleNames.map((name) => (
-        <span key={name} className="max-w-[155px] truncate rounded-full bg-[#f5f2fb] px-2.5 py-1 text-xs font-semibold text-[#655e94]">
+        <span key={name} className="max-w-[155px] truncate rounded-full bg-[#fbe9d7] px-2.5 py-1 text-xs font-semibold text-[#c96a1f]">
           {name}
         </span>
       ))}
@@ -120,14 +120,14 @@ function TeacherResourceList({ resourceBooks }) {
     <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
       {books.map((book) => (
         <div key={book.id} className="flex min-w-0 items-start gap-3 rounded-xl border border-[#e5e8e9] bg-white p-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f5f2fb] text-[#655e94]">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#fbe9d7] text-[#c96a1f]">
             <BookOpen size={17} aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
             <p className="line-clamp-2 text-sm font-semibold leading-snug text-[#253d3e]">{book.name}</p>
             <p className="mt-1 truncate text-xs text-[#667475]">{book.publisherName || 'Yayın evi yok'}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <span className="rounded-full bg-[#f5f2fb] px-2 py-0.5 text-[11px] font-semibold text-[#655e94]">
+              <span className="rounded-full bg-[#fbe9d7] px-2 py-0.5 text-[11px] font-semibold text-[#c96a1f]">
                 {book.subjectName || 'Derssiz'}
               </span>
               <span className="rounded-full bg-[#eef3f3] px-2 py-0.5 text-[11px] font-semibold text-[#5f7f81]">
@@ -154,11 +154,11 @@ function TeacherDetailCard({ teacher, associations, onEditResources, onClose }) 
     >
       <div className="flex flex-col gap-4 border-b border-[#edf0f1] px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#f5f2fb] text-[#655e94]">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#fbe9d7] text-[#c96a1f]">
             <GraduationCap size={24} aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase text-[#655e94]">Öğretmen Detayı</p>
+            <p className="text-xs font-bold uppercase text-[#1c2b5e]">Öğretmen Detayı</p>
             <h2 className="mt-1 truncate text-lg font-bold text-[#253d3e]">{teacher.fullName}</h2>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[#667475]">
               <a href={`tel:${teacher.phone.replace(/\s/g, '')}`} className="inline-flex items-center gap-1.5">
@@ -177,7 +177,7 @@ function TeacherDetailCard({ teacher, associations, onEditResources, onClose }) 
           <span className="rounded-full bg-[#eef3f3] px-3 py-1 text-xs font-semibold text-[#5f7f81]">
             {teacher.typeLabel}
           </span>
-          <span className="rounded-full bg-[#f5f2fb] px-3 py-1 text-xs font-semibold text-[#655e94]">
+          <span className="rounded-full bg-[#fbe9d7] px-3 py-1 text-xs font-semibold text-[#c96a1f]">
             {resourceCountText(totalResourceCount)}
           </span>
           {subjects.slice(0, 3).map((subject) => (
@@ -203,7 +203,7 @@ function TeacherDetailCard({ teacher, associations, onEditResources, onClose }) 
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-base font-bold text-[#253d3e]">{association.studentFullName || 'Öğrenci'}</h3>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-[#655e94]">
+                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-[#1c2b5e]">
                     {association.subjectName || 'Ders seçilmedi'}
                   </span>
                 </div>
@@ -364,11 +364,11 @@ export default function TeachersPage() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Öğretmen, öğrenci, ders veya kaynak ara..."
-                className="w-full rounded-xl border border-[#dfe4e5] bg-white py-2.5 pl-9 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#655e94]/20"
+                className="w-full rounded-xl border border-[#dfe4e5] bg-white py-2.5 pl-9 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#1c2b5e]/20"
               />
             </div>
 
-            <span className="rounded-full bg-[#f5f2fb] px-3 py-1 text-xs font-semibold text-[#655e94]">
+            <span className="rounded-full bg-[#fbe9d7] px-3 py-1 text-xs font-semibold text-[#c96a1f]">
               {filteredTeachers.length} öğretmen
             </span>
           </div>
@@ -391,7 +391,7 @@ export default function TeachersPage() {
               <DataTable>
                 <table className="w-full min-w-[1160px] text-left">
                   <thead>
-                    <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#655e94]">
+                    <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#1c2b5e]">
                       <th className="px-4 py-3">Öğretmen</th>
                       <th className="px-4 py-3">Öğrenci</th>
                       <th className="px-4 py-3">Ders</th>
@@ -428,7 +428,7 @@ export default function TeachersPage() {
                           <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">
                             <span>{teacher.studentFullName || 'Öğrenci'}</span>
                             {associationCount > 1 ? (
-                              <span className="mt-1 flex items-center gap-1 text-xs font-semibold text-[#655e94]">
+                              <span className="mt-1 flex items-center gap-1 text-xs font-semibold text-[#1c2b5e]">
                                 <Users size={12} aria-hidden="true" />
                                 {associationCount} ilişkili öğrenci
                               </span>

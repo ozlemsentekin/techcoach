@@ -86,7 +86,7 @@ export default function MistakesPage() {
           <DataTable>
             <table className="w-full min-w-[560px] text-left">
               <thead>
-                <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#655e94]">
+                <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#1c2b5e]">
                   <th className="px-4 py-3">Konu</th>
                   <th className="px-4 py-3">Hata Dağılımı</th>
                   <th className="px-4 py-3 text-center">Yanlış</th>

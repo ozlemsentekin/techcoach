@@ -76,9 +76,9 @@ export default function SchoolPicker({
         <span className="text-sm font-medium text-panel-text-muted">Okul</span>
 
         {school ? (
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-panel-border bg-[#fbfaff] p-2.5">
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-panel-border bg-[#f7f8fc] p-2.5">
             <span className="flex min-w-0 items-center gap-2">
-              <School size={16} className="shrink-0 text-[#655e94]" aria-hidden="true" />
+              <School size={16} className="shrink-0 text-[#1c2b5e]" aria-hidden="true" />
               <span className="truncate text-sm font-medium text-panel-text">{school.name}</span>
               {school.type ? (
                 <Badge tone={SCHOOL_TYPE_TONES[school.type] || 'neutral'}>
@@ -111,7 +111,7 @@ export default function SchoolPicker({
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Okul adı ara..."
-                className="w-full rounded-xl border border-[#dfe4e5] bg-white py-2 pl-9 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#655e94]/20"
+                className="w-full rounded-xl border border-[#dfe4e5] bg-white py-2 pl-9 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#1c2b5e]/20"
               />
             </div>
 

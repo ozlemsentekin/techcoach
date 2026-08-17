@@ -98,7 +98,7 @@ export default function MessagesPage() {
         />
         <Button
           onClick={handleSend}
-          className="h-10 rounded-[10px] bg-[#655e94] px-4 text-sm font-medium text-white hover:opacity-90"
+          className="h-10 rounded-[10px] bg-[#1c2b5e] px-4 text-sm font-medium text-white hover:opacity-90"
         >
           Gönder
         </Button>

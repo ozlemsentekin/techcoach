@@ -71,7 +71,6 @@ export function AuthProvider({ children }) {
       const data = await authRequest('/api/auth/register', {
         method: 'POST',
         body: JSON.stringify(payload),
-        timeoutMs: 10000,
       })
       setAuthUser(data.user)
       setAuthMessage('Üyelik oluşturuldu ve giriş yapıldı.')

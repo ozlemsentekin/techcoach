@@ -1124,12 +1124,12 @@ function BookBlock({ book, subjectsById, topics, tests, isFocused, missingAnswer
   return (
     <div
       ref={blockRef}
-      className={`overflow-hidden rounded-xl border border-[#e7e8ed] border-l-2 border-l-[#c9bfec] bg-white shadow-[0_1px_4px_rgba(20,25,40,0.03)] ${
+      className={`overflow-hidden rounded-xl border border-[#e7e8ed] border-l-2 border-l-[#c1c8e0] bg-white shadow-[0_1px_4px_rgba(20,25,40,0.03)] ${
         isFocused ? 'ring-2 ring-[#b85f22] ring-offset-2' : ''
       }`}
     >
       <div
-        className="flex min-h-[80px] flex-wrap items-center gap-3 px-[18px] py-4 cursor-pointer hover:bg-[#fbfaff]"
+        className="flex min-h-[80px] flex-wrap items-center gap-3 px-[18px] py-4 cursor-pointer hover:bg-[#f7f8fc]"
         onClick={() => setExpanded((value) => !value)}
       >
         <div className="flex min-w-0 flex-auto items-center gap-3">

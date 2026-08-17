@@ -138,7 +138,7 @@ export default function AssignTaskModal({ homework, onSave, onClose }) {
           <button
             type="submit"
             disabled={saving}
-            className="flex items-center justify-center gap-2 rounded-xl bg-[#655e94] px-4 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex items-center justify-center gap-2 rounded-xl bg-[#1c2b5e] px-4 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {saving ? <Loader2 size={16} className="animate-spin" /> : null}
             {saving ? 'Kaydediliyor...' : 'Kaydet'}

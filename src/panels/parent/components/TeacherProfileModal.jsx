@@ -166,7 +166,7 @@ export default function TeacherProfileModal({ teacher, onSaved, onClose }) {
           ) : (
             <div className="flex flex-col gap-5">
               <div className="flex items-center gap-5">
-                <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#f5f2fb] text-[#655e94]">
+                <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#fbe9d7] text-[#c96a1f]">
                   <GraduationCap size={28} aria-hidden="true" />
                 </span>
 
@@ -231,7 +231,7 @@ export default function TeacherProfileModal({ teacher, onSaved, onClose }) {
                         onClick={() => handleTypeChange(option.value)}
                         className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
                           selected
-                            ? 'border-[#655e94] bg-[#f5f2fb] text-[#655e94]'
+                            ? 'border-[#c96a1f] bg-[#fbe9d7] text-[#c96a1f]'
                             : 'border-panel-border bg-white text-panel-text-muted hover:bg-panel-surface-soft'
                         }`}
                       >

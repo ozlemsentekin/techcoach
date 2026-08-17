@@ -260,43 +260,43 @@ export default function LandingPage() {
             </p>
 
             <div className="panels-grid">
-              <article className="panel-card">
-                <div className="panel-card-head">
+              <article className="landing-panel-card">
+                <div className="landing-panel-card-head">
                   <div className="mock-device phone-style" />
-                  <div className="panel-card-copy">
+                  <div className="landing-panel-card-copy">
                     <h3>Öğrenci</h3>
                     <p>Günlük plan, streak, ders ajandası, hata defteri ve kaynak kaydı tek mobil akışta.</p>
                   </div>
                 </div>
-                <div className="panel-card-tags">
+                <div className="landing-panel-card-tags">
                   <span>Günlük plan</span>
                   <span>Hata defteri</span>
                 </div>
               </article>
 
-              <article className="panel-card">
-                <div className="panel-card-head">
+              <article className="landing-panel-card">
+                <div className="landing-panel-card-head">
                   <div className="mock-device laptop-style" />
-                  <div className="panel-card-copy">
+                  <div className="landing-panel-card-copy">
                     <h3>Veli</h3>
                     <p>Haftalık rapor, riskli dersler ve plan takibi. Müdahale değil, görünürlük.</p>
                   </div>
                 </div>
-                <div className="panel-card-tags">
+                <div className="landing-panel-card-tags">
                   <span>Haftalık rapor</span>
                   <span>Risk görünürlüğü</span>
                 </div>
               </article>
 
-              <article className="panel-card">
-                <div className="panel-card-head">
+              <article className="landing-panel-card">
+                <div className="landing-panel-card-head">
                   <div className="mock-device laptop-style" />
-                  <div className="panel-card-copy">
+                  <div className="landing-panel-card-copy">
                     <h3>Öğretmen</h3>
                     <p>Öğrencinin hata yoğunluğu, yaklaşan sınavları ve haftalık öncelik alanları tek yerde.</p>
                   </div>
                 </div>
-                <div className="panel-card-tags">
+                <div className="landing-panel-card-tags">
                   <span>Öncelik alanları</span>
                   <span>Müdahale önerisi</span>
                 </div>

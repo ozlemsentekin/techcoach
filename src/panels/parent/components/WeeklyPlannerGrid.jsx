@@ -149,8 +149,10 @@ function formatTaskTime(task) {
 }
 
 // Ödev kartının en üstünde artık genel "Matematik Ödevi" yerine daha ayırt edici bir
-// etiket gösteriyoruz: mümkünse yayın evi adı (kart başına farklı olur), yoksa ders adı.
+// etiket gösteriyoruz: ders adı + yayın evi adı bir arada (kart başına farklı olur),
+// ikisinden biri eksikse sadece var olan gösterilir.
 function getTaskTag(task) {
+  if (task.subject && task.publisherName) return `${task.subject} · ${task.publisherName}`
   return task.publisherName || task.subject || null
 }
 
@@ -596,7 +598,7 @@ export default function WeeklyPlannerGrid({
                 <button
                   type="button"
                   onClick={() => handleAddTask(date, QUICK_ADD_TEMPLATES.lesson)}
-                  className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-violet-100 bg-violet-50/80 px-3 text-xs font-bold text-panel-blue transition-colors duration-150 hover:bg-violet-100/70"
+                  className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 text-xs font-bold text-panel-blue transition-colors duration-150 hover:bg-slate-100/70"
                 >
                   <BookOpen size={16} aria-hidden="true" />
                   <span className="min-w-0 truncate">Ders Ekle</span>

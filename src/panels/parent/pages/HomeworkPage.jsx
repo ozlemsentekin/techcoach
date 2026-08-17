@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { NotebookPen } from 'lucide-react'
-import { getHomeworks, addHomework, deleteHomework, assignHomeworkTask } from '../../../services/homeworkService'
+import { getHomeworks, addHomework, updateHomework, deleteHomework, assignHomeworkTask } from '../../../services/homeworkService'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import AddHomeworkModal from '../../student/components/AddHomeworkModal'
 import AssignTaskModal from '../../shared/homework/AssignTaskModal'
+import EditHomeworkModal from '../../shared/homework/EditHomeworkModal'
 import Button from '../../ui/Button'
 import { MotionDiv } from '../../ui/motion'
 import { groupHomeworksByDate } from '../../shared/homework/homeworkDisplay'
@@ -22,6 +23,7 @@ export default function HomeworkPage() {
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [deletingHomework, setDeletingHomework] = useState(null)
+  const [editingHomework, setEditingHomework] = useState(null)
   const [assigningTaskHomework, setAssigningTaskHomework] = useState(null)
   const [expandedDateOverrides, setExpandedDateOverrides] = useState({})
   const [filter, setFilter] = useState('active')
@@ -76,6 +78,12 @@ export default function HomeworkPage() {
     setAssigningTaskHomework(null)
   }
 
+  const handleEditSave = async (updates) => {
+    await updateHomework(editingHomework.id, updates)
+    setHomeworks(await getHomeworks())
+    setEditingHomework(null)
+  }
+
   const handleDeleteConfirmed = async () => {
     const homeworkId = deletingHomework?.id
     setDeletingHomework(null)
@@ -95,7 +103,7 @@ export default function HomeworkPage() {
         actions={
           <Button
             onClick={() => setShowModal(true)}
-            className="h-10 rounded-[10px] bg-[#655e94] px-4 text-sm font-medium text-white hover:opacity-90"
+            className="h-10 rounded-[10px] bg-[#1c2b5e] px-4 text-sm font-medium text-white hover:opacity-90"
           >
             + Ödev Ekle
           </Button>
@@ -139,6 +147,7 @@ export default function HomeworkPage() {
                   isOpen={isDateOpen(dateGroup.dueDate, index)}
                   onToggle={() => toggleDate(dateGroup.dueDate, index)}
                   onDeleteRequest={setDeletingHomework}
+                  onEditRequest={setEditingHomework}
                   onAssignTaskRequest={setAssigningTaskHomework}
                 />
               ))}
@@ -154,6 +163,14 @@ export default function HomeworkPage() {
           homework={assigningTaskHomework}
           onSave={handleAssignTaskSave}
           onClose={() => setAssigningTaskHomework(null)}
+        />
+      ) : null}
+
+      {editingHomework ? (
+        <EditHomeworkModal
+          homework={editingHomework}
+          onSave={handleEditSave}
+          onClose={() => setEditingHomework(null)}
         />
       ) : null}
 

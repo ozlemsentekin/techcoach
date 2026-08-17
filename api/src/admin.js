@@ -1,4 +1,4 @@
-const { sql, withRequest } = require('./db')
+const { sql, withRequest, withTransaction } = require('./db')
 const { isConfigError } = require('./config')
 const { clearSessionHeaders, createSessionHeaders, json } = require('./http')
 const {
@@ -184,6 +184,60 @@ async function updateUserHandler(request) {
   }
 }
 
+async function deleteUserHandler(request) {
+  try {
+    const { error, session } = await requireAdmin(request)
+    if (error) {
+      return error
+    }
+
+    const userId = request.params.userId
+
+    if (userId === session.sub) {
+      return json(400, { error: 'Kendi hesabınızı silemezsiniz.' })
+    }
+
+    // Entitlements/TeacherEntitlements satırları kullanıcının kendi hesap hakkı durumudur (1:1,
+    // PK = kullanıcı id'si) — gerçek bir bağımlılık değil, o yüzden kullanıcıyla birlikte silinir.
+    // Bunun dışında kalan FK'lar (öğrenci verisi, ödev, ders programı vb.) hâlâ silmeyi engeller.
+    const rowsAffected = await withTransaction(async (requestInTransaction) => {
+      await requestInTransaction({ id: { type: sql.UniqueIdentifier, value: userId } }).query(`
+        DELETE FROM dbo.Entitlements WHERE parent_id = @id;
+      `)
+      await requestInTransaction({ id: { type: sql.UniqueIdentifier, value: userId } }).query(`
+        DELETE FROM dbo.TeacherEntitlements WHERE teacher_id = @id;
+      `)
+      const result = await requestInTransaction({ id: { type: sql.UniqueIdentifier, value: userId } }).query(`
+        DELETE FROM dbo.Users WHERE id = @id;
+      `)
+      return result.rowsAffected[0]
+    })
+
+    if (!rowsAffected) {
+      return json(404, { error: 'Kullanıcı bulunamadı.' })
+    }
+
+    return json(200, { success: true })
+  } catch (error) {
+    if (error.number === 547) {
+      return json(409, {
+        error: 'Bu kullanıcının ilişkili kayıtları (öğrenci, ödev, ders programı vb.) olduğu için silinemiyor.',
+      })
+    }
+
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('deleteUserHandler failed', error)
+    return json(500, { error: 'Kullanıcı silinemedi.' })
+  }
+}
+
 // Admin bir üyenin panelini kendi hesabıyla görüntüleyebilsin diye o üye adına yeni bir
 // oturum jetonu üretir (payload'a actingAdminId/actingAdminName eklenerek — bkz.
 // security.js createSessionToken). "Yönetici Paneline Dön" bu iz sürülen bilgiyle geri döner.
@@ -203,10 +257,12 @@ async function impersonateUserHandler(request) {
     const result = await requestDb.query(`
       SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.parent_id,
              p.full_name AS parent_full_name, u.last_login_at, u.created_at,
+             sp.theme_id,
              e.status AS entitlement_status, e.source AS entitlement_source,
              e.current_period_end AS entitlement_current_period_end
       FROM dbo.Users u
       LEFT JOIN dbo.Users p ON p.id = u.parent_id
+      LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
       LEFT JOIN dbo.Entitlements e ON e.parent_id = COALESCE(u.parent_id, u.id)
       WHERE u.id = @id;
     `)
@@ -367,6 +423,7 @@ module.exports = {
   listUsersHandler,
   requireAdmin,
   updateUserHandler,
+  deleteUserHandler,
   impersonateUserHandler,
   returnToAdminHandler,
   grantTeacherEntitlementHandler,

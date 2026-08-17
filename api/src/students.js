@@ -13,6 +13,7 @@ const {
 } = require('./security')
 const { sanitizeUser } = require('./auth')
 const { requireStudentContext } = require('./studentScope')
+const { getParentStudentQuota } = require('./entitlements')
 
 const TEACHER_TYPES = new Set(['ozel_ogretmen', 'okul_ogretmeni'])
 const TEACHER_TYPE_LABELS = {
@@ -34,6 +35,13 @@ const SCHEDULE_DAY_ALIASES = {
 }
 const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const MAX_PHOTO_LENGTH = 350000
+const PHOTO_DATA_URL_PATTERN = /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\s]+$/i
+const STUDENT_GENDERS = new Set(['kiz', 'erkek'])
+// theme_id değerleri src/theme/themes.js içindeki THEME_IDS listesiyle senkron tutulmalı.
+const STUDENT_THEME_IDS = new Set(['pink', 'blue', 'neutral', 'purple', 'green', 'orange', 'black'])
+const STUDENT_GRADES = new Set(['1', '2', '3', '4', '5', '6', '7', '8'])
 
 function sanitizeStudent(record) {
   return {
@@ -45,6 +53,11 @@ function sanitizeStudent(record) {
     resourceCount: Number(record.resource_count) || 0,
     teacherCount: Number(record.teacher_count) || 0,
     restricted: Boolean(record.funded_by_teacher_id),
+    phone: record.phone || null,
+    photoUrl: record.photo_url || null,
+    grade: record.grade || null,
+    schoolName: record.school_name || null,
+    themeId: record.theme_id || null,
   }
 }
 
@@ -444,14 +457,18 @@ async function listStudentsHandler(request) {
     })
     const result = await requestDb.query(`
       SELECT u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at, u.funded_by_teacher_id,
+             sp.phone, sp.photo_url, sp.grade, sp.theme_id, s.name AS school_name,
              COUNT(DISTINCT rb.id) AS resource_count,
              COUNT(DISTINCT st.id) AS teacher_count
       FROM dbo.Users u
+      LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
+      LEFT JOIN dbo.Schools s ON s.id = sp.school_id
       LEFT JOIN dbo.StudentResourceBooks srb ON srb.student_id = u.id
       LEFT JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id AND rb.is_active = 1
       LEFT JOIN dbo.StudentTeachers st ON st.student_id = u.id
       WHERE u.parent_id = @parentId
-      GROUP BY u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at, u.funded_by_teacher_id
+      GROUP BY u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at, u.funded_by_teacher_id,
+               sp.phone, sp.photo_url, sp.grade, sp.theme_id, s.name
       ORDER BY u.created_at ASC;
     `)
 
@@ -475,11 +492,29 @@ async function listStudentsHandler(request) {
   }
 }
 
+async function verifyStudentSchoolSelection({ provinceId, districtId, schoolId }) {
+  const requestDb = await withRequest({
+    schoolId: { type: sql.UniqueIdentifier, value: schoolId },
+    districtId: { type: sql.UniqueIdentifier, value: districtId },
+    provinceId: { type: sql.UniqueIdentifier, value: provinceId },
+  })
+  const result = await requestDb.query(`
+    SELECT TOP 1 id FROM dbo.Schools
+    WHERE id = @schoolId AND district_id = @districtId AND province_id = @provinceId AND is_active = 1;
+  `)
+  return Boolean(result.recordset[0])
+}
+
 async function createStudentHandler(request) {
   try {
     const { error, parentId } = await requireParentSession(request)
     if (error) {
       return error
+    }
+
+    const quota = await getParentStudentQuota(parentId)
+    if (!quota.hasRemaining) {
+      return json(403, { error: 'Öğrenci ekleme hakkınız kalmadı.' })
     }
 
     const payload = await request.json().catch(() => null)
@@ -502,29 +537,138 @@ async function createStudentHandler(request) {
       return json(400, { error: 'Geçerli bir e-posta adresi girin.' })
     }
 
-    const now = new Date()
+    const birthDate = String(payload.birthDate || '').trim()
+    if (!DATE_PATTERN.test(birthDate) || Number.isNaN(new Date(birthDate).getTime())) {
+      return json(400, { error: 'Doğum tarihi geçerli olmalı.' })
+    }
+    if (new Date(birthDate).getTime() > Date.now()) {
+      return json(400, { error: 'Doğum tarihi gelecekte olamaz.' })
+    }
 
-    const requestDb = await withRequest({
+    const phone = normalizePhone(payload.phone)
+    if (!phone) {
+      return json(400, { error: 'Telefon numarası geçersiz. Örn: 05XX XXX XX XX' })
+    }
+
+    let password = String(payload.password || '').trim()
+    if (!password) {
+      // Öğrenciye şifre girilmediyse (sihirbazın 1. adımı), varsayılan olarak
+      // telefon numarasının son 6 hanesi kullanılır — profil güncellemede de aynı kural geçerli.
+      password = defaultPasswordForPhone(phone)
+    }
+    if (password.length < 6 || password.length > 72) {
+      return json(400, { error: 'Şifre 6 ile 72 karakter arasında olmalı.' })
+    }
+
+    const gender = String(payload.gender || '').trim()
+    if (!STUDENT_GENDERS.has(gender)) {
+      return json(400, { error: 'Cinsiyet seçilmeli.' })
+    }
+
+    let themeId = String(payload.themeId || '').trim()
+    if (themeId && !STUDENT_THEME_IDS.has(themeId)) {
+      return json(400, { error: 'Geçersiz panel stili seçimi.' })
+    }
+    if (!themeId) {
+      // Panel stili seçilmezse cinsiyete göre varsayılan tema atanır.
+      themeId = gender === 'kiz' ? 'purple' : 'blue'
+    }
+
+    let provinceId = null
+    let districtId = null
+    let schoolId = null
+    if (payload.provinceId || payload.districtId || payload.schoolId) {
+      provinceId = String(payload.provinceId || '').trim()
+      districtId = String(payload.districtId || '').trim()
+      schoolId = String(payload.schoolId || '').trim()
+      if (!isGuid(provinceId) || !isGuid(districtId) || !isGuid(schoolId)) {
+        return json(400, { error: 'Okul seçimi eksik veya geçersiz.' })
+      }
+      const schoolValid = await verifyStudentSchoolSelection({ provinceId, districtId, schoolId })
+      if (!schoolValid) {
+        return json(400, { error: 'Seçilen okul, il/ilçe ile eşleşmiyor.' })
+      }
+    }
+
+    const grade = String(payload.grade || '').trim()
+    if (!STUDENT_GRADES.has(grade)) {
+      return json(400, { error: 'Sınıf 1 ile 8 arasında seçilmeli.' })
+    }
+
+    // Sınıf seviyesine göre beklenen doğum yılı aralığı (± 1 yıl); frontend'deki
+    // getGradeBirthYearRange ile aynı formül.
+    const expectedBirthYear = new Date().getFullYear() - Number(grade) - 5
+    const minBirthYear = expectedBirthYear - 1
+    const maxBirthYear = expectedBirthYear + 1
+    const birthYear = Number(birthDate.slice(0, 4))
+    if (birthYear < minBirthYear || birthYear > maxBirthYear) {
+      return json(400, {
+        error: `${grade}. sınıf için doğum tarihi ${minBirthYear}-${maxBirthYear} yılları arasında olmalı.`,
+      })
+    }
+
+    const rawPhotoUrl = payload.photoUrl?.trim() || null
+    let photoUrl = null
+    if (rawPhotoUrl) {
+      if (rawPhotoUrl.length > MAX_PHOTO_LENGTH) {
+        return json(400, { error: 'Fotoğraf dosyası çok büyük. Daha küçük bir görsel yükleyin.' })
+      }
+      if (!rawPhotoUrl.startsWith('https://') && !rawPhotoUrl.startsWith('http://') && !PHOTO_DATA_URL_PATTERN.test(rawPhotoUrl)) {
+        return json(400, { error: 'Fotoğraf için geçerli bir URL veya JPG/PNG/WEBP dosyası kullanılmalı.' })
+      }
+      photoUrl = rawPhotoUrl
+    }
+
+    const now = new Date()
+    const passwordHash = await hashPassword(password)
+
+    const insertDb = await withRequest({
       fullName: { type: sql.NVarChar(120), value: fullName },
       email: { type: sql.NVarChar(320), value: email },
+      phone: { type: sql.NVarChar(30), value: phone },
+      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       role: { type: sql.NVarChar(20), value: 'ogrenci' },
       parentId: { type: sql.UniqueIdentifier, value: parentId },
       consentAt: { type: sql.DateTime2, value: now },
     })
 
-    const result = await requestDb.query(`
-      INSERT INTO dbo.Users (full_name, email, role, parent_id, aydinlatma_accepted_at, kvkk_accepted_at)
-      OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.role, inserted.created_at,
-             0 AS resource_count, 0 AS teacher_count
-      VALUES (@fullName, @email, @role, @parentId, @consentAt, @consentAt);
-    `)
-
-    return json(201, { student: sanitizeStudent(result.recordset[0]) })
-  } catch (error) {
-    if (error.number === 2601 || error.number === 2627) {
-      return json(409, { error: 'Bu e-posta adresi ile daha önce kayıt oluşturulmuş.' })
+    let insertResult
+    try {
+      insertResult = await insertDb.query(`
+        INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, role, parent_id, aydinlatma_accepted_at, kvkk_accepted_at)
+        OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.role, inserted.created_at,
+               0 AS resource_count, 0 AS teacher_count
+        VALUES (@fullName, @email, @phone, @passwordHash, @role, @parentId, @consentAt, @consentAt);
+      `)
+    } catch (insertError) {
+      if (insertError.number === 2601 || insertError.number === 2627) {
+        return json(409, { error: 'Bu e-posta veya telefon numarası ile daha önce kayıt oluşturulmuş.' })
+      }
+      throw insertError
     }
 
+    const studentId = insertResult.recordset[0].id
+
+    const profileDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      provinceId: { type: sql.UniqueIdentifier, value: provinceId },
+      districtId: { type: sql.UniqueIdentifier, value: districtId },
+      schoolId: { type: sql.UniqueIdentifier, value: schoolId },
+      birthDate: { type: sql.Date, value: birthDate },
+      grade: { type: sql.NVarChar(20), value: grade },
+      phone: { type: sql.NVarChar(30), value: phone },
+      gender: { type: sql.NVarChar(10), value: gender },
+      themeId: { type: sql.NVarChar(20), value: themeId },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoUrl },
+    })
+    await profileDb.query(`
+      INSERT INTO dbo.StudentProfiles (student_id, province_id, district_id, school_id, birth_date, grade, phone, gender, theme_id, photo_url)
+      VALUES (@studentId, @provinceId, @districtId, @schoolId, @birthDate, @grade, @phone, @gender, @themeId, @photoUrl);
+    `)
+
+    const record = { ...insertResult.recordset[0], theme_id: themeId, photo_url: photoUrl }
+    return json(201, { student: sanitizeStudent(record) })
+  } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
@@ -550,9 +694,11 @@ async function enterStudentHandler(request) {
     const result = await requestDb.query(`
       SELECT TOP 1
         u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at, u.funded_by_teacher_id,
+        sp.theme_id,
         e.status AS entitlement_status, e.source AS entitlement_source,
         e.current_period_end AS entitlement_current_period_end
       FROM dbo.Users u
+      LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
       LEFT JOIN dbo.Entitlements e ON e.parent_id = @parentId
       WHERE u.id = @studentId AND u.parent_id = @parentId;
     `)
@@ -1236,4 +1382,5 @@ module.exports = {
   requireParentSession,
   verifyParentOwnsStudent,
   verifySubjectExists,
+  STUDENT_THEME_IDS,
 }

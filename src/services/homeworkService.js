@@ -50,6 +50,7 @@ export async function addHomework({
   priority,
   taskDate,
   taskTime,
+  taskDurationMinutes,
 }) {
   const data = await authRequest('/api/panel/homeworks', {
     method: 'POST',
@@ -66,6 +67,7 @@ export async function addHomework({
       priority,
       taskDate,
       taskTime,
+      taskDurationMinutes,
     }),
   })
   return data.homework

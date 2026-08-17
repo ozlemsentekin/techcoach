@@ -1,4 +1,4 @@
-const { sql, withRequest } = require('./db')
+const { sql, withRequest, withTransaction } = require('./db')
 const { isCaptchaConfigured, isConfigError } = require('./config')
 const { clearSessionHeaders, createSessionHeaders, getClientIp, json } = require('./http')
 const { consumeRateLimit } = require('./rate-limit')
@@ -17,6 +17,15 @@ const {
 
 const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+// "DENEME" kupon kodu (yalnızca büyük harf, tam eşleşme): veliye ücretsiz + 2 öğrenci
+// hakkı, öğretmene ücretsiz + 10 öğrenci hakkı tanır. Bkz. registerHandler.
+const TRIAL_COUPON_CODE = 'DENEME'
+const TRIAL_COUPON_PARENT_MAX_STUDENTS = 2
+const TRIAL_COUPON_TEACHER_SEATS = 10
+
+// Test/geliştirme sırasında sık giriş denemesi yapılan bu numara için giriş rate limit kontrolü atlanır.
+const LOGIN_RATE_LIMIT_EXEMPT_PHONES = new Set(['+905353816943'])
+
 function sanitizeUser(record) {
   return {
     id: record.id,
@@ -28,6 +37,7 @@ function sanitizeUser(record) {
     lastLoginAt: record.last_login_at,
     createdAt: record.created_at,
     needsConsent: !record.aydinlatma_accepted_at || !record.kvkk_accepted_at,
+    themeId: record.theme_id || null,
   }
 }
 
@@ -89,39 +99,68 @@ async function registerHandler(request) {
   // Herkese açık kayıt formu yalnızca ebeveyn veya öğretmen hesabı oluşturur; öğrenciler
   // yalnızca bir ebeveynin "Öğrenci Profillerim" ekranından eklenebilir.
   const role = payload.role === 'ogretmen' ? 'ogretmen' : 'ebeveyn'
+  const hasTrialCoupon = String(payload.couponCode || '').trim() === TRIAL_COUPON_CODE
 
   try {
-    const requestDb = await withRequest({
-      fullName: { type: sql.NVarChar(120), value: fullName },
-      email: { type: sql.NVarChar(320), value: email },
-      phone: { type: sql.NVarChar(20), value: phone },
-      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
-      role: { type: sql.NVarChar(20), value: role },
-      consentAt: { type: sql.DateTime2, value: now },
+    const { user, entitlement } = await withTransaction(async (requestInTransaction) => {
+      const insertUserDb = requestInTransaction({
+        fullName: { type: sql.NVarChar(120), value: fullName },
+        email: { type: sql.NVarChar(320), value: email },
+        phone: { type: sql.NVarChar(20), value: phone },
+        passwordHash: { type: sql.NVarChar(255), value: passwordHash },
+        role: { type: sql.NVarChar(20), value: role },
+        consentAt: { type: sql.DateTime2, value: now },
+      })
+
+      const result = await insertUserDb.query(`
+        INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
+        OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
+               inserted.is_admin, inserted.last_login_at, inserted.created_at,
+               inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at
+        VALUES (@fullName, @email, @phone, @passwordHash, @role, @consentAt, @consentAt);
+      `)
+
+      const insertedUser = sanitizeUser(result.recordset[0])
+      let insertedEntitlement = { status: 'none', source: null, currentPeriodEnd: null }
+
+      if (role === 'ogretmen') {
+        // Web üzerinden kart tahsilatı henüz entegre değil; öğretmen deneme durumuyla
+        // kaydolur, gerçek ödeme altyapısı eklendiğinde bu durum güncellenecek.
+        // "DENEME" kupon kodu girildiyse hesap doğrudan ücretsiz + 10 öğrenci koltuğuyla aktif olur.
+        const teacherStatus = hasTrialCoupon ? 'active' : 'trial'
+        const teacherBaseSeats = hasTrialCoupon ? TRIAL_COUPON_TEACHER_SEATS : 4
+        const teacherGrantedReason = hasTrialCoupon ? 'coupon:DENEME' : 'self_service_signup'
+        const entitlementDb = requestInTransaction({
+          teacherId: { type: sql.UniqueIdentifier, value: insertedUser.id },
+          status: { type: sql.NVarChar(20), value: teacherStatus },
+          baseSeats: { type: sql.Int, value: teacherBaseSeats },
+          grantedReason: { type: sql.NVarChar(255), value: teacherGrantedReason },
+        })
+        await entitlementDb.query(`
+          INSERT INTO dbo.TeacherEntitlements (teacher_id, status, source, base_seats, purchased_seats, granted_reason)
+          VALUES (@teacherId, @status, 'comp', @baseSeats, 0, @grantedReason);
+        `)
+      } else if (hasTrialCoupon) {
+        // "DENEME" kupon kodu girildiyse veli hesabı ücretsiz aktif olur ve 2 öğrenci ekleme
+        // hakkı tanınır (kota kontrolü createStudentHandler içinde uygulanır).
+        const entitlementDb = requestInTransaction({
+          parentId: { type: sql.UniqueIdentifier, value: insertedUser.id },
+          maxStudents: { type: sql.Int, value: TRIAL_COUPON_PARENT_MAX_STUDENTS },
+        })
+        await entitlementDb.query(`
+          INSERT INTO dbo.Entitlements (parent_id, status, source, max_students, granted_reason)
+          VALUES (@parentId, 'active', 'comp', @maxStudents, 'coupon:DENEME');
+        `)
+        insertedEntitlement = { status: 'active', source: 'comp', currentPeriodEnd: null }
+      }
+
+      return { user: insertedUser, entitlement: insertedEntitlement }
     })
 
-    const result = await requestDb.query(`
-      INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
-      OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
-             inserted.is_admin, inserted.last_login_at, inserted.created_at,
-             inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at
-      VALUES (@fullName, @email, @phone, @passwordHash, @role, @consentAt, @consentAt);
-    `)
-
-    const user = sanitizeUser(result.recordset[0])
-
-    if (role === 'ogretmen') {
-      // Web üzerinden kart tahsilatı henüz entegre değil; öğretmen deneme durumuyla
-      // kaydolur, gerçek ödeme altyapısı eklendiğinde bu durum güncellenecek.
-      const entitlementDb = await withRequest({
-        teacherId: { type: sql.UniqueIdentifier, value: user.id },
-      })
-      await entitlementDb.query(`
-        INSERT INTO dbo.TeacherEntitlements (teacher_id, status, source, base_seats, purchased_seats, granted_reason)
-        VALUES (@teacherId, 'trial', 'comp', 4, 0, 'self_service_signup');
-      `)
-    }
-
+    // Kayıt anında verilen aboneliği (kupon vb.) yanıta ekliyoruz; aksi halde frontend'deki
+    // route guard (App.jsx) taze kaydolan kullanıcıyı bir sonraki /me çağrısına kadar
+    // entitlement bilgisi eksik zannedip paywall'a yönlendirebilir.
+    user.entitlement = entitlement
     const token = createSessionToken(user)
 
     return json(201, { user }, createSessionHeaders(token))
@@ -148,7 +187,10 @@ async function loginHandler(request) {
 
   const ip = getClientIp(request)
 
-  if (!(await consumeRateLimit(`login:${ip}:${phone}`))) {
+  if (
+    !LOGIN_RATE_LIMIT_EXEMPT_PHONES.has(phone) &&
+    !(await consumeRateLimit(`login:${ip}:${phone}`))
+  ) {
     return json(429, { error: 'Çok fazla giriş denemesi yapıldı. Lütfen 15 dakika sonra tekrar deneyin.' })
   }
 
@@ -159,21 +201,26 @@ async function loginHandler(request) {
 
     const result = await requestDb.query(`
       SELECT TOP 1
-        id,
-        full_name,
-        email,
-        phone_number,
-        role,
-        is_admin,
-        password_hash,
-        failed_login_count,
-        lockout_until,
-        last_login_at,
-        created_at,
-        aydinlatma_accepted_at,
-        kvkk_accepted_at
-      FROM dbo.Users
-      WHERE phone_number = @phone;
+        u.id,
+        u.full_name,
+        u.email,
+        u.phone_number,
+        u.role,
+        u.is_admin,
+        u.password_hash,
+        u.failed_login_count,
+        u.lockout_until,
+        u.last_login_at,
+        u.created_at,
+        u.aydinlatma_accepted_at,
+        u.kvkk_accepted_at,
+        sp.theme_id,
+        e.status AS entitlement_status, e.source AS entitlement_source,
+        e.current_period_end AS entitlement_current_period_end
+      FROM dbo.Users u
+      LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
+      LEFT JOIN dbo.Entitlements e ON e.parent_id = COALESCE(u.parent_id, u.id)
+      WHERE u.phone_number = @phone;
     `)
 
     const record = result.recordset[0]
@@ -229,6 +276,13 @@ async function loginHandler(request) {
       ...record,
       last_login_at: new Date().toISOString(),
     })
+    // registerHandler'daki aynı nedenden: route guard'ın (App.jsx) girişten hemen sonra
+    // paywall'a yanlış yönlendirmemesi için entitlement bilgisi yanıta ekleniyor.
+    user.entitlement = {
+      status: record.entitlement_status || 'none',
+      source: record.entitlement_source || null,
+      currentPeriodEnd: record.entitlement_current_period_end || null,
+    }
     const token = createSessionToken(user)
 
     return json(200, { user }, createSessionHeaders(token))
@@ -252,9 +306,11 @@ async function meHandler(request) {
       SELECT TOP 1
         u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.last_login_at, u.created_at,
         u.aydinlatma_accepted_at, u.kvkk_accepted_at, u.funded_by_teacher_id,
+        sp.theme_id,
         e.status AS entitlement_status, e.source AS entitlement_source,
         e.current_period_end AS entitlement_current_period_end
       FROM dbo.Users u
+      LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
       LEFT JOIN dbo.Entitlements e ON e.parent_id = COALESCE(u.parent_id, u.id)
       WHERE u.id = @id;
     `)

@@ -1,6 +1,8 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import NavIcon from './NavIcon'
-import { PARENT_ADMIN_NAV, PARENT_SIDEBAR_NAV, isNavItemActive } from './navConfig'
+import { useAuth } from '../../context/useAuth'
+import { useParentStudentsGate } from '../parent/useParentStudentsGate'
+import { PARENT_ADMIN_NAV, getParentSidebarNav, isNavItemActive } from './navConfig'
 
 const ITEM_CLASS = ({ active }) =>
   `flex items-center gap-3 rounded-xl px-2.5 py-2 text-base font-medium transition-colors md:justify-center lg:justify-start ${
@@ -11,7 +13,10 @@ const ITEM_CLASS = ({ active }) =>
 
 export default function ParentSidebar() {
   const location = useLocation()
+  const { authUser } = useAuth()
+  const { hasStudents } = useParentStudentsGate()
   const isAdminSection = location.pathname.startsWith('/parent/admin')
+  const sidebarNav = getParentSidebarNav(authUser?.isAdmin, hasStudents)
 
   return (
     <aside className="hidden shrink-0 flex-col bg-panel-surface px-2 py-5 shadow-panel-1 md:flex md:w-20 lg:w-64 lg:px-3">
@@ -49,7 +54,7 @@ export default function ParentSidebar() {
         </nav>
       ) : (
         <nav className="flex flex-1 flex-col gap-0.5" aria-label="Ebeveyn menüsü">
-          {PARENT_SIDEBAR_NAV.map((item) => (
+          {sidebarNav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

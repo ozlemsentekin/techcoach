@@ -4,11 +4,13 @@ import ParentSidebar from './ParentSidebar'
 import TeacherSidebar from './TeacherSidebar'
 import PanelHeader from './PanelHeader'
 import MobileBottomNavigation from './MobileBottomNavigation'
+import { useAuth } from '../../context/useAuth'
+import { useParentStudentsGate } from '../parent/useParentStudentsGate'
 import {
   STUDENT_PRIMARY_NAV,
   STUDENT_MORE_NAV,
-  PARENT_PRIMARY_NAV,
-  PARENT_MORE_NAV,
+  getParentPrimaryNav,
+  getParentMoreNav,
   PARENT_ADMIN_NAV,
   TEACHER_PRIMARY_NAV,
   TEACHER_MORE_NAV,
@@ -19,19 +21,21 @@ const RETURN_TO_PANEL_ITEM = { to: '/parent/dashboard', label: 'Panele Dön', ic
 
 export default function PanelLayout({ role }) {
   const location = useLocation()
+  const { authUser } = useAuth()
+  const { hasStudents } = useParentStudentsGate()
   const Sidebar = SIDEBAR_BY_ROLE[role] || StudentSidebar
   const isAdminSection = role === 'parent' && location.pathname.startsWith('/parent/admin')
   const primaryItems = isAdminSection
     ? [RETURN_TO_PANEL_ITEM]
     : role === 'parent'
-      ? PARENT_PRIMARY_NAV
+      ? getParentPrimaryNav(hasStudents)
       : role === 'teacher'
         ? TEACHER_PRIMARY_NAV
         : STUDENT_PRIMARY_NAV
   const moreItems = isAdminSection
     ? PARENT_ADMIN_NAV.children
     : role === 'parent'
-      ? PARENT_MORE_NAV
+      ? getParentMoreNav(authUser?.isAdmin, hasStudents)
       : role === 'teacher'
         ? TEACHER_MORE_NAV
         : STUDENT_MORE_NAV

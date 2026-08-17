@@ -62,4 +62,31 @@ async function withRequest(bindings = {}) {
   return request
 }
 
-module.exports = { sql, withRequest }
+// Runs `work` against a single SQL transaction so multi-step writes (e.g. creating a
+// user row plus its entitlement row) either all commit or all roll back. `work` receives
+// a requestInTransaction(bindings) helper that mirrors withRequest's signature but binds
+// each request to the transaction instead of the shared pool.
+async function withTransaction(work) {
+  const pool = await getPool()
+  const transaction = new sql.Transaction(pool)
+  await transaction.begin()
+
+  const requestInTransaction = (bindings = {}) => {
+    const request = new sql.Request(transaction)
+    Object.entries(bindings).forEach(([name, binding]) => {
+      request.input(name, binding.type, binding.value)
+    })
+    return request
+  }
+
+  try {
+    const result = await work(requestInTransaction)
+    await transaction.commit()
+    return result
+  } catch (error) {
+    await transaction.rollback().catch(() => {})
+    throw error
+  }
+}
+
+module.exports = { sql, withRequest, withTransaction }

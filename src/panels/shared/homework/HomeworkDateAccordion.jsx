@@ -8,6 +8,7 @@ export default function HomeworkDateAccordion({
   isOpen,
   onToggle,
   onDeleteRequest,
+  onEditRequest,
   onAssignTaskRequest,
   isPast = false,
 }) {
@@ -74,6 +75,7 @@ export default function HomeworkDateAccordion({
               subject={subjectGroup.subject}
               items={subjectGroup.items}
               onDeleteRequest={onDeleteRequest}
+              onEditRequest={onEditRequest}
               onAssignTaskRequest={onAssignTaskRequest}
             />
           ))}

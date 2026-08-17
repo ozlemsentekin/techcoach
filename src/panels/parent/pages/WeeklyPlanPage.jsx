@@ -19,7 +19,7 @@ import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
 import WeeklyPlannerGrid from '../components/WeeklyPlannerGrid'
 import AddTaskDrawer from '../components/AddTaskDrawer'
-import AddHomeworkModal from '../../student/components/AddHomeworkModal'
+import AssignHomeworkModal from '../components/AssignHomeworkModal'
 
 const currentWeekStart = getMondayOfWeek(todayISODate())
 
@@ -318,7 +318,7 @@ export default function WeeklyPlanPage() {
           ) : null}
 
           {homeworkModalDate ? (
-            <AddHomeworkModal
+            <AssignHomeworkModal
               defaultTaskDate={homeworkModalDate}
               onSave={handleSaveHomework}
               onClose={() => setHomeworkModalDate('')}

@@ -235,7 +235,7 @@ function SubjectRow({ subject, books, publishersById, onToggleActive, onEditBook
           <span className="truncate text-sm font-semibold text-[#253d3e]">{subject.name}</span>
         </div>
         <div>
-          <span className="inline-flex items-center rounded-full bg-[#f8f7fb] px-2.5 py-1 text-xs font-medium text-[#655e94]">
+          <span className="inline-flex items-center rounded-full bg-[#f8f7fb] px-2.5 py-1 text-xs font-medium text-[#1c2b5e]">
             {books.length} kaynak
           </span>
         </div>
@@ -339,7 +339,7 @@ export default function AdminSubjectsPage() {
       ) : (
         <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <DataTable>
-            <div className="hidden items-center gap-3 bg-[#f8f7fb] px-4 py-3 text-[13px] font-semibold text-[#655e94] sm:grid sm:grid-cols-[minmax(0,1fr)_140px_180px]">
+            <div className="hidden items-center gap-3 bg-[#f8f7fb] px-4 py-3 text-[13px] font-semibold text-[#1c2b5e] sm:grid sm:grid-cols-[minmax(0,1fr)_140px_180px]">
               <span>Ders Adı</span>
               <span>Kaynak</span>
               <span>İşlem</span>

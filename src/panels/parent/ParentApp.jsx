@@ -1,9 +1,12 @@
-import { createElement, lazy, Suspense } from 'react'
+import { createElement, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
+import { authRequest } from '../../services/authClient'
 import ThemeProvider from '../../theme/ThemeProvider'
 import PanelLayout from '../layout/PanelLayout'
 import LoadingState from '../shared/LoadingState'
+import ParentStudentsGateContext from './parentStudentsGateContextObject'
+import { useParentStudentsGate } from './useParentStudentsGate'
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const WeeklyPlanPage = lazy(() => import('./pages/WeeklyPlanPage'))
@@ -28,6 +31,52 @@ function RequireAdmin({ children }) {
   return authUser?.isAdmin ? children : <Navigate to="/parent/dashboard" replace />
 }
 
+// Bugün/Haftalık Plan/Ödevler bir öğrenci bağlamı gerektirir; hiç çocuk profili eklenmemiş
+// bir veli için bunlar yerine Çocuklarım'a yönlendirir (bkz. navConfig.getParentPrimaryNav).
+function RequireStudents({ children }) {
+  const { studentsLoading, hasStudents } = useParentStudentsGate()
+  if (studentsLoading) {
+    return <LoadingState label="Yükleniyor..." />
+  }
+  if (!hasStudents) {
+    return <Navigate to="/parent/students" replace />
+  }
+  return children
+}
+
+function ParentStudentsGateProvider({ children }) {
+  const [studentsLoading, setStudentsLoading] = useState(true)
+  // Fetch tamamlanana kadar mevcut çoğunluk (zaten çocuğu olan) veliler için menüde
+  // gereksiz bir yanıp sönme olmasın diye iyimser varsayılan true.
+  const [hasStudents, setHasStudents] = useState(true)
+
+  useEffect(() => {
+    let ignore = false
+    authRequest('/api/parent/students', { method: 'GET' })
+      .then((data) => {
+        if (!ignore) setHasStudents((data.students || []).length > 0)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!ignore) setStudentsLoading(false)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [])
+
+  const value = useMemo(
+    () => ({
+      studentsLoading,
+      hasStudents,
+      markHasStudents: () => setHasStudents(true),
+    }),
+    [studentsLoading, hasStudents],
+  )
+
+  return <ParentStudentsGateContext.Provider value={value}>{children}</ParentStudentsGateContext.Provider>
+}
+
 function pageElement(Page) {
   return (
     <Suspense fallback={<LoadingState label="Sayfa yükleniyor..." />}>
@@ -39,78 +88,89 @@ function pageElement(Page) {
 export default function ParentApp() {
   return (
     <ThemeProvider fixedTheme="techcoach">
-      <Routes>
-        <Route element={<PanelLayout role="parent" />}>
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={pageElement(DashboardPage)} />
-          <Route path="weekly-plan" element={pageElement(WeeklyPlanPage)} />
-          <Route path="progress" element={pageElement(ProgressPage)} />
-          <Route path="messages" element={pageElement(MessagesPage)} />
-          <Route path="homework" element={pageElement(HomeworkPage)} />
-          <Route path="tests" element={pageElement(TestsPage)} />
-          <Route path="mistakes" element={pageElement(MistakesPage)} />
-          <Route path="students" element={pageElement(StudentsPage)} />
-          <Route path="teachers" element={pageElement(TeachersPage)} />
-          <Route path="settings" element={pageElement(SettingsPage)} />
-          <Route
-            path="admin/users"
-            element={
-              <RequireAdmin>
-                {pageElement(AdminUsersPage)}
-              </RequireAdmin>
-            }
-          />
-          <Route
-            path="admin/subjects"
-            element={
-              <RequireAdmin>
-                {pageElement(AdminSubjectsPage)}
-              </RequireAdmin>
-            }
-          />
-          <Route
-            path="admin/publishers"
-            element={
-              <RequireAdmin>
-                {pageElement(AdminPublishersPage)}
-              </RequireAdmin>
-            }
-          />
-          <Route
-            path="admin/motivation-messages"
-            element={
-              <RequireAdmin>
-                {pageElement(AdminMotivationMessagesPage)}
-              </RequireAdmin>
-            }
-          />
-          <Route
-            path="admin/greetings"
-            element={
-              <RequireAdmin>
-                {pageElement(AdminGreetingsPage)}
-              </RequireAdmin>
-            }
-          />
-          <Route
-            path="admin/schools"
-            element={
-              <RequireAdmin>
-                {pageElement(AdminSchoolsPage)}
-              </RequireAdmin>
-            }
-          />
-          <Route
-            path="admin/missing-answer-keys"
-            element={
-              <RequireAdmin>
-                {pageElement(AdminMissingAnswerKeysPage)}
-              </RequireAdmin>
-            }
-          />
-          <Route path="*" element={<Navigate to="dashboard" replace />} />
-        </Route>
-      </Routes>
+      <ParentStudentsGateProvider>
+        <Routes>
+          <Route element={<PanelLayout role="parent" />}>
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route
+              path="dashboard"
+              element={<RequireStudents>{pageElement(DashboardPage)}</RequireStudents>}
+            />
+            <Route
+              path="weekly-plan"
+              element={<RequireStudents>{pageElement(WeeklyPlanPage)}</RequireStudents>}
+            />
+            <Route path="progress" element={pageElement(ProgressPage)} />
+            <Route path="messages" element={pageElement(MessagesPage)} />
+            <Route
+              path="homework"
+              element={<RequireStudents>{pageElement(HomeworkPage)}</RequireStudents>}
+            />
+            <Route path="tests" element={pageElement(TestsPage)} />
+            <Route path="mistakes" element={pageElement(MistakesPage)} />
+            <Route path="students" element={pageElement(StudentsPage)} />
+            <Route path="teachers" element={pageElement(TeachersPage)} />
+            <Route path="settings" element={pageElement(SettingsPage)} />
+            <Route
+              path="admin/users"
+              element={
+                <RequireAdmin>
+                  {pageElement(AdminUsersPage)}
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="admin/subjects"
+              element={
+                <RequireAdmin>
+                  {pageElement(AdminSubjectsPage)}
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="admin/publishers"
+              element={
+                <RequireAdmin>
+                  {pageElement(AdminPublishersPage)}
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="admin/motivation-messages"
+              element={
+                <RequireAdmin>
+                  {pageElement(AdminMotivationMessagesPage)}
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="admin/greetings"
+              element={
+                <RequireAdmin>
+                  {pageElement(AdminGreetingsPage)}
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="admin/schools"
+              element={
+                <RequireAdmin>
+                  {pageElement(AdminSchoolsPage)}
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="admin/missing-answer-keys"
+              element={
+                <RequireAdmin>
+                  {pageElement(AdminMissingAnswerKeysPage)}
+                </RequireAdmin>
+              }
+            />
+            <Route path="*" element={<Navigate to="dashboard" replace />} />
+          </Route>
+        </Routes>
+      </ParentStudentsGateProvider>
     </ThemeProvider>
   )
 }

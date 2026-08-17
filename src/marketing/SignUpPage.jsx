@@ -10,9 +10,10 @@ import './LandingPage.css'
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY
 
 const INITIAL_FORM = {
-  fullName: '',
+  firstName: '',
+  lastName: '',
   phone: '',
-  email: '',
+  couponCode: '',
   acceptAydinlatma: false,
   acceptKvkk: false,
 }
@@ -158,8 +159,13 @@ export default function SignUpPage() {
     }))
   }
 
+  const combinedFullName = () => `${form.firstName.trim()} ${form.lastName.trim()}`.trim()
+
   const validateForm = () => {
-    if (form.fullName.trim().length < 3 || form.fullName.trim().length > 120) {
+    if (!form.firstName.trim() || !form.lastName.trim()) {
+      return 'Ad ve soyadınızı girin.'
+    }
+    if (combinedFullName().length < 3 || combinedFullName().length > 120) {
       return 'Ad soyad 3 ile 120 karakter arasında olmalı.'
     }
     if (!/^0?5\d{9}$/.test(form.phone)) {
@@ -182,9 +188,9 @@ export default function SignUpPage() {
 
     try {
       const user = await register({
-        fullName: form.fullName.trim(),
+        fullName: combinedFullName(),
         phone: form.phone,
-        email: form.email.trim(),
+        couponCode: form.couponCode.trim(),
         acceptAydinlatma: form.acceptAydinlatma,
         acceptKvkk: form.acceptKvkk,
         role,
@@ -257,27 +263,37 @@ export default function SignUpPage() {
             {authError ? <div className="auth-feedback auth-feedback-error">{authError}</div> : null}
 
             <form className="login-form" onSubmit={handleSubmit}>
-              <label htmlFor="signup-name">Ad Soyad</label>
-              <input
-                id="signup-name"
-                name="fullName"
-                type="text"
-                placeholder="Adınızı ve soyadınızı girin"
-                autoComplete="name"
-                minLength="3"
-                maxLength="120"
-                required
-                value={form.fullName}
-                onChange={handleInputChange}
-              />
+              <div className="signup-name-row">
+                <input
+                  name="firstName"
+                  type="text"
+                  placeholder="Ad"
+                  aria-label="Ad"
+                  autoComplete="given-name"
+                  maxLength="60"
+                  required
+                  value={form.firstName}
+                  onChange={handleInputChange}
+                />
+                <input
+                  name="lastName"
+                  type="text"
+                  placeholder="Soyad"
+                  aria-label="Soyad"
+                  autoComplete="family-name"
+                  maxLength="60"
+                  required
+                  value={form.lastName}
+                  onChange={handleInputChange}
+                />
+              </div>
 
-              <label htmlFor="signup-phone">Telefon</label>
               <input
-                id="signup-phone"
                 name="phone"
                 type="tel"
                 inputMode="numeric"
-                placeholder="05XXXXXXXXX"
+                placeholder="Telefon (05XXXXXXXXX)"
+                aria-label="Telefon"
                 maxLength="11"
                 autoComplete="tel"
                 required
@@ -285,14 +301,13 @@ export default function SignUpPage() {
                 onChange={handleInputChange}
               />
 
-              <label htmlFor="signup-email">Email Adresi (tercihen)</label>
               <input
-                id="signup-email"
-                name="email"
-                type="email"
-                placeholder="ornek@mail.com"
-                autoComplete="email"
-                value={form.email}
+                name="couponCode"
+                type="text"
+                placeholder="Kupon kodu (varsa)"
+                aria-label="Kupon Kodu"
+                autoComplete="off"
+                value={form.couponCode}
                 onChange={handleInputChange}
               />
 

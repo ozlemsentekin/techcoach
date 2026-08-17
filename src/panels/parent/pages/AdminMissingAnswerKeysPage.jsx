@@ -38,7 +38,7 @@ export default function AdminMissingAnswerKeysPage() {
       ) : (
         <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <DataTable>
-            <div className="hidden items-center gap-3 bg-[#f8f7fb] px-4 py-3 text-[13px] font-semibold text-[#655e94] sm:grid sm:grid-cols-[minmax(0,1fr)_180px_180px_140px]">
+            <div className="hidden items-center gap-3 bg-[#f8f7fb] px-4 py-3 text-[13px] font-semibold text-[#1c2b5e] sm:grid sm:grid-cols-[minmax(0,1fr)_180px_180px_140px]">
               <span>Kitap Adı</span>
               <span>Ders</span>
               <span>Yayın Evi</span>

@@ -74,7 +74,7 @@ export default function MotivationMessageForm({ onSaved }) {
 
         <button
           type="submit"
-          className="ml-auto rounded-xl bg-panel-blue px-4 py-2 text-sm font-semibold text-white"
+          className="ml-auto rounded-xl bg-gradient-to-br from-[#f07b31] to-[#cc682a] px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(240,123,49,0.28)] hover:brightness-105 active:brightness-95"
         >
           Mesajı Ata
         </button>

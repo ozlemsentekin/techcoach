@@ -56,7 +56,7 @@ export default function TestsPage() {
           <DataTable>
             <table className="w-full min-w-[600px] text-left">
               <thead>
-                <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#655e94]">
+                <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#1c2b5e]">
                   <th className="px-4 py-3">Ders</th>
                   <th className="px-4 py-3">Tarih</th>
                   <th className="px-4 py-3 text-center">Doğru</th>

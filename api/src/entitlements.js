@@ -237,9 +237,31 @@ async function hasActiveParentEntitlement(parentId) {
   return ACTIVE_STATUSES.has(result.recordset[0]?.status)
 }
 
+// Velinin öğrenci ekleme kotasını döner. `max_students` yalnızca "DENEME" kupon kodu gibi
+// sınırlı haklarda set edilir; NULL ise (varsayılan) sınırsız kabul edilir, mevcut davranış
+// bozulmaz.
+async function getParentStudentQuota(parentId) {
+  const requestDb = await withRequest({ parentId: { type: sql.UniqueIdentifier, value: parentId } })
+  const result = await requestDb.query(`
+    SELECT
+      (SELECT max_students FROM dbo.Entitlements WHERE parent_id = @parentId) AS max_students,
+      (SELECT COUNT(*) FROM dbo.Users WHERE parent_id = @parentId AND role = 'ogrenci') AS used_students;
+  `)
+  const record = result.recordset[0]
+  const maxStudents = record?.max_students ?? null
+  const usedStudents = Number(record?.used_students) || 0
+
+  return {
+    maxStudents,
+    usedStudents,
+    hasRemaining: maxStudents === null || usedStudents < maxStudents,
+  }
+}
+
 module.exports = {
   revenuecatWebhookHandler,
   getTeacherQuota,
   hasActiveParentEntitlement,
+  getParentStudentQuota,
   ACTIVE_STATUSES,
 }

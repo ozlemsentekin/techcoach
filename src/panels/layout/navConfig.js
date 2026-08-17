@@ -16,16 +16,31 @@ export const PARENT_PRIMARY_NAV = [
   { to: '/parent/dashboard', label: 'Bugün', icon: 'Home' },
   { to: '/parent/weekly-plan', label: 'Haftalık Plan', icon: 'CalendarRange' },
   { to: '/parent/homework', label: 'Ödevler', icon: 'NotebookPen' },
-  { to: '/parent/messages', label: 'Mesajlar', icon: 'MessageCircle' },
 ]
 
-export const PARENT_MORE_NAV = [
-  { to: '/parent/progress', label: 'Gelişim', icon: 'TrendingUp' },
-  { to: '/parent/students', label: 'Öğrenciler', icon: 'Users' },
-  { to: '/parent/teachers', label: 'Öğretmenler', icon: 'GraduationCap' },
-]
+export const PARENT_STUDENTS_NAV_ITEM = { to: '/parent/students', label: 'Çocuklarım', icon: 'Users' }
 
-export const PARENT_SIDEBAR_NAV = [...PARENT_PRIMARY_NAV, ...PARENT_MORE_NAV]
+export const PARENT_MORE_NAV = [PARENT_STUDENTS_NAV_ITEM]
+
+// Mesajlar şimdilik yalnızca admin yetkili veli hesaplarına gösteriliyor.
+export const PARENT_ADMIN_ONLY_NAV = [{ to: '/parent/messages', label: 'Mesajlar', icon: 'MessageCircle' }]
+
+// Henüz hiç çocuk profili eklenmemiş bir veli için Bugün/Haftalık Plan/Ödevler sayfalarının
+// hepsi boş/hatalı görünür (bunlar bir öğrenci bağlamı gerektirir); o yüzden ilk kayıtta tek
+// birincil menü öğesi olarak yalnızca Çocuklarım gösterilir.
+export function getParentPrimaryNav(hasStudents) {
+  return hasStudents ? PARENT_PRIMARY_NAV : [PARENT_STUDENTS_NAV_ITEM]
+}
+
+export function getParentMoreNav(isAdmin, hasStudents = true) {
+  const base = isAdmin ? [...PARENT_ADMIN_ONLY_NAV, ...PARENT_MORE_NAV] : PARENT_MORE_NAV
+  // Çocuklarım hiç öğrenci yokken zaten birincil menüde gösteriliyor, burada tekrar etmesin.
+  return hasStudents ? base : base.filter((item) => item.to !== PARENT_STUDENTS_NAV_ITEM.to)
+}
+
+export function getParentSidebarNav(isAdmin, hasStudents = true) {
+  return [...getParentPrimaryNav(hasStudents), ...getParentMoreNav(isAdmin, hasStudents)]
+}
 
 export function isNavItemActive(to, location) {
   const [path, search = ''] = to.split('?')
