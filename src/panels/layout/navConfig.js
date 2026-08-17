@@ -16,6 +16,7 @@ export const PARENT_PRIMARY_NAV = [
   { to: '/parent/dashboard', label: 'Bugün', icon: 'Home' },
   { to: '/parent/weekly-plan', label: 'Haftalık Plan', icon: 'CalendarRange' },
   { to: '/parent/homework', label: 'Ödevler', icon: 'NotebookPen' },
+  { to: '/parent/library', label: 'Kütüphane', icon: 'Library' },
 ]
 
 export const PARENT_STUDENTS_NAV_ITEM = { to: '/parent/students', label: 'Çocuklarım', icon: 'Users' }
@@ -52,6 +53,7 @@ export const TEACHER_PRIMARY_NAV = [
   { to: '/teacher/students', label: 'Öğrencilerim', icon: 'Users' },
   { to: '/teacher/lesson-plan', label: 'Ders Planım', icon: 'CalendarRange' },
   { to: '/teacher/parents', label: 'Velilerim', icon: 'UserRound' },
+  { to: '/teacher/library', label: 'Kütüphane', icon: 'Library' },
 ]
 
 export const TEACHER_MORE_NAV = []

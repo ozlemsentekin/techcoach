@@ -10,6 +10,8 @@ import DataTable from '../../ui/DataTable'
 import ActionsMenu from '../../ui/ActionsMenu'
 import { MotionDiv } from '../../ui/motion'
 import ProvinceDistrictSelect from '../components/ProvinceDistrictSelect'
+import SchoolScheduleEditor from '../components/SchoolScheduleEditor'
+import { GRADE_OPTIONS } from '../components/studentWizardConstants'
 
 const SCHOOL_TYPE_LABELS = { devlet: 'Devlet', ozel: 'Özel' }
 const SCHOOL_TYPE_TONES = { devlet: 'sage', ozel: 'accent' }
@@ -227,6 +229,108 @@ function BulkImportSchoolsModal({ onImported, onClose }) {
   )
 }
 
+function SchoolClassScheduleModal({ school, onClose }) {
+  const [grade, setGrade] = useState(GRADE_OPTIONS[0])
+  const [entries, setEntries] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [banner, setBanner] = useState('')
+
+  useEffect(() => {
+    let ignore = false
+    setLoading(true)
+    setError('')
+
+    authRequest(`/api/panel-admin/schools/${school.id}/class-schedules?grade=${grade}`, { method: 'GET' })
+      .then((data) => {
+        if (!ignore) setEntries(data.entries)
+      })
+      .catch((err) => {
+        if (!ignore) setError(err.message)
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false)
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [school.id, grade])
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError('')
+    setBanner('')
+    try {
+      const data = await authRequest(`/api/panel-admin/schools/${school.id}/class-schedules`, {
+        method: 'PUT',
+        body: JSON.stringify({ grade, entries }),
+      })
+      setEntries(data.entries)
+      setBanner('Ders programı kaydedildi.')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-panel-2">
+        <div className="flex items-center justify-between gap-4 px-5 py-4">
+          <div>
+            <h2 className="text-lg font-semibold text-panel-text">Ders Programı</h2>
+            <p className="text-sm text-panel-text-muted">{school.name}</p>
+          </div>
+          <button type="button" aria-label="Kapat" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto border-t border-[#edf0f1] px-5 py-4">
+          {error ? (
+            <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
+          ) : null}
+          {banner ? (
+            <div className="mb-3 rounded-xl bg-panel-sage-soft px-3 py-1.5 text-sm text-panel-text">{banner}</div>
+          ) : null}
+
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {GRADE_OPTIONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={grade === option}
+                onClick={() => setGrade(option)}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  grade === option
+                    ? 'border-[#c96a1f] bg-[#fbe9d7] text-[#c96a1f]'
+                    : 'border-panel-border bg-white text-panel-text hover:bg-[#f8f7fb]'
+                }`}
+              >
+                {option}. Sınıf
+              </button>
+            ))}
+          </div>
+
+          {loading ? <LoadingState label="Ders programı yükleniyor..." /> : <SchoolScheduleEditor entries={entries} onChange={setEntries} />}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-[#edf0f1] px-5 py-3">
+          <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={saving}>
+            Kapat
+          </Button>
+          <Button type="button" size="md" onClick={handleSave} disabled={saving || loading}>
+            {saving ? 'Kaydediliyor...' : 'Kaydet'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function AdminSchoolsPage() {
   const [schools, setSchools] = useState(null)
   const [error, setError] = useState('')
@@ -237,6 +341,7 @@ export default function AdminSchoolsPage() {
   const [editingSchool, setEditingSchool] = useState(null)
   const [showBulkImport, setShowBulkImport] = useState(false)
   const [openMenuSchoolId, setOpenMenuSchoolId] = useState(null)
+  const [scheduleModalSchool, setScheduleModalSchool] = useState(null)
 
   const loadSchools = () => {
     const params = new URLSearchParams()
@@ -378,6 +483,7 @@ export default function AdminSchoolsPage() {
                           triggerLabel="Okul işlemleri"
                           items={[
                             { label: 'Düzenle', onClick: () => setEditingSchool(school) },
+                            { label: 'Ders Programı', onClick: () => setScheduleModalSchool(school) },
                             {
                               label: school.isActive ? 'Pasif Yap' : 'Aktif Yap',
                               onClick: () => handleToggleActive(school),
@@ -400,6 +506,9 @@ export default function AdminSchoolsPage() {
       ) : null}
       {showBulkImport ? (
         <BulkImportSchoolsModal onImported={loadSchools} onClose={() => setShowBulkImport(false)} />
+      ) : null}
+      {scheduleModalSchool ? (
+        <SchoolClassScheduleModal school={scheduleModalSchool} onClose={() => setScheduleModalSchool(null)} />
       ) : null}
     </div>
   )

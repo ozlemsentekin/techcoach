@@ -3,6 +3,7 @@ const { isConfigError } = require('./config')
 const { clearSessionHeaders, json } = require('./http')
 const { defaultPasswordForPhone, hashPassword, isSessionError, normalizePhone } = require('./security')
 const { requireParentSession, verifyParentOwnsStudent, STUDENT_THEME_IDS } = require('./students')
+const { validateScheduleEntries, parseJsonEntries, getStudentSchoolScheduleTemplate } = require('./schoolSchedule')
 
 const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -10,6 +11,7 @@ const MAX_PHOTO_LENGTH = 350000
 const PHOTO_DATA_URL_PATTERN = /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\s]+$/i
 const MAX_INTERESTS = 20
 const MAX_INTEREST_LENGTH = 60
+const MAX_SUBJECTS = 20
 
 function isGuid(value) {
   return typeof value === 'string' && GUID_PATTERN.test(value.trim())
@@ -72,6 +74,33 @@ function normalizeInterestList(value, label) {
   return { value: items }
 }
 
+function normalizeSubjectIds(value) {
+  if (value === undefined || value === null) {
+    return { value: [] }
+  }
+  if (!Array.isArray(value)) {
+    return { error: 'Ders listesi geçersiz.' }
+  }
+  if (value.length > MAX_SUBJECTS) {
+    return { error: `En fazla ${MAX_SUBJECTS} ders seçebilirsiniz.` }
+  }
+
+  const ids = []
+  const seen = new Set()
+  for (const raw of value) {
+    if (!isGuid(raw)) {
+      return { error: 'Ders listesi geçersiz.' }
+    }
+    const id = raw.trim().toLowerCase()
+    if (!seen.has(id)) {
+      seen.add(id)
+      ids.push(id)
+    }
+  }
+
+  return { value: ids }
+}
+
 function sanitizeStudentProfile(record) {
   if (!record) return null
 
@@ -86,11 +115,14 @@ function sanitizeStudentProfile(record) {
     birthDate: record.birth_date || null,
     supportedTeam: record.supported_team || null,
     grade: record.grade || null,
+    gender: record.gender || null,
     themeId: record.theme_id || null,
     phone: record.phone || null,
     photoUrl: record.photo_url || null,
     interestedSports: parseJsonStringArray(record.interested_sports_json),
     interestedArts: parseJsonStringArray(record.interested_arts_json),
+    schoolSchedule: parseJsonEntries(record.school_schedule_json),
+    subjectIds: parseJsonStringArray(record.subject_ids_json),
     updatedAt: record.updated_at,
   }
 }
@@ -102,8 +134,9 @@ async function fetchStudentProfile(studentId) {
   const result = await requestDb.query(`
     SELECT sp.province_id, pr.name AS province_name, sp.district_id, d.name AS district_name,
            sp.school_id, s.name AS school_name, s.school_type,
-           sp.birth_date, sp.supported_team, sp.grade, sp.phone, sp.photo_url, sp.theme_id,
-           sp.interested_sports_json, sp.interested_arts_json, sp.updated_at
+           sp.birth_date, sp.supported_team, sp.grade, sp.phone, sp.photo_url, sp.theme_id, sp.gender,
+           sp.interested_sports_json, sp.interested_arts_json, sp.school_schedule_json, sp.subject_ids_json,
+           sp.updated_at
     FROM dbo.StudentProfiles sp
     LEFT JOIN dbo.Provinces pr ON pr.id = sp.province_id
     LEFT JOIN dbo.Districts d ON d.id = sp.district_id
@@ -238,6 +271,16 @@ function validateProfilePayload(payload) {
     return { error: artsResult.error }
   }
 
+  const scheduleResult = validateScheduleEntries(payload.schoolSchedule)
+  if (scheduleResult.error) {
+    return { error: scheduleResult.error }
+  }
+
+  const subjectIdsResult = normalizeSubjectIds(payload.subjectIds)
+  if (subjectIdsResult.error) {
+    return { error: subjectIdsResult.error }
+  }
+
   return {
     value: {
       provinceId,
@@ -250,6 +293,8 @@ function validateProfilePayload(payload) {
       photoUrl: photoResult.value,
       interestedSports: sportsResult.value,
       interestedArts: artsResult.value,
+      schoolSchedule: scheduleResult.value,
+      subjectIds: subjectIdsResult.value,
       themeId,
       themeIdProvided,
     },
@@ -270,7 +315,16 @@ async function getStudentProfileHandler(request) {
     }
 
     const profile = await fetchStudentProfile(studentId)
-    return json(200, { profile })
+
+    // Öğrenci için henüz kendi ders programı girilmemişse, ama okulu ve sınıfı biliniyorsa,
+    // aynı okul+sınıf için tanımlı admin şablonunu öneri olarak döneriz (kaydedilmez, sadece
+    // sihirbaz/profil ekranında ön dolgu için kullanılır).
+    let suggestedSchoolSchedule = []
+    if (profile && profile.schoolSchedule.length === 0 && profile.schoolId && profile.grade) {
+      suggestedSchoolSchedule = await getStudentSchoolScheduleTemplate(profile.schoolId, profile.grade)
+    }
+
+    return json(200, { profile: profile ? { ...profile, suggestedSchoolSchedule } : profile })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -336,6 +390,14 @@ async function updateStudentProfileHandler(request) {
         type: sql.NVarChar(sql.MAX),
         value: profile.interestedArts.length ? JSON.stringify(profile.interestedArts) : null,
       },
+      schoolScheduleJson: {
+        type: sql.NVarChar(sql.MAX),
+        value: profile.schoolSchedule.length ? JSON.stringify(profile.schoolSchedule) : null,
+      },
+      subjectIdsJson: {
+        type: sql.NVarChar(sql.MAX),
+        value: profile.subjectIds.length ? JSON.stringify(profile.subjectIds) : null,
+      },
     })
 
     await requestDb.query(`
@@ -361,10 +423,12 @@ async function updateStudentProfileHandler(request) {
         photo_url = @photoUrl,
         theme_id = CASE WHEN @themeIdProvided = 1 THEN @themeId ELSE target.theme_id END,
         interested_sports_json = @interestedSportsJson,
-        interested_arts_json = @interestedArtsJson
+        interested_arts_json = @interestedArtsJson,
+        school_schedule_json = @schoolScheduleJson,
+        subject_ids_json = @subjectIdsJson
       WHEN NOT MATCHED THEN INSERT
-        (student_id, province_id, district_id, school_id, birth_date, supported_team, grade, phone, photo_url, theme_id, interested_sports_json, interested_arts_json)
-        VALUES (@studentId, @provinceId, @districtId, @schoolId, @birthDate, @supportedTeam, @grade, @phone, @photoUrl, @themeId, @interestedSportsJson, @interestedArtsJson);
+        (student_id, province_id, district_id, school_id, birth_date, supported_team, grade, phone, photo_url, theme_id, interested_sports_json, interested_arts_json, school_schedule_json, subject_ids_json)
+        VALUES (@studentId, @provinceId, @districtId, @schoolId, @birthDate, @supportedTeam, @grade, @phone, @photoUrl, @themeId, @interestedSportsJson, @interestedArtsJson, @schoolScheduleJson, @subjectIdsJson);
     `)
 
     const savedProfile = await fetchStudentProfile(studentId)

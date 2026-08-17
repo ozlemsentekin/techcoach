@@ -14,7 +14,8 @@ import {
   XCircle,
 } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
-import { todayISODate } from '../../../utils/time'
+import { getSchoolScheduleConflict } from '../../../services/weeklyPlanService'
+import { addMinutesToTime, todayISODate } from '../../../utils/time'
 import Badge from '../../ui/Badge'
 import LoadingState from '../../shared/LoadingState'
 import { cn } from '../../ui/utils'
@@ -89,7 +90,7 @@ function ResourceBookCover({ book }) {
   )
 }
 
-export default function AssignHomeworkModal({ defaultTaskDate, onSave, onClose }) {
+export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, onSave, onClose }) {
   const [step, setStep] = useState('source')
   const [resourceBookId, setResourceBookId] = useState('')
   const [note, setNote] = useState('')
@@ -211,6 +212,17 @@ export default function AssignHomeworkModal({ defaultTaskDate, onSave, onClose }
     const trimmedTime = taskTime.trim()
     const usingDefaultTime = !trimmedTime
     const selectedDuration = durationPreset === 'custom' ? Number(customDuration) || 0 : durationPreset
+    const effectiveStartTime = trimmedTime || DEFAULT_TASK_TIME
+    const effectiveDuration = usingDefaultTime ? DEFAULT_TASK_DURATION_MINUTES : selectedDuration || DEFAULT_TASK_DURATION_MINUTES
+    const effectiveEndTime = addMinutesToTime(effectiveStartTime, effectiveDuration)
+
+    const schoolConflict = getSchoolScheduleConflict(schoolSchedule, defaultTaskDate, effectiveStartTime, effectiveEndTime)
+    if (schoolConflict) {
+      setSaveError(
+        `Bu saatte öğrenci okulda (${schoolConflict.startTime}-${schoolConflict.endTime}${schoolConflict.lessonName ? ` · ${schoolConflict.lessonName}` : ''}). Bu saate ödev eklenemez.`,
+      )
+      return
+    }
 
     setSaving(true)
     setSaveError('')
@@ -226,8 +238,8 @@ export default function AssignHomeworkModal({ defaultTaskDate, onSave, onClose }
         totalQuestionCount: Number(totalQuestionCount) || 0,
         totalPageCount: isReadingBook ? Number(totalPageCount) || 0 : undefined,
         taskDate: defaultTaskDate,
-        taskTime: trimmedTime || DEFAULT_TASK_TIME,
-        taskDurationMinutes: usingDefaultTime ? DEFAULT_TASK_DURATION_MINUTES : selectedDuration || DEFAULT_TASK_DURATION_MINUTES,
+        taskTime: effectiveStartTime,
+        taskDurationMinutes: effectiveDuration,
       })
     } catch (err) {
       setSaveError(err.message || 'Bir hata oluştu, tekrar deneyin.')

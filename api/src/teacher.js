@@ -36,7 +36,13 @@ function addDaysISO(dateISO, days) {
   return date.toISOString().slice(0, 10)
 }
 const { SELECT_TASK, sanitizeTask, fetchTaskAnswerSheetData } = require('./tasks')
-const { fetchResourceBookTopicsWithTests } = require('./catalog')
+const {
+  fetchResourceBookTopicsWithTests,
+  LIBRARY_GRADES,
+  fetchLibraryResourceBooks,
+  createLibraryResourceBookSubmission,
+  fetchResourceBookById,
+} = require('./catalog')
 const {
   sanitizeProgressResourceBook,
   sanitizeProgressTest,
@@ -347,7 +353,6 @@ async function createTeacherStudentHandler(request) {
     } else {
       consumesQuota = true
       parentHasPanelAccess = false
-      const now = new Date()
       const insertParentDb = await withRequest({
         fullName: { type: sql.NVarChar(120), value: parentFullName },
         phone: { type: sql.NVarChar(20), value: parentPhone },
@@ -918,6 +923,130 @@ async function listTeacherResourceBookTopicsHandler(request) {
   }
 }
 
+async function listLibraryResourceBooksForTeacherHandler(request) {
+  try {
+    const { error, teacherUserId } = await requireTeacherSession(request)
+    if (error) return error
+
+    const grade = request.query.get('grade')
+    const subjectId = request.query.get('subjectId')
+    if (!LIBRARY_GRADES.has(grade)) {
+      return json(400, { error: 'Geçersiz sınıf.' })
+    }
+    if (!subjectId) {
+      return json(400, { error: 'Ders belirtilmeli.' })
+    }
+
+    const resourceBooks = await fetchLibraryResourceBooks({ grade, subjectId, actorUserId: teacherUserId })
+    return json(200, { resourceBooks })
+  } catch (error) {
+    return handleError(error, 'listLibraryResourceBooksForTeacherHandler', 'Kütüphane kaynakları yüklenemedi.')
+  }
+}
+
+async function createLibraryResourceBookForTeacherHandler(request) {
+  try {
+    const { error, teacherUserId } = await requireTeacherSession(request)
+    if (error) return error
+
+    const payload = await request.json().catch(() => null)
+    const result = await createLibraryResourceBookSubmission({ actorUserId: teacherUserId, role: 'ogretmen', payload })
+    if (result.error) {
+      return json(400, { error: result.error })
+    }
+
+    return json(201, { resourceBook: result.resourceBook })
+  } catch (error) {
+    if (error.number === 547) {
+      return json(400, { error: 'Seçilen yayın evi veya ders bulunamadı.' })
+    }
+    return handleError(error, 'createLibraryResourceBookForTeacherHandler', 'Kaynak gönderilemedi.')
+  }
+}
+
+async function listAssignableStudentsForLibraryResourceHandler(request) {
+  try {
+    const { error, teacherUserId } = await requireTeacherSession(request)
+    if (error) return error
+
+    const resourceBookId = request.params.resourceBookId
+    const resourceBook = await fetchResourceBookById(resourceBookId)
+    if (!resourceBook) {
+      return json(404, { error: 'Kaynak bulunamadı.' })
+    }
+
+    const requestDb = await withRequest({
+      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+      subjectId: { type: sql.UniqueIdentifier, value: resourceBook.subjectId },
+      grade: { type: sql.NVarChar(20), value: resourceBook.grade },
+      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+    })
+    const result = await requestDb.query(`
+      SELECT st.id AS student_teacher_id, st.student_id, u.full_name AS student_full_name,
+             CASE WHEN srb.resource_book_id IS NULL THEN 0 ELSE 1 END AS assigned
+      FROM dbo.StudentTeachers st
+      INNER JOIN dbo.Users u ON u.id = st.student_id
+      INNER JOIN dbo.StudentProfiles sp ON sp.student_id = st.student_id
+      LEFT JOIN dbo.StudentResourceBooks srb ON srb.student_id = st.student_id AND srb.resource_book_id = @resourceBookId
+      WHERE st.teacher_user_id = @teacherUserId AND st.subject_id = @subjectId AND sp.grade = @grade
+      ORDER BY u.full_name ASC;
+    `)
+
+    return json(200, {
+      students: result.recordset.map((record) => ({
+        studentTeacherId: record.student_teacher_id,
+        studentId: record.student_id,
+        fullName: record.student_full_name,
+        assigned: Boolean(record.assigned),
+      })),
+    })
+  } catch (error) {
+    return handleError(error, 'listAssignableStudentsForLibraryResourceHandler', 'Öğrenciler yüklenemedi.')
+  }
+}
+
+async function assignLibraryResourceBookHandler(request) {
+  try {
+    const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    const resourceBookId = request.params.resourceBookId
+    const resourceBook = await fetchResourceBookById(resourceBookId)
+    if (!resourceBook) {
+      return json(404, { error: 'Kaynak bulunamadı.' })
+    }
+    if (resourceBook.subjectId !== subjectId) {
+      return json(400, { error: 'Bu kaynak, bu öğrenciyle olan dersinize ait değil.' })
+    }
+
+    const requestDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+    })
+    await requestDb.query(`
+      INSERT INTO dbo.StudentResourceBooks (student_id, resource_book_id)
+      SELECT @studentId, @resourceBookId
+      WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.StudentResourceBooks WHERE student_id = @studentId AND resource_book_id = @resourceBookId
+      );
+
+      INSERT INTO dbo.StudentTeacherResourceBooks (teacher_id, student_id, resource_book_id)
+      SELECT @studentTeacherId, @studentId, @resourceBookId
+      WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.StudentTeacherResourceBooks WHERE teacher_id = @studentTeacherId AND resource_book_id = @resourceBookId
+      );
+    `)
+
+    return json(200, { success: true })
+  } catch (error) {
+    if (error.number === 547) {
+      return json(400, { error: 'Kaynak bulunamadı.' })
+    }
+    return handleError(error, 'assignLibraryResourceBookHandler', 'Kaynak atanamadı.')
+  }
+}
+
 async function listTeacherStudentHomeworksHandler(request) {
   try {
     const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
@@ -1396,6 +1525,10 @@ module.exports = {
   deleteTeacherOneTimeLessonHandler,
   listTeacherResourceBooksHandler,
   listTeacherResourceBookTopicsHandler,
+  listLibraryResourceBooksForTeacherHandler,
+  createLibraryResourceBookForTeacherHandler,
+  listAssignableStudentsForLibraryResourceHandler,
+  assignLibraryResourceBookHandler,
   listTeacherStudentHomeworksHandler,
   createTeacherHomeworkHandler,
   assignTeacherHomeworkTaskHandler,

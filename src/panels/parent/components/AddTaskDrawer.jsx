@@ -3,7 +3,7 @@ import { Loader2, Trash2, X } from 'lucide-react'
 import Badge from '../../ui/Badge'
 import { TASK_TYPES } from '../../../data/taskTypes'
 import { TASK_TEMPLATES } from '../../../data/taskTemplates'
-import { hasOverlap } from '../../../services/weeklyPlanService'
+import { getSchoolScheduleConflict, hasOverlap } from '../../../services/weeklyPlanService'
 import { todayISODate } from '../../../utils/time'
 
 const PRIORITY_OPTIONS = [
@@ -27,7 +27,16 @@ function addMinutesToTime(startTime, minutes) {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
-export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDate, onSave, onDelete, onClose, getExistingTasksForDate }) {
+export default function AddTaskDrawer({
+  initialTask,
+  initialTemplate,
+  defaultDate,
+  onSave,
+  onDelete,
+  onClose,
+  getExistingTasksForDate,
+  schoolSchedule,
+}) {
   const seed = { ...initialTemplate?.task, ...initialTask }
   const seedStartTime = seed.startTime || '16:00'
   const seedEndTime = seed.endTime || (seed.durationMinutes ? addMinutesToTime(seedStartTime, seed.durationMinutes) : '16:45')
@@ -53,6 +62,7 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
   const [saving, setSaving] = useState(false)
 
   const durationMinutes = computeDurationMinutes(form.startTime, form.endTime)
+  const schoolConflict = getSchoolScheduleConflict(schoolSchedule, form.date, form.startTime, form.endTime)
 
   const [conflict, setConflict] = useState(false)
 
@@ -122,6 +132,12 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
       setError('Bitiş saati başlangıç saatinden önce olamaz.')
       return
     }
+    if (schoolConflict) {
+      setError(
+        `Bu saatte öğrenci okulda (${schoolConflict.startTime}-${schoolConflict.endTime}${schoolConflict.lessonName ? ` · ${schoolConflict.lessonName}` : ''}). Bu saate görev eklenemez.`,
+      )
+      return
+    }
 
     setError('')
     setSaving(true)
@@ -181,7 +197,12 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
         ) : null}
 
         {error ? <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div> : null}
-        {conflict ? (
+        {schoolConflict ? (
+          <div className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-medium text-slate-600">
+            Bu saatte öğrenci okulda ({schoolConflict.startTime}-{schoolConflict.endTime}
+            {schoolConflict.lessonName ? ` · ${schoolConflict.lessonName}` : ''}). Bu saate görev eklenemez.
+          </div>
+        ) : conflict ? (
           <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">
             Bu saatte başka bir görev var. Yine de ekleyebilir veya saati değiştirebilirsin.
           </div>
@@ -349,7 +370,7 @@ export default function AddTaskDrawer({ initialTask, initialTemplate, defaultDat
           ) : null}
           <button
             type="submit"
-            disabled={deleting || saving}
+            disabled={deleting || saving || Boolean(schoolConflict)}
             className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
           >
             {saving ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : null}

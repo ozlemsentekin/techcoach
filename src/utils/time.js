@@ -20,6 +20,16 @@ export function getMondayOfWeek(dateISO) {
   return addDaysISO(dateISO, diffToMonday)
 }
 
+// Haftalık tekrar eden programlarda (öğretmen/okul ders saatleri) günü Türkçe slug olarak
+// saklama kuralı zaten var (bkz. StudentTeachers.schedule_json); Pazartesi başlangıçlı.
+export const WEEKDAY_KEYS = ['pazartesi', 'sali', 'carsamba', 'persembe', 'cuma', 'cumartesi', 'pazar']
+
+/** Verilen tarihin haftanın hangi gününe denk geldiğini Türkçe slug olarak döner. */
+export function getWeekdayKey(dateISO) {
+  const jsDay = new Date(dateISO).getDay()
+  return WEEKDAY_KEYS[(jsDay + 6) % 7]
+}
+
 /** Verilen tarihin içinde bulunduğu ayın tüm günlerini (ISO) döner. */
 export function getMonthDates(dateISO) {
   const date = new Date(dateISO)

@@ -9,6 +9,7 @@ import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import ResourceImageField from '../components/ResourceImageField'
+import { GRADE_OPTIONS } from '../components/studentWizardConstants'
 
 const RESOURCE_BOOK_TYPES = [
   { value: 'konu_anlatimi', label: 'Konu Anlatımı' },
@@ -83,12 +84,72 @@ function AddPublisherModal({ onCreated, onClose }) {
   )
 }
 
+function RejectResourceBookModal({ book, onConfirm, onClose }) {
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+
+    if (reason.trim().length < 2) {
+      setError('Red gerekçesi en az 2 karakter olmalı.')
+      return
+    }
+
+    setError('')
+    setLoading(true)
+    try {
+      await onConfirm(reason.trim())
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <form onSubmit={handleSubmit} className="w-full max-w-md panel-card p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-panel-text">Kaynağı Reddet</h2>
+          <button type="button" aria-label="Kapat" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <p className="mb-3 text-sm text-panel-text-muted">
+          <span className="font-medium text-panel-text">{book.name}</span> kaynağını reddetme gerekçenizi yazın; bu
+          gerekçe sadece kaynağı ekleyen kişiye gösterilir.
+        </p>
+
+        {error ? (
+          <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{error}</div>
+        ) : null}
+
+        <textarea
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          rows={3}
+          className="w-full rounded-xl border border-panel-border p-2.5 text-sm text-panel-text"
+          placeholder="Örn. Görsel eksik, konu isimleri kitaba uymuyor..."
+        />
+
+        <Button type="submit" disabled={loading} size="md" className="mt-3 w-full">
+          {loading ? 'Kaydediliyor...' : 'Reddet'}
+        </Button>
+      </form>
+    </div>
+  )
+}
+
 function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
   const isEdit = Boolean(book)
   const effectivePublisherId = book?.publisherId || publisher?.id
   const [name, setName] = useState(book?.name || '')
   const [pageCount, setPageCount] = useState(book ? String(book.pageCount) : '')
   const [subjectId, setSubjectId] = useState(book?.subjectId || '')
+  const [grade, setGrade] = useState(book?.grade || '')
   const [type, setType] = useState(book?.type || '')
   const [publishMonthYear, setPublishMonthYear] = useState(book?.publishMonthYear || '')
   const [isActive, setIsActive] = useState(book ? book.isActive : true)
@@ -117,6 +178,10 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
       setError('Kaynak tipi seçilmeli.')
       return
     }
+    if (!grade) {
+      setError('Sınıf seçilmeli.')
+      return
+    }
 
     setError('')
     setLoading(true)
@@ -128,6 +193,7 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
         pageCount: pageCountNumber,
         isActive,
         type,
+        grade,
         publishMonthYear: publishMonthYear.trim() || null,
         hasAnswerKey: type === 'soru_bankasi' ? hasAnswerKey : true,
         imageUrl: imageUrl.trim() || null,
@@ -201,23 +267,43 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
               />
             </label>
 
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-panel-text-muted">Ders</span>
-              <select
-                value={subjectId}
-                onChange={(event) => setSubjectId(event.target.value)}
-                className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-              >
-                <option value="" disabled>
-                  Ders seçin
-                </option>
-                {subjects?.map((subject) => (
-                  <option key={subject.id} value={subject.id}>
-                    {subject.name}
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Ders</span>
+                <select
+                  value={subjectId}
+                  onChange={(event) => setSubjectId(event.target.value)}
+                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+                >
+                  <option value="" disabled>
+                    Ders seçin
                   </option>
-                ))}
-              </select>
-            </label>
+                  {subjects?.map((subject) => (
+                    <option key={subject.id} value={subject.id}>
+                      {subject.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Sınıf</span>
+                <select
+                  value={grade}
+                  onChange={(event) => setGrade(event.target.value)}
+                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+                >
+                  <option value="" disabled>
+                    Sınıf seçin
+                  </option>
+                  {GRADE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}. Sınıf
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <label className="flex flex-col gap-1.5">
@@ -1109,7 +1195,29 @@ function TopicBlock({ topic, tests, expanded, onToggle, onAddTest, onEditTopic, 
   )
 }
 
-function BookBlock({ book, subjectsById, topics, tests, isFocused, missingAnswerKeyInfo, onAddTopic, onAddTest, onEditTopic, onEditTest, onViewTest, onDeleteTest, onEditBook, onToggleActive }) {
+const CREATED_BY_ROLE_LABELS = {
+  ogretmen: 'Öğretmen',
+  ebeveyn: 'Veli',
+}
+
+function BookBlock({
+  book,
+  subjectsById,
+  topics,
+  tests,
+  isFocused,
+  missingAnswerKeyInfo,
+  onAddTopic,
+  onAddTest,
+  onEditTopic,
+  onEditTest,
+  onViewTest,
+  onDeleteTest,
+  onEditBook,
+  onToggleActive,
+  onApproveBook,
+  onRejectBook,
+}) {
   const [expanded, setExpanded] = useState(isFocused)
   const [expandedTopicId, setExpandedTopicId] = useState(null)
   const blockRef = useRef(null)
@@ -1174,6 +1282,11 @@ function BookBlock({ book, subjectsById, topics, tests, isFocused, missingAnswer
               <span>
                 Ders: <span className="font-medium text-[#263a39]">{subjectsById[book.subjectId]?.name || '—'}</span>
               </span>
+              {book.grade ? (
+                <span className="inline-flex items-center rounded-full bg-[#eef1ff] px-2.5 py-1 text-[11px] font-medium text-[#3d4ba0]">
+                  {book.grade}. Sınıf
+                </span>
+              ) : null}
               {book.type ? (
                 <span className="inline-flex items-center rounded-full bg-[#f8e3d0] px-2.5 py-1 text-[11px] font-medium text-[#c9772f]">
                   {RESOURCE_BOOK_TYPE_LABELS[book.type] || book.type}
@@ -1187,6 +1300,16 @@ function BookBlock({ book, subjectsById, topics, tests, isFocused, missingAnswer
               {missingAnswerKeyInfo ? (
                 <span className="inline-flex items-center rounded-full bg-panel-accent-soft px-2.5 py-1 text-[11px] font-medium text-panel-warm">
                   {missingAnswerKeyInfo.incompleteTestCount}/{missingAnswerKeyInfo.totalTestCount} Test Eksik
+                </span>
+              ) : null}
+              {book.status === 'pending' ? (
+                <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-medium text-amber-700">
+                  Onay Bekliyor{book.createdByName ? ` · ${book.createdByName} (${CREATED_BY_ROLE_LABELS[book.createdByRole] || book.createdByRole})` : ''}
+                </span>
+              ) : null}
+              {book.status === 'rejected' ? (
+                <span className="inline-flex items-center rounded-full bg-panel-accent-soft px-2.5 py-1 text-[11px] font-medium text-panel-warm">
+                  Reddedildi
                 </span>
               ) : null}
               <button
@@ -1204,17 +1327,37 @@ function BookBlock({ book, subjectsById, topics, tests, isFocused, missingAnswer
             </div>
           </div>
         </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          className="h-10 w-full shrink-0 rounded-[10px] border-[#e1e4ea] bg-white text-[#c9772f] hover:bg-[#f8e3d0] sm:w-auto"
-          onClick={(event) => {
-            event.stopPropagation()
-            onAddTopic(book)
-          }}
-        >
-          + İçerik Ekle
-        </Button>
+        {book.status === 'pending' ? (
+          <div className="flex w-full shrink-0 gap-2 sm:w-auto" onClick={(event) => event.stopPropagation()}>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-10 flex-1 rounded-[10px] border-[#e1e4ea] bg-white text-panel-warm hover:bg-panel-accent-soft sm:flex-none"
+              onClick={() => onRejectBook(book)}
+            >
+              Reddet
+            </Button>
+            <Button
+              size="sm"
+              className="h-10 flex-1 rounded-[10px] sm:flex-none"
+              onClick={() => onApproveBook(book)}
+            >
+              Onayla
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-10 w-full shrink-0 rounded-[10px] border-[#e1e4ea] bg-white text-[#c9772f] hover:bg-[#f8e3d0] sm:w-auto"
+            onClick={(event) => {
+              event.stopPropagation()
+              onAddTopic(book)
+            }}
+          >
+            + İçerik Ekle
+          </Button>
+        )}
       </div>
       {expanded ? (
         topics.length === 0 ? (
@@ -1262,6 +1405,8 @@ function PublisherRow({
   onDeleteTest,
   onEditBook,
   onToggleActive,
+  onApproveBook,
+  onRejectBook,
 }) {
   const [expanded, setExpanded] = useState(isFocusPublisher)
 
@@ -1319,6 +1464,8 @@ function PublisherRow({
                   onDeleteTest={onDeleteTest}
                   onEditBook={onEditBook}
                   onToggleActive={onToggleActive}
+                  onApproveBook={onApproveBook}
+                  onRejectBook={onRejectBook}
                 />
               ))}
             </div>
@@ -1341,6 +1488,7 @@ export default function AdminPublishersPage() {
   const [showPublisherModal, setShowPublisherModal] = useState(false)
   const [bookModalPublisher, setBookModalPublisher] = useState(null)
   const [editingBook, setEditingBook] = useState(null)
+  const [rejectingBook, setRejectingBook] = useState(null)
   const [topicModalBook, setTopicModalBook] = useState(null)
   const [testModalTopic, setTestModalTopic] = useState(null)
   const [editingTopic, setEditingTopic] = useState(null)
@@ -1402,11 +1550,38 @@ export default function AdminPublishersPage() {
           pageCount: book.pageCount,
           isActive: !book.isActive,
           type: book.type,
+          grade: book.grade,
           hasAnswerKey: book.hasAnswerKey,
           imageUrl: book.imageUrl,
         }),
       })
       handleBookSaved(data.resourceBook)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleApproveBook = async (book) => {
+    try {
+      const data = await authRequest(`/api/panel-admin/resource-books/${book.id}/review`, {
+        method: 'PATCH',
+        body: JSON.stringify({ action: 'approve' }),
+      })
+      handleBookSaved(data.resourceBook)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleRejectBook = async (reason) => {
+    if (!rejectingBook) return
+    try {
+      const data = await authRequest(`/api/panel-admin/resource-books/${rejectingBook.id}/review`, {
+        method: 'PATCH',
+        body: JSON.stringify({ action: 'reject', reason }),
+      })
+      handleBookSaved(data.resourceBook)
+      setRejectingBook(null)
     } catch (err) {
       setError(err.message)
     }
@@ -1572,6 +1747,8 @@ export default function AdminPublishersPage() {
                   onDeleteTest={setDeletingTest}
                   onEditBook={setEditingBook}
                   onToggleActive={handleToggleActive}
+                  onApproveBook={handleApproveBook}
+                  onRejectBook={setRejectingBook}
                 />
               ))
             )}
@@ -1599,6 +1776,14 @@ export default function AdminPublishersPage() {
           subjects={subjects}
           onSaved={handleBookSaved}
           onClose={() => setEditingBook(null)}
+        />
+      ) : null}
+
+      {rejectingBook ? (
+        <RejectResourceBookModal
+          book={rejectingBook}
+          onConfirm={handleRejectBook}
+          onClose={() => setRejectingBook(null)}
         />
       ) : null}
 

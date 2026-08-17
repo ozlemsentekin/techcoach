@@ -14,12 +14,13 @@ import {
   NotebookPen,
   Plus,
   ScanLine,
+  School,
   Star,
   Target,
   UploadCloud,
   XCircle,
 } from 'lucide-react'
-import { todayISODate } from '../../../utils/time'
+import { todayISODate, WEEKDAY_KEYS as DAY_KEYS } from '../../../utils/time'
 
 const BREAK_DURATION_OPTIONS = [15, 30, 45, 60]
 
@@ -27,7 +28,6 @@ const DAY_LABELS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cu
 
 // student.schedule (bkz. StudentTeacherModal) dayOfWeek'i bu Türkçe slug'larla saklar;
 // weekDates her zaman Pazartesi'den başladığı için index eşlemesi doğrudan yapılabilir.
-const DAY_KEYS = ['pazartesi', 'sali', 'carsamba', 'persembe', 'cuma', 'cumartesi', 'pazar']
 
 const QUICK_ADD_TEMPLATES = {
   lesson: {
@@ -296,10 +296,27 @@ function ScheduleSlotCard({ task }) {
   )
 }
 
+// Öğrencinin okul ders programındaki (bkz. StudentProfiles.school_schedule_json /
+// SchoolClassSchedules) bir zaman dilimini temsil eden salt okunur, sahte "görev" kartı.
+// Gerçek bir Tasks satırı değildir; o saatin okulda geçtiğini göstermek ve o saate ödev
+// eklenmesini engellemek (bkz. AddTaskDrawer/AssignHomeworkModal) için kullanılır.
+function SchoolSlotCard({ task }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-xl border border-slate-300 bg-slate-100 px-2.5 py-2 text-slate-600">
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold">
+        <School size={12} aria-hidden="true" />
+        {task.startTime}-{task.endTime}
+      </span>
+      <span className="truncate text-sm font-bold">{task.lessonName || 'Okulda'}</span>
+    </div>
+  )
+}
+
 function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet }) {
   const [showBreakMenu, setShowBreakMenu] = useState(false)
 
   if (task.isScheduleSlot) return <ScheduleSlotCard task={task} />
+  if (task.isSchoolSlot) return <SchoolSlotCard task={task} />
 
   const style = getTaskStyle(task)
   const isHomework = task.taskType === 'odev'
@@ -477,6 +494,7 @@ export default function WeeklyPlannerGrid({
   tasksByDate,
   dayStatusByDate,
   lessonSchedule,
+  schoolSchedule,
   onAddHomework,
   onAddTask,
   onEditTask,
@@ -513,7 +531,16 @@ export default function WeeklyPlannerGrid({
         startTime: slot.startTime,
         endTime: slot.endTime,
       }))
-    const tasks = [...(tasksByDate[date] || []), ...scheduleSlots].sort((a, b) =>
+    const schoolSlots = (schoolSchedule || [])
+      .filter((slot) => slot.dayOfWeek === DAY_KEYS[index] && slot.startTime)
+      .map((slot, slotIndex) => ({
+        id: `school-${date}-${slotIndex}`,
+        isSchoolSlot: true,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        lessonName: slot.lessonName,
+      }))
+    const tasks = [...(tasksByDate[date] || []), ...scheduleSlots, ...schoolSlots].sort((a, b) =>
       (a.startTime || '').localeCompare(b.startTime || ''),
     )
     const isPastDay = date < currentDate

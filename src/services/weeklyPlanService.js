@@ -1,7 +1,7 @@
 import { getTasksForDate, postTask, patchTask, removeTask } from './taskService'
 import { getHomeworks } from './homeworkService'
 import { authRequest } from './authClient'
-import { addDaysISO, getMondayOfWeek, parseTimeToMinutes } from '../utils/time'
+import { addDaysISO, getMondayOfWeek, getWeekdayKey, parseTimeToMinutes } from '../utils/time'
 
 /**
  * @typedef {'taslak'|'yayinlandi'|'guncellendi'|'arsivlendi'} PlanStatus
@@ -255,6 +255,35 @@ export function hasOverlap(tasks, startTime, endTime, excludeTaskId) {
     const taskEnd = parseTimeToMinutes(task.endTime)
     return start < taskEnd && end > taskStart
   })
+}
+
+/** Öğrencinin okul ders programını döner (bkz. StudentProfiles.school_schedule_json). */
+export async function getSchoolSchedule() {
+  const data = await authRequest('/api/panel/school-schedule', { method: 'GET' })
+  return data.entries
+}
+
+/**
+ * Verilen tarih+saat aralığının, öğrencinin okul ders programındaki bir zaman dilimiyle
+ * çakışıp çakışmadığını kontrol eder; çakışan girdiyi (varsa) döner. hasOverlap'ten farkı,
+ * görev-görev çakışmasını değil görev-okul çakışmasını kontrol etmesi — bu haftalık planda
+ * sert bir engel olarak kullanılır (bkz. AddTaskDrawer/AssignHomeworkModal).
+ */
+export function getSchoolScheduleConflict(schoolSchedule, dateISO, startTime, endTime) {
+  if (!schoolSchedule?.length || !startTime || !endTime) return null
+
+  const dayOfWeek = getWeekdayKey(dateISO)
+  const start = parseTimeToMinutes(startTime)
+  const end = parseTimeToMinutes(endTime)
+
+  return (
+    schoolSchedule.find((slot) => {
+      if (slot.dayOfWeek !== dayOfWeek) return false
+      const slotStart = parseTimeToMinutes(slot.startTime)
+      const slotEnd = parseTimeToMinutes(slot.endTime)
+      return start < slotEnd && end > slotStart
+    }) || null
+  )
 }
 
 export { getMondayOfWeek }

@@ -14,6 +14,7 @@ const {
 const { sanitizeUser } = require('./auth')
 const { requireStudentContext } = require('./studentScope')
 const { getParentStudentQuota } = require('./entitlements')
+const { LIBRARY_GRADES, fetchLibraryResourceBooks, createLibraryResourceBookSubmission, fetchResourceBookById } = require('./catalog')
 
 const TEACHER_TYPES = new Set(['ozel_ogretmen', 'okul_ogretmeni'])
 const TEACHER_TYPE_LABELS = {
@@ -74,6 +75,8 @@ function sanitizeStudentResourceBook(record) {
     type: record.resource_type,
     hasAnswerKey: Boolean(record.has_answer_key),
     imageUrl: record.image_url || null,
+    grade: record.grade || null,
+    status: record.status,
     assigned: Boolean(record.assigned),
     assignedAt: record.assigned_at || null,
   }
@@ -312,13 +315,14 @@ async function verifyParentOwnsTeacher(parentId, studentId, teacherId) {
   return Boolean(result.recordset[0])
 }
 
-async function fetchStudentResourceBooks(studentId) {
+async function fetchStudentResourceBooks(studentId, actorUserId) {
   const requestDb = await withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
+    actorUserId: { type: sql.UniqueIdentifier, value: actorUserId || null },
   })
   const result = await requestDb.query(`
     SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-           rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url,
+           rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.grade, rb.status,
            CASE WHEN srb.resource_book_id IS NULL THEN 0 ELSE 1 END AS assigned,
            srb.assigned_at
     FROM dbo.ResourceBooks rb
@@ -326,7 +330,10 @@ async function fetchStudentResourceBooks(studentId) {
     LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
     LEFT JOIN dbo.StudentResourceBooks srb
       ON srb.resource_book_id = rb.id AND srb.student_id = @studentId
+    LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = @studentId
     WHERE rb.is_active = 1
+      AND (sp.grade IS NULL OR rb.grade IS NULL OR rb.grade = sp.grade OR srb.resource_book_id IS NOT NULL)
+      AND (rb.status = 'approved' OR rb.created_by_user_id = @actorUserId OR srb.resource_book_id IS NOT NULL)
     ORDER BY s.name ASC, p.name ASC, rb.name ASC;
   `)
 
@@ -810,7 +817,7 @@ async function listStudentResourceBooksHandler(request) {
       return json(404, { error: 'Öğrenci bulunamadı.' })
     }
 
-    const resourceBooks = await fetchStudentResourceBooks(studentId)
+    const resourceBooks = await fetchStudentResourceBooks(studentId, parentId)
     return json(200, { resourceBooks })
   } catch (error) {
     if (isConfigError(error)) {
@@ -898,7 +905,7 @@ async function updateStudentResourceBooksHandler(request) {
       END CATCH
     `)
 
-    const resourceBooks = await fetchStudentResourceBooks(studentId)
+    const resourceBooks = await fetchStudentResourceBooks(studentId, parentId)
     const resourceCount = resourceBooks.filter((book) => book.assigned).length
     return json(200, { resourceBooks, resourceCount })
   } catch (error) {
@@ -912,6 +919,201 @@ async function updateStudentResourceBooksHandler(request) {
 
     console.error('updateStudentResourceBooksHandler failed', error)
     return json(500, { error: 'Kaynak atamaları kaydedilemedi.' })
+  }
+}
+
+async function listLibraryResourceBooksForParentHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const grade = request.query.get('grade')
+    const subjectId = request.query.get('subjectId')
+    if (!LIBRARY_GRADES.has(grade)) {
+      return json(400, { error: 'Geçersiz sınıf.' })
+    }
+    if (!subjectId) {
+      return json(400, { error: 'Ders belirtilmeli.' })
+    }
+
+    const resourceBooks = await fetchLibraryResourceBooks({ grade, subjectId, actorUserId: parentId })
+    return json(200, { resourceBooks })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('listLibraryResourceBooksForParentHandler failed', error)
+    return json(500, { error: 'Kütüphane kaynakları yüklenemedi.' })
+  }
+}
+
+async function createLibraryResourceBookForParentHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const payload = await request.json().catch(() => null)
+    const result = await createLibraryResourceBookSubmission({ actorUserId: parentId, role: 'ebeveyn', payload })
+    if (result.error) {
+      return json(400, { error: result.error })
+    }
+
+    return json(201, { resourceBook: result.resourceBook })
+  } catch (error) {
+    if (error.number === 547) {
+      return json(400, { error: 'Seçilen yayın evi veya ders bulunamadı.' })
+    }
+
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('createLibraryResourceBookForParentHandler failed', error)
+    return json(500, { error: 'Kaynak gönderilemedi.' })
+  }
+}
+
+async function listAssignableStudentsForLibraryResourceHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const resourceBookId = request.params.resourceBookId
+    const resourceBook = await fetchResourceBookById(resourceBookId)
+    if (!resourceBook) {
+      return json(404, { error: 'Kaynak bulunamadı.' })
+    }
+
+    const requestDb = await withRequest({
+      parentId: { type: sql.UniqueIdentifier, value: parentId },
+      grade: { type: sql.NVarChar(20), value: resourceBook.grade },
+      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+    })
+    const result = await requestDb.query(`
+      SELECT u.id AS student_id, u.full_name AS student_full_name,
+             CASE WHEN srb.resource_book_id IS NULL THEN 0 ELSE 1 END AS assigned
+      FROM dbo.Users u
+      INNER JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
+      LEFT JOIN dbo.StudentResourceBooks srb ON srb.student_id = u.id AND srb.resource_book_id = @resourceBookId
+      WHERE u.parent_id = @parentId AND sp.grade = @grade
+      ORDER BY u.full_name ASC;
+    `)
+
+    return json(200, {
+      students: result.recordset.map((record) => ({
+        studentId: record.student_id,
+        fullName: record.student_full_name,
+        assigned: Boolean(record.assigned),
+      })),
+    })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('listAssignableStudentsForLibraryResourceHandler failed', error)
+    return json(500, { error: 'Öğrenciler yüklenemedi.' })
+  }
+}
+
+async function assignLibraryResourceBookHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const studentId = request.params.studentId
+    const resourceBookId = request.params.resourceBookId
+    const ownsStudent = await verifyParentOwnsStudent(parentId, studentId)
+    if (!ownsStudent) {
+      return json(404, { error: 'Öğrenci bulunamadı.' })
+    }
+
+    const requestDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+    })
+    await requestDb.query(`
+      INSERT INTO dbo.StudentResourceBooks (student_id, resource_book_id)
+      SELECT @studentId, @resourceBookId
+      WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.StudentResourceBooks WHERE student_id = @studentId AND resource_book_id = @resourceBookId
+      );
+    `)
+
+    return json(200, { success: true })
+  } catch (error) {
+    if (error.number === 547) {
+      return json(400, { error: 'Kaynak bulunamadı.' })
+    }
+
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('assignLibraryResourceBookHandler failed', error)
+    return json(500, { error: 'Kaynak atanamadı.' })
+  }
+}
+
+async function unassignLibraryResourceBookHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const studentId = request.params.studentId
+    const resourceBookId = request.params.resourceBookId
+    const ownsStudent = await verifyParentOwnsStudent(parentId, studentId)
+    if (!ownsStudent) {
+      return json(404, { error: 'Öğrenci bulunamadı.' })
+    }
+
+    const requestDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+    })
+    await requestDb.query(`
+      DELETE FROM dbo.StudentResourceBooks WHERE student_id = @studentId AND resource_book_id = @resourceBookId;
+    `)
+
+    return json(200, { success: true })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('unassignLibraryResourceBookHandler failed', error)
+    return json(500, { error: 'Kaynak kaldırılamadı.' })
   }
 }
 
@@ -1368,6 +1570,11 @@ module.exports = {
   createStudentHandler,
   enterStudentHandler,
   exitStudentHandler,
+  listLibraryResourceBooksForParentHandler,
+  createLibraryResourceBookForParentHandler,
+  listAssignableStudentsForLibraryResourceHandler,
+  assignLibraryResourceBookHandler,
+  unassignLibraryResourceBookHandler,
   listStudentResourceBooksHandler,
   updateStudentResourceBooksHandler,
   listStudentTeachersForParentHandler,

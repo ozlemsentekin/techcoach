@@ -15,6 +15,11 @@ const {
   exitStudentHandler,
   listStudentResourceBooksHandler,
   updateStudentResourceBooksHandler,
+  listLibraryResourceBooksForParentHandler,
+  createLibraryResourceBookForParentHandler,
+  listAssignableStudentsForLibraryResourceHandler,
+  assignLibraryResourceBookHandler,
+  unassignLibraryResourceBookHandler,
   listStudentTeachersForParentHandler,
   listParentTeachersHandler,
   createStudentTeacherHandler,
@@ -25,6 +30,11 @@ const {
   grantTeacherAccessHandler,
 } = require('./students')
 const { getStudentProfileHandler, updateStudentProfileHandler } = require('./studentProfile')
+const {
+  getSchoolClassScheduleHandler,
+  saveSchoolClassScheduleHandler,
+  getPanelSchoolScheduleHandler,
+} = require('./schoolSchedule')
 const {
   listTeacherStudentsHandler,
   listTeacherParentsHandler,
@@ -37,6 +47,10 @@ const {
   deleteTeacherOneTimeLessonHandler,
   listTeacherResourceBooksHandler,
   listTeacherResourceBookTopicsHandler,
+  listLibraryResourceBooksForTeacherHandler,
+  createLibraryResourceBookForTeacherHandler,
+  listAssignableStudentsForLibraryResourceHandler: listAssignableStudentsForTeacherLibraryResourceHandler,
+  assignLibraryResourceBookHandler: assignTeacherLibraryResourceBookHandler,
   listTeacherStudentHomeworksHandler,
   createTeacherHomeworkHandler,
   assignTeacherHomeworkTaskHandler,
@@ -52,12 +66,14 @@ const {
   listSubjectsHandler,
   listSubjectsForPanelHandler,
   listPublishersHandler,
+  listPublishersForPanelHandler,
   createPublisherHandler,
   listResourceBooksHandler,
   listResourceBooksMissingAnswerKeyHandler,
   listResourceBooksForPanelHandler,
   createResourceBookHandler,
   updateResourceBookHandler,
+  reviewResourceBookHandler,
   listResourceBookTopicsHandler,
   createResourceBookTopicHandler,
   updateResourceBookTopicHandler,
@@ -268,6 +284,41 @@ app.http('parent-student-resource-books-update', {
   handler: updateStudentResourceBooksHandler,
 })
 
+app.http('parent-library-resource-books-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'parent/library/resource-books',
+  handler: listLibraryResourceBooksForParentHandler,
+})
+
+app.http('parent-library-resource-books-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'parent/library/resource-books',
+  handler: createLibraryResourceBookForParentHandler,
+})
+
+app.http('parent-library-resource-book-assignable-students', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'parent/library/resource-books/{resourceBookId}/assignable-students',
+  handler: listAssignableStudentsForLibraryResourceHandler,
+})
+
+app.http('parent-student-library-resource-book-assign', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'parent/students/{studentId}/library/resource-books/{resourceBookId}',
+  handler: assignLibraryResourceBookHandler,
+})
+
+app.http('parent-student-library-resource-book-unassign', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'parent/students/{studentId}/library/resource-books/{resourceBookId}',
+  handler: unassignLibraryResourceBookHandler,
+})
+
 app.http('parent-student-teachers-list', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -415,6 +466,34 @@ app.http('panel-teacher-resource-book-topics-list', {
   handler: listTeacherResourceBookTopicsHandler,
 })
 
+app.http('panel-teacher-library-resource-books-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/library/resource-books',
+  handler: listLibraryResourceBooksForTeacherHandler,
+})
+
+app.http('panel-teacher-library-resource-books-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/library/resource-books',
+  handler: createLibraryResourceBookForTeacherHandler,
+})
+
+app.http('panel-teacher-library-resource-book-assignable-students', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/library/resource-books/{resourceBookId}/assignable-students',
+  handler: listAssignableStudentsForTeacherLibraryResourceHandler,
+})
+
+app.http('panel-teacher-student-library-resource-book-assign', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/students/{studentTeacherId}/library/resource-books/{resourceBookId}',
+  handler: assignTeacherLibraryResourceBookHandler,
+})
+
 app.http('panel-teacher-homeworks-list', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -527,6 +606,20 @@ app.http('panel-admin-schools-bulk-import', {
   handler: bulkImportSchoolsHandler,
 })
 
+app.http('panel-admin-school-class-schedule-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-admin/schools/{schoolId}/class-schedules',
+  handler: getSchoolClassScheduleHandler,
+})
+
+app.http('panel-admin-school-class-schedule-save', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel-admin/schools/{schoolId}/class-schedules',
+  handler: saveSchoolClassScheduleHandler,
+})
+
 app.http('panel-admin-subjects', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -553,6 +646,13 @@ app.http('panel-admin-publishers-create', {
   methods: ['POST'],
   route: 'panel-admin/publishers',
   handler: createPublisherHandler,
+})
+
+app.http('panel-publishers', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/publishers',
+  handler: listPublishersForPanelHandler,
 })
 
 app.http('panel-admin-motivation-messages-list', {
@@ -637,6 +737,13 @@ app.http('panel-admin-resource-books-update', {
   methods: ['PATCH'],
   route: 'panel-admin/resource-books/{resourceBookId}',
   handler: updateResourceBookHandler,
+})
+
+app.http('panel-admin-resource-books-review', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-admin/resource-books/{resourceBookId}/review',
+  handler: reviewResourceBookHandler,
 })
 
 app.http('panel-admin-resource-books-missing-answer-key', {
@@ -868,6 +975,13 @@ app.http('panel-tasks-test-remove', {
   methods: ['DELETE'],
   route: 'panel/tasks/{taskId}/tests/{testId}',
   handler: removeTaskTestHandler,
+})
+
+app.http('panel-school-schedule-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/school-schedule',
+  handler: getPanelSchoolScheduleHandler,
 })
 
 app.http('panel-weekly-plan-status-get', {

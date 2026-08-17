@@ -22,6 +22,8 @@ const AdminSchoolsPage = lazy(() => import('./pages/AdminSchoolsPage'))
 const AdminMissingAnswerKeysPage = lazy(() => import('./pages/AdminMissingAnswerKeysPage'))
 const StudentsPage = lazy(() => import('./pages/StudentsPage'))
 const TeachersPage = lazy(() => import('./pages/TeachersPage'))
+const LibraryPage = lazy(() => import('./pages/LibraryPage'))
+const LibraryGradePage = lazy(() => import('./pages/LibraryGradePage'))
 const HomeworkPage = lazy(() => import('./pages/HomeworkPage'))
 const TestsPage = lazy(() => import('./pages/TestsPage'))
 const MistakesPage = lazy(() => import('./pages/MistakesPage'))
@@ -45,11 +47,15 @@ function RequireStudents({ children }) {
 }
 
 function ParentStudentsGateProvider({ children }) {
+  const { authUser } = useAuth()
   const [studentsLoading, setStudentsLoading] = useState(true)
   // Fetch tamamlanana kadar mevcut çoğunluk (zaten çocuğu olan) veliler için menüde
   // gereksiz bir yanıp sönme olmasın diye iyimser varsayılan true.
   const [hasStudents, setHasStudents] = useState(true)
 
+  // authUser.id'ye bağlı: admin bir veliyi impersonate edip /parent/dashboard'a geçtiğinde
+  // ParentApp yeniden mount olmuyor, bu yüzden kimlik değiştiğinde yeniden fetch etmezsek
+  // önceki kullanıcıya ait hasStudents değeri (ve dolayısıyla menü) yanlışlıkla kalıcı olur.
   useEffect(() => {
     let ignore = false
     authRequest('/api/parent/students', { method: 'GET' })
@@ -63,7 +69,7 @@ function ParentStudentsGateProvider({ children }) {
     return () => {
       ignore = true
     }
-  }, [])
+  }, [authUser?.id])
 
   const value = useMemo(
     () => ({
@@ -110,6 +116,14 @@ export default function ParentApp() {
             <Route path="mistakes" element={pageElement(MistakesPage)} />
             <Route path="students" element={pageElement(StudentsPage)} />
             <Route path="teachers" element={pageElement(TeachersPage)} />
+            <Route
+              path="library"
+              element={<RequireStudents>{pageElement(LibraryPage)}</RequireStudents>}
+            />
+            <Route
+              path="library/:grade"
+              element={<RequireStudents>{pageElement(LibraryGradePage)}</RequireStudents>}
+            />
             <Route path="settings" element={pageElement(SettingsPage)} />
             <Route
               path="admin/users"

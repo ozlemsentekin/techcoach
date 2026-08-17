@@ -8,6 +8,7 @@ import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
 import DataTable from '../../ui/DataTable'
 import ResourceImageField from '../components/ResourceImageField'
+import { GRADE_OPTIONS } from '../components/studentWizardConstants'
 
 const RESOURCE_BOOK_TYPES = [
   { value: 'konu_anlatimi', label: 'Konu Anlatımı' },
@@ -22,6 +23,7 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
   const [pageCount, setPageCount] = useState(book ? String(book.pageCount) : '')
   const [publisherId, setPublisherId] = useState(book?.publisherId || '')
   const [type, setType] = useState(book?.type || '')
+  const [grade, setGrade] = useState(book?.grade || '')
   const [isActive, setIsActive] = useState(book ? book.isActive : true)
   const [hasAnswerKey, setHasAnswerKey] = useState(book ? book.hasAnswerKey : true)
   const [imageUrl, setImageUrl] = useState(book?.imageUrl || '')
@@ -48,6 +50,10 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
       setError('Kaynak tipi seçilmeli.')
       return
     }
+    if (!grade) {
+      setError('Sınıf seçilmeli.')
+      return
+    }
 
     setError('')
     setLoading(true)
@@ -59,6 +65,7 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
         pageCount: pageCountNumber,
         isActive,
         type,
+        grade,
         hasAnswerKey: type === 'soru_bankasi' ? hasAnswerKey : true,
         imageUrl: imageUrl.trim() || null,
       }
@@ -140,6 +147,24 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
               {RESOURCE_BOOK_TYPES.map((item) => (
                 <option key={item.value} value={item.value}>
                   {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-panel-text-muted">Sınıf</span>
+            <select
+              value={grade}
+              onChange={(event) => setGrade(event.target.value)}
+              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+            >
+              <option value="" disabled>
+                Sınıf seçin
+              </option>
+              {GRADE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}. Sınıf
                 </option>
               ))}
             </select>
@@ -311,6 +336,7 @@ export default function AdminSubjectsPage() {
           pageCount: book.pageCount,
           isActive: !book.isActive,
           type: book.type,
+          grade: book.grade,
           hasAnswerKey: book.hasAnswerKey,
           imageUrl: book.imageUrl,
         }),

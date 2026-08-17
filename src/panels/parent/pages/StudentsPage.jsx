@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import {
   BookOpen,
   Calendar,
-  Check,
   GraduationCap,
   Palette,
   Phone,
@@ -27,32 +26,12 @@ import StudentTeacherModal from '../components/StudentTeacherModal'
 import StudentProfileModal, { InterestPicker } from '../components/StudentProfileModal'
 import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
 import SchoolPicker from '../components/SchoolPicker'
+import SchoolScheduleEditor from '../components/SchoolScheduleEditor'
+import SubjectPicker from '../components/SubjectPicker'
 import ResourceImageField from '../components/ResourceImageField'
 import { COMMON_ARTS, COMMON_SPORTS } from '../components/studentInterestCatalog'
-
-const GENDER_OPTIONS = [
-  { value: 'kiz', label: 'Kız' },
-  { value: 'erkek', label: 'Erkek' },
-]
-
-const GRADE_OPTIONS = ['1', '2', '3', '4', '5', '6', '7', '8']
-
-// Bir sınıf seviyesindeki öğrencilerin tipik doğum yılı, o sınıfa göre ± 1 yıllık bir
-// aralığa denk gelir (ör. bugün 7. sınıf öğrencisi genelde 12 yaşında olur).
-function getGradeBirthYearRange(grade) {
-  const gradeNumber = Number(grade)
-  if (!Number.isInteger(gradeNumber) || gradeNumber < 1 || gradeNumber > 8) {
-    return null
-  }
-  const expectedBirthYear = new Date().getFullYear() - gradeNumber - 5
-  return { min: expectedBirthYear - 1, max: expectedBirthYear + 1 }
-}
-
-const WIZARD_STEPS = [
-  { key: 1, label: 'Temel Bilgiler' },
-  { key: 2, label: 'Okul Bilgileri' },
-  { key: 3, label: 'Panel ve Hobiler' },
-]
+import { FieldIcon, WizardSteps } from '../components/StudentWizardShared'
+import { GENDER_OPTIONS, GRADE_OPTIONS, WIZARD_STEPS, getGradeBirthYearRange } from '../components/studentWizardConstants'
 
 const INITIAL_FORM = {
   firstName: '',
@@ -82,53 +61,6 @@ function StudentAvatar({ student }) {
   )
 }
 
-function WizardSteps({ step }) {
-  return (
-    <div className="flex items-center gap-2 overflow-x-auto bg-panel-accent-soft px-4 py-3 sm:gap-3 sm:px-6 sm:py-3.5">
-      {WIZARD_STEPS.map((item, index) => {
-        const isActive = item.key === step
-        const isDone = item.key < step
-        return (
-          <div key={item.key} className="flex shrink-0 items-center gap-2 sm:flex-1 sm:gap-3">
-            <span
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors sm:h-8 sm:w-8 sm:text-sm ${
-                isActive
-                  ? 'bg-panel-warm text-white shadow-[0_4px_10px_rgba(201,106,31,0.35)]'
-                  : isDone
-                    ? 'bg-panel-warm text-white'
-                    : 'border border-panel-border-strong bg-white text-panel-text-muted'
-              }`}
-            >
-              {isDone ? <Check size={14} aria-hidden="true" /> : item.key}
-            </span>
-            <span
-              className={`whitespace-nowrap text-xs font-semibold sm:text-sm ${
-                isActive ? 'text-panel-warm' : isDone ? 'text-panel-text' : 'text-panel-text-muted'
-              }`}
-            >
-              {item.label}
-            </span>
-            {index < WIZARD_STEPS.length - 1 ? (
-              <span className={`hidden h-0.5 flex-1 rounded-full sm:block ${isDone ? 'bg-panel-warm' : 'bg-panel-border-strong'}`} />
-            ) : null}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function FieldIcon({ icon }) {
-  const Icon = icon
-  return (
-    <Icon
-      size={16}
-      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-panel-blue"
-      aria-hidden="true"
-    />
-  )
-}
-
 function AddStudentModal({ onCreated, onClose }) {
   const [step, setStep] = useState(1)
   const [studentId, setStudentId] = useState(null)
@@ -141,8 +73,18 @@ function AddStudentModal({ onCreated, onClose }) {
   const [supportedTeam, setSupportedTeam] = useState('')
   const [interestedSports, setInterestedSports] = useState([])
   const [interestedArts, setInterestedArts] = useState([])
+  const [schoolSchedule, setSchoolSchedule] = useState([])
+  const [scheduleLoaded, setScheduleLoaded] = useState(false)
+  const [subjectIds, setSubjectIds] = useState([])
+  const [allSubjects, setAllSubjects] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    authRequest('/api/panel/subjects', { method: 'GET' })
+      .then((data) => setAllSubjects(data.subjects))
+      .catch(() => setAllSubjects([]))
+  }, [])
 
   const handleChange = (event) => {
     const { name, type, value, checked } = event.target
@@ -186,6 +128,11 @@ function AddStudentModal({ onCreated, onClose }) {
       return
     }
 
+    if (studentId) {
+      setStep(2)
+      return
+    }
+
     setError('')
     setLoading(true)
     try {
@@ -225,6 +172,8 @@ function AddStudentModal({ onCreated, onClose }) {
         supportedTeam: supportedTeam.trim() || null,
         interestedSports,
         interestedArts,
+        schoolSchedule,
+        subjectIds,
         ...(themeId ? { themeId } : {}),
       }),
     })
@@ -251,6 +200,67 @@ function AddStudentModal({ onCreated, onClose }) {
     setStep(3)
   }
 
+  // 3. adıma (Okul Ders Saatleri) ilk girişte, aynı okul+sınıf için admin tarafında tanımlı
+  // bir ders programı şablonu varsa onu öneri olarak getirip ön dolgu yapar; veli düzenleyip
+  // kaydedebilir veya tamamen atlayabilir.
+  useEffect(() => {
+    if (step !== 3 || scheduleLoaded || !studentId) return
+    let ignore = false
+
+    authRequest(`/api/parent/students/${studentId}/profile`, { method: 'GET' })
+      .then((data) => {
+        if (ignore) return
+        const loaded = data.profile
+        const initial = loaded?.schoolSchedule?.length ? loaded.schoolSchedule : loaded?.suggestedSchoolSchedule || []
+        setSchoolSchedule(initial)
+        setSubjectIds(loaded?.subjectIds || [])
+        setScheduleLoaded(true)
+      })
+      .catch(() => {
+        if (!ignore) setScheduleLoaded(true)
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [step, scheduleLoaded, studentId])
+
+  const handleSaveSchedule = async () => {
+    setError('')
+    setLoading(true)
+    try {
+      await saveProfile()
+      setStep(4)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSkipSchedule = () => {
+    setError('')
+    setStep(4)
+  }
+
+  const handleSaveSubjects = async () => {
+    setError('')
+    setLoading(true)
+    try {
+      await saveProfile()
+      setStep(5)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSkipSubjects = () => {
+    setError('')
+    setStep(5)
+  }
+
   const handleFinish = async () => {
     setError('')
     setLoading(true)
@@ -269,16 +279,16 @@ function AddStudentModal({ onCreated, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-panel-2">
+      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-panel-2">
         <div className="flex items-center justify-between gap-4 px-4 pb-3 pt-3 sm:px-6 sm:pb-3.5 sm:pt-4">
           <h2 className="text-lg font-semibold text-panel-text">Çocuk Ekle</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
             <X size={20} />
           </button>
         </div>
-        <WizardSteps step={step} />
+        <WizardSteps step={step} steps={WIZARD_STEPS} />
 
-        <div className="flex-1 overflow-y-auto border-t border-[#edf0f1] px-4 py-4 sm:px-6 sm:py-5">
+        <div className="min-h-[420px] flex-1 overflow-y-auto border-t border-[#edf0f1] px-4 py-4 sm:min-h-[460px] sm:px-6 sm:py-5">
           {error ? (
             <div className="mb-3 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
           ) : null}
@@ -399,7 +409,7 @@ function AddStudentModal({ onCreated, onClose }) {
                   onChange={handleChange}
                   className="mt-0.5 h-5 w-5 rounded border-panel-border"
                 />
-                <span>Bu çocuk için ebeveyn olarak KVKK ve aydınlatma metni onayını veriyorum.</span>
+                <span>Çocuğum için ebeveyn olarak KVKK ve aydınlatma metni onayını veriyorum.</span>
               </label>
             </form>
           ) : null}
@@ -422,6 +432,27 @@ function AddStudentModal({ onCreated, onClose }) {
           ) : null}
 
           {step === 3 ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-panel-text-muted">
+                Çocuğunuzun okul ders saatlerini girin (hafta sonu kurs programı varsa cumartesi/pazar da
+                eklenebilir). Bu saatler haftalık planda "Okulda" olarak görünür ve bu saatlere ödev eklenemez. Şu an
+                bilmiyorsanız bu adımı atlayıp daha sonra "Detay" ekranından ekleyebilirsiniz.
+              </p>
+              <SchoolScheduleEditor entries={schoolSchedule} onChange={setSchoolSchedule} />
+            </div>
+          ) : null}
+
+          {step === 4 ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-panel-text-muted">
+                Soldaki listeden çocuğunuzun okulda aldığı dersleri seçin, sağdaki listeye eklensin. Şu an
+                bilmiyorsanız bu adımı atlayıp daha sonra "Detay" ekranından ekleyebilirsiniz.
+              </p>
+              <SubjectPicker allSubjects={allSubjects} selectedIds={subjectIds} onChange={setSubjectIds} />
+            </div>
+          ) : null}
+
+          {step === 5 ? (
             <div className="flex flex-col gap-4">
               <p className="text-sm text-panel-text-muted">
                 Bu adımdaki bilgiler zorunlu değildir, istediğiniz zaman "Detay" ekranından güncelleyebilirsiniz.
@@ -490,6 +521,9 @@ function AddStudentModal({ onCreated, onClose }) {
 
           {step === 2 ? (
             <>
+              <Button type="button" variant="secondary" size="md" onClick={() => setStep(1)} disabled={loading}>
+                Geri
+              </Button>
               <Button type="button" variant="secondary" size="md" onClick={handleSkipSchool} disabled={loading}>
                 Atla
               </Button>
@@ -502,6 +536,34 @@ function AddStudentModal({ onCreated, onClose }) {
           {step === 3 ? (
             <>
               <Button type="button" variant="secondary" size="md" onClick={() => setStep(2)} disabled={loading}>
+                Geri
+              </Button>
+              <Button type="button" variant="secondary" size="md" onClick={handleSkipSchedule} disabled={loading}>
+                Atla
+              </Button>
+              <Button type="button" size="md" onClick={handleSaveSchedule} disabled={loading}>
+                {loading ? 'Kaydediliyor...' : 'Kaydet ve Devam Et'}
+              </Button>
+            </>
+          ) : null}
+
+          {step === 4 ? (
+            <>
+              <Button type="button" variant="secondary" size="md" onClick={() => setStep(3)} disabled={loading}>
+                Geri
+              </Button>
+              <Button type="button" variant="secondary" size="md" onClick={handleSkipSubjects} disabled={loading}>
+                Atla
+              </Button>
+              <Button type="button" size="md" onClick={handleSaveSubjects} disabled={loading}>
+                {loading ? 'Kaydediliyor...' : 'Kaydet ve Devam Et'}
+              </Button>
+            </>
+          ) : null}
+
+          {step === 5 ? (
+            <>
+              <Button type="button" variant="secondary" size="md" onClick={() => setStep(4)} disabled={loading}>
                 Geri
               </Button>
               <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={loading}>
