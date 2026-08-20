@@ -3,7 +3,7 @@ import { Camera, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import Button from '../../ui/Button'
 import ResourceImageField from '../../parent/components/ResourceImageField'
-import { libraryApiBase } from './libraryConstants'
+import { libraryApiBase, RESOURCE_SOURCE_LABELS } from './libraryConstants'
 
 const TOC_MAX_DIMENSION = 1600
 const TOC_JPEG_QUALITY = 0.82
@@ -261,6 +261,7 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
   const nextId = useLocalId()
 
   const [step, setStep] = useState(1)
+  const [resourceSource, setResourceSource] = useState('')
   const [name, setName] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [barcode, setBarcode] = useState('')
@@ -296,6 +297,10 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
   }, [])
 
   const goToStep2 = () => {
+    if (!resourceSource) {
+      setError('Kaynak türü (Okul Kaynağı / Özel Kaynak) seçilmeli.')
+      return
+    }
     if (name.trim().length < 2) {
       setError('Kaynak adı en az 2 karakter olmalı.')
       return
@@ -398,6 +403,7 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
         body: JSON.stringify({
           grade,
           subjectId,
+          resourceSource,
           name: name.trim(),
           imageUrl: imageUrl.trim() || null,
           barcode: barcode.trim(),
@@ -475,6 +481,26 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
             <div className="flex flex-col gap-4">
               <div className="flex justify-center">
                 <ResourceImageField value={imageUrl} onChange={setImageUrl} compact size={140} showUrlToggle />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Kaynak Türü</span>
+                <div className="flex gap-2">
+                  {Object.entries(RESOURCE_SOURCE_LABELS).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setResourceSource(value)}
+                      className={`flex-1 rounded-xl border p-2.5 text-sm font-medium transition-colors ${
+                        resourceSource === value
+                          ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
+                          : 'border-panel-border text-panel-text-muted hover:border-panel-blue'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <label className="flex flex-col gap-1.5">

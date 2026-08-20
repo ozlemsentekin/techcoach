@@ -241,8 +241,8 @@ export default function AssignHomeworkModal({ studentTeacherId, subjectName, def
       <form
         onSubmit={handleSubmit}
         className={cn(
-          'flex h-full w-full flex-col overflow-hidden bg-panel-surface sm:h-auto sm:max-h-[90vh] sm:rounded-2xl sm:shadow-panel-2',
-          step === 'source' ? 'sm:max-w-3xl' : 'sm:max-w-xl',
+          'flex h-full w-full flex-col overflow-hidden bg-panel-surface sm:h-auto sm:max-h-[94vh] sm:rounded-2xl sm:shadow-panel-2',
+          step === 'source' ? 'sm:max-w-4xl' : 'sm:max-w-xl',
         )}
       >
         {/* Koyu başlık çubuğu */}
@@ -308,23 +308,23 @@ export default function AssignHomeworkModal({ studentTeacherId, subjectName, def
               ) : resourceBooks.length === 0 ? (
                 <p className="p-2 text-sm text-panel-text-muted">Bu öğrenci için takip edilen kaynak yok.</p>
               ) : (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                   {resourceBooks.map((book) => (
                     <button
                       key={book.id}
                       type="button"
                       onClick={() => handleSelectResourceBook(book)}
-                      className="flex min-w-0 flex-col items-stretch gap-2 rounded-xl border border-panel-border p-2.5 text-left transition-colors hover:border-panel-blue hover:bg-panel-blue-soft/40"
+                      className="flex min-w-0 flex-col items-stretch gap-1.5 rounded-xl border border-panel-border p-2 text-left transition-colors hover:border-panel-blue hover:bg-panel-blue-soft/40"
                     >
                       <ResourceBookCover book={book} />
-                      <div className="flex min-w-0 flex-col gap-1">
+                      <div className="flex min-w-0 flex-col gap-0.5">
                         {book.publisherName ? (
                           <Badge tone="lilac" className="w-fit">
                             {book.publisherName}
                           </Badge>
                         ) : null}
-                        <p className="text-sm font-semibold leading-snug text-panel-text">{book.name}</p>
-                        {book.subjectName ? <p className="text-xs text-panel-text-muted">{book.subjectName}</p> : null}
+                        <p className="truncate text-sm font-semibold leading-snug text-panel-text">{book.name}</p>
+                        {book.subjectName ? <p className="truncate text-xs text-panel-text-muted">{book.subjectName}</p> : null}
                       </div>
                       <ResourceBookRates completionRate={book.completionRate} successRate={book.successRate} className="mt-0" />
                     </button>

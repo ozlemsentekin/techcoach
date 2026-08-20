@@ -16,6 +16,7 @@ const { requireStudentContext } = require('./studentScope')
 const { getParentStudentQuota } = require('./entitlements')
 const {
   LIBRARY_GRADES,
+  RESOURCE_SOURCES,
   fetchLibraryResourceBooks,
   createLibraryResourceBookSubmission,
   deleteLibraryResourceBookSubmission,
@@ -107,6 +108,7 @@ function sanitizeTeacherResourceBook(record) {
     type: record.resource_type,
     hasAnswerKey: Boolean(record.has_answer_key),
     imageUrl: record.image_url || null,
+    resourceSource: record.resource_source || null,
     assigned: Boolean(record.assigned),
     assignedAt: record.assigned_at || null,
     completionRate: null,
@@ -455,6 +457,7 @@ async function fetchTeacherResourceBooks(studentId, teacherId) {
   const result = await requestDb.query(`
     SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
            rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url,
+           rb.resource_source,
            CASE WHEN strb.resource_book_id IS NULL THEN 0 ELSE 1 END AS assigned,
            strb.assigned_at
     FROM dbo.StudentResourceBooks srb
@@ -961,14 +964,18 @@ async function listLibraryResourceBooksForParentHandler(request) {
 
     const grade = request.query.get('grade')
     const subjectId = request.query.get('subjectId')
+    const source = request.query.get('source')
     if (!LIBRARY_GRADES.has(grade)) {
       return json(400, { error: 'Geçersiz sınıf.' })
     }
     if (!subjectId) {
       return json(400, { error: 'Ders belirtilmeli.' })
     }
+    if (source && !RESOURCE_SOURCES.includes(source)) {
+      return json(400, { error: 'Geçersiz kaynak türü.' })
+    }
 
-    const resourceBooks = await fetchLibraryResourceBooks({ grade, subjectId, actorUserId: parentId })
+    const resourceBooks = await fetchLibraryResourceBooks({ grade, subjectId, actorUserId: parentId, source })
     return json(200, { resourceBooks })
   } catch (error) {
     if (isConfigError(error)) {

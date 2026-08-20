@@ -4,3 +4,5 @@ export const LIBRARY_GRADES = ['5', '6', '7', '8', '9', '10', '11', '12']
 export function libraryApiBase(role) {
   return role === 'teacher' ? '/api/panel-teacher' : '/api/parent'
 }
+
+export const RESOURCE_SOURCE_LABELS = { okul: 'Okul Kaynağı', ozel: 'Özel Kaynak' }

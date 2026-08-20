@@ -36,6 +36,24 @@ export function ResourceBookAvatar({ book, size = 'md', onClick }) {
   )
 }
 
+export function ResourceBookCover({ book }) {
+  if (book?.imageUrl) {
+    return (
+      <img
+        src={book.imageUrl}
+        alt={`${book.name} görseli`}
+        className="aspect-[3/4] w-full rounded-lg border border-panel-border object-cover"
+      />
+    )
+  }
+
+  return (
+    <span className="flex aspect-[3/4] w-full items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
+      <BookOpen size={28} aria-hidden="true" />
+    </span>
+  )
+}
+
 const RATE_TONES = {
   blue: { chip: 'bg-panel-blue-soft text-panel-blue', bar: 'bg-panel-blue', text: 'text-panel-blue' },
   sage: { chip: 'bg-panel-sage-soft text-panel-sage', bar: 'bg-panel-sage', text: 'text-panel-sage' },
@@ -77,9 +95,22 @@ function RateRow({ icon: Icon, label, value, tone }) {
   )
 }
 
+export function SuccessRateBadge({ value, label = 'Başarı' }) {
+  const hasValue = value !== null && value !== undefined
+  const percentage = hasValue ? Math.round(value * 100) : 0
+  const colors = RATE_TONES[successRateTone(value)]
+
+  return (
+    <span className={cn('inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold', colors.chip)}>
+      <Target size={12} className="shrink-0" aria-hidden="true" />
+      {label} {hasValue ? `%${percentage}` : '—'}
+    </span>
+  )
+}
+
 export function ResourceBookRates({ completionRate, successRate, className }) {
   return (
-    <div className={cn('mt-2.5 grid grid-cols-2 gap-1.5', className)}>
+    <div className={cn('mt-2.5 grid grid-cols-1 gap-1.5', className)}>
       <RateRow icon={CheckCircle2} label="Tamamlanma" value={completionRate} tone={completionRateTone(completionRate)} />
       <RateRow icon={Target} label="Başarı" value={successRate} tone={successRateTone(successRate)} />
     </div>

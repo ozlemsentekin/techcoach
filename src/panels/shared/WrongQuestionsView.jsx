@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, ArrowLeft, BookOpen, ChevronRight, Layers } from 'lucide-react'
+import { AlertCircle, ArrowLeft, BookOpen, ChevronRight, Layers, Tag } from 'lucide-react'
 import PageHeader from '../layout/PageHeader'
 import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
@@ -7,6 +7,10 @@ import Button from '../ui/Button'
 import Badge from '../ui/Badge'
 import { MotionDiv } from '../ui/motion'
 import WrongQuestionGalleryModal from './WrongQuestionGalleryModal'
+import { ResourceBookAvatar } from './ResourceBookCard'
+
+const NO_BOOK_KEY = '__kaynaksiz__'
+const sourceKeyFor = (bookName) => bookName || NO_BOOK_KEY
 
 const SHELF_TONES = [
   { icon: 'bg-panel-blue-soft text-panel-blue', hoverBorder: 'hover:border-panel-blue' },
@@ -30,14 +34,9 @@ function groupBySubjectAndTopic(wrongQuestions) {
     const subjectGroup = bySubject.get(item.subject)
     subjectGroup.items.push(item)
 
-    // Grouped by kitap adı (bookName), not the free-text topic label: the same book's tests can
-    // carry differently-worded topic strings (renamed/re-entered over time), which fragmented one
-    // book into several cards, while unrelated books sharing a generic "1. Ünite - ..." topic name
-    // got merged into one. bookName is the stable identifier; topic falls back only for legacy
-    // manually-entered rows that have no linked book.
-    const topicKey = item.bookName || item.topic || ''
+    const topicKey = item.topic || item.bookName || ''
     if (!subjectGroup.topicsByKey.has(topicKey)) {
-      subjectGroup.topicsByKey.set(topicKey, { topic: item.bookName || item.topic || null, items: [] })
+      subjectGroup.topicsByKey.set(topicKey, { topic: item.topic || item.bookName || null, items: [] })
     }
     subjectGroup.topicsByKey.get(topicKey).items.push(item)
   })
@@ -49,6 +48,55 @@ function groupBySubjectAndTopic(wrongQuestions) {
       topics: Array.from(group.topicsByKey.values()).sort((a, b) => b.items.length - a.items.length),
     }))
     .sort((a, b) => b.items.length - a.items.length)
+}
+
+// bookName tests arası kararlı bir kimlik: aynı kitabın testleri zaman içinde farklı ifadelerle
+// konu adı almış olabilir. "Kaynağa göre" görünüm bu yüzden birincil olarak bookName'e göre
+// gruplar (bookName olmayan eski manuel kayıtlar tek bir "Kaynaksız" grubunda toplanır) ve her
+// kaynağın altında konulara göre alt kırılım sunar.
+function groupBySubjectAndSource(wrongQuestions) {
+  const bySubject = new Map()
+  wrongQuestions.forEach((item) => {
+    if (!item.hasPhoto) return
+    if (!bySubject.has(item.subject)) {
+      bySubject.set(item.subject, { subject: item.subject, items: [], sourcesByKey: new Map() })
+    }
+    const subjectGroup = bySubject.get(item.subject)
+    subjectGroup.items.push(item)
+
+    const sourceKey = sourceKeyFor(item.bookName)
+    if (!subjectGroup.sourcesByKey.has(sourceKey)) {
+      subjectGroup.sourcesByKey.set(sourceKey, {
+        bookName: item.bookName || null,
+        publisherName: item.publisherName || null,
+        items: [],
+        topicsByKey: new Map(),
+      })
+    }
+    const sourceGroup = subjectGroup.sourcesByKey.get(sourceKey)
+    sourceGroup.items.push(item)
+
+    const topicKey = item.topic || ''
+    if (!sourceGroup.topicsByKey.has(topicKey)) {
+      sourceGroup.topicsByKey.set(topicKey, { topic: item.topic || null, items: [] })
+    }
+    sourceGroup.topicsByKey.get(topicKey).items.push(item)
+  })
+
+  return Array.from(bySubject.values()).map((group) => ({
+    subject: group.subject,
+    items: group.items,
+    sources: Array.from(group.sourcesByKey.values())
+      .map((source) => ({
+        ...source,
+        topics: Array.from(source.topicsByKey.values()).sort((a, b) => b.items.length - a.items.length),
+      }))
+      .sort((a, b) => {
+        const publisherCompare = (a.publisherName || '').localeCompare(b.publisherName || '', 'tr')
+        if (publisherCompare !== 0) return publisherCompare
+        return (a.bookName || '').localeCompare(b.bookName || '', 'tr')
+      }),
+  }))
 }
 
 function SubjectShelfCard({ subject, count, tone, onClick }) {
@@ -118,6 +166,56 @@ function ContentTopicCard({ topic, wrongCount, stats, onClick }) {
   )
 }
 
+const GROUP_MODE_OPTIONS = [
+  { value: 'topic', label: 'İçerik Grubuna Göre' },
+  { value: 'source', label: 'Kaynağa Göre' },
+]
+
+function GroupModeToggle({ mode, onChange }) {
+  return (
+    <div className="inline-flex w-fit gap-1 rounded-full border border-panel-border bg-panel-surface-soft p-1">
+      {GROUP_MODE_OPTIONS.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onChange(option.value)}
+          className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors ${
+            mode === option.value
+              ? 'bg-panel-surface text-panel-blue shadow-panel-1'
+              : 'text-panel-text-muted hover:text-panel-text'
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function SourceProfileCard({ bookName, publisherName, wrongCount, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex flex-col gap-3 rounded-2xl border border-panel-border bg-panel-surface p-4 text-left shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-md"
+    >
+      <span className="inline-flex w-fit items-center gap-1 rounded-full bg-panel-slate-soft px-2.5 py-1 text-[11px] font-semibold text-panel-slate">
+        <Tag size={11} aria-hidden="true" />
+        {publisherName || 'Yayın evi belirtilmemiş'}
+      </span>
+      <div className="flex items-center gap-3">
+        <ResourceBookAvatar book={{ name: bookName }} size="md" />
+        <h3 className="line-clamp-2 min-w-0 flex-1 text-sm font-bold leading-snug text-panel-text">
+          {bookName || 'Kaynak belirtilmemiş'}
+        </h3>
+      </div>
+      <Badge tone="warm" className="w-fit">
+        {wrongCount} yanlış
+      </Badge>
+    </button>
+  )
+}
+
 // Öğrenci/veli/öğretmen panellerinin ortak Hata Defteri görünümü: ders kartları -> içerik (konu)
 // kartları -> fotoğraf galerisi + Dikkat Hatası/Bilgi Eksikliği etiketleme. Kimin verisini
 // gösterdiği tamamen fetchWrongQuestions/fetchTopicStats/updateMistakeReason prop'larıyla
@@ -135,6 +233,8 @@ export default function WrongQuestionsView({
   const [topicStats, setTopicStats] = useState([])
   const [error, setError] = useState('')
   const [selectedSubject, setSelectedSubject] = useState(null)
+  const [groupMode, setGroupMode] = useState('topic')
+  const [selectedSourceKey, setSelectedSourceKey] = useState(null)
   const [galleryTopicKey, setGalleryTopicKey] = useState(null)
 
   useEffect(() => {
@@ -153,8 +253,14 @@ export default function WrongQuestionsView({
     }
   }, [fetchWrongQuestions, fetchTopicStats])
 
-  const groups = useMemo(() => (wrongQuestions ? groupBySubjectAndTopic(wrongQuestions) : []), [wrongQuestions])
-  const selectedGroup = groups.find((group) => group.subject === selectedSubject) || null
+  const contentGroups = useMemo(() => (wrongQuestions ? groupBySubjectAndTopic(wrongQuestions) : []), [wrongQuestions])
+  const sourceGroups = useMemo(() => (wrongQuestions ? groupBySubjectAndSource(wrongQuestions) : []), [wrongQuestions])
+  const selectedContentGroup = contentGroups.find((group) => group.subject === selectedSubject) || null
+  const selectedSourceGroup = sourceGroups.find((group) => group.subject === selectedSubject) || null
+  const activeSource =
+    groupMode === 'source' && selectedSourceKey
+      ? selectedSourceGroup?.sources.find((source) => sourceKeyFor(source.bookName) === selectedSourceKey) || null
+      : null
 
   const topicStatsMap = useMemo(() => {
     const map = new Map()
@@ -162,9 +268,25 @@ export default function WrongQuestionsView({
     return map
   }, [topicStats])
 
-  const galleryTopicGroup = selectedGroup?.topics.find(
-    (topicGroup) => topicStatsKey(selectedGroup.subject, topicGroup.topic) === galleryTopicKey,
+  const activeTopics = activeSource ? activeSource.topics : groupMode === 'topic' ? selectedContentGroup?.topics : null
+  const galleryTopicGroup = activeTopics?.find(
+    (topicGroup) => topicStatsKey(selectedSubject, topicGroup.topic) === galleryTopicKey,
   )
+
+  const handleSelectSubject = (subject) => {
+    setSelectedSubject(subject)
+    setSelectedSourceKey(null)
+  }
+
+  const handleBackToSubjects = () => {
+    setSelectedSubject(null)
+    setSelectedSourceKey(null)
+  }
+
+  const handleChangeGroupMode = (mode) => {
+    setGroupMode(mode)
+    setSelectedSourceKey(null)
+  }
 
   const handleUpdateMistakeReason = async (wrongQuestionId, mistakeReason) => {
     const updated = await updateMistakeReason(wrongQuestionId, mistakeReason)
@@ -175,14 +297,28 @@ export default function WrongQuestionsView({
 
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
-      {selectedGroup ? (
+      {activeSource ? (
         <PageHeader
-          title={selectedGroup.subject}
-          subtitle={`${selectedGroup.items.length} yanlış soru`}
+          title={activeSource.bookName || 'Kaynak belirtilmemiş'}
+          subtitle={`${activeSource.publisherName || 'Yayın evi belirtilmemiş'} · ${activeSource.items.length} yanlış soru`}
           actions={
             <div className="flex items-center gap-2">
               {headerActions}
-              <Button variant="secondary" onClick={() => setSelectedSubject(null)}>
+              <Button variant="secondary" onClick={() => setSelectedSourceKey(null)}>
+                <ArrowLeft size={15} aria-hidden="true" />
+                Kaynaklara Dön
+              </Button>
+            </div>
+          }
+        />
+      ) : selectedSubject ? (
+        <PageHeader
+          title={selectedSubject}
+          subtitle={`${selectedContentGroup?.items.length ?? 0} yanlış soru`}
+          actions={
+            <div className="flex items-center gap-2">
+              {headerActions}
+              <Button variant="secondary" onClick={handleBackToSubjects}>
                 <ArrowLeft size={15} aria-hidden="true" />
                 Derslere Dön
               </Button>
@@ -197,41 +333,78 @@ export default function WrongQuestionsView({
         <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
       ) : wrongQuestions === null ? (
         <LoadingState label="Hata defteri yükleniyor..." />
-      ) : groups.length === 0 ? (
+      ) : contentGroups.length === 0 ? (
         <EmptyState
           icon={AlertCircle}
           title="Henüz fotoğraflanmış yanlış yok"
           description="Cevap kağıdında yanlış işaretlenen bir soruya tıklayıp fotoğrafını eklediğinde burada görünecek."
         />
-      ) : selectedGroup ? (
+      ) : activeSource ? (
         <MotionDiv
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
         >
-          {selectedGroup.topics.map((topicGroup) => (
+          {activeSource.topics.map((topicGroup) => (
             <ContentTopicCard
-              key={topicStatsKey(selectedGroup.subject, topicGroup.topic)}
+              key={topicStatsKey(selectedSubject, topicGroup.topic)}
               topic={topicGroup.topic}
               wrongCount={topicGroup.items.length}
-              stats={topicStatsMap.get(topicStatsKey(selectedGroup.subject, topicGroup.topic))}
-              onClick={() => setGalleryTopicKey(topicStatsKey(selectedGroup.subject, topicGroup.topic))}
+              stats={topicStatsMap.get(topicStatsKey(selectedSubject, topicGroup.topic))}
+              onClick={() => setGalleryTopicKey(topicStatsKey(selectedSubject, topicGroup.topic))}
             />
           ))}
         </MotionDiv>
+      ) : selectedSubject ? (
+        <div className="flex flex-col gap-4">
+          <GroupModeToggle mode={groupMode} onChange={handleChangeGroupMode} />
+          {groupMode === 'source' ? (
+            <MotionDiv
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+            >
+              {selectedSourceGroup?.sources.map((source) => (
+                <SourceProfileCard
+                  key={sourceKeyFor(source.bookName)}
+                  bookName={source.bookName}
+                  publisherName={source.publisherName}
+                  wrongCount={source.items.length}
+                  onClick={() => setSelectedSourceKey(sourceKeyFor(source.bookName))}
+                />
+              ))}
+            </MotionDiv>
+          ) : (
+            <MotionDiv
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+            >
+              {selectedContentGroup?.topics.map((topicGroup) => (
+                <ContentTopicCard
+                  key={topicStatsKey(selectedSubject, topicGroup.topic)}
+                  topic={topicGroup.topic}
+                  wrongCount={topicGroup.items.length}
+                  stats={topicStatsMap.get(topicStatsKey(selectedSubject, topicGroup.topic))}
+                  onClick={() => setGalleryTopicKey(topicStatsKey(selectedSubject, topicGroup.topic))}
+                />
+              ))}
+            </MotionDiv>
+          )}
+        </div>
       ) : (
         <MotionDiv
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
         >
-          {groups.map((group, index) => (
+          {contentGroups.map((group, index) => (
             <SubjectShelfCard
               key={group.subject}
               subject={group.subject}
               count={group.items.length}
               tone={SHELF_TONES[index % SHELF_TONES.length]}
-              onClick={() => setSelectedSubject(group.subject)}
+              onClick={() => handleSelectSubject(group.subject)}
             />
           ))}
         </MotionDiv>

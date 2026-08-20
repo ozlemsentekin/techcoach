@@ -3,7 +3,8 @@ import { ArrowLeft, Check, ChevronDown, ChevronRight, Pencil, X } from 'lucide-r
 import Badge from '../../ui/Badge'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
-import { ResourceBookAvatar, ResourceBookRates } from '../../shared/ResourceBookCard'
+import { ResourceBookCover, ResourceBookRates } from '../../shared/ResourceBookCard'
+import ResourceSourceBadge from '../../shared/library/ResourceSourceBadge'
 import ManualOpticalAnswerModal from '../../shared/ManualOpticalAnswerModal'
 import {
   getTeacherResourceBooks,
@@ -421,35 +422,40 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
   }, [student.studentTeacherId])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="flex max-h-[85vh] w-full max-w-3xl flex-col panel-card p-6">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
+    <div className="fixed inset-0 z-50 flex justify-center bg-black/40 sm:items-center sm:p-4">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-panel-surface sm:h-auto sm:max-h-[94vh] sm:max-w-4xl sm:rounded-2xl sm:shadow-panel-2">
+        <div className="flex shrink-0 items-center justify-between gap-3 bg-panel-blue px-4 py-3 text-white">
+          <div className="flex min-w-0 items-center gap-1.5">
             {selectedBook ? (
               <button
                 type="button"
                 onClick={() => setSelectedBook(null)}
                 aria-label="Kaynak listesine dön"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-panel-text-muted hover:bg-panel-surface-soft"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/80 hover:bg-white/10 hover:text-white"
               >
                 <ArrowLeft size={18} aria-hidden="true" />
               </button>
             ) : null}
             <div className="min-w-0">
-              <h2 className="truncate text-base font-semibold text-panel-text">
+              <h2 className="truncate text-sm font-semibold sm:text-base">
                 {selectedBook ? selectedBook.name : `${student.studentFullName} · Kaynaklar`}
               </h2>
               {selectedBook?.publisherName ? (
-                <p className="text-xs text-panel-text-muted">{selectedBook.publisherName}</p>
+                <p className="truncate text-[11px] text-white/70">{selectedBook.publisherName}</p>
               ) : null}
             </div>
           </div>
-          <button type="button" aria-label="Kapat" onClick={onClose} className="shrink-0">
-            <X size={20} />
+          <button
+            type="button"
+            aria-label="Kapat"
+            onClick={onClose}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/80 hover:bg-white/10 hover:text-white"
+          >
+            <X size={18} />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {selectedBook ? (
             <BookTopics key={selectedBook.id} studentTeacherId={student.studentTeacherId} book={selectedBook} />
           ) : error ? (
@@ -459,25 +465,28 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
           ) : resourceBooks.length === 0 ? (
             <p className="p-2 text-sm text-panel-text-muted">Bu öğrenci için takip edilen kaynak yok.</p>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {resourceBooks.map((book) => (
                 <button
                   key={book.id}
                   type="button"
                   onClick={() => setSelectedBook(book)}
-                  className="group flex items-start gap-3.5 rounded-2xl border border-panel-border bg-white p-3.5 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-panel-blue hover:shadow-md"
+                  className="flex min-w-0 flex-col items-stretch gap-1.5 rounded-xl border border-panel-border p-2 text-left transition-colors hover:border-panel-blue hover:bg-panel-blue-soft/40"
                 >
-                  <ResourceBookAvatar book={book} size="lg" />
-                  <div className="min-w-0 flex-1">
-                    {book.publisherName ? (
-                      <Badge tone="lilac" className="mb-1 w-fit">
-                        {book.publisherName}
-                      </Badge>
-                    ) : null}
-                    <p className="truncate text-sm font-semibold text-panel-text group-hover:text-panel-blue">{book.name}</p>
+                  <ResourceBookCover book={book} />
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {book.publisherName ? (
+                        <Badge tone="lilac" className="w-fit">
+                          {book.publisherName}
+                        </Badge>
+                      ) : null}
+                      <ResourceSourceBadge source={book.resourceSource} />
+                    </div>
+                    <p className="truncate text-sm font-semibold leading-snug text-panel-text">{book.name}</p>
                     {book.subjectName ? <p className="truncate text-xs text-panel-text-muted">{book.subjectName}</p> : null}
-                    <ResourceBookRates completionRate={book.completionRate} successRate={book.successRate} />
                   </div>
+                  <ResourceBookRates completionRate={book.completionRate} successRate={book.successRate} className="mt-0" />
                 </button>
               ))}
             </div>

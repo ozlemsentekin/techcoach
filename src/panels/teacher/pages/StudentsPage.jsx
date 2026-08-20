@@ -4,11 +4,30 @@ import { AlertCircle, BookOpen, CalendarDays, GraduationCap, Phone, Plus, School
 import PageHeader from '../../layout/PageHeader'
 import EmptyState from '../../shared/EmptyState'
 import LoadingState from '../../shared/LoadingState'
+import { SuccessRateBadge } from '../../shared/ResourceBookCard'
 import Button from '../../ui/Button'
 import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
 import AddTeacherStudentModal from '../components/AddTeacherStudentModal'
 import { getTeacherStudents } from '../../../services/teacherService'
 import { formatDateShort } from '../../../utils/time'
+
+function StudentAvatar({ student }) {
+  if (student.studentPhotoUrl) {
+    return (
+      <img
+        src={student.studentPhotoUrl}
+        alt={`${student.studentFullName} fotoğrafı`}
+        className="h-12 w-12 shrink-0 rounded-xl border border-panel-border object-cover"
+      />
+    )
+  }
+
+  return (
+    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
+      <GraduationCap size={24} aria-hidden="true" />
+    </span>
+  )
+}
 
 function nextLessonText(student) {
   const lesson = student.nextLesson
@@ -80,12 +99,13 @@ export default function StudentsPage() {
                 className="flex flex-col gap-4 rounded-2xl border border-panel-border bg-panel-surface p-5 shadow-panel-1"
               >
                 <div className="flex items-center gap-3">
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
-                    <GraduationCap size={24} aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0">
+                  <StudentAvatar student={student} />
+                  <div className="min-w-0 flex-1">
                     <p className="truncate text-base font-bold text-panel-text">{student.studentFullName}</p>
-                    <p className="text-sm text-panel-text-muted">{student.subjectName || 'Ders seçilmedi'}</p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <p className="truncate text-sm text-panel-text-muted">{student.subjectName || 'Ders seçilmedi'}</p>
+                      {student.subjectName ? <SuccessRateBadge value={student.successRate} /> : null}
+                    </div>
                   </div>
                 </div>
 

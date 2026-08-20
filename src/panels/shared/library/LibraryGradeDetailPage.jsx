@@ -12,6 +12,8 @@ import { libraryApiBase } from './libraryConstants'
 import AssignLibraryResourceModal from './AssignLibraryResourceModal'
 import AddLibraryResourceWizard from './AddLibraryResourceWizard'
 import LibraryResourceDetailModal from './LibraryResourceDetailModal'
+import ResourceSourceBadge from './ResourceSourceBadge'
+import { RESOURCE_SOURCE_LABELS } from './libraryConstants'
 
 const RESOURCE_BOOK_TYPE_LABELS = {
   konu_anlatimi: 'Konu Anlatımı',
@@ -65,6 +67,7 @@ export default function LibraryGradeDetailPage({ role }) {
 
   const [subjects, setSubjects] = useState(null)
   const [activeSubjectId, setActiveSubjectId] = useState(null)
+  const [activeSource, setActiveSource] = useState(null)
   const [resourceBooks, setResourceBooks] = useState(null)
   const [error, setError] = useState('')
   const [assignBook, setAssignBook] = useState(null)
@@ -95,7 +98,8 @@ export default function LibraryGradeDetailPage({ role }) {
   const visibleSubjects = useMemo(() => {
     if (!subjects) return null
     if (role !== 'teacher' || !teacherSubjectIds?.length) return subjects
-    return subjects.filter((subject) => teacherSubjectIds.includes(subject.id))
+    const normalizedIds = teacherSubjectIds.map((id) => id.toLowerCase())
+    return subjects.filter((subject) => normalizedIds.includes(subject.id.toLowerCase()))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subjects, role, teacherSubjectIds?.length])
 
@@ -107,7 +111,10 @@ export default function LibraryGradeDetailPage({ role }) {
   const loadResourceBooks = () => {
     if (!activeSubjectId) return
     setResourceBooks(null)
-    authRequest(`${apiBase}/library/resource-books?grade=${grade}&subjectId=${activeSubjectId}`, { method: 'GET' })
+    const sourceParam = activeSource ? `&source=${activeSource}` : ''
+    authRequest(`${apiBase}/library/resource-books?grade=${grade}&subjectId=${activeSubjectId}${sourceParam}`, {
+      method: 'GET',
+    })
       .then((data) => setResourceBooks(data.resourceBooks))
       .catch((err) => setError(err.message))
   }
@@ -115,7 +122,7 @@ export default function LibraryGradeDetailPage({ role }) {
   useEffect(() => {
     loadResourceBooks()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSubjectId, grade])
+  }, [activeSubjectId, activeSource, grade])
 
   const activeSubject = visibleSubjects?.find((subject) => subject.id === activeSubjectId) || null
 
@@ -179,6 +186,25 @@ export default function LibraryGradeDetailPage({ role }) {
         </div>
       )}
 
+      <div className="flex flex-wrap gap-1.5">
+        {[{ value: null, label: 'Tümü' }, ...Object.entries(RESOURCE_SOURCE_LABELS).map(([value, label]) => ({ value, label }))].map(
+          (option) => (
+            <button
+              key={option.label}
+              type="button"
+              onClick={() => setActiveSource(option.value)}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                activeSource === option.value
+                  ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
+                  : 'border-panel-border text-panel-text-muted hover:border-panel-blue'
+              }`}
+            >
+              {option.label}
+            </button>
+          ),
+        )}
+      </div>
+
       {resourceBooks === null ? (
         <LoadingState label="Kaynaklar yükleniyor..." />
       ) : resourceBooks.length === 0 ? (
@@ -214,6 +240,7 @@ export default function LibraryGradeDetailPage({ role }) {
                   <span className="rounded-full bg-panel-surface-soft px-2 py-0.5 text-[11px] font-medium text-panel-text-muted">
                     {book.pageCount} sayfa
                   </span>
+                  <ResourceSourceBadge source={book.resourceSource} />
                   <StatusBadge status={book.status} />
                 </div>
                 {book.status === 'rejected' && book.rejectionReason ? (

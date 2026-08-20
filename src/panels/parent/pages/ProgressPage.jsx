@@ -85,7 +85,7 @@ export default function ProgressPage() {
       <StudentProgressView
         key={selectedStudent.id}
         studentId={selectedStudent.id}
-        title="Gelişim"
+        title="Gelişim Analizi"
         emptySubtitle={`${selectedStudent.fullName} için gösterilecek ders bulunamadı.`}
         buildSubtitle={(subjectLabel) => `${selectedStudent.fullName} için ${subjectLabel} bazında emek, doğruluk ve kaynak ilerlemesi.`}
         headerActions={headerActions}

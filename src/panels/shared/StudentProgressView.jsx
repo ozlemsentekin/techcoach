@@ -2,9 +2,7 @@ import { createElement, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   BookOpenCheck,
-  CalendarDays,
   CheckCircle2,
-  Clock3,
   Layers3,
   Target,
   Trophy,
@@ -95,13 +93,6 @@ function dateInRange(dateKey, rangeId, today) {
   }
   if (rangeId === 'month') return dateKey.slice(0, 7) === today.slice(0, 7)
   return true
-}
-
-function formatDateLabel(dateKey, rangeId) {
-  if (rangeId === 'all') {
-    return new Date(`${dateKey}-01T00:00:00`).toLocaleDateString('tr-TR', { month: 'short', year: '2-digit' })
-  }
-  return new Date(`${dateKey}T00:00:00`).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })
 }
 
 function splitTestResults(item, testsById, { idPrefix, minutes, source }) {
@@ -356,9 +347,8 @@ function sumRecords(records) {
   )
 }
 
-function buildInsights({ stats, contentRows, wrongRows }) {
+function buildInsights({ contentRows, wrongRows }) {
   const insights = []
-  const answeredQuestions = stats.correct + stats.wrong
   const weakestContent = contentRows
     .filter((row) => row.correct + row.wrong >= 3)
     .sort((a, b) => a.accuracy - b.accuracy)[0]
@@ -373,7 +363,7 @@ function buildInsights({ stats, contentRows, wrongRows }) {
     insights.push({
       icon: Trophy,
       title: 'Güçlü Alan',
-      text: `${strongestContent.label} için doğruluk ${formatPercent(strongestContent.accuracy)}.`,
+      text: `${strongestContent.label} konusunda oldukça başarılısın, doğruluğun ${formatPercent(strongestContent.accuracy)}.`,
       tone: 'text-panel-sage bg-panel-sage-soft',
     })
   }
@@ -382,31 +372,19 @@ function buildInsights({ stats, contentRows, wrongRows }) {
     insights.push({
       icon: Target,
       title: 'Tekrar Odağı',
-      text: `${weakestContent.label} içinde ${formatNumber(weakestContent.wrong)} yanlış görünüyor.`,
+      text: `${weakestContent.label} konusunu tekrar etmelisin, bu konuda ${formatNumber(weakestContent.wrong)} yanlışın var.`,
       tone: 'text-panel-warm bg-panel-accent-soft',
     })
   } else if (repeatTopic) {
     insights.push({
       icon: AlertTriangle,
       title: 'Tekrar Odağı',
-      text: `${repeatTopic.topic || repeatTopic.subject} hata defterinde bekliyor.`,
+      text: `${repeatTopic.topic || repeatTopic.subject} konusu hata defterinde tekrarını bekliyor.`,
       tone: 'text-panel-warm bg-panel-accent-soft',
     })
   }
 
-  insights.push({
-    icon: Clock3,
-    title: 'Çalışma Ritmi',
-    text:
-      stats.minutes > 0
-        ? `${formatNumber(stats.minutes)} dk odaklı çalışma kaydedildi.`
-        : answeredQuestions > 0
-          ? 'Soru kaydı var, süre kaydı henüz az.'
-          : 'Bu filtrede çalışma kaydı bekleniyor.',
-    tone: 'text-student-theme-text bg-student-theme-soft',
-  })
-
-  return insights.slice(0, 3)
+  return insights.slice(0, 2)
 }
 
 function metricDescription(stats, plannedTasks, completedTasks) {
@@ -618,43 +596,6 @@ function ImagePreviewLightbox({ preview, onClose }) {
   )
 }
 
-function RecentActivity({ records }) {
-  const recent = [...records].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5)
-
-  return (
-    <section className="panel-card overflow-hidden">
-      <div className="flex items-center justify-between gap-3 border-b border-panel-border px-4 py-4">
-        <div>
-          <h2 className="text-base font-bold text-panel-text">Son Çalışmalar</h2>
-          <p className="mt-0.5 text-sm text-panel-text-muted">Seçili derse göre</p>
-        </div>
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-panel-sage-soft text-panel-sage">
-          <CalendarDays size={18} aria-hidden="true" />
-        </span>
-      </div>
-
-      {recent.length ? (
-        <div className="divide-y divide-panel-border">
-          {recent.map((record) => (
-            <div key={record.id} className="grid gap-2 px-4 py-3 sm:grid-cols-[110px_minmax(0,1fr)_auto] sm:items-center">
-              <span className="text-sm font-semibold text-panel-text-muted">{formatDateLabel(record.date, 'month')}</span>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-panel-text">{record.content}</p>
-                <p className="truncate text-xs text-panel-text-muted">{record.resource}</p>
-              </div>
-              <span className="text-sm font-bold text-panel-text">
-                {formatNumber(record.questions)} soru · {formatNumber(record.minutes)} dk
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="px-4 py-6 text-sm text-panel-text-muted">Bu filtrede son çalışma kaydı yok.</p>
-      )}
-    </section>
-  )
-}
-
 export default function StudentProgressView({
   studentId,
   title = 'Gelişimim',
@@ -746,7 +687,7 @@ export default function StudentProgressView({
   const accuracy = stats.correct + stats.wrong > 0 ? (stats.correct / (stats.correct + stats.wrong)) * 100 : NaN
   const completedHomeworkQuestions = filteredHomeworks.reduce((sum, homework) => sum + asNumber(homework.completedQuestionCount), 0)
   const totalHomeworkQuestions = filteredHomeworks.reduce((sum, homework) => sum + asNumber(homework.totalQuestionCount), 0)
-  const insights = buildInsights({ stats, contentRows, wrongRows: filteredWrongRows })
+  const insights = buildInsights({ contentRows, wrongRows: filteredWrongRows })
 
   if (error) {
     return <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
@@ -809,8 +750,6 @@ export default function StudentProgressView({
           onPreviewImage={setPreviewImage}
         />
       </div>
-
-      <RecentActivity records={filteredRecords} />
 
       <ImagePreviewLightbox preview={previewImage} onClose={() => setPreviewImage(null)} />
     </div>

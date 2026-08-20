@@ -40,12 +40,14 @@ const { SELECT_TASK, sanitizeTask, fetchTaskAnswerSheetData } = require('./tasks
 const {
   fetchResourceBookTopicsWithTests,
   LIBRARY_GRADES,
+  RESOURCE_SOURCES,
   fetchLibraryResourceBooks,
   createLibraryResourceBookSubmission,
   deleteLibraryResourceBookSubmission,
   addLibraryResourceBookTopicsSubmission,
   fetchResourceBookById,
   fetchLibraryResourceBookDetail,
+  fetchResourceBookStatsForStudent,
 } = require('./catalog')
 const {
   sanitizeProgressResourceBook,
@@ -138,6 +140,50 @@ async function fetchNextOneTimeLessonsByStudentTeacherId(teacherUserId, todayISO
   return byStudentTeacherId
 }
 
+// Bir öğretmenin, birlikte çalıştığı her öğrenci ilişkisi (student_teacher_id) için o derse ait
+// kaynak kitaplardaki tüm testlerin doğru/cevaplanan toplamından tek bir başarı oranı hesaplar.
+async function fetchStudentTeacherSuccessRates(rows) {
+  const rates = new Map()
+  if (!rows.length) return rates
+
+  const idBindings = Object.fromEntries(
+    rows.map((row, index) => [`stId${index}`, { type: sql.UniqueIdentifier, value: row.studentTeacherId }]),
+  )
+  const idPlaceholders = rows.map((_, index) => `@stId${index}`).join(', ')
+
+  const booksDb = await withRequest(idBindings)
+  const booksResult = await booksDb.query(`
+    SELECT teacher_id AS student_teacher_id, resource_book_id
+    FROM dbo.StudentTeacherResourceBooks
+    WHERE teacher_id IN (${idPlaceholders});
+  `)
+
+  const bookIdsByStudentTeacherId = new Map()
+  booksResult.recordset.forEach((record) => {
+    if (!bookIdsByStudentTeacherId.has(record.student_teacher_id)) {
+      bookIdsByStudentTeacherId.set(record.student_teacher_id, [])
+    }
+    bookIdsByStudentTeacherId.get(record.student_teacher_id).push(record.resource_book_id)
+  })
+
+  const studentIdByStudentTeacherId = new Map(rows.map((row) => [row.studentTeacherId, row.studentId]))
+
+  await Promise.all(
+    Array.from(bookIdsByStudentTeacherId.entries()).map(async ([studentTeacherId, bookIds]) => {
+      const stats = await fetchResourceBookStatsForStudent(studentIdByStudentTeacherId.get(studentTeacherId), bookIds)
+      let correct = 0
+      let answered = 0
+      stats.forEach((entry) => {
+        correct += entry.correct
+        answered += entry.answered
+      })
+      rates.set(studentTeacherId, answered > 0 ? correct / answered : null)
+    }),
+  )
+
+  return rates
+}
+
 async function listTeacherStudentsHandler(request) {
   try {
     const { error, teacherUserId } = await requireTeacherSession(request)
@@ -147,7 +193,7 @@ async function listTeacherStudentsHandler(request) {
     const result = await requestDb.query(`
       SELECT st.id AS student_teacher_id, st.student_id, u.full_name AS student_full_name, u.phone_number AS student_phone,
              st.subject_id, s.name AS subject_name, st.teacher_type, st.schedule_json, st.access_granted_at,
-             sp.grade AS student_grade, sch.name AS school_name,
+             sp.grade AS student_grade, sp.photo_url AS student_photo_url, sch.name AS school_name,
              (SELECT COUNT(*) FROM dbo.StudentTeacherResourceBooks strb WHERE strb.teacher_id = st.id) AS resource_count
       FROM dbo.StudentTeachers st
       INNER JOIN dbo.Users u ON u.id = st.student_id
@@ -161,6 +207,9 @@ async function listTeacherStudentsHandler(request) {
     const todayISO = new Date().toISOString().slice(0, 10)
     const nowHHMM = new Date().toISOString().slice(11, 16)
     const nextOneTimeByStudentTeacherId = await fetchNextOneTimeLessonsByStudentTeacherId(teacherUserId, todayISO)
+    const successRateByStudentTeacherId = await fetchStudentTeacherSuccessRates(
+      result.recordset.map((record) => ({ studentTeacherId: record.student_teacher_id, studentId: record.student_id })),
+    )
 
     const students = result.recordset.map((record) => {
       const schedule = parseScheduleJson(record.schedule_json)
@@ -175,6 +224,7 @@ async function listTeacherStudentsHandler(request) {
         studentFullName: record.student_full_name,
         studentPhone: record.student_phone || null,
         studentGrade: record.student_grade || null,
+        studentPhotoUrl: record.student_photo_url || null,
         schoolName: record.school_name || null,
         subjectId: record.subject_id,
         subjectName: record.subject_name || null,
@@ -184,6 +234,7 @@ async function listTeacherStudentsHandler(request) {
         nextLesson,
         resourceCount: Number(record.resource_count) || 0,
         accessGrantedAt: record.access_granted_at || null,
+        successRate: successRateByStudentTeacherId.get(record.student_teacher_id) ?? null,
       }
     })
 
@@ -1287,14 +1338,18 @@ async function listLibraryResourceBooksForTeacherHandler(request) {
 
     const grade = request.query.get('grade')
     const subjectId = request.query.get('subjectId')
+    const source = request.query.get('source')
     if (!LIBRARY_GRADES.has(grade)) {
       return json(400, { error: 'Geçersiz sınıf.' })
     }
     if (!subjectId) {
       return json(400, { error: 'Ders belirtilmeli.' })
     }
+    if (source && !RESOURCE_SOURCES.includes(source)) {
+      return json(400, { error: 'Geçersiz kaynak türü.' })
+    }
 
-    const resourceBooks = await fetchLibraryResourceBooks({ grade, subjectId, actorUserId: teacherUserId })
+    const resourceBooks = await fetchLibraryResourceBooks({ grade, subjectId, actorUserId: teacherUserId, source })
     return json(200, { resourceBooks })
   } catch (error) {
     return handleError(error, 'listLibraryResourceBooksForTeacherHandler', 'Kütüphane kaynakları yüklenemedi.')

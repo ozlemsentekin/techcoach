@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, FileText, Hash, Layers, Loader2, X } from 'lucide-react'
 import { cn } from '../ui/utils'
 
 const MISTAKE_REASON_OPTIONS = [
@@ -7,12 +7,18 @@ const MISTAKE_REASON_OPTIONS = [
   { value: 'bilgi-eksikligi', label: 'Bilgi Eksikliği' },
 ]
 
-function CaptionRow({ label, value }) {
+function InfoField({ icon, label, value }) {
   if (!value) return null
+  const Icon = icon
   return (
-    <div className="flex items-baseline gap-1.5 text-xs">
-      <span className="text-white/60">{label}</span>
-      <span className="font-semibold text-white">{value}</span>
+    <div className="flex min-w-0 items-start gap-2">
+      <Icon size={14} className="mt-0.5 shrink-0 text-white/40" aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">{label}</p>
+        <p className="break-words text-sm font-semibold text-white" title={value}>
+          {value}
+        </p>
+      </div>
     </div>
   )
 }
@@ -28,25 +34,29 @@ export default function WrongQuestionGalleryModal({ title, items, initialIndex =
   const [savingReason, setSavingReason] = useState(false)
   const [photosById, setPhotosById] = useState({})
   const [photoError, setPhotoError] = useState('')
+  const [zoomed, setZoomed] = useState(false)
 
   const item = items[index]
   const hasMultiple = items.length > 1
   const currentPhotoUrl = item ? photosById[item.id] : undefined
 
   const goTo = (nextIndex) => {
+    setZoomed(false)
     setIndex((nextIndex + items.length) % items.length)
   }
 
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') onClose()
-      else if (event.key === 'ArrowLeft' && hasMultiple) goTo(index - 1)
+      if (event.key === 'Escape') {
+        if (zoomed) setZoomed(false)
+        else onClose()
+      } else if (event.key === 'ArrowLeft' && hasMultiple) goTo(index - 1)
       else if (event.key === 'ArrowRight' && hasMultiple) goTo(index + 1)
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, hasMultiple])
+  }, [index, hasMultiple, zoomed])
 
   useEffect(() => {
     if (!item || photosById[item.id]) return
@@ -91,7 +101,7 @@ export default function WrongQuestionGalleryModal({ title, items, initialIndex =
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex flex-col bg-black/90"
+      className="fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-black/95"
       role="dialog"
       aria-modal="true"
       aria-label={title ? `${title} fotoğraf galerisi` : 'Soru fotoğrafı galerisi'}
@@ -113,7 +123,30 @@ export default function WrongQuestionGalleryModal({ title, items, initialIndex =
         </button>
       </div>
 
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden px-4">
+      <div className="flex flex-col items-center gap-2 px-4 pb-3">
+        <div className="flex w-full max-w-2xl flex-wrap items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-lg">
+          <span className="text-xs font-semibold text-slate-700">Bu soruyu neden yanlış yaptın?</span>
+          {MISTAKE_REASON_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={item.mistakeReason === option.value}
+              disabled={savingReason}
+              onClick={() => handleSelectReason(option.value)}
+              className={cn(
+                'rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50',
+                item.mistakeReason === option.value
+                  ? 'border-panel-blue bg-panel-blue text-white'
+                  : 'border-slate-300 text-slate-700 hover:border-panel-blue hover:text-panel-blue',
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="relative flex flex-1 items-center justify-center px-4 py-2">
         {hasMultiple ? (
           <button
             type="button"
@@ -125,12 +158,13 @@ export default function WrongQuestionGalleryModal({ title, items, initialIndex =
           </button>
         ) : null}
 
-        <div className="relative flex max-h-[62vh] min-h-[240px] max-w-full items-center justify-center">
+        <div className="flex min-h-[240px] max-h-[50vh] max-w-full items-center justify-center">
           {currentPhotoUrl ? (
             <img
               src={currentPhotoUrl}
               alt={`${item.topic || title || 'Soru'} fotoğrafı`}
-              className="max-h-[62vh] max-w-full rounded-xl object-contain shadow-2xl"
+              onClick={() => setZoomed(true)}
+              className="max-h-[50vh] max-w-full cursor-zoom-in rounded-xl object-contain shadow-2xl"
             />
           ) : photoError ? (
             <p className="max-w-xs text-center text-sm text-white/70">{photoError}</p>
@@ -140,14 +174,6 @@ export default function WrongQuestionGalleryModal({ title, items, initialIndex =
               <span className="text-xs">Fotoğraf yükleniyor...</span>
             </div>
           )}
-          {currentPhotoUrl ? (
-            <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 rounded-b-xl bg-gradient-to-t from-black/85 to-transparent px-4 pb-3 pt-8">
-              <CaptionRow label="Kaynak:" value={item.publisherName} />
-              <CaptionRow label="Konu:" value={item.topic} />
-              <CaptionRow label="Test:" value={item.testName} />
-              <CaptionRow label="Soru No:" value={item.questionNumber} />
-            </div>
-          ) : null}
         </div>
 
         {hasMultiple ? (
@@ -162,49 +188,38 @@ export default function WrongQuestionGalleryModal({ title, items, initialIndex =
         ) : null}
       </div>
 
-      <div className="flex flex-col items-center gap-3 px-4 pb-4">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-white/70">Bu soruyu neden yanlış yaptın?</span>
-          {MISTAKE_REASON_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={item.mistakeReason === option.value}
-              disabled={savingReason}
-              onClick={() => handleSelectReason(option.value)}
-              className={cn(
-                'rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50',
-                item.mistakeReason === option.value
-                  ? 'border-panel-blue bg-panel-blue text-white'
-                  : 'border-white/25 text-white hover:border-white/50',
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
+      <div className="flex flex-col items-center gap-4 px-4 pb-6">
+        <div className="grid w-full max-w-4xl grid-cols-2 gap-x-6 gap-y-3 rounded-2xl border border-white/10 bg-white/[0.06] px-6 py-3 sm:grid-cols-4">
+          <InfoField icon={BookOpen} label="Kaynak" value={item.publisherName} />
+          <InfoField icon={Layers} label="Konu" value={item.topic} />
+          <InfoField icon={FileText} label="Test" value={item.testName} />
+          <InfoField icon={Hash} label="Soru No" value={item.questionNumber} />
         </div>
-
-        {hasMultiple ? (
-          <div className="flex w-full max-w-full gap-2 overflow-x-auto pb-1">
-            {items.map((thumb, thumbIndex) => (
-              <button
-                key={thumb.id}
-                type="button"
-                aria-label={`${thumbIndex + 1}. fotoğrafı göster`}
-                onClick={() => setIndex(thumbIndex)}
-                className={cn(
-                  'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border-2 text-xs font-bold transition-colors',
-                  thumbIndex === index
-                    ? 'border-panel-blue bg-panel-blue text-white'
-                    : 'border-white/20 text-white/70 hover:border-white/50',
-                )}
-              >
-                {thumb.questionNumber || thumbIndex + 1}
-              </button>
-            ))}
-          </div>
-        ) : null}
       </div>
+
+      {zoomed && currentPhotoUrl ? (
+        <div
+          className="fixed inset-0 z-[70] flex cursor-zoom-out items-center justify-center bg-black/90 p-4"
+          role="button"
+          tabIndex={-1}
+          aria-label="Fotoğrafı kapat"
+          onClick={() => setZoomed(false)}
+        >
+          <img
+            src={currentPhotoUrl}
+            alt={`${item.topic || title || 'Soru'} fotoğrafı büyütülmüş`}
+            className="max-h-[95vh] max-w-[95vw] rounded-xl object-contain shadow-2xl"
+          />
+          <button
+            type="button"
+            aria-label="Kapat"
+            onClick={() => setZoomed(false)}
+            className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }

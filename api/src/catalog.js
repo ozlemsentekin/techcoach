@@ -25,6 +25,9 @@ function sanitizePublisher(record) {
 }
 
 const RESOURCE_BOOK_TYPES = ['konu_anlatimi', 'soru_bankasi', 'okuma_kitabi', 'etkinlik']
+// Kaynağın okulun resmi kaynağı mı yoksa ekleyen kişinin kendi seçtiği ek bir kaynak mı olduğu —
+// created_by_role'dan bağımsız: bir öğretmen hem okulun kullandığı kitabı hem de kendi özel kaynağını ekleyebilir.
+const RESOURCE_SOURCES = ['okul', 'ozel']
 const RESOURCE_BOOK_GRADES = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'])
 // Kütüphane özelliği (veli/öğretmen kaynak gezinme + ekleme) ortaokul (5-8) ve lise (9-12) kademelerini kapsıyor.
 const LIBRARY_GRADES = new Set(['5', '6', '7', '8', '9', '10', '11', '12'])
@@ -71,6 +74,7 @@ function sanitizeResourceBook(record) {
     publishYear: record.publish_year || null,
     publishMonthYear: record.publish_month_year || null,
     grade: record.grade || null,
+    resourceSource: record.resource_source || null,
     status: record.status,
     createdByRole: record.created_by_role || null,
     createdByUserId: record.created_by_user_id || null,
@@ -646,8 +650,8 @@ async function updateResourceBookHandler(request) {
 const LIBRARY_RESOURCE_BOOK_SELECT = `
   SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
          rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url,
-         rb.barcode, rb.publish_year, rb.publish_month_year, rb.grade, rb.status, rb.created_by_role,
-         rb.created_by_user_id, rb.rejection_reason, rb.created_at
+         rb.barcode, rb.publish_year, rb.publish_month_year, rb.grade, rb.resource_source, rb.status,
+         rb.created_by_role, rb.created_by_user_id, rb.rejection_reason, rb.created_at
   FROM dbo.ResourceBooks rb
   LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
   LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
@@ -657,16 +661,17 @@ const LIBRARY_RESOURCE_BOOK_SELECT = `
  * Kütüphane rafı: bir sınıf + ders için görülebilir kaynaklar. Onaylı kaynaklar herkese,
  * onay bekleyen/reddedilen kaynaklar ise sadece onu ekleyen kullanıcıya görünür.
  */
-async function fetchLibraryResourceBooks({ grade, subjectId, actorUserId }) {
+async function fetchLibraryResourceBooks({ grade, subjectId, actorUserId, source }) {
   const requestDb = await withRequest({
     grade: { type: sql.NVarChar(20), value: grade },
     subjectId: { type: sql.UniqueIdentifier, value: subjectId },
     actorUserId: { type: sql.UniqueIdentifier, value: actorUserId },
+    ...(source ? { source: { type: sql.NVarChar(20), value: source } } : {}),
   })
   const result = await requestDb.query(`
     ${LIBRARY_RESOURCE_BOOK_SELECT}
     WHERE rb.is_active = 1 AND rb.grade = @grade AND rb.subject_id = @subjectId
-      AND ${LIBRARY_VISIBILITY_SQL}
+      AND ${LIBRARY_VISIBILITY_SQL} ${source ? 'AND rb.resource_source = @source' : ''}
     ORDER BY rb.name ASC;
   `)
   return result.recordset.map((record) => ({
@@ -912,6 +917,7 @@ async function createLibraryResourceBookSubmission({ actorUserId, role, payload 
   const name = payload?.name?.trim()
   const grade = payload?.grade
   const subjectId = payload?.subjectId
+  const resourceSource = payload?.resourceSource
   const imageResult = sanitizeResourceBookImageUrl(payload?.imageUrl)
   const publisherId = payload?.publisherId || null
   const publisherName = payload?.publisherName?.trim() || null
@@ -926,6 +932,9 @@ async function createLibraryResourceBookSubmission({ actorUserId, role, payload 
   }
   if (!subjectId) {
     return { error: 'Ders seçilmeli.' }
+  }
+  if (!RESOURCE_SOURCES.includes(resourceSource)) {
+    return { error: 'Kaynak türü (okul/özel) seçilmeli.' }
   }
   if (imageResult.error) {
     return { error: imageResult.error }
@@ -1001,15 +1010,16 @@ async function createLibraryResourceBookSubmission({ actorUserId, role, payload 
     barcode: { type: sql.NVarChar(50), value: barcodeResult.value },
     publishYear: { type: sql.SmallInt, value: publishYearResult.value },
     grade: { type: sql.NVarChar(20), value: grade },
+    resourceSource: { type: sql.NVarChar(20), value: resourceSource },
     status: { type: sql.NVarChar(20), value: 'pending' },
     createdByRole: { type: sql.NVarChar(20), value: role },
     createdByUserId: { type: sql.UniqueIdentifier, value: actorUserId },
   })
   const bookResult = await insertBookDb.query(`
     INSERT INTO dbo.ResourceBooks
-      (publisher_id, subject_id, name, page_count, resource_type, has_answer_key, image_url, barcode, publish_year, grade, status, created_by_role, created_by_user_id)
+      (publisher_id, subject_id, name, page_count, resource_type, has_answer_key, image_url, barcode, publish_year, grade, resource_source, status, created_by_role, created_by_user_id)
     OUTPUT inserted.id
-    VALUES (@publisherId, @subjectId, @name, @pageCount, @resourceType, @hasAnswerKey, @imageUrl, @barcode, @publishYear, @grade, @status, @createdByRole, @createdByUserId);
+    VALUES (@publisherId, @subjectId, @name, @pageCount, @resourceType, @hasAnswerKey, @imageUrl, @barcode, @publishYear, @grade, @resourceSource, @status, @createdByRole, @createdByUserId);
   `)
   const resourceBookId = bookResult.recordset[0].id
   await insertLibraryResourceBookTopics(resourceBookId, normalizedTopics)
@@ -1504,6 +1514,8 @@ async function fetchResourceBookStatsForStudent(studentId, resourceBookIds) {
     stats.set(bookId, {
       completionRate: entry.totalTests > 0 ? entry.completedTests / entry.totalTests : null,
       successRate: answered > 0 ? entry.correct / answered : null,
+      correct: entry.correct,
+      answered,
     })
   })
 
@@ -2595,6 +2607,7 @@ module.exports = {
   updateResourceBookHandler,
   reviewResourceBookHandler,
   LIBRARY_GRADES,
+  RESOURCE_SOURCES,
   fetchLibraryResourceBooks,
   createLibraryResourceBookSubmission,
   deleteLibraryResourceBookSubmission,
