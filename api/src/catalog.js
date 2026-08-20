@@ -1341,13 +1341,29 @@ async function fetchResourceBookTopicsWithTests(resourceBookId, studentId) {
     testsByTopicId.set(test.topic_id, list)
   })
 
+  // Content entry sometimes creates several ResourceBookTopics rows with the same name under one
+  // book (e.g. one per test added). Merge those into a single group by name so the panel shows one
+  // section per topic instead of repeating the same heading.
+  const topicGroupsByName = new Map()
+  topicsResult.recordset.forEach((topic) => {
+    const group = topicGroupsByName.get(topic.name)
+    if (!group) {
+      topicGroupsByName.set(topic.name, { representative: topic, ids: [topic.id] })
+    } else {
+      group.ids.push(topic.id)
+      if (new Date(topic.created_at) < new Date(group.representative.created_at)) {
+        group.representative = topic
+      }
+    }
+  })
+
   // Topics have no page number of their own, so order them by their earliest test's page — the
   // order a student would actually encounter them in the book, not alphabetical.
-  return topicsResult.recordset
-    .map((topic) => {
-      const topicTests = testsByTopicId.get(topic.id) || []
+  return Array.from(topicGroupsByName.values())
+    .map(({ representative, ids }) => {
+      const topicTests = ids.flatMap((id) => testsByTopicId.get(id) || [])
       const minPageStart = topicTests.length ? Math.min(...topicTests.map((t) => t.page_start)) : null
-      return { topic, topicTests, minPageStart }
+      return { topic: representative, topicTests, minPageStart }
     })
     .sort((a, b) => {
       if (a.minPageStart === null && b.minPageStart === null) {
