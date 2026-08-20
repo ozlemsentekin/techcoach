@@ -441,7 +441,29 @@ async function listTasksHandler(request) {
     }
 
     const date = request.query.get('date')
+    const from = request.query.get('from')
+    const to = request.query.get('to')
     const isDraft = request.query.get('isDraft') === 'true'
+
+    // Geçmiş günlerin tamamlanmamış görevlerini tek istekte listelemek için (bkz. TodayPage
+    // history fetch) tekil "date" yerine "from"/"to" aralığı da kabul edilir. Aralık modunda
+    // autoCompleteExpiredBreaks çalıştırılmaz: geçmiş günler için bu kontrol anlamsızdır ve
+    // bugünün süresi dolan molaları zaten ayrı bir "date" isteğiyle/periyodik yenilemeyle işlenir.
+    if (from && to) {
+      const requestDb = await withRequest({
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        from: { type: sql.Date, value: from },
+        to: { type: sql.Date, value: to },
+        isDraft: { type: sql.Bit, value: isDraft },
+      })
+      const result = await requestDb.query(`
+        ${SELECT_TASK}
+        WHERE student_id = @studentId AND date BETWEEN @from AND @to AND is_draft = @isDraft
+        ORDER BY date ASC, start_time ASC;
+      `)
+
+      return json(200, { tasks: result.recordset.map(sanitizeTask) })
+    }
 
     if (!date) {
       return json(400, { error: 'Tarih zorunludur.' })

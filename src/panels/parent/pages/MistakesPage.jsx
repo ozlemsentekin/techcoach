@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Users } from 'lucide-react'
-import { authRequest } from '../../../services/authClient'
+import { cachedGet } from '../../../services/authClient'
 import {
   getWrongQuestions,
   getWrongQuestionTopicStats,
@@ -22,7 +22,7 @@ export default function MistakesPage() {
   useEffect(() => {
     let ignore = false
 
-    authRequest('/api/parent/students', { method: 'GET' })
+    cachedGet('/api/parent/students')
       .then((data) => {
         if (ignore) return
         setStudents(data.students)

@@ -15,14 +15,13 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { authRequest } from '../../../services/authClient'
+import { authRequest, cachedGet, invalidateCache } from '../../../services/authClient'
 import { useParentStudentsGate } from '../useParentStudentsGate'
 import { THEMES } from '../../../theme/themes'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
-import { MotionDiv } from '../../ui/motion'
 import StudentTeacherModal from '../components/StudentTeacherModal'
 import StudentProfileModal, { InterestPicker } from '../components/StudentProfileModal'
 import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
@@ -149,6 +148,7 @@ function AddStudentModal({ onCreated, onClose }) {
           acceptConsent: form.acceptConsent,
         }),
       })
+      invalidateCache('/api/parent/students')
       setStudentId(data.student.id)
       onCreated(data.student)
       setStep(2)
@@ -177,6 +177,9 @@ function AddStudentModal({ onCreated, onClose }) {
         subjectIds,
         ...(themeId ? { themeId } : {}),
       }),
+    }).then((result) => {
+      invalidateCache('/api/parent/students')
+      return result
     })
 
   const handleSaveSchool = async () => {
@@ -279,8 +282,8 @@ function AddStudentModal({ onCreated, onClose }) {
   const gradeBirthYearRange = getGradeBirthYearRange(form.grade)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-panel-2">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden bg-white shadow-panel-2 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
         <div className="flex items-center justify-between gap-4 px-4 pb-3 pt-3 sm:px-6 sm:pb-3.5 sm:pt-4">
           <h2 className="text-lg font-semibold text-panel-text">Çocuk Ekle</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -289,7 +292,7 @@ function AddStudentModal({ onCreated, onClose }) {
         </div>
         <WizardSteps step={step} steps={WIZARD_STEPS} />
 
-        <div className="min-h-[420px] flex-1 overflow-y-auto border-t border-[#edf0f1] px-4 py-4 sm:min-h-[460px] sm:px-6 sm:py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-[#edf0f1] px-4 py-4 sm:min-h-[460px] sm:px-6 sm:py-5">
           {error ? (
             <div className="mb-3 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
           ) : null}
@@ -508,7 +511,7 @@ function AddStudentModal({ onCreated, onClose }) {
           ) : null}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-[#edf0f1] px-4 py-3 sm:px-6 sm:py-4">
+        <div className="flex flex-col items-stretch gap-2 border-t border-[#edf0f1] px-4 py-3 sm:flex-row sm:items-center sm:justify-end sm:px-6 sm:py-4">
           {step === 1 ? (
             <>
               <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={loading}>
@@ -674,7 +677,7 @@ export default function StudentsPage() {
   const [profileModalStudent, setProfileModalStudent] = useState(null)
 
   const loadStudents = () => {
-    authRequest('/api/parent/students', { method: 'GET' })
+    cachedGet('/api/parent/students')
       .then((data) => setStudents(data.students))
       .catch((err) => setError(err.message))
   }
@@ -723,7 +726,7 @@ export default function StudentsPage() {
           description="Çocuğunuza özel içerik ve gelişim takibi için bir profil ekleyerek başlayın."
         />
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="fade-slide-in">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {students.map((student) => (
               <StudentCard
@@ -735,7 +738,7 @@ export default function StudentsPage() {
               />
             ))}
           </div>
-        </MotionDiv>
+        </div>
       )}
 
       {showModal ? <AddStudentModal onCreated={handleCreated} onClose={handleWizardClose} /> : null}

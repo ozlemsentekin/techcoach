@@ -1,9 +1,15 @@
-import { authRequest } from './authClient'
+import { authRequest, cachedGet, invalidateCache } from './authClient'
 
 /** @returns {Promise<Array>} */
 export async function getTeacherStudents() {
-  const data = await authRequest('/api/panel-teacher/students', { method: 'GET' })
+  const data = await cachedGet('/api/panel-teacher/students')
   return data.students
+}
+
+/** @returns {Promise<Object>} */
+export async function getTeacherStudent(studentTeacherId) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}`, { method: 'GET' })
+  return data.student
 }
 
 /** @returns {Promise<Array>} */
@@ -25,10 +31,12 @@ export async function getTeacherEntitlement() {
 
 /** Öğretmenin kendi panel kotasından doğrudan bir öğrenci eklemesini sağlar. */
 export async function addTeacherStudent({ studentFullName, subjectId, teacherType, parentFullName, parentPhone }) {
-  return authRequest('/api/panel-teacher/students', {
+  const result = await authRequest('/api/panel-teacher/students', {
     method: 'POST',
     body: JSON.stringify({ studentFullName, subjectId, teacherType, parentFullName, parentPhone }),
   })
+  invalidateCache('/api/panel-teacher/students')
+  return result
 }
 
 /** Kütüphanede gösterilen sınıflar (öğrencilerden otomatik + elle eklenenler). @returns {Promise<{grades: string[], manualGrades: string[]}>} */
@@ -202,12 +210,12 @@ export async function getTeacherStudentWrongQuestions(studentTeacherId, resource
   return data.wrongQuestions
 }
 
-/** @returns {Promise<import('./wrongQuestionService').WrongQuestionTopicStats[]>} */
+/** @returns {Promise<import('./wrongQuestionService').WrongQuestionTopicStatsResponse>} */
 export async function getTeacherStudentWrongQuestionTopicStats(studentTeacherId) {
   const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/wrong-question-topic-stats`, {
     method: 'GET',
   })
-  return data.topicStats
+  return { topicStats: data.topicStats || [], sourceTopicStats: data.sourceTopicStats || [] }
 }
 
 /** @returns {Promise<string>} photoUrl */

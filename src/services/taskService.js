@@ -10,6 +10,14 @@ export async function getTasksForDate(date, { isDraft = false } = {}) {
   return data.tasks
 }
 
+/** Aralıktaki (dahil) tüm günlerin görevlerini tek istekte döner. @returns {Promise<object[]>} */
+export async function getTasksForDateRange(fromDate, toDate, { isDraft = false } = {}) {
+  const data = await authRequest(`/api/panel/tasks?from=${fromDate}&to=${toDate}&isDraft=${isDraft}`, {
+    method: 'GET',
+  })
+  return data.tasks
+}
+
 /** @returns {Promise<object>} */
 export async function getTaskById(taskId) {
   const data = await authRequest(`/api/panel/tasks/${taskId}`, { method: 'GET' })

@@ -41,6 +41,7 @@ const {
 } = require('./schoolSchedule')
 const {
   listTeacherStudentsHandler,
+  getTeacherStudentHandler,
   listTeacherParentsHandler,
   getTeacherLessonPlanHandler,
   addTeacherRecurringLessonSlotHandler,
@@ -432,6 +433,13 @@ app.http('panel-teacher-students-list', {
   methods: ['GET'],
   route: 'panel-teacher/students',
   handler: listTeacherStudentsHandler,
+})
+
+app.http('panel-teacher-student-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}',
+  handler: getTeacherStudentHandler,
 })
 
 app.http('panel-teacher-students-create', {

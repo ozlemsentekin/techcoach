@@ -11,7 +11,7 @@ import AssignHomeworkModal from '../components/AssignHomeworkModal'
 import TaskDetailModal from '../components/TaskDetailModal'
 import TaskOpticalResultModal from '../components/TaskOpticalResultModal'
 import {
-  getTeacherStudents,
+  getTeacherStudent,
   getTeacherStudentHomeworks,
   getTeacherStudentTasksForDate,
   addTeacherHomework,
@@ -56,12 +56,10 @@ export default function StudentDetailPage() {
   useEffect(() => {
     let ignore = false
 
-    getTeacherStudents()
+    getTeacherStudent(studentTeacherId)
       .then((data) => {
         if (ignore) return
-        const match = data.find((item) => item.studentTeacherId === studentTeacherId)
-        setStudent(match || null)
-        if (!match) setStudentError('Bu öğrenci bulunamadı ya da erişim yetkiniz yok.')
+        setStudent(data)
       })
       .catch((err) => {
         if (!ignore) setStudentError(err.message)

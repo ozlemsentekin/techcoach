@@ -1,7 +1,7 @@
 import { createElement, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
-import { authRequest } from '../../services/authClient'
+import { authRequest, cachedGet } from '../../services/authClient'
 import ThemeProvider from '../../theme/ThemeProvider'
 import PanelLayout from '../layout/PanelLayout'
 import LoadingState from '../shared/LoadingState'
@@ -58,7 +58,7 @@ function ParentStudentsGateProvider({ children }) {
   // önceki kullanıcıya ait hasStudents değeri (ve dolayısıyla menü) yanlışlıkla kalıcı olur.
   useEffect(() => {
     let ignore = false
-    authRequest('/api/parent/students', { method: 'GET' })
+    cachedGet('/api/parent/students')
       .then((data) => {
         if (!ignore) setHasStudents((data.students || []).length > 0)
       })

@@ -495,14 +495,28 @@ function topicStatsKey(subject, topic) {
   return `${(subject || '').trim()}::${(topic || '').trim()}`
 }
 
+function sourceStatsKey(subject, topic, bookName) {
+  return `${topicStatsKey(subject, topic)}::${(bookName || '').trim()}`
+}
+
 // Bir öğrencinin fotoğraflı yanlışlarını içerik (konu) bazında kart olarak göstermek için,
 // aynı konudaki TÜM atanmış kaynaklardan (farklı kitap/yayınevi) toplam çözülen soru sayısını ve
-// başarı oranını hesaplar. catalog.js'deki computeResourceBookStats ile aynı JSON-birleştirme
+// başarı oranını hesaplar (topicStats — "İçerik Grubuna Göre" sekmesi için). Aynı geçişte, her
+// (ders, konu, kitap) üçlüsü için de ayrı bir kırılım hesaplar (sourceTopicStats — "Kaynağa Göre"
+// sekmesinde bir kaynağa girildiğinde, başarı oranının sadece o kaynaktaki sorulara göre
+// gösterilmesi için). catalog.js'deki computeResourceBookStats ile aynı JSON-birleştirme
 // mantığını kullanır, ama kitap yerine (ders, konu) çiftine göre gruplar.
 // teacherId verildiğinde (öğretmen panelinden çağrıldığında) testler ayrıca o öğretmene atanmış
 // kaynaklarla sınırlanır (bkz. teacher.js'deki getTeacherStudentProgressOverviewHandler'daki aynı kısıtlama).
 async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId } = {}) {
-  if (!topicKeys.length) return []
+  if (!topicKeys.length) return { topicStats: [], sourceTopicStats: [] }
+
+  const emptyTopicStats = topicKeys.map(({ subject, topic }) => ({
+    subject,
+    topic,
+    totalAnswered: 0,
+    successRate: null,
+  }))
 
   const wantedKeys = new Set(topicKeys.map(({ subject, topic }) => topicStatsKey(subject, topic)))
 
@@ -511,7 +525,7 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
     ...(teacherId ? { teacherId: { type: sql.UniqueIdentifier, value: teacherId } } : {}),
   })
   const testsResult = await testsDb.query(`
-    SELECT tt.id AS test_id, s.name AS subject_name, COALESCE(tt.topic_name, rbt.name) AS topic_name
+    SELECT tt.id AS test_id, s.name AS subject_name, COALESCE(tt.topic_name, rbt.name) AS topic_name, rb.name AS book_name
     FROM dbo.ResourceBookTopicTests tt
     JOIN dbo.ResourceBookTopics rbt ON rbt.id = tt.topic_id
     JOIN dbo.ResourceBooks rb ON rb.id = rbt.resource_book_id
@@ -521,14 +535,19 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
     WHERE rb.is_active = 1;
   `)
 
-  const keyByTestId = new Map()
+  const testMeta = new Map()
   testsResult.recordset.forEach((row) => {
-    const key = topicStatsKey(row.subject_name, row.topic_name)
-    if (wantedKeys.has(key)) {
-      keyByTestId.set(row.test_id, key)
-    }
+    const topicKey = topicStatsKey(row.subject_name, row.topic_name)
+    if (!wantedKeys.has(topicKey)) return
+    testMeta.set(row.test_id, {
+      topicKey,
+      sourceKey: sourceStatsKey(row.subject_name, row.topic_name, row.book_name),
+      subject: row.subject_name,
+      topic: row.topic_name,
+      bookName: row.book_name,
+    })
   })
-  if (!keyByTestId.size) return []
+  if (!testMeta.size) return { topicStats: emptyTopicStats, sourceTopicStats: [] }
 
   const testResultCounts = new Map()
 
@@ -544,7 +563,7 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
       return
     }
     Object.entries(results || {}).forEach(([testId, result]) => {
-      if (!keyByTestId.has(testId)) return
+      if (!testMeta.has(testId)) return
       const existing = testResultCounts.get(testId)
       if (!existing || (result?.gradedAt && (!existing.gradedAt || result.gradedAt > existing.gradedAt))) {
         testResultCounts.set(testId, result)
@@ -559,23 +578,35 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
     WHERE student_id = @studentId;
   `)
   manualResult.recordset.forEach((row) => {
-    if (!keyByTestId.has(row.test_id)) return
+    if (!testMeta.has(row.test_id)) return
     if (row.correct_count === null && row.wrong_count === null && row.blank_count === null) return
     testResultCounts.set(row.test_id, { correct: row.correct_count, wrong: row.wrong_count, blank: row.blank_count })
   })
 
   const totals = new Map()
-  keyByTestId.forEach((key, testId) => {
+  const sourceTotals = new Map()
+  const sourceMeta = new Map()
+  testMeta.forEach((meta, testId) => {
     const result = testResultCounts.get(testId)
     if (!result) return
-    if (!totals.has(key)) totals.set(key, { correct: 0, wrong: 0, blank: 0 })
-    const entry = totals.get(key)
-    entry.correct += Number(result.correct) || 0
-    entry.wrong += Number(result.wrong) || 0
-    entry.blank += Number(result.blank) || 0
+
+    if (!totals.has(meta.topicKey)) totals.set(meta.topicKey, { correct: 0, wrong: 0, blank: 0 })
+    const topicEntry = totals.get(meta.topicKey)
+    topicEntry.correct += Number(result.correct) || 0
+    topicEntry.wrong += Number(result.wrong) || 0
+    topicEntry.blank += Number(result.blank) || 0
+
+    if (!sourceTotals.has(meta.sourceKey)) {
+      sourceTotals.set(meta.sourceKey, { correct: 0, wrong: 0, blank: 0 })
+      sourceMeta.set(meta.sourceKey, { subject: meta.subject, topic: meta.topic, bookName: meta.bookName })
+    }
+    const sourceEntry = sourceTotals.get(meta.sourceKey)
+    sourceEntry.correct += Number(result.correct) || 0
+    sourceEntry.wrong += Number(result.wrong) || 0
+    sourceEntry.blank += Number(result.blank) || 0
   })
 
-  return topicKeys.map(({ subject, topic }) => {
+  const topicStats = topicKeys.map(({ subject, topic }) => {
     const entry = totals.get(topicStatsKey(subject, topic))
     const totalAnswered = entry ? entry.correct + entry.wrong + entry.blank : 0
     return {
@@ -585,6 +616,20 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
       successRate: entry && totalAnswered > 0 ? entry.correct / totalAnswered : null,
     }
   })
+
+  const sourceTopicStats = Array.from(sourceTotals.entries()).map(([key, entry]) => {
+    const meta = sourceMeta.get(key)
+    const totalAnswered = entry.correct + entry.wrong + entry.blank
+    return {
+      subject: meta.subject,
+      topic: meta.topic,
+      bookName: meta.bookName,
+      totalAnswered,
+      successRate: totalAnswered > 0 ? entry.correct / totalAnswered : null,
+    }
+  })
+
+  return { topicStats, sourceTopicStats }
 }
 
 async function getWrongQuestionTopicStatsHandler(request) {
@@ -607,8 +652,8 @@ async function getWrongQuestionTopicStatsHandler(request) {
       WHERE wq.student_id = @studentId AND wq.photo_url IS NOT NULL;
     `)
 
-    const topicStats = await computeWrongQuestionTopicStats(studentId, result.recordset)
-    return json(200, { topicStats })
+    const { topicStats, sourceTopicStats } = await computeWrongQuestionTopicStats(studentId, result.recordset)
+    return json(200, { topicStats, sourceTopicStats })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })

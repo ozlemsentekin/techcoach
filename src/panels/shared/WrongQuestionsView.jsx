@@ -5,7 +5,6 @@ import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
 import Button from '../ui/Button'
 import Badge from '../ui/Badge'
-import { MotionDiv } from '../ui/motion'
 import WrongQuestionGalleryModal from './WrongQuestionGalleryModal'
 import { ResourceBookAvatar } from './ResourceBookCard'
 
@@ -22,6 +21,10 @@ const SHELF_TONES = [
 
 function topicStatsKey(subject, topic) {
   return `${subject || ''}::${topic || ''}`
+}
+
+function sourceStatsKey(subject, topic, bookName) {
+  return `${topicStatsKey(subject, topic)}::${bookName || ''}`
 }
 
 function groupBySubjectAndTopic(wrongQuestions) {
@@ -128,7 +131,7 @@ function SubjectShelfCard({ subject, count, tone, onClick }) {
   )
 }
 
-function ContentTopicCard({ topic, wrongCount, stats, onClick }) {
+function ContentTopicCard({ topic, wrongCount, stats, scopeLabel, onClick }) {
   const successPercent = stats?.successRate != null ? Math.round(stats.successRate * 100) : null
   return (
     <button
@@ -163,11 +166,11 @@ function ContentTopicCard({ topic, wrongCount, stats, onClick }) {
         </div>
       </div>
 
-      <p className="text-xs text-panel-text-muted">
-        {stats && stats.totalAnswered > 0
-          ? `${stats.totalAnswered} soru çözüldü (tüm kaynaklar)`
-          : 'Henüz çözüm verisi yok'}
-      </p>
+      {stats && stats.totalAnswered > 0 ? (
+        <p className="text-xs text-panel-text-muted">
+          {stats.totalAnswered} soru çözüldü{scopeLabel ? ` (${scopeLabel})` : ''}
+        </p>
+      ) : null}
     </button>
   )
 }
@@ -179,13 +182,13 @@ const GROUP_MODE_OPTIONS = [
 
 function GroupModeToggle({ mode, onChange }) {
   return (
-    <div className="inline-flex w-fit gap-1 rounded-full border border-panel-border bg-panel-surface-soft p-1">
+    <div className="inline-flex w-full gap-1 rounded-full border border-panel-border bg-panel-surface-soft p-1 sm:w-fit">
       {GROUP_MODE_OPTIONS.map((option) => (
         <button
           key={option.value}
           type="button"
           onClick={() => onChange(option.value)}
-          className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors ${
+          className={`flex-1 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors sm:flex-none ${
             mode === option.value
               ? 'bg-panel-surface text-panel-blue shadow-panel-1'
               : 'text-panel-text-muted hover:text-panel-text'
@@ -238,6 +241,7 @@ export default function WrongQuestionsView({
 }) {
   const [wrongQuestions, setWrongQuestions] = useState(null)
   const [topicStats, setTopicStats] = useState([])
+  const [sourceTopicStats, setSourceTopicStats] = useState([])
   const [error, setError] = useState('')
   const [selectedSubject, setSelectedSubject] = useState(null)
   const [groupMode, setGroupMode] = useState('topic')
@@ -246,11 +250,12 @@ export default function WrongQuestionsView({
 
   useEffect(() => {
     let ignore = false
-    Promise.all([fetchWrongQuestions(), fetchTopicStats().catch(() => [])])
-      .then(([wrongQuestionsData, topicStatsData]) => {
+    Promise.all([fetchWrongQuestions(), fetchTopicStats().catch(() => ({ topicStats: [], sourceTopicStats: [] }))])
+      .then(([wrongQuestionsData, statsData]) => {
         if (ignore) return
         setWrongQuestions(wrongQuestionsData)
-        setTopicStats(topicStatsData || [])
+        setTopicStats(statsData?.topicStats || [])
+        setSourceTopicStats(statsData?.sourceTopicStats || [])
       })
       .catch((err) => {
         if (!ignore) setError(err.message)
@@ -280,6 +285,12 @@ export default function WrongQuestionsView({
     topicStats.forEach((stat) => map.set(topicStatsKey(stat.subject, stat.topic), stat))
     return map
   }, [topicStats])
+
+  const sourceTopicStatsMap = useMemo(() => {
+    const map = new Map()
+    sourceTopicStats.forEach((stat) => map.set(sourceStatsKey(stat.subject, stat.topic, stat.bookName), stat))
+    return map
+  }, [sourceTopicStats])
 
   const activeTopics = activeSource ? activeSource.topics : groupMode === 'topic' ? selectedContentGroup?.topics : null
   const galleryTopicGroup = activeTopics?.find(
@@ -357,29 +368,27 @@ export default function WrongQuestionsView({
           description="Cevap kağıdında yanlış işaretlenen bir soruya tıklayıp fotoğrafını eklediğinde burada görünecek."
         />
       ) : activeSource ? (
-        <MotionDiv
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+        <div
+          className="fade-slide-in grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
         >
           {activeSource.topics.map((topicGroup) => (
             <ContentTopicCard
               key={topicStatsKey(effectiveSelectedSubject, topicGroup.topic)}
               topic={topicGroup.topic}
               wrongCount={topicGroup.items.length}
-              stats={topicStatsMap.get(topicStatsKey(effectiveSelectedSubject, topicGroup.topic))}
+              stats={sourceTopicStatsMap.get(
+                sourceStatsKey(effectiveSelectedSubject, topicGroup.topic, activeSource.bookName),
+              )}
               onClick={() => setGalleryTopicKey(topicStatsKey(effectiveSelectedSubject, topicGroup.topic))}
             />
           ))}
-        </MotionDiv>
+        </div>
       ) : effectiveSelectedSubject ? (
         <div className="flex flex-col gap-4">
           <GroupModeToggle mode={groupMode} onChange={handleChangeGroupMode} />
           {groupMode === 'source' ? (
-            <MotionDiv
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+            <div
+              className="fade-slide-in grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
             >
               {selectedSourceGroup?.sources.map((source) => (
                 <SourceProfileCard
@@ -391,12 +400,10 @@ export default function WrongQuestionsView({
                   onClick={() => setSelectedSourceKey(sourceKeyFor(source.bookName))}
                 />
               ))}
-            </MotionDiv>
+            </div>
           ) : (
-            <MotionDiv
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+            <div
+              className="fade-slide-in grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
             >
               {selectedContentGroup?.topics.map((topicGroup) => (
                 <ContentTopicCard
@@ -404,17 +411,16 @@ export default function WrongQuestionsView({
                   topic={topicGroup.topic}
                   wrongCount={topicGroup.items.length}
                   stats={topicStatsMap.get(topicStatsKey(effectiveSelectedSubject, topicGroup.topic))}
+                  scopeLabel="tüm kaynaklar"
                   onClick={() => setGalleryTopicKey(topicStatsKey(effectiveSelectedSubject, topicGroup.topic))}
                 />
               ))}
-            </MotionDiv>
+            </div>
           )}
         </div>
       ) : (
-        <MotionDiv
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+        <div
+          className="fade-slide-in grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
         >
           {contentGroups.map((group, index) => (
             <SubjectShelfCard
@@ -425,7 +431,7 @@ export default function WrongQuestionsView({
               onClick={() => handleSelectSubject(group.subject)}
             />
           ))}
-        </MotionDiv>
+        </div>
       )}
 
       {galleryTopicGroup ? (

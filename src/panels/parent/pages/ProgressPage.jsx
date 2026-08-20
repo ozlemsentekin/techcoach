@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Award, Users } from 'lucide-react'
-import { authRequest } from '../../../services/authClient'
+import { cachedGet } from '../../../services/authClient'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
@@ -19,7 +19,7 @@ export default function ProgressPage() {
   useEffect(() => {
     let ignore = false
 
-    authRequest('/api/parent/students', { method: 'GET' })
+    cachedGet('/api/parent/students')
       .then((data) => {
         if (ignore) return
         setStudents(data.students)

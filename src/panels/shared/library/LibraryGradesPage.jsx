@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Library, Plus, Users, X } from 'lucide-react'
-import { authRequest } from '../../../services/authClient'
+import { authRequest, cachedGet } from '../../../services/authClient'
 import { addTeacherLibraryGrade, getTeacherLibraryGrades, removeTeacherLibraryGrade } from '../../../services/teacherService'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
@@ -32,7 +32,7 @@ export default function LibraryGradesPage({ role }) {
           setGrades(data.grades || [])
           setManualGrades(data.manualGrades || [])
         })
-      : authRequest('/api/parent/students', { method: 'GET' }).then((data) => {
+      : cachedGet('/api/parent/students').then((data) => {
           if (ignore) return
           const studentGrades = new Set((data.students || []).map((student) => student.grade))
           setGrades(LIBRARY_GRADES.filter((grade) => studentGrades.has(grade)))

@@ -1,4 +1,38 @@
 const DEFAULT_AUTH_TIMEOUT_MS = 25000
+const DEFAULT_CACHE_TTL_MS = 30000
+
+const getCache = new Map() // path -> { expiresAt, promise }
+
+/**
+ * GET isteklerini kısa süreliğine (varsayılan 30sn) önbelleğe alır ve eşzamanlı çağrılarda
+ * aynı bekleyen promise'i paylaşır. Sık gezilen ekranlar arasında (ör. öğrenci/öğretmen roster'ı)
+ * her navigasyonda aynı verinin yeniden çekilmesini önlemek içindir. TTL kısa tutulur ki bir
+ * mutasyondan sonra invalidateCache çağrılması unutulsa bile veri kendiliğinden tazelensin.
+ */
+export function cachedGet(path, { ttlMs = DEFAULT_CACHE_TTL_MS } = {}) {
+  const cached = getCache.get(path)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.promise
+  }
+
+  const promise = authRequest(path, { method: 'GET' }).catch((error) => {
+    getCache.delete(path)
+    throw error
+  })
+  getCache.set(path, { expiresAt: Date.now() + ttlMs, promise })
+  return promise
+}
+
+/** Bir path'in (veya path'le başlayan tüm girişlerin) önbelleğini temizler. */
+export function invalidateCache(path) {
+  if (!path) {
+    getCache.clear()
+    return
+  }
+  for (const key of getCache.keys()) {
+    if (key === path || key.startsWith(`${path}/`)) getCache.delete(key)
+  }
+}
 
 export async function authRequest(path, options = {}) {
   const { headers, timeoutMs = DEFAULT_AUTH_TIMEOUT_MS, ...fetchOptions } = options

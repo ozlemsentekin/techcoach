@@ -32,6 +32,21 @@ import { authRequest } from './authClient'
  */
 
 /**
+ * @typedef {Object} WrongQuestionSourceTopicStats
+ * @property {string} subject
+ * @property {string} [topic]
+ * @property {string} [bookName]
+ * @property {number} totalAnswered
+ * @property {number|null} successRate
+ */
+
+/**
+ * @typedef {Object} WrongQuestionTopicStatsResponse
+ * @property {WrongQuestionTopicStats[]} topicStats İçerik grubuna göre (konudaki tüm kaynaklar birleşik).
+ * @property {WrongQuestionSourceTopicStats[]} sourceTopicStats Kaynağa göre (her kitap için ayrı).
+ */
+
+/**
  * @param {string} [studentId] Veli oturumunda hangi çocuğun verisini isteyeceğini belirtir;
  * öğrenci kendi oturumunda görmezden gelinir. Backend zaten `?studentId=` ile sahiplik
  * kontrolü yapıp doğru öğrenciye yönlendiriyor (bkz. api/src/studentScope.js).
@@ -43,11 +58,11 @@ export async function getWrongQuestions(studentId) {
   return data.wrongQuestions
 }
 
-/** @param {string} [studentId] @returns {Promise<WrongQuestionTopicStats[]>} */
+/** @param {string} [studentId] @returns {Promise<WrongQuestionTopicStatsResponse>} */
 export async function getWrongQuestionTopicStats(studentId) {
   const query = studentId ? `?studentId=${studentId}` : ''
   const data = await authRequest(`/api/panel/wrong-question-topic-stats${query}`, { method: 'GET' })
-  return data.topicStats
+  return { topicStats: data.topicStats || [], sourceTopicStats: data.sourceTopicStats || [] }
 }
 
 /**

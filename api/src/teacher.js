@@ -244,6 +244,60 @@ async function listTeacherStudentsHandler(request) {
   }
 }
 
+// listTeacherStudentsHandler'ın tekil öğrenci karşılığı — StudentDetailPage gibi tek bir
+// öğrenciye ihtiyaç duyan ekranların tüm roster'ı çekip client-side .find() yapmasını önler.
+// nextLesson/successRate gibi listede hesaplanan pahalı alanları kasıtlı olarak içermez.
+async function getTeacherStudentHandler(request) {
+  try {
+    const { error, teacherUserId } = await requireTeacherSession(request)
+    if (error) return error
+
+    const studentTeacherId = request.params.studentTeacherId
+    const requestDb = await withRequest({
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+    })
+    const result = await requestDb.query(`
+      SELECT st.id AS student_teacher_id, st.student_id, u.full_name AS student_full_name, u.phone_number AS student_phone,
+             st.subject_id, s.name AS subject_name, st.teacher_type, st.schedule_json, st.access_granted_at,
+             sp.grade AS student_grade, sp.photo_url AS student_photo_url, sch.name AS school_name,
+             (SELECT COUNT(*) FROM dbo.StudentTeacherResourceBooks strb WHERE strb.teacher_id = st.id) AS resource_count
+      FROM dbo.StudentTeachers st
+      INNER JOIN dbo.Users u ON u.id = st.student_id
+      LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
+      LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = st.student_id
+      LEFT JOIN dbo.Schools sch ON sch.id = sp.school_id
+      WHERE st.id = @studentTeacherId AND st.teacher_user_id = @teacherUserId;
+    `)
+
+    const record = result.recordset[0]
+    if (!record) {
+      return json(404, { error: 'Öğrenci bulunamadı.' })
+    }
+
+    return json(200, {
+      student: {
+        studentTeacherId: record.student_teacher_id,
+        studentId: record.student_id,
+        studentFullName: record.student_full_name,
+        studentPhone: record.student_phone || null,
+        studentGrade: record.student_grade || null,
+        studentPhotoUrl: record.student_photo_url || null,
+        schoolName: record.school_name || null,
+        subjectId: record.subject_id,
+        subjectName: record.subject_name || null,
+        teacherType: record.teacher_type,
+        typeLabel: TEACHER_TYPE_LABELS[record.teacher_type] || record.teacher_type,
+        schedule: parseScheduleJson(record.schedule_json),
+        resourceCount: Number(record.resource_count) || 0,
+        accessGrantedAt: record.access_granted_at || null,
+      },
+    })
+  } catch (error) {
+    return handleError(error, 'getTeacherStudentHandler', 'Öğrenci yüklenemedi.')
+  }
+}
+
 async function listTeacherParentsHandler(request) {
   try {
     const { error, teacherUserId } = await requireTeacherSession(request)
@@ -2138,8 +2192,10 @@ async function getTeacherStudentWrongQuestionTopicStatsHandler(request) {
       WHERE wq.student_id = @studentId AND wq.subject = @subject AND wq.photo_url IS NOT NULL;
     `)
 
-    const topicStats = await computeWrongQuestionTopicStats(studentId, result.recordset, { teacherId: studentTeacherId })
-    return json(200, { topicStats })
+    const { topicStats, sourceTopicStats } = await computeWrongQuestionTopicStats(studentId, result.recordset, {
+      teacherId: studentTeacherId,
+    })
+    return json(200, { topicStats, sourceTopicStats })
   } catch (error) {
     return handleError(error, 'getTeacherStudentWrongQuestionTopicStatsHandler', 'İçerik istatistikleri yüklenemedi.')
   }
@@ -2189,6 +2245,7 @@ async function updateTeacherStudentWrongQuestionHandler(request) {
 
 module.exports = {
   listTeacherStudentsHandler,
+  getTeacherStudentHandler,
   listTeacherParentsHandler,
   getTeacherLessonPlanHandler,
   addTeacherRecurringLessonSlotHandler,

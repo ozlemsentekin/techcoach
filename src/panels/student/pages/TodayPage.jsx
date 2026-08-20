@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../../context/useAuth'
-import { getTasksForDate, updateTask, patchTask, toggleSubGoal, rescheduleTask } from '../../../services/taskService'
+import { getTasksForDate, getTasksForDateRange, updateTask, patchTask, toggleSubGoal, rescheduleTask } from '../../../services/taskService'
 import { getCheckIn } from '../../../services/checkInService'
 import { addSession } from '../../../services/studySessionService'
 import { addHomework } from '../../../services/homeworkService'
@@ -103,12 +103,17 @@ export default function TodayPage() {
   useEffect(() => {
     if (historyDays.length === 0) return undefined
     let ignore = false
-    Promise.all(historyDays.map((day) => getTasksForDate(day)))
-      .then((results) => {
+    const from = historyDays.reduce((min, day) => (day < min ? day : min))
+    const to = historyDays.reduce((max, day) => (day > max ? day : max))
+    getTasksForDateRange(from, to)
+      .then((rangeTasks) => {
         if (ignore) return
         const map = {}
-        historyDays.forEach((day, index) => {
-          map[day] = results[index]
+        historyDays.forEach((day) => {
+          map[day] = []
+        })
+        rangeTasks.forEach((task) => {
+          if (map[task.date]) map[task.date].push(task)
         })
         setHistoryTasks(map)
       })
