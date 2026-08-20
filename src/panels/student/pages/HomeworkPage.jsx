@@ -7,7 +7,6 @@ import AddHomeworkModal from '../components/AddHomeworkModal'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
-import { MotionDiv } from '../../ui/motion'
 import { groupHomeworksByDate, isHomeworkCompleted } from '../../shared/homework/homeworkDisplay'
 import HomeworkDateAccordion from '../../shared/homework/HomeworkDateAccordion'
 
@@ -121,7 +120,7 @@ export default function HomeworkPage() {
               description="Bugün, gelecek tarihli ya da gecikmiş ödev kalmadı."
             />
           ) : (
-            <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-4">
+            <div className="fade-slide-in flex flex-col gap-4">
               {visibleGroups.map((dateGroup, index) => (
                 <HomeworkDateAccordion
                   key={dateGroup.dueDate || 'unassigned'}
@@ -131,7 +130,7 @@ export default function HomeworkPage() {
                   isPast={Boolean(dateGroup.dueDate) && dateGroup.dueDate < today}
                 />
               ))}
-            </MotionDiv>
+            </div>
           )}
         </>
       )}

@@ -10,7 +10,6 @@ import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
-import { MotionDiv } from '../../ui/motion'
 
 function formatHour(hour) {
   return `${String(hour).padStart(2, '0')}:00`
@@ -61,8 +60,11 @@ function RuleModal({ rule, rules, onSaved, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-md panel-card p-5">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-panel-1 sm:rounded-2xl"
+      >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">{isEdit ? 'Kuralı Düzenle' : 'Kural Ekle'}</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -205,7 +207,7 @@ export default function AdminGreetingsPage() {
       ) : sortedRules.length === 0 ? (
         <EmptyState icon={Clock} title="Henüz kural yok" description="İlk selamlama aralığını ekleyebilirsin." />
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="panel-card p-5">
+        <div className="fade-slide-in panel-card p-5">
           <div className="grid gap-3">
             {sortedRules.map((rule) => (
               <GreetingRuleCard
@@ -217,7 +219,7 @@ export default function AdminGreetingsPage() {
               />
             ))}
           </div>
-        </MotionDiv>
+        </div>
       )}
 
       {modalState ? (

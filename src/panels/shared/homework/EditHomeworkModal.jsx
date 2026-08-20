@@ -99,8 +99,11 @@ export default function EditHomeworkModal({ homework, onSave, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <form onSubmit={handleSubmit} className="max-h-[90vh] w-full max-w-md overflow-y-auto panel-card p-6">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="h-full w-full max-w-md overflow-y-auto border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl sm:p-6"
+      >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-panel-text">Ödevi Düzenle</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -173,7 +176,7 @@ export default function EditHomeworkModal({ homework, onSave, onClose }) {
               />
             </label>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2">
               <label className="flex flex-col gap-1.5">
                 <span className="text-xs font-medium text-panel-text-muted">Toplam soru sayısı</span>
                 <input

@@ -16,7 +16,7 @@ export default function RescheduleTaskModal({ task, onConfirm, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 md:items-center md:p-4">
-      <div className="w-full max-w-md rounded-t-3xl border border-panel-border bg-panel-surface p-6 md:rounded-2xl">
+      <div className="w-full max-w-md rounded-t-3xl border border-panel-border bg-panel-surface p-5 md:rounded-2xl md:p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">"{task.title}" görevini taşı</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -25,7 +25,7 @@ export default function RescheduleTaskModal({ task, onConfirm, onClose }) {
         </div>
 
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
             <label className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-panel-text-muted">Yeni tarih</span>
               <input

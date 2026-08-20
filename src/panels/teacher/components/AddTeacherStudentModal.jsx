@@ -104,15 +104,15 @@ export default function AddTeacherStudentModal({ onCreated, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
     >
       <form
         onSubmit={handleSubmit}
         onClick={(event) => event.stopPropagation()}
-        className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-panel-surface shadow-2xl"
+        className="flex h-full w-full max-w-lg flex-col overflow-hidden bg-panel-surface shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl"
       >
-        <div className="flex items-center justify-between border-b border-panel-border px-6 py-4">
+        <div className="flex items-center justify-between border-b border-panel-border px-4 py-3 sm:px-6 sm:py-4">
           <h2 className="text-xl font-semibold text-panel-text">Öğrenci Ekle</h2>
           <button
             type="button"
@@ -124,7 +124,7 @@ export default function AddTeacherStudentModal({ onCreated, onClose }) {
           </button>
         </div>
 
-        <div className="overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           {isLoading ? (
             <LoadingState label="Yükleniyor..." />
           ) : (
@@ -181,7 +181,7 @@ export default function AddTeacherStudentModal({ onCreated, onClose }) {
 
                 <div className="flex flex-col gap-2">
                   <span className="text-sm font-medium text-panel-text-muted">Öğretmen Tipi</span>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
                     {TEACHER_TYPE_OPTIONS.map((option) => {
                       const selected = form.teacherType === option.value
                       return (
@@ -229,7 +229,7 @@ export default function AddTeacherStudentModal({ onCreated, onClose }) {
         </div>
 
         {isLoading ? null : (
-          <div className="border-t border-panel-border px-6 py-4">
+          <div className="border-t border-panel-border px-4 py-3 sm:px-6 sm:py-4">
             <Button type="submit" disabled={saving || !entitlement.isActive} className="h-11 w-full text-base">
               {saving ? 'Ekleniyor...' : 'Öğrenciyi Ekle'}
             </Button>

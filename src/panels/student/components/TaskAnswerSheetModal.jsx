@@ -26,7 +26,7 @@ function buildInitialAnswers(tests) {
 function ResultBadge({ result }) {
   if (!result) return null
   return (
-    <div className="flex flex-nowrap items-center justify-between gap-1 rounded-xl bg-student-theme-soft px-2 py-1.5 text-xs font-semibold">
+    <div className="flex flex-wrap items-center justify-between gap-1 rounded-xl bg-student-theme-soft px-2 py-1.5 text-xs font-semibold">
       <span className="flex shrink-0 items-center gap-1 text-panel-sage">
         <CheckCircle2 size={13} aria-hidden="true" /> {result.correct} Doğru
       </span>
@@ -43,7 +43,7 @@ function ResultBadge({ result }) {
 function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapture }) {
   const locked = Boolean(result)
   return (
-    <div className="flex flex-col gap-1.5 rounded-2xl border border-panel-border p-2.5">
+    <div className="min-w-0 rounded-2xl border border-panel-border p-2.5">
       <div className="flex items-start justify-between gap-1.5">
         <h3
           className="min-w-0 truncate text-xs font-semibold text-panel-text"
@@ -63,9 +63,11 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
         </button>
       </div>
 
-      <ResultBadge result={result} />
+      <div className="mt-1.5">
+        <ResultBadge result={result} />
+      </div>
 
-      <div className="grid grid-cols-1 gap-y-0.5">
+      <div className="mt-1.5 grid grid-cols-1 gap-y-1">
         {Array.from({ length: test.questionCount }, (_, index) => index + 1).map((orderNo) => {
           const key = String(orderNo)
           const selected = answers[key]
@@ -91,12 +93,12 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
                     }
                   : undefined
               }
-              className={`flex items-center gap-1.5 rounded-lg px-1 py-0.5 transition-colors ${
+              className={`grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-x-1.5 gap-y-1 rounded-lg px-1 py-1 transition-colors sm:flex sm:items-center ${
                 isMistake ? 'cursor-pointer bg-panel-red-soft hover:bg-panel-red-soft/70' : ''
               }`}
             >
               <span className="w-5 shrink-0 text-right text-sm font-bold text-panel-text-muted">{orderNo}.</span>
-              <div className="flex shrink-0 gap-1">
+              <div className="flex min-w-0 flex-wrap gap-1">
                 {OPTIONS.map((option) => {
                   const isSelected = selected === option
                   const isCorrectReveal = isMismatch && !isSelected && option === correctLabel
@@ -146,11 +148,6 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
                   </button>
                 ) : null}
               </div>
-              {isMismatch && correctLabel ? (
-                <span className="min-w-0 truncate text-[10px] italic leading-none text-panel-text-muted">
-                  Doğru cevap: {correctLabel}
-                </span>
-              ) : null}
               {isMistake ? (
                 <span
                   title={hasPhoto ? 'Fotoğraf eklendi' : 'Fotoğraf ekle'}
@@ -159,6 +156,11 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
                   }`}
                 >
                   <Camera size={12} aria-hidden="true" />
+                </span>
+              ) : null}
+              {isMismatch && correctLabel ? (
+                <span className="col-start-2 col-end-4 min-w-0 text-[10px] italic leading-none text-panel-text-muted sm:col-auto sm:truncate">
+                  Doğru cevap: {correctLabel}
                 </span>
               ) : null}
             </div>
@@ -283,10 +285,10 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 md:items-center">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-t-3xl border border-panel-border bg-panel-surface md:max-h-[85vh] md:max-w-4xl md:rounded-2xl xl:max-w-6xl 2xl:max-w-7xl">
-        <div className="flex items-center justify-between border-b border-panel-border p-5">
-          <div>
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 md:items-center md:p-4">
+      <div className="flex h-full w-full max-w-2xl flex-col border border-panel-border bg-panel-surface md:h-auto md:max-h-[85vh] md:max-w-4xl md:rounded-2xl xl:max-w-6xl 2xl:max-w-7xl">
+        <div className="flex items-start justify-between gap-3 border-b border-panel-border p-4 sm:p-5">
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold text-panel-text">Cevap Kağıdı</h2>
             <p className="text-sm text-panel-text-muted">
               {lessonLabel} · {task.title}
@@ -297,7 +299,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {error ? <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div> : null}
 
           {tests === null ? (
@@ -350,7 +352,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
         </div>
 
         {tests?.length ? (
-          <div className="border-t border-panel-border p-5">
+          <div className="border-t border-panel-border p-4 sm:p-5">
             <button
               type="button"
               onClick={handleSave}

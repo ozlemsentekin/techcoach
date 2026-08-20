@@ -51,8 +51,8 @@ export default function SessionCompletionModal({ task, initialCompletedQuestionC
 
   if (result) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-        <div className="w-full max-w-md panel-card p-6 text-center">
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+        <div className="w-full max-w-md rounded-t-3xl border border-panel-border bg-panel-surface p-5 text-center shadow-panel-1 sm:rounded-2xl sm:p-6">
           <p className="text-base text-panel-text">{result}</p>
           <button
             type="button"
@@ -67,8 +67,8 @@ export default function SessionCompletionModal({ task, initialCompletedQuestionC
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto panel-card p-6">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-panel-1 sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">Çalışma Değerlendirmesi</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -91,7 +91,7 @@ export default function SessionCompletionModal({ task, initialCompletedQuestionC
           </label>
 
           {hasQuestionTarget ? (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-3">
               <label className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-panel-text-muted">Doğru</span>
                 <input
@@ -177,7 +177,7 @@ export default function SessionCompletionModal({ task, initialCompletedQuestionC
             />
           </label>
 
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 min-[420px]:flex-row">
             <button
               type="button"
               onClick={() => handleSubmit('tamamlandi')}

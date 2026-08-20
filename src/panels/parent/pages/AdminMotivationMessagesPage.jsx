@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { MotionDiv } from '../../ui/motion'
 import { Sparkles, Pencil, X } from 'lucide-react'
 import {
   MOTIVATION_CATEGORIES,
@@ -59,8 +58,11 @@ function MessageModal({ message, defaultCategory, onSaved, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-md panel-card p-5">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-panel-1 sm:rounded-2xl"
+      >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">{isEdit ? 'Mesajı Düzenle' : 'Mesaj Ekle'}</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -219,7 +221,7 @@ export default function AdminMotivationMessagesPage() {
       ) : messages.length === 0 ? (
         <EmptyState icon={Sparkles} title="Henüz mesaj yok" />
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-4">
+        <div className="fade-slide-in flex flex-col gap-4">
           {MOTIVATION_CATEGORIES.map((category) => (
             <CategorySection
               key={category}
@@ -230,7 +232,7 @@ export default function AdminMotivationMessagesPage() {
               onToggleActive={handleToggleActive}
             />
           ))}
-        </MotionDiv>
+        </div>
       )}
 
       {modalState ? (

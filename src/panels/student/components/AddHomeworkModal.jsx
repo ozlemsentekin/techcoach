@@ -198,10 +198,10 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
       <form
         onSubmit={handleSubmit}
-        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto panel-card p-6"
+        className="h-full w-full max-w-3xl overflow-y-auto border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl sm:p-6"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-panel-text">Ödev Ekle</h2>
@@ -255,7 +255,7 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate }) {
           {resourceBookId && !isReadingBook ? (
             <label className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-panel-text-muted">İçerik ve testler (isteğe bağlı, birden fazla seçilebilir)</span>
-              <div className="max-h-64 overflow-y-auto rounded-xl border border-panel-border p-2">
+              <div className="max-h-72 overflow-y-auto rounded-xl border border-panel-border p-2 sm:max-h-64">
                 {topics === null ? (
                   <p className="p-2 text-xs text-panel-text-muted">İçerikler yükleniyor...</p>
                 ) : topics.length === 0 ? (
@@ -264,58 +264,59 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate }) {
                   topics.map((topic) => {
                     const isCollapsed = collapsedTopicIds.has(topic.id)
                     return (
-                    <div key={topic.id} className="py-0.5">
-                      <button
-                        type="button"
-                        onClick={() => toggleTopicCollapsed(topic.id)}
-                        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-student-theme-soft"
-                      >
-                        {isCollapsed ? (
-                          <ChevronRight size={14} className="shrink-0 text-panel-text-muted" />
-                        ) : (
-                          <ChevronDown size={14} className="shrink-0 text-panel-text-muted" />
-                        )}
-                        <span className="font-medium text-panel-text">{topic.name}</span>
-                      </button>
-                      {topic.tests.length && !isCollapsed ? (
-                        <div className="ml-6 flex flex-col">
-                          {topic.tests.map((test) => (
-                            <label
-                              key={test.id}
-                              className={`flex items-center gap-2 rounded-lg px-2 py-1 text-xs ${
-                                test.completed
-                                  ? 'cursor-not-allowed opacity-50'
-                                  : test.assignedPending
-                                    ? 'bg-panel-accent-soft hover:bg-panel-accent-soft/80'
-                                    : 'hover:bg-student-theme-soft'
-                              }`}
-                            >
-                              {test.completed ? (
-                                <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm bg-student-theme-primary text-student-theme-button-text">
-                                  <Check size={10} strokeWidth={3} />
+                      <div key={topic.id} className="py-0.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleTopicCollapsed(topic.id)}
+                          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-student-theme-soft"
+                        >
+                          {isCollapsed ? (
+                            <ChevronRight size={14} className="shrink-0 text-panel-text-muted" />
+                          ) : (
+                            <ChevronDown size={14} className="shrink-0 text-panel-text-muted" />
+                          )}
+                          <span className="min-w-0 flex-1 font-medium text-panel-text">{topic.name}</span>
+                        </button>
+                        {topic.tests.length && !isCollapsed ? (
+                          <div className="ml-0 flex flex-col sm:ml-6">
+                            {topic.tests.map((test) => (
+                              <label
+                                key={test.id}
+                                className={`flex items-start gap-2 rounded-lg px-2 py-1.5 text-xs sm:items-center ${
+                                  test.completed
+                                    ? 'cursor-not-allowed opacity-50'
+                                    : test.assignedPending
+                                      ? 'bg-panel-accent-soft hover:bg-panel-accent-soft/80'
+                                      : 'hover:bg-student-theme-soft'
+                                }`}
+                              >
+                                {test.completed ? (
+                                  <span className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm bg-student-theme-primary text-student-theme-button-text sm:mt-0">
+                                    <Check size={10} strokeWidth={3} />
+                                  </span>
+                                ) : (
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedTestIds.has(test.id)}
+                                    onChange={() => toggleTest(test.id)}
+                                    className="mt-0.5 sm:mt-0"
+                                  />
+                                )}
+                                <span className="flex min-w-0 flex-1 flex-col gap-1 text-panel-text-muted sm:flex-row sm:items-center sm:gap-1.5">
+                                  {test.topicName ? (
+                                    <Badge tone="slate" className="w-fit max-w-full shrink-0 truncate">
+                                      {test.topicName}
+                                    </Badge>
+                                  ) : null}
+                                  <span className="line-clamp-2 sm:truncate">
+                                    {test.name} · s.{test.pageStart}-{test.pageEnd} · {test.questionCount} soru
+                                  </span>
                                 </span>
-                              ) : (
-                                <input
-                                  type="checkbox"
-                                  checked={selectedTestIds.has(test.id)}
-                                  onChange={() => toggleTest(test.id)}
-                                />
-                              )}
-                              <span className="flex min-w-0 items-center gap-1.5 text-panel-text-muted">
-                                {test.topicName ? (
-                                  <Badge tone="slate" className="shrink-0">
-                                    {test.topicName}
-                                  </Badge>
-                                ) : null}
-                                <span className="truncate">
-                                  {test.name} · s.{test.pageStart}-{test.pageEnd} · {test.questionCount} soru
-                                </span>
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
+                              </label>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
                     )
                   })
                 )}
@@ -339,7 +340,7 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate }) {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-panel-text-muted">Tarih (isteğe bağlı)</span>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 min-[420px]:flex-row">
                 <input
                   type="date"
                   value={taskDate}
@@ -351,7 +352,7 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate }) {
                   value={taskTime}
                   onChange={(event) => setTaskTime(event.target.value)}
                   disabled={!taskDate}
-                  className="w-28 shrink-0 rounded-xl border border-panel-border p-3 text-sm text-panel-text disabled:opacity-60"
+                  className="w-full shrink-0 rounded-xl border border-panel-border p-3 text-sm text-panel-text disabled:opacity-60 min-[420px]:w-28"
                 />
               </div>
               <span className="text-xs text-panel-text-muted">

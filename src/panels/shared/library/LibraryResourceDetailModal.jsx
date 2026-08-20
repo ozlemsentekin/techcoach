@@ -57,8 +57,8 @@ export default function LibraryResourceDetailModal({ role, resourceBookId, onClo
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-2 sm:p-4">
-      <div className="flex h-full max-h-[95vh] w-full max-w-3xl flex-col overflow-hidden panel-card p-4 sm:h-[85vh] sm:p-6">
+    <div className="fixed inset-0 z-[70] flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex h-full w-full max-w-3xl flex-col overflow-hidden border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-[85vh] sm:max-h-[95vh] sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             {book?.imageUrl ? (
@@ -133,7 +133,7 @@ export default function LibraryResourceDetailModal({ role, resourceBookId, onClo
         </div>
 
         {book ? (
-          <div className="mt-4 flex items-center justify-end gap-2 border-t border-panel-border pt-4">
+          <div className="mt-4 flex flex-col items-stretch gap-2 border-t border-panel-border pt-4 sm:flex-row sm:items-center sm:justify-end">
             {book.canDelete ? (
               <Button
                 type="button"

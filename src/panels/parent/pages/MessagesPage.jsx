@@ -9,7 +9,6 @@ import Button from '../../ui/Button'
 import Badge from '../../ui/Badge'
 import { Card, CardContent } from '../../ui/Card'
 import DataTable from '../../ui/DataTable'
-import { MotionDiv } from '../../ui/motion'
 import { MessageCircle } from 'lucide-react'
 
 function formatDisplayDate(dateISO) {
@@ -111,7 +110,7 @@ export default function MessagesPage() {
       ) : messages.length === 0 ? (
         <EmptyState icon={MessageCircle} title="Henüz mesaj yok" description="İlk motivasyon mesajını gönder." />
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="fade-slide-in">
           <DataTable>
             {[...messages].reverse().map((message) => (
               <div
@@ -128,7 +127,7 @@ export default function MessagesPage() {
               </div>
             ))}
           </DataTable>
-        </MotionDiv>
+        </div>
       )}
     </div>
   )

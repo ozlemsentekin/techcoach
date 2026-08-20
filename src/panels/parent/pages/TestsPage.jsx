@@ -9,7 +9,40 @@ import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Badge from '../../ui/Badge'
 import DataTable from '../../ui/DataTable'
-import { MotionDiv } from '../../ui/motion'
+
+function TestSessionCard({ session }) {
+  const title = session.task?.subject || session.task?.title || 'Çalışma Oturumu'
+  const date = new Date(session.endedAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })
+  const metrics = [
+    { label: 'Doğru', value: session.correctCount, tone: 'bg-panel-sage-soft text-panel-sage' },
+    { label: 'Yanlış', value: session.wrongCount, tone: 'bg-panel-red-soft text-panel-red' },
+    { label: 'Boş', value: session.blankCount, tone: 'bg-panel-surface-soft text-panel-text-muted' },
+  ]
+
+  return (
+    <article className="rounded-xl border border-panel-border bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="line-clamp-2 text-sm font-bold leading-snug text-[#253d3e]">{title}</h2>
+          <p className="mt-1 text-xs font-medium text-[#667475]">{date}</p>
+          {session.difficultyRating ? (
+            <p className="mt-1 text-xs text-[#667475]">Zorluk: {session.difficultyRating}</p>
+          ) : null}
+        </div>
+        <Badge tone="blue">{calculateNet(session.correctCount, session.wrongCount)} net</Badge>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {metrics.map((item) => (
+          <div key={item.label} className={`rounded-lg px-2 py-2 text-center ${item.tone}`}>
+            <p className="text-lg font-bold leading-none tabular-nums">{item.value}</p>
+            <p className="mt-1 text-[11px] font-semibold">{item.label}</p>
+          </div>
+        ))}
+      </div>
+    </article>
+  )
+}
 
 export default function TestsPage() {
   const [testSessions, setTestSessions] = useState(null)
@@ -52,8 +85,14 @@ export default function TestsPage() {
       {testSessions.length === 0 ? (
         <EmptyState icon={FileCheck2} title="Henüz test sonucu yok" description="Aylin bir test tamamladığında burada görünecek." />
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-          <DataTable>
+        <div className="fade-slide-in">
+          <div className="grid gap-3 md:hidden">
+            {testSessions.map((session) => (
+              <TestSessionCard key={session.id} session={session} />
+            ))}
+          </div>
+
+          <DataTable className="hidden md:block">
             <table className="w-full min-w-[600px] text-left">
               <thead>
                 <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#1c2b5e]">
@@ -90,7 +129,7 @@ export default function TestsPage() {
               </tbody>
             </table>
           </DataTable>
-        </MotionDiv>
+        </div>
       )}
     </div>
   )

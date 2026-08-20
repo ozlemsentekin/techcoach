@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { MotionDiv } from '../../ui/motion'
 import { BookOpen } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import PageHeader from '../../layout/PageHeader'
@@ -36,8 +35,36 @@ export default function AdminMissingAnswerKeysPage() {
           description="Cevap anahtarı eksik testi olan soru bankası kaynağı bulunmuyor."
         />
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-          <DataTable>
+        <div className="fade-slide-in">
+          <div className="grid gap-3 sm:hidden">
+            {resourceBooks.map((book) => (
+              <Link
+                key={book.id}
+                to={`/parent/admin/publishers?resourceBookId=${book.id}`}
+                className="rounded-xl border border-panel-border bg-white p-4 shadow-sm"
+              >
+                <div className="flex items-start gap-3">
+                  {book.imageUrl ? (
+                    <img src={book.imageUrl} alt={`${book.name} görseli`} className="h-14 w-14 shrink-0 rounded-xl object-cover" />
+                  ) : (
+                    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-panel-slate-soft text-panel-slate">
+                      <BookOpen size={20} aria-hidden="true" />
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <h2 className="line-clamp-2 text-sm font-semibold leading-snug text-panel-text">{book.name}</h2>
+                    <p className="mt-1 text-xs text-panel-text-muted">{book.subjectName || 'Ders belirtilmemiş'}</p>
+                    <p className="text-xs text-panel-text-muted">{book.publisherName || 'Yayın evi belirtilmemiş'}</p>
+                  </div>
+                </div>
+                <span className="mt-3 inline-flex w-fit items-center rounded-full bg-panel-accent-soft px-2.5 py-1 text-xs font-semibold text-panel-warm">
+                  {book.incompleteTestCount}/{book.totalTestCount} test eksik
+                </span>
+              </Link>
+            ))}
+          </div>
+
+          <DataTable className="hidden sm:block">
             <div className="hidden items-center gap-3 bg-[#f8f7fb] px-4 py-3 text-[13px] font-semibold text-[#1c2b5e] sm:grid sm:grid-cols-[minmax(0,1fr)_180px_180px_140px]">
               <span>Kitap Adı</span>
               <span>Ders</span>
@@ -66,7 +93,7 @@ export default function AdminMissingAnswerKeysPage() {
               ))}
             </div>
           </DataTable>
-        </MotionDiv>
+        </div>
       )}
     </div>
   )

@@ -557,8 +557,8 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-2 sm:p-4">
-      <div className="flex h-full max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden panel-card p-4 sm:h-[88vh] sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-[88vh] sm:max-h-[92vh] sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             {selectedBook ? (
@@ -625,7 +625,7 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
           ) : resourceBooks.length === 0 ? (
             <p className="p-2 text-sm text-panel-text-muted">Bu öğrenci için atanmış kaynak yok.</p>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {(activeSubject?.books || []).map((book) => (
                 <div
                   key={book.id}
@@ -638,7 +638,7 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
                       setSelectedBook(book)
                     }
                   }}
-                  className="group relative flex cursor-pointer items-start gap-3.5 rounded-2xl border border-panel-border bg-white p-3.5 pr-9 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-panel-blue hover:shadow-md"
+                  className="group relative grid cursor-pointer grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-3 rounded-xl border border-panel-border bg-white p-3 pr-10 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-panel-blue hover:shadow-md sm:grid-cols-[4rem_minmax(0,1fr)]"
                 >
                   <button
                     type="button"
@@ -652,15 +652,21 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
                   >
                     <Trash2 size={15} aria-hidden="true" />
                   </button>
-                  <ResourceBookAvatar book={book} size="lg" />
+                  <ResourceBookAvatar book={book} size="row" />
                   <div className="min-w-0 flex-1">
                     {book.publisherName ? (
-                      <Badge tone="lilac" className="mb-1 w-fit">
+                      <Badge tone="lilac" className="mb-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
                         {book.publisherName}
                       </Badge>
                     ) : null}
-                    <p className="truncate text-sm font-semibold text-panel-text group-hover:text-panel-blue">{book.name}</p>
-                    <ResourceBookRates completionRate={book.completionRate} successRate={book.successRate} />
+                    <p className="line-clamp-2 text-sm font-semibold leading-snug text-panel-text group-hover:text-panel-blue">
+                      {book.name}
+                    </p>
+                    <ResourceBookRates
+                      completionRate={book.completionRate}
+                      successRate={book.successRate}
+                      className="grid-cols-2"
+                    />
                   </div>
                 </div>
               ))}

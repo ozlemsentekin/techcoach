@@ -123,8 +123,8 @@ export default function StudentResourceAssignModal({ student, onSaved, onClose }
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-2 sm:p-4">
-      <div className="flex h-full max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden panel-card p-4 sm:h-[88vh] sm:p-6">
+    <div className="fixed inset-0 z-[60] flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-[88vh] sm:max-h-[92vh] sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-panel-text">Kaynak Ata</h2>
@@ -234,7 +234,7 @@ export default function StudentResourceAssignModal({ student, onSaved, onClose }
           )}
         </div>
 
-        <div className="mt-4 flex justify-end gap-2 border-t border-panel-border pt-4">
+        <div className="mt-4 flex flex-col items-stretch gap-2 border-t border-panel-border pt-4 sm:flex-row sm:justify-end">
           <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={saving}>
             Vazgeç
           </Button>

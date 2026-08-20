@@ -308,25 +308,29 @@ export default function AssignHomeworkModal({ studentTeacherId, subjectName, def
               ) : resourceBooks.length === 0 ? (
                 <p className="p-2 text-sm text-panel-text-muted">Bu öğrenci için takip edilen kaynak yok.</p>
               ) : (
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                <div className="grid grid-cols-1 gap-2.5 min-[520px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                   {resourceBooks.map((book) => (
                     <button
                       key={book.id}
                       type="button"
                       onClick={() => handleSelectResourceBook(book)}
-                      className="flex min-w-0 flex-col items-stretch gap-1.5 rounded-xl border border-panel-border p-2 text-left transition-colors hover:border-panel-blue hover:bg-panel-blue-soft/40"
+                      className="grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-3 rounded-xl border border-panel-border p-2 text-left transition-colors hover:border-panel-blue hover:bg-panel-blue-soft/40 sm:flex sm:flex-col sm:items-stretch sm:gap-1.5"
                     >
                       <ResourceBookCover book={book} />
                       <div className="flex min-w-0 flex-col gap-0.5">
                         {book.publisherName ? (
-                          <Badge tone="lilac" className="w-fit">
+                          <Badge tone="lilac" className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
                             {book.publisherName}
                           </Badge>
                         ) : null}
-                        <p className="truncate text-sm font-semibold leading-snug text-panel-text">{book.name}</p>
+                        <p className="line-clamp-2 text-sm font-semibold leading-snug text-panel-text">{book.name}</p>
                         {book.subjectName ? <p className="truncate text-xs text-panel-text-muted">{book.subjectName}</p> : null}
                       </div>
-                      <ResourceBookRates completionRate={book.completionRate} successRate={book.successRate} className="mt-0" />
+                      <ResourceBookRates
+                        completionRate={book.completionRate}
+                        successRate={book.successRate}
+                        className="col-start-2 mt-0 grid-cols-2 sm:col-start-auto sm:grid-cols-1"
+                      />
                     </button>
                   ))}
                 </div>

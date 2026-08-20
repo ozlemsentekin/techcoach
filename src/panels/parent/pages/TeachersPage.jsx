@@ -7,7 +7,6 @@ import LoadingState from '../../shared/LoadingState'
 import ActionsMenu from '../../ui/ActionsMenu'
 import Button from '../../ui/Button'
 import DataTable from '../../ui/DataTable'
-import { MotionDiv } from '../../ui/motion'
 import TeacherProfileModal from '../components/TeacherProfileModal'
 import TeacherResourceBooksModal from '../components/TeacherResourceBooksModal'
 import GrantTeacherAccessDialog from '../components/GrantTeacherAccessDialog'
@@ -141,16 +140,85 @@ function TeacherResourceList({ resourceBooks }) {
   )
 }
 
+function TeacherMobileCard({ teacher, associationCount, isSelected, isMenuOpen, onToggleMenu, onCloseMenu, menuItems }) {
+  return (
+    <article
+      className={`rounded-xl border bg-white p-4 shadow-[0_4px_16px_rgba(37,61,62,0.06)] ${
+        isSelected ? 'border-[#1c2b5e]' : 'border-[#e4e8e9]'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <h3 className="min-w-0 truncate text-base font-bold text-[#253d3e]">{teacher.fullName}</h3>
+            {teacher.teacherUserId ? (
+              <span className="shrink-0 rounded-full bg-[#e8f3ee] px-2 py-0.5 text-[10px] font-semibold text-[#3f8f6c]">
+                Panelde
+              </span>
+            ) : null}
+          </div>
+          <a
+            href={`tel:${teacher.phone.replace(/\s/g, '')}`}
+            className="mt-1 inline-flex max-w-full items-center gap-1 text-xs font-medium text-[#667475]"
+          >
+            <Phone size={12} className="shrink-0" aria-hidden="true" />
+            <span className="truncate">{teacher.phone}</span>
+          </a>
+        </div>
+
+        <ActionsMenu
+          isOpen={isMenuOpen}
+          onToggle={onToggleMenu}
+          onClose={onCloseMenu}
+          triggerLabel="Öğretmen işlemleri"
+          items={menuItems}
+        />
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-[#667475]">
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          <Users size={14} className="shrink-0" aria-hidden="true" />
+          <span className="truncate">{teacher.studentFullName || 'Öğrenci'}</span>
+          {associationCount > 1 ? (
+            <span className="shrink-0 rounded-full bg-[#eef3f3] px-2 py-0.5 text-[11px] font-semibold text-[#1c2b5e]">
+              +{associationCount - 1}
+            </span>
+          ) : null}
+        </span>
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          <BookOpen size={14} className="shrink-0" aria-hidden="true" />
+          <span className="truncate">{teacher.subjectName || 'Ders seçilmedi'}</span>
+        </span>
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          <CalendarDays size={14} className="shrink-0" aria-hidden="true" />
+          <span className="truncate">{scheduleText(teacher)}</span>
+        </span>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="rounded-full bg-[#eef3f3] px-2.5 py-1 text-xs font-semibold text-[#5f7f81]">
+          {teacher.typeLabel}
+        </span>
+        <span className="rounded-full bg-[#fbe9d7] px-2.5 py-1 text-xs font-semibold text-[#c96a1f]">
+          {resourceCountText(teacher.resourceCount || teacher.resourceBooks?.length || 0)}
+        </span>
+      </div>
+
+      <div className="mt-3">
+        <ResourceSummary teacher={teacher} />
+      </div>
+    </article>
+  )
+}
+
 function TeacherDetailCard({ teacher, associations, onEditResources, onClose }) {
   const subjects = uniqueValues(associations.map((item) => item.subjectName))
   const totalResourceCount = associations.reduce((total, item) => total + (item.resourceBooks?.length || 0), 0)
 
   return (
-    <MotionDiv
+    <div
       key={teacher.id}
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border border-[#e4e8e9] bg-white shadow-[0_4px_16px_rgba(37,61,62,0.06)]"
+      className="fade-slide-in rounded-2xl border border-[#e4e8e9] bg-white shadow-[0_4px_16px_rgba(37,61,62,0.06)]"
     >
       <div className="flex flex-col gap-4 border-b border-[#edf0f1] px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 items-start gap-3">
@@ -243,7 +311,7 @@ function TeacherDetailCard({ teacher, associations, onEditResources, onClose }) 
           </article>
         ))}
       </div>
-    </MotionDiv>
+    </div>
   )
 }
 
@@ -337,6 +405,21 @@ export default function TeachersPage() {
     )
   }
 
+  const getTeacherMenuItems = (teacher) => [
+    { label: 'Detay', icon: Eye, onClick: () => toggleTeacherDetail(teacher) },
+    { label: 'Profil', icon: UserRound, onClick: () => setProfileModalTeacher(teacher) },
+    { label: 'Kaynak', icon: BookOpen, onClick: () => setResourceModalTeacher(teacher) },
+    ...(teacher.teacherUserId
+      ? []
+      : [
+          {
+            label: 'Panele Yetki Ver',
+            icon: KeyRound,
+            onClick: () => setGrantAccessTeacher(teacher),
+          },
+        ]),
+  ]
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader title="Öğretmenler" />
@@ -352,7 +435,7 @@ export default function TeachersPage() {
           description="Öğrenci profillerinden eklenen öğretmenler burada listelenir."
         />
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-3">
+        <div className="fade-slide-in flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="relative w-full sm:w-80">
               <Search
@@ -388,7 +471,27 @@ export default function TeachersPage() {
                 />
               ) : null}
 
-              <DataTable>
+              <div className="grid gap-3 md:hidden">
+                {filteredTeachers.map((teacher) => {
+                  const associationCount = associationCounts.get(teacherGroupKey(teacher)) || 1
+                  const detailSelected = selectedTeacher?.id === teacher.id
+
+                  return (
+                    <TeacherMobileCard
+                      key={teacher.id}
+                      teacher={teacher}
+                      associationCount={associationCount}
+                      isSelected={detailSelected}
+                      isMenuOpen={openMenuTeacherId === teacher.id}
+                      onToggleMenu={() => setOpenMenuTeacherId((current) => (current === teacher.id ? null : teacher.id))}
+                      onCloseMenu={() => setOpenMenuTeacherId(null)}
+                      menuItems={getTeacherMenuItems(teacher)}
+                    />
+                  )
+                })}
+              </div>
+
+              <DataTable className="hidden md:block">
                 <table className="w-full min-w-[1160px] text-left">
                   <thead>
                     <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#1c2b5e]">
@@ -463,20 +566,7 @@ export default function TeachersPage() {
                                 }
                                 onClose={() => setOpenMenuTeacherId(null)}
                                 triggerLabel="Öğretmen işlemleri"
-                                items={[
-                                  { label: 'Detay', icon: Eye, onClick: () => toggleTeacherDetail(teacher) },
-                                  { label: 'Profil', icon: UserRound, onClick: () => setProfileModalTeacher(teacher) },
-                                  { label: 'Kaynak', icon: BookOpen, onClick: () => setResourceModalTeacher(teacher) },
-                                  ...(teacher.teacherUserId
-                                    ? []
-                                    : [
-                                        {
-                                          label: 'Panele Yetki Ver',
-                                          icon: KeyRound,
-                                          onClick: () => setGrantAccessTeacher(teacher),
-                                        },
-                                      ]),
-                                ]}
+                                items={getTeacherMenuItems(teacher)}
                               />
                             </div>
                           </td>
@@ -488,7 +578,7 @@ export default function TeachersPage() {
               </DataTable>
             </>
           )}
-        </MotionDiv>
+        </div>
       )}
 
       {resourceModalTeacher ? (

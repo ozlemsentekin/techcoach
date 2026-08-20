@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { MotionDiv } from '../../ui/motion'
 import { BookOpen, ChevronDown, ChevronRight, Pencil, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import PageHeader from '../../layout/PageHeader'
@@ -87,8 +86,11 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-md panel-card p-5">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="h-full w-full overflow-y-auto border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-auto sm:max-h-[90vh] sm:max-w-md sm:rounded-2xl sm:p-5"
+      >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">{isEdit ? 'Kaynağı Düzenle' : 'Kaynak Ekle'}</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -363,7 +365,7 @@ export default function AdminSubjectsPage() {
       ) : subjects.length === 0 ? (
         <EmptyState icon={BookOpen} title="Henüz ders yok" />
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="fade-slide-in">
           <DataTable>
             <div className="hidden items-center gap-3 bg-[#f8f7fb] px-4 py-3 text-[13px] font-semibold text-[#1c2b5e] sm:grid sm:grid-cols-[minmax(0,1fr)_140px_180px]">
               <span>Ders Adı</span>
@@ -384,7 +386,7 @@ export default function AdminSubjectsPage() {
               ))}
             </div>
           </DataTable>
-        </MotionDiv>
+        </div>
       )}
 
       {addBookSubject ? (

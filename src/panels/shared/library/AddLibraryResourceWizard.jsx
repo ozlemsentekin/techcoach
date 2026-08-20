@@ -433,8 +433,8 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
 
   if (submitted) {
     return (
-      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-4">
-        <div className="w-full max-w-md panel-card p-6 text-center">
+      <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+        <div className="w-full max-w-md rounded-t-3xl border border-panel-border bg-panel-surface p-5 text-center shadow-panel-1 sm:rounded-2xl sm:p-6">
           <h2 className="text-lg font-bold text-panel-text">Kaydınız alındı</h2>
           <p className="mt-2 text-sm text-panel-text-muted">
             Kaynağınız admin onayından sonra herkese görünür olacak. Onay beklerken bile öğrencinize/çocuğunuza
@@ -458,8 +458,8 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
           : 'Cevap Anahtarı Fotoğrafları'
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-2 sm:p-4">
-      <div className="flex h-full max-h-[95vh] w-full max-w-4xl flex-col overflow-hidden panel-card p-4 sm:h-[85vh] sm:p-6">
+    <div className="fixed inset-0 z-[70] flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex h-full w-full max-w-4xl flex-col overflow-hidden border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-[85vh] sm:max-h-[95vh] sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-panel-text">Kaynak Ekle</h2>
@@ -727,7 +727,7 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
           )}
         </div>
 
-        <div className="mt-4 flex justify-end gap-2 border-t border-panel-border pt-4">
+        <div className="mt-4 flex flex-col items-stretch gap-2 border-t border-panel-border pt-4 sm:flex-row sm:justify-end">
           {step === 1 ? (
             <>
               <Button type="button" variant="secondary" size="md" onClick={onClose}>

@@ -9,7 +9,6 @@ import AddHomeworkModal from '../../student/components/AddHomeworkModal'
 import AssignTaskModal from '../../shared/homework/AssignTaskModal'
 import EditHomeworkModal from '../../shared/homework/EditHomeworkModal'
 import Button from '../../ui/Button'
-import { MotionDiv } from '../../ui/motion'
 import { groupHomeworksByDate } from '../../shared/homework/homeworkDisplay'
 import HomeworkDateAccordion from '../../shared/homework/HomeworkDateAccordion'
 
@@ -139,7 +138,7 @@ export default function HomeworkPage() {
           {visibleGroups.length === 0 ? (
             <EmptyState icon={NotebookPen} title="Aktif ödev yok" description="Tüm ödevler tamamlandı." />
           ) : (
-            <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-4">
+            <div className="fade-slide-in flex flex-col gap-4">
               {visibleGroups.map((dateGroup, index) => (
                 <HomeworkDateAccordion
                   key={dateGroup.dueDate || 'unassigned'}
@@ -151,7 +150,7 @@ export default function HomeworkPage() {
                   onAssignTaskRequest={setAssigningTaskHomework}
                 />
               ))}
-            </MotionDiv>
+            </div>
           )}
         </>
       )}

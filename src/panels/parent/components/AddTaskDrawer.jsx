@@ -167,7 +167,7 @@ export default function AddTaskDrawer({
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30">
       <form
         onSubmit={handleSubmit}
-        className="flex h-full w-full max-w-md flex-col gap-4 overflow-y-auto bg-panel-surface p-6"
+        className="flex h-full w-full max-w-md flex-col gap-4 overflow-y-auto bg-panel-surface p-4 sm:p-6"
       >
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">
@@ -240,7 +240,7 @@ export default function AddTaskDrawer({
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-panel-text-muted">Ders</span>
             <input
@@ -269,7 +269,7 @@ export default function AddTaskDrawer({
           />
         </label>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-panel-text-muted">Başlangıç saati</span>
             <input
@@ -317,7 +317,7 @@ export default function AddTaskDrawer({
 
         <div>
           <p className="mb-2 text-sm font-medium text-panel-text-muted">Öncelik</p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {PRIORITY_OPTIONS.map((option) => (
               <button
                 key={option.id}
@@ -356,7 +356,7 @@ export default function AddTaskDrawer({
           />
         </label>
 
-        <div className="mt-auto flex gap-3">
+        <div className="mt-auto flex flex-col gap-2 min-[420px]:flex-row min-[420px]:gap-3">
           {initialTask && onDelete ? (
             <button
               type="button"

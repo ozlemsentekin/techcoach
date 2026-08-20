@@ -10,8 +10,8 @@ export default function TaskDetailModal({ task, onReschedule, onClose }) {
   const hasQuestionProgress = task.targetQuestionCount > 0
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-md panel-card p-6">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="w-full max-w-md rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-panel-1 sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-panel-text">Görev Detayı</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>

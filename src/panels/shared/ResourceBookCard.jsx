@@ -3,14 +3,20 @@ import { cn } from '../ui/utils'
 
 const AVATAR_DIMENSIONS = { md: 'h-10 w-10', row: 'h-14 w-14', lg: 'h-20 w-20' }
 const AVATAR_ICON_SIZES = { md: 17, row: 22, lg: 30 }
+const AVATAR_PIXEL_SIZES = { md: 40, row: 56, lg: 80 }
 
 export function ResourceBookAvatar({ book, size = 'md', onClick }) {
   const dimension = AVATAR_DIMENSIONS[size] || AVATAR_DIMENSIONS.md
+  const pixelSize = AVATAR_PIXEL_SIZES[size] || AVATAR_PIXEL_SIZES.md
   if (book?.imageUrl) {
     const image = (
       <img
         src={book.imageUrl}
         alt={`${book.name} görseli`}
+        loading="lazy"
+        decoding="async"
+        width={pixelSize}
+        height={pixelSize}
         className={`${dimension} shrink-0 rounded-xl border border-panel-border object-cover shadow-sm`}
       />
     )
@@ -42,6 +48,8 @@ export function ResourceBookCover({ book }) {
       <img
         src={book.imageUrl}
         alt={`${book.name} görseli`}
+        loading="lazy"
+        decoding="async"
         className="aspect-[3/4] w-full rounded-lg border border-panel-border object-cover"
       />
     )
@@ -113,7 +121,7 @@ export function SuccessRateBadge({ value, label = 'Başarı' }) {
 export function ResourceBookRates({ completionRate, successRate, className }) {
   return (
     <div className={cn('mt-2.5 grid grid-cols-1 gap-1.5', className)}>
-      <RateRow icon={CheckCircle2} label="Tamamlanma" value={completionRate} tone={completionRateTone(completionRate)} />
+      <RateRow icon={CheckCircle2} label="İlerleme" value={completionRate} tone={completionRateTone(completionRate)} />
       <RateRow icon={Target} label="Başarı" value={successRate} tone={successRateTone(successRate)} />
     </div>
   )

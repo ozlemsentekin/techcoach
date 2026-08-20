@@ -147,16 +147,19 @@ export default function TeacherProfileModal({ teacher, onSaved, onClose }) {
   const isLoading = subjects === null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <form onSubmit={handleSubmit} className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-panel-2">
-        <div className="flex items-center justify-between gap-4 border-b border-[#edf0f1] px-6 py-4">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="flex h-full w-full max-w-2xl flex-col bg-white shadow-panel-2 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl"
+      >
+        <div className="flex items-center justify-between gap-4 border-b border-[#edf0f1] px-4 py-3 sm:px-6 sm:py-4">
           <h2 className="text-lg font-semibold text-panel-text">Öğretmen Profili</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
             <X size={20} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           {error ? (
             <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
           ) : null}
@@ -165,7 +168,7 @@ export default function TeacherProfileModal({ teacher, onSaved, onClose }) {
             <LoadingState label="Öğretmen bilgileri yükleniyor..." />
           ) : (
             <div className="flex flex-col gap-5">
-              <div className="flex items-center gap-5">
+              <div className="flex items-start gap-4 sm:items-center sm:gap-5">
                 <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#fbe9d7] text-[#c96a1f]">
                   <GraduationCap size={28} aria-hidden="true" />
                 </span>
@@ -220,7 +223,7 @@ export default function TeacherProfileModal({ teacher, onSaved, onClose }) {
 
               <div className="flex flex-col gap-2">
                 <span className="text-sm font-medium text-panel-text-muted">Öğretmen Tipi</span>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
                   {TEACHER_TYPE_OPTIONS.map((option) => {
                     const selected = form.type === option.value
                     return (
@@ -244,7 +247,7 @@ export default function TeacherProfileModal({ teacher, onSaved, onClose }) {
 
               {form.type === 'ozel_ogretmen' ? (
                 <div className="flex flex-col gap-3 rounded-xl border border-[#e9edf0] bg-[#fbfcfc] p-3">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <span className="flex items-center gap-2 text-sm font-semibold text-panel-text">
                       <CalendarDays size={16} aria-hidden="true" />
                       Ders Programı
@@ -314,7 +317,7 @@ export default function TeacherProfileModal({ teacher, onSaved, onClose }) {
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-[#edf0f1] px-6 py-4">
+        <div className="flex flex-col gap-2 border-t border-[#edf0f1] px-4 py-3 sm:flex-row sm:justify-end sm:px-6 sm:py-4">
           <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={saving}>
             Vazgeç
           </Button>

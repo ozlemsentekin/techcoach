@@ -65,8 +65,8 @@ export default function ChangePasswordDialog({ onClose }) {
 
   if (success) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" role="dialog" aria-modal="true">
-        <div className="w-full max-w-sm panel-card p-6 shadow-lg">
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">
+        <div className="w-full max-w-sm rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-lg sm:rounded-2xl sm:p-6">
           <div className="flex items-center gap-2 text-emerald-600">
             <Check size={20} aria-hidden="true" />
             <h2 className="text-lg font-semibold text-panel-text">Şifre değiştirildi</h2>
@@ -87,8 +87,11 @@ export default function ChangePasswordDialog({ onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" role="dialog" aria-modal="true">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm panel-card p-6 shadow-lg">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-sm rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-lg sm:rounded-2xl sm:p-6"
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
@@ -130,7 +133,7 @@ export default function ChangePasswordDialog({ onClose }) {
 
         {error ? <p className="mt-3 text-sm text-panel-warm">{error}</p> : null}
 
-        <div className="mt-6 flex gap-3">
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:gap-3">
           <button
             type="button"
             onClick={onClose}

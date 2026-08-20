@@ -228,9 +228,9 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
   const isLoading = teachers === null || subjects === null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col rounded-2xl bg-white shadow-panel-2">
-        <div className="flex items-start justify-between gap-4 border-b border-[#edf0f1] px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex h-full w-full max-w-6xl flex-col overflow-hidden bg-white shadow-panel-2 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[#edf0f1] px-4 py-3 sm:px-5 sm:py-4">
           <div>
             <h2 className="text-lg font-semibold text-panel-text">Öğretmen Ekle</h2>
             <p className="text-sm text-panel-text-muted">{student.fullName}</p>
@@ -240,7 +240,7 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
           {error ? (
             <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
           ) : null}
@@ -276,7 +276,7 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
                 )}
               </section>
 
-              <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-xl border border-[#e5e8e9] bg-[#fbfcfc] p-4">
+              <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-xl border border-[#e5e8e9] bg-[#fbfcfc] p-3 sm:p-4">
                 <label className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium text-panel-text-muted">Ders</span>
                   <select

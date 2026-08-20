@@ -8,13 +8,23 @@ import Button from '../../ui/Button'
 import Badge from '../../ui/Badge'
 import DataTable from '../../ui/DataTable'
 import ActionsMenu from '../../ui/ActionsMenu'
-import { MotionDiv } from '../../ui/motion'
 import ProvinceDistrictSelect from '../components/ProvinceDistrictSelect'
 import SchoolScheduleEditor from '../components/SchoolScheduleEditor'
 import { GRADE_OPTIONS } from '../components/studentWizardConstants'
 
 const SCHOOL_TYPE_LABELS = { devlet: 'Devlet', ozel: 'Özel' }
 const SCHOOL_TYPE_TONES = { devlet: 'sage', ozel: 'accent' }
+
+function schoolMenuItems({ school, onEdit, onSchedule, onToggleActive }) {
+  return [
+    { label: 'Düzenle', onClick: () => onEdit(school) },
+    { label: 'Ders Programı', onClick: () => onSchedule(school) },
+    {
+      label: school.isActive ? 'Pasif Yap' : 'Aktif Yap',
+      onClick: () => onToggleActive(school),
+    },
+  ]
+}
 
 function SchoolModal({ school, onSaved, onClose }) {
   const isEdit = Boolean(school)
@@ -59,8 +69,11 @@ function SchoolModal({ school, onSaved, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-md panel-card p-5">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="h-full w-full overflow-y-auto border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-auto sm:max-h-[90vh] sm:max-w-md sm:rounded-2xl sm:p-5"
+      >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">{isEdit ? 'Okulu Düzenle' : 'Okul Ekle'}</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -169,8 +182,11 @@ function BulkImportSchoolsModal({ onImported, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-lg panel-card p-5">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="h-full w-full overflow-y-auto border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-auto sm:max-h-[90vh] sm:max-w-lg sm:rounded-2xl sm:p-5"
+      >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">Toplu Okul İçe Aktar</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -277,9 +293,9 @@ function SchoolClassScheduleModal({ school, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-panel-2">
-        <div className="flex items-center justify-between gap-4 px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex h-full w-full flex-col bg-white shadow-panel-2 sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-4 px-4 py-3 sm:px-5 sm:py-4">
           <div>
             <h2 className="text-lg font-semibold text-panel-text">Ders Programı</h2>
             <p className="text-sm text-panel-text-muted">{school.name}</p>
@@ -289,7 +305,7 @@ function SchoolClassScheduleModal({ school, onClose }) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto border-t border-[#edf0f1] px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-[#edf0f1] px-4 py-4 sm:px-5">
           {error ? (
             <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
           ) : null}
@@ -318,7 +334,7 @@ function SchoolClassScheduleModal({ school, onClose }) {
           {loading ? <LoadingState label="Ders programı yükleniyor..." /> : <SchoolScheduleEditor entries={entries} onChange={setEntries} />}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-[#edf0f1] px-5 py-3">
+        <div className="flex flex-col gap-2 border-t border-[#edf0f1] px-4 py-3 sm:flex-row sm:items-center sm:justify-end sm:px-5">
           <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={saving}>
             Kapat
           </Button>
@@ -381,6 +397,12 @@ export default function AdminSchoolsPage() {
     }
   }
 
+  const menuContext = {
+    onEdit: setEditingSchool,
+    onSchedule: setScheduleModalSchool,
+    onToggleActive: handleToggleActive,
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
@@ -437,8 +459,44 @@ export default function AdminSchoolsPage() {
       ) : schools.length === 0 ? (
         <EmptyState icon={School} title="Okul bulunamadı" description="Yukarıdaki butonlarla okul ekleyebilir veya toplu içe aktarabilirsiniz." />
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-          <DataTable>
+        <div className="fade-slide-in flex flex-col gap-3">
+          <div className="grid gap-3 md:hidden">
+            {schools.map((school) => (
+              <article key={school.id} className="rounded-xl border border-panel-border bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="line-clamp-2 text-sm font-bold leading-snug text-[#253d3e]">{school.name}</h2>
+                    <p className="mt-1 text-xs text-[#667475]">
+                      {school.provinceName} / {school.districtName}
+                    </p>
+                  </div>
+                  <ActionsMenu
+                    isOpen={openMenuSchoolId === school.id}
+                    onToggle={() => setOpenMenuSchoolId((current) => (current === school.id ? null : school.id))}
+                    onClose={() => setOpenMenuSchoolId(null)}
+                    triggerLabel="Okul işlemleri"
+                    items={schoolMenuItems({ school, ...menuContext })}
+                  />
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Badge tone={SCHOOL_TYPE_TONES[school.type] || 'neutral'}>
+                    {SCHOOL_TYPE_LABELS[school.type] || school.type}
+                  </Badge>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleActive(school)}
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                      school.isActive ? 'bg-[#e5f3ea] text-[#34845a]' : 'bg-[#f1f1f3] text-[#8a8a92]'
+                    }`}
+                  >
+                    {school.isActive ? 'Aktif' : 'Pasif'}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <DataTable className="hidden md:block">
             <table className="w-full min-w-[760px] text-left">
               <thead>
                 <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#1c2b5e]">
@@ -481,14 +539,7 @@ export default function AdminSchoolsPage() {
                           }
                           onClose={() => setOpenMenuSchoolId(null)}
                           triggerLabel="Okul işlemleri"
-                          items={[
-                            { label: 'Düzenle', onClick: () => setEditingSchool(school) },
-                            { label: 'Ders Programı', onClick: () => setScheduleModalSchool(school) },
-                            {
-                              label: school.isActive ? 'Pasif Yap' : 'Aktif Yap',
-                              onClick: () => handleToggleActive(school),
-                            },
-                          ]}
+                          items={schoolMenuItems({ school, ...menuContext })}
                         />
                       </div>
                     </td>
@@ -497,7 +548,7 @@ export default function AdminSchoolsPage() {
               </tbody>
             </table>
           </DataTable>
-        </MotionDiv>
+        </div>
       )}
 
       {showSchoolModal ? <SchoolModal onSaved={handleSchoolSaved} onClose={() => setShowSchoolModal(false)} /> : null}

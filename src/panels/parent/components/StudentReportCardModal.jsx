@@ -128,9 +128,9 @@ export default function StudentReportCardModal({ student, onClose }) {
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="flex max-h-[88vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-panel-2">
-        <div className="flex items-start justify-between gap-4 border-b border-[#edf0f1] px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex h-full w-full max-w-3xl flex-col bg-white shadow-panel-2 sm:h-[88vh] sm:max-h-[92vh] sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[#edf0f1] px-4 py-3 sm:px-5 sm:py-4">
           <div>
             <h2 className="text-lg font-semibold text-panel-text">LGS Karnesi</h2>
             <p className="text-sm text-panel-text-muted">{student.fullName}</p>
@@ -140,7 +140,7 @@ export default function StudentReportCardModal({ student, onClose }) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
           {error ? (
             <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
           ) : null}
@@ -154,7 +154,78 @@ export default function StudentReportCardModal({ student, onClose }) {
               description="Bu öğrenciye henüz kaynak atanmamış."
             />
           ) : (
-            <div className="overflow-hidden rounded-xl border border-[#edf0f1]">
+            <>
+            <div className="grid gap-3 sm:hidden">
+              {rows.map((row) => (
+                <article key={row.key} className="rounded-xl border border-[#edf0f1] bg-white p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="min-w-0 text-sm font-bold text-[#253d3e]">{row.name}</h3>
+                    <span className="shrink-0 rounded-full bg-[#f8f7fb] px-2 py-1 text-xs font-semibold text-[#1c2b5e]">
+                      {formatPercent(row.correct, row.wrong)}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-lg bg-[#f8f7fb] px-2 py-2">
+                      <p className="text-[11px] font-medium text-[#667475]">Soru</p>
+                      <p className="text-sm font-bold text-[#253d3e]">{formatNumber(row.questions)}</p>
+                    </div>
+                    <div className="rounded-lg bg-panel-sage-soft px-2 py-2">
+                      <p className="text-[11px] font-medium text-panel-sage">Doğru</p>
+                      <p className="text-sm font-bold text-panel-sage">{formatNumber(row.correct)}</p>
+                    </div>
+                    <div className="rounded-lg bg-panel-red-soft px-2 py-2">
+                      <p className="text-[11px] font-medium text-panel-red">Yanlış</p>
+                      <p className="text-sm font-bold text-panel-red">{formatNumber(row.wrong)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-center">
+                    <div className="rounded-lg bg-[#f8f7fb] px-2 py-2">
+                      <p className="text-[11px] font-medium text-[#667475]">Boş</p>
+                      <p className="text-sm font-bold text-[#667475]">{formatNumber(row.blank)}</p>
+                    </div>
+                    <div className="rounded-lg bg-panel-blue-soft px-2 py-2">
+                      <p className="text-[11px] font-medium text-[#1c2b5e]">Net</p>
+                      <p className="text-sm font-bold text-[#1c2b5e]">{formatNet(row.net)}</p>
+                    </div>
+                  </div>
+                </article>
+              ))}
+
+              <article className="rounded-xl border border-[#c1c8e0] bg-[#f8f7fb] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="text-sm font-bold text-[#253d3e]">Toplam</h3>
+                  <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-[#1c2b5e]">
+                    {formatPercent(totals.correct, totals.wrong)}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-lg bg-white px-2 py-2">
+                    <p className="text-[11px] font-medium text-[#667475]">Soru</p>
+                    <p className="text-sm font-bold text-[#253d3e]">{formatNumber(totals.questions)}</p>
+                  </div>
+                  <div className="rounded-lg bg-white px-2 py-2">
+                    <p className="text-[11px] font-medium text-panel-sage">Doğru</p>
+                    <p className="text-sm font-bold text-panel-sage">{formatNumber(totals.correct)}</p>
+                  </div>
+                  <div className="rounded-lg bg-white px-2 py-2">
+                    <p className="text-[11px] font-medium text-panel-red">Yanlış</p>
+                    <p className="text-sm font-bold text-panel-red">{formatNumber(totals.wrong)}</p>
+                  </div>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-center">
+                  <div className="rounded-lg bg-white px-2 py-2">
+                    <p className="text-[11px] font-medium text-[#667475]">Boş</p>
+                    <p className="text-sm font-bold text-[#667475]">{formatNumber(totals.blank)}</p>
+                  </div>
+                  <div className="rounded-lg bg-white px-2 py-2">
+                    <p className="text-[11px] font-medium text-[#1c2b5e]">Net</p>
+                    <p className="text-sm font-bold text-[#1c2b5e]">{formatNet(calculateNet(totals.correct, totals.wrong))}</p>
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <div className="hidden overflow-hidden rounded-xl border border-[#edf0f1] sm:block">
               <table className="w-full min-w-[640px] text-left">
                 <thead>
                   <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#1c2b5e]">
@@ -199,6 +270,7 @@ export default function StudentReportCardModal({ student, onClose }) {
                 </tfoot>
               </table>
             </div>
+            </>
           )}
         </div>
       </div>

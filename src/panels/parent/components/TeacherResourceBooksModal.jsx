@@ -109,9 +109,9 @@ export default function TeacherResourceBooksModal({ student, teacher, onSaved, o
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-panel-2">
-        <div className="flex items-start justify-between gap-4 border-b border-[#edf0f1] px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex h-full w-full max-w-5xl flex-col bg-white shadow-panel-2 sm:h-[88vh] sm:max-h-[92vh] sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[#edf0f1] px-4 py-3 sm:px-5 sm:py-4">
           <div>
             <h2 className="text-lg font-semibold text-panel-text">Takip Edilen Kaynaklar</h2>
             <p className="text-sm text-panel-text-muted">
@@ -123,7 +123,7 @@ export default function TeacherResourceBooksModal({ student, teacher, onSaved, o
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0f1] px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0f1] px-4 py-3 sm:px-5">
           <div className="relative w-full sm:w-80">
             <Search
               size={14}
@@ -142,7 +142,7 @@ export default function TeacherResourceBooksModal({ student, teacher, onSaved, o
           </span>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
           {error ? (
             <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
           ) : null}
@@ -213,7 +213,7 @@ export default function TeacherResourceBooksModal({ student, teacher, onSaved, o
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-[#edf0f1] px-5 py-4">
+        <div className="flex flex-col gap-2 border-t border-[#edf0f1] px-4 py-3 sm:flex-row sm:justify-end sm:px-5 sm:py-4">
           <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={saving}>
             Vazgeç
           </Button>

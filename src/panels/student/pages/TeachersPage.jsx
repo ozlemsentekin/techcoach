@@ -4,7 +4,6 @@ import { authRequest } from '../../../services/authClient'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
-import { MotionDiv } from '../../ui/motion'
 
 const WEEKDAY_LABELS = {
   pazartesi: 'Pazartesi',
@@ -122,11 +121,11 @@ export default function TeachersPage() {
           description="Ebeveyn panelinden öğretmen tanımı yapıldığında burada görünür."
         />
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="fade-slide-in grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {teachers.map((teacher) => (
             <TeacherProfileCard key={teacher.id} teacher={teacher} />
           ))}
-        </MotionDiv>
+        </div>
       )}
     </div>
   )

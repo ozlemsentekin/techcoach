@@ -22,7 +22,7 @@ function DurationPicker({ value, onChange }) {
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-xs font-medium text-panel-text-muted">Süre</span>
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 min-[380px]:grid-cols-3 sm:grid-cols-5">
         {DURATION_OPTIONS.map((minutes) => (
           <button
             key={minutes}
@@ -95,8 +95,11 @@ export default function AddLessonModal({ students, onSave, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <form onSubmit={handleSubmit} className="max-h-[90vh] w-full max-w-lg overflow-y-auto panel-card p-6">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="h-full w-full max-w-lg overflow-y-auto border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl sm:p-6"
+      >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-panel-text">Ders Ekle</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -120,7 +123,7 @@ export default function AddLessonModal({ students, onSave, onClose }) {
             </select>
           </label>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
             <button
               type="button"
               onClick={() => setMode('recurring')}
@@ -148,7 +151,7 @@ export default function AddLessonModal({ students, onSave, onClose }) {
           {mode === 'recurring' ? (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-panel-text-muted">Gün</span>
-              <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+              <div className="grid grid-cols-3 gap-2 min-[420px]:grid-cols-4 sm:grid-cols-7">
                 {WEEKDAYS.map((day) => (
                   <button
                     key={day.id}

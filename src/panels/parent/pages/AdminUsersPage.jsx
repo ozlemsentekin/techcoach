@@ -10,7 +10,6 @@ import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import Badge from '../../ui/Badge'
 import Button from '../../ui/Button'
 import DataTable from '../../ui/DataTable'
-import { MotionDiv } from '../../ui/motion'
 import SubjectPicker from '../components/SubjectPicker'
 
 const ROLE_TONE = {
@@ -125,8 +124,11 @@ function EditUserModal({ user, isSelf, onSaved, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-md panel-card p-5">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="h-full w-full max-w-md overflow-y-auto border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl sm:p-5"
+      >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">Üyeyi Düzenle</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -287,6 +289,47 @@ function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpers
   )
 }
 
+function UserMobileCard({ user, indent = false, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
+  return (
+    <article className={`rounded-xl border border-panel-border bg-white p-4 shadow-sm ${indent ? 'ml-4 border-dashed' : ''}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <h3 className="min-w-0 truncate text-sm font-bold text-[#253d3e]">{user.fullName}</h3>
+            {user.isAdmin ? (
+              <Badge tone="lilac">
+                <ShieldCheck size={12} aria-hidden="true" />
+                Admin
+              </Badge>
+            ) : null}
+          </div>
+          <div className="mt-1">
+            <ContactCell user={user} />
+          </div>
+        </div>
+        <RowActions
+          user={user}
+          isSelf={isSelf}
+          impersonating={impersonating}
+          onEdit={onEdit}
+          onImpersonate={onImpersonate}
+          onDelete={onDelete}
+        />
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <RoleBadge user={user} />
+        <span className="rounded-full bg-[#f8f7fb] px-2.5 py-1 text-[11px] font-semibold text-[#667475]">
+          Kayıt: {formatDate(user.createdAt)}
+        </span>
+        <span className="rounded-full bg-[#f8f7fb] px-2.5 py-1 text-[11px] font-semibold text-[#667475]">
+          Son giriş: {formatDate(user.lastLoginAt)}
+        </span>
+      </div>
+    </article>
+  )
+}
+
 function ParentRow({ user, students, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
   const [expanded, setExpanded] = useState(true)
   const hasStudents = students.length > 0
@@ -356,6 +399,89 @@ function ParentRow({ user, students, isSelf, impersonating, onEdit, onImpersonat
           ))
         : null}
     </>
+  )
+}
+
+function ParentMobileCard({ user, students, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
+  const [expanded, setExpanded] = useState(true)
+  const hasStudents = students.length > 0
+
+  return (
+    <div className="flex flex-col gap-2">
+      <article className="rounded-xl border border-panel-border bg-white p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <button
+            type="button"
+            disabled={!hasStudents}
+            onClick={() => setExpanded((value) => !value)}
+            className="flex min-w-0 flex-1 items-start gap-2 text-left disabled:cursor-default"
+          >
+            <span className="mt-0.5 flex w-4 shrink-0 items-center justify-center">
+              {hasStudents ? (
+                expanded ? (
+                  <ChevronDown size={14} className="text-[#87a3a5]" aria-hidden="true" />
+                ) : (
+                  <ChevronRight size={14} className="text-[#87a3a5]" aria-hidden="true" />
+                )
+              ) : null}
+            </span>
+            <span className="min-w-0">
+              <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <span className="min-w-0 truncate text-sm font-bold text-[#253d3e]">{user.fullName}</span>
+                {user.isAdmin ? (
+                  <Badge tone="lilac">
+                    <ShieldCheck size={12} aria-hidden="true" />
+                    Admin
+                  </Badge>
+                ) : null}
+                {hasStudents ? (
+                  <span className="inline-flex items-center rounded-full bg-[#f8f7fb] px-2.5 py-1 text-xs font-medium text-[#1c2b5e]">
+                    {students.length} öğrenci
+                  </span>
+                ) : null}
+              </span>
+              <span className="mt-1 block">
+                <ContactCell user={user} />
+              </span>
+            </span>
+          </button>
+
+          <RowActions
+            user={user}
+            isSelf={isSelf}
+            impersonating={impersonating}
+            onEdit={onEdit}
+            onImpersonate={onImpersonate}
+            onDelete={onDelete}
+          />
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 pl-6">
+          <RoleBadge user={user} />
+          <span className="rounded-full bg-[#f8f7fb] px-2.5 py-1 text-[11px] font-semibold text-[#667475]">
+            Kayıt: {formatDate(user.createdAt)}
+          </span>
+          <span className="rounded-full bg-[#f8f7fb] px-2.5 py-1 text-[11px] font-semibold text-[#667475]">
+            Son giriş: {formatDate(user.lastLoginAt)}
+          </span>
+        </div>
+      </article>
+
+      {hasStudents && expanded
+        ? students.map((student) => (
+            <UserMobileCard
+              key={student.id}
+              user={student}
+              indent
+              isSelf={false}
+              impersonating={impersonating}
+              onEdit={onEdit}
+              onImpersonate={onImpersonate}
+              onDelete={onDelete}
+            />
+          ))
+        : null}
+    </div>
   )
 }
 
@@ -500,11 +626,29 @@ export default function AdminUsersPage() {
       ) : users.length === 0 ? (
         <EmptyState icon={ShieldCheck} title="Henüz kullanıcı yok" />
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-          <DataTable>
-            {topLevelUsers.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-[#667475]">Aramayla eşleşen kullanıcı yok.</p>
-            ) : (
+        <div className="fade-slide-in">
+          {topLevelUsers.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-panel-border bg-white px-4 py-6 text-sm text-[#667475]">
+              Aramayla eşleşen kullanıcı yok.
+            </p>
+          ) : (
+            <>
+              <div className="grid gap-3 md:hidden">
+                {topLevelUsers.map((user) => (
+                  <ParentMobileCard
+                    key={user.id}
+                    user={user}
+                    students={studentsByParentId.get(user.id) || []}
+                    isSelf={user.id === authUser?.id}
+                    impersonating={Boolean(impersonatingId)}
+                    onEdit={setEditingUser}
+                    onImpersonate={handleImpersonate}
+                    onDelete={setDeletingUser}
+                  />
+                ))}
+              </div>
+
+              <DataTable className="hidden md:block">
               <table className="w-full min-w-[760px] text-left">
                 <thead>
                   <tr className="bg-[#f8f7fb] text-[13px] font-semibold text-[#1c2b5e]">
@@ -531,9 +675,10 @@ export default function AdminUsersPage() {
                   ))}
                 </tbody>
               </table>
-            )}
-          </DataTable>
-        </MotionDiv>
+              </DataTable>
+            </>
+          )}
+        </div>
       )}
 
       {editingUser ? (

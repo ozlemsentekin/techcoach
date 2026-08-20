@@ -195,8 +195,8 @@ export default function StudentProfileModal({ student, onClose }) {
   const defaultThemeLabel = gender === 'kiz' ? 'Mor Tema' : gender === 'erkek' ? 'Mavi Tema' : 'cinsiyete göre'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="flex h-[min(680px,90vh)] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-panel-2">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden bg-white shadow-panel-2 sm:h-[min(680px,90vh)] sm:rounded-2xl">
         <div className="flex items-center justify-between gap-4 px-4 pb-3 pt-3 sm:px-6 sm:pb-3.5 sm:pt-4">
           <h2 className="text-lg font-semibold text-panel-text">Profil</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -206,7 +206,7 @@ export default function StudentProfileModal({ student, onClose }) {
 
         {profile !== null ? <WizardSteps step={step} steps={WIZARD_STEPS} onStepClick={setStep} /> : null}
 
-        <div className="flex-1 overflow-y-auto border-t border-[#edf0f1] px-4 py-4 sm:px-6 sm:py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-[#edf0f1] px-4 py-4 sm:px-6 sm:py-5">
           {error ? (
             <div className="mb-3 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
           ) : null}
@@ -350,7 +350,7 @@ export default function StudentProfileModal({ student, onClose }) {
           ) : null}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-[#edf0f1] px-4 py-3 sm:px-6 sm:py-4">
+        <div className="flex flex-col items-stretch gap-2 border-t border-[#edf0f1] px-4 py-3 sm:flex-row sm:items-center sm:justify-end sm:px-6 sm:py-4">
           <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={saving}>
             Vazgeç
           </Button>

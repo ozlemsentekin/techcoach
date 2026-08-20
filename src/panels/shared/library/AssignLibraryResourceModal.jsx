@@ -51,8 +51,8 @@ export default function AssignLibraryResourceModal({ role, resourceBook, onClose
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-md panel-card p-5">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-panel-1 sm:rounded-2xl">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-panel-text">Kaynağı Ata</h2>

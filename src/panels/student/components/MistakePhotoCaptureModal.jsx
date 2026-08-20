@@ -86,12 +86,12 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Soru fotoğrafı ekle"
     >
-      <div className="w-full max-w-sm panel-card p-6 shadow-lg">
+      <div className="w-full max-w-sm rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-lg sm:rounded-2xl sm:p-6">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-panel-text">{questionLabel ? `${questionLabel}. Soru Fotoğrafı` : 'Soru Fotoğrafı'}</h2>

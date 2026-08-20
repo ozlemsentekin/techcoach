@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { MotionDiv } from '../../ui/motion'
 import { BookOpen, Building2, CheckCircle2, ChevronDown, ChevronRight, Dot, FileText, HelpCircle, ImagePlus, KeyRound, ListTree, Pencil, Search, Trash2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import PageHeader from '../../layout/PageHeader'
@@ -49,10 +48,10 @@ function AddPublisherModal({ onCreated, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md panel-card p-5"
+        className="w-full max-w-md rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-panel-1 sm:rounded-2xl"
       >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">Yayın Evi Ekle</h2>
@@ -109,8 +108,11 @@ function RejectResourceBookModal({ book, onConfirm, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-md panel-card p-5">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-panel-1 sm:rounded-2xl"
+      >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">Kaynağı Reddet</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -216,10 +218,10 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-2xl panel-card p-5 sm:p-6"
+        className="h-full w-full overflow-y-auto border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-auto sm:max-h-[92vh] sm:max-w-2xl sm:rounded-2xl sm:p-6"
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
@@ -244,7 +246,7 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
           <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
         ) : null}
 
-        <div className="grid gap-5 sm:grid-cols-[200px_1fr]">
+        <div className="grid gap-4 sm:grid-cols-[200px_1fr] sm:gap-5">
           <div className="flex justify-center sm:justify-start">
             <ResourceImageField
               value={imageUrl}
@@ -267,7 +269,7 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
               />
             </label>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-panel-text-muted">Ders</span>
                 <select
@@ -305,7 +307,7 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
               </label>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-panel-text-muted">Basım Ay/Yıl</span>
                 <input
@@ -411,10 +413,10 @@ function TopicModal({ book, topic, onSaved, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md panel-card p-5"
+        className="h-full w-full overflow-y-auto border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-auto sm:max-h-[90vh] sm:max-w-md sm:rounded-2xl sm:p-5"
       >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">{isEdit ? 'İçerik Düzenle' : 'İçerik Ekle'}</h2>
@@ -524,10 +526,10 @@ function TestModal({ topic, test, onSaved, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md panel-card p-5"
+        className="h-full w-full overflow-y-auto border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-auto sm:max-h-[90vh] sm:max-w-md sm:rounded-2xl sm:p-5"
       >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-panel-text">{isEdit ? 'Test Düzenle' : 'Test Ekle'}</h2>
@@ -720,9 +722,9 @@ function AddQuestionsFromImageModal({ test, onClose, onQuestionsSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl bg-white">
-        <div className="flex items-center justify-between border-b border-[#edf0f1] px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex h-full w-full flex-col bg-white sm:h-auto sm:max-h-[85vh] sm:max-w-2xl sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-[#edf0f1] px-4 py-3 sm:px-5 sm:py-4">
           <div>
             <h2 className="text-lg font-semibold text-panel-text">Fotoğraftan Soru Ekle</h2>
             <p className="text-xs text-[#667475]">{test.name} · {test.topicName}</p>
@@ -732,7 +734,7 @@ function AddQuestionsFromImageModal({ test, onClose, onQuestionsSaved }) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
           {error ? (
             <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
           ) : null}
@@ -762,7 +764,7 @@ function AddQuestionsFromImageModal({ test, onClose, onQuestionsSaved }) {
               ) : (
                 draftQuestions.map((question, questionIndex) => (
                   <div key={questionIndex} className="flex flex-col gap-2.5 rounded-xl border border-[#e5e8e9] p-3">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <label className="flex items-center gap-2 text-sm font-semibold text-[#b85f22]">
                         Soru No
                         <input
@@ -773,7 +775,7 @@ function AddQuestionsFromImageModal({ test, onClose, onQuestionsSaved }) {
                           className="w-16 rounded-lg border border-panel-border p-1 text-sm text-panel-text"
                         />
                       </label>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {!question.hasAnswerKeyMatch ? (
                           <span className="rounded-full bg-panel-accent-soft px-2 py-0.5 text-[11px] font-medium text-panel-warm">
                             Cevap anahtarı bulunamadı, doğru şıkkı seç
@@ -820,7 +822,7 @@ function AddQuestionsFromImageModal({ test, onClose, onQuestionsSaved }) {
                           <input
                             value={option.text}
                             onChange={(event) => updateOption(questionIndex, optionIndex, { text: event.target.value })}
-                            className="flex-1 rounded-lg border border-panel-border p-1.5 text-sm text-panel-text"
+                            className="min-w-0 flex-1 rounded-lg border border-panel-border p-1.5 text-sm text-panel-text"
                           />
                         </div>
                       ))}
@@ -829,7 +831,7 @@ function AddQuestionsFromImageModal({ test, onClose, onQuestionsSaved }) {
                 ))
               )}
 
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Button
                   type="button"
                   variant="secondary"
@@ -899,9 +901,9 @@ function AnswerKeyModal({ test, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4">
-      <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl bg-white">
-        <div className="flex items-center justify-between border-b border-[#edf0f1] px-5 py-4">
+    <div className="fixed inset-0 z-[60] flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex h-full w-full flex-col bg-white sm:h-auto sm:max-h-[85vh] sm:max-w-lg sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-[#edf0f1] px-4 py-3 sm:px-5 sm:py-4">
           <div>
             <h2 className="text-lg font-semibold text-panel-text">Cevap Anahtarı</h2>
             <p className="text-xs text-[#667475]">{test.name} · {test.topicName}</p>
@@ -911,7 +913,7 @@ function AnswerKeyModal({ test, onClose }) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
           {error ? (
             <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
           ) : null}
@@ -923,7 +925,7 @@ function AnswerKeyModal({ test, onClose }) {
               <p className="mb-3 text-xs text-[#667475]">
                 {filledCount}/{entries.length} sorunun cevabı girildi.
               </p>
-              <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-6">
+              <div className="grid grid-cols-3 gap-2.5 min-[380px]:grid-cols-4 sm:grid-cols-6">
                 {entries.map((label, index) => (
                   <label key={index} className="flex flex-col items-center gap-1">
                     <span className="text-xs font-semibold text-[#b85f22]">{index + 1}</span>
@@ -946,7 +948,7 @@ function AnswerKeyModal({ test, onClose }) {
           )}
         </div>
 
-        <div className="border-t border-[#edf0f1] px-5 py-4">
+        <div className="border-t border-[#edf0f1] px-4 py-3 sm:px-5 sm:py-4">
           <Button type="button" disabled={saving || entries === null} size="md" className="w-full" onClick={handleSave}>
             {saving ? 'Kaydediliyor...' : 'Cevap Anahtarını Kaydet'}
           </Button>
@@ -974,16 +976,16 @@ function TestQuestionsModal({ test, resourceBookType, onClose }) {
   }, [test.id])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl bg-white">
-        <div className="flex items-center justify-between border-b border-[#edf0f1] px-5 py-4">
-          <div>
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex h-full w-full flex-col bg-white sm:h-auto sm:max-h-[85vh] sm:max-w-2xl sm:rounded-2xl">
+        <div className="flex flex-col gap-3 border-b border-[#edf0f1] px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-5 sm:py-4">
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold text-panel-text">{test.name}</h2>
             <p className="text-xs text-[#667475]">
               {test.topicName} · {test.pageStart}–{test.pageEnd}. sayfalar · {test.questionCount} soru
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {resourceBookType === 'soru_bankasi' ? (
               <Button
                 type="button"
@@ -1012,7 +1014,7 @@ function TestQuestionsModal({ test, resourceBookType, onClose }) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
           {error ? (
             <div className="rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
           ) : questions === null ? (
@@ -1107,8 +1109,8 @@ function TopicBlock({ topic, tests, expanded, onToggle, onAddTest, onEditTopic, 
             </button>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="flex items-center gap-1.5">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          <div className="flex flex-wrap items-center gap-1.5">
             <StatBadge icon={ListTree} value={`${totalTests} test`} />
             <StatBadge icon={FileText} value={`${totalPages} sayfa`} />
             <StatBadge icon={HelpCircle} value={`${totalQuestions} soru`} />
@@ -1131,7 +1133,61 @@ function TopicBlock({ topic, tests, expanded, onToggle, onAddTest, onEditTopic, 
         tests.length === 0 ? (
           <p className="py-2 text-xs text-[#667475]">Bu içeriğe ait test yok.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto rounded-[10px] border border-[#e5e8e9]">
+          <>
+            <div className="mt-3 grid gap-2 sm:hidden">
+              {tests.map((test) => (
+                <article
+                  key={test.id}
+                  role="button"
+                  tabIndex={0}
+                  className="rounded-[10px] border border-[#e5e8e9] bg-white p-3 text-left"
+                  onClick={() => onViewTest(test)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      onViewTest(test)
+                    }
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="line-clamp-1 text-sm font-semibold text-[#253d3e]">{test.name}</p>
+                      <p className="mt-1 line-clamp-2 text-xs text-[#667475]">{test.topicName}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        aria-label="Testi düzenle"
+                        className="text-[#87a3a5] hover:text-[#253d3e]"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onEditTest(test)
+                        }}
+                      >
+                        <Pencil size={14} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Testi sil"
+                        className="text-[#87a3a5] hover:text-panel-warm"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onDeleteTest(test)
+                        }}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-[#667475]">
+                    <span className="rounded-full bg-[#faf3ec] px-2 py-1">{test.pageStart}–{test.pageEnd}. sayfalar</span>
+                    <span className="rounded-full bg-[#faf3ec] px-2 py-1">{test.questionCount} soru</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="mt-3 hidden overflow-x-auto rounded-[10px] border border-[#e5e8e9] sm:block">
             <table className="w-full min-w-[600px] text-left text-xs">
               <thead>
                 <tr className="bg-[#faf3ec] text-[12px] font-semibold text-[#b85f22]">
@@ -1188,7 +1244,8 @@ function TopicBlock({ topic, tests, expanded, onToggle, onAddTest, onEditTopic, 
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )
       ) : null}
     </div>
@@ -1734,7 +1791,7 @@ export default function AdminPublishersPage() {
           description="Yukarıdaki butonla ilk yayın evini oluşturabilirsiniz."
         />
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="fade-slide-in">
           <div className="flex flex-col gap-3">
             {filteredPublishers.length === 0 ? (
               <p className="px-1 py-6 text-sm text-[#667475]">
@@ -1769,7 +1826,7 @@ export default function AdminPublishersPage() {
               ))
             )}
           </div>
-        </MotionDiv>
+        </div>
       )}
 
       {showPublisherModal ? (

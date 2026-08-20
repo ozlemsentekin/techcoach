@@ -2,7 +2,7 @@ import { useContext, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Check, ChevronDown, HeartPulse, KeyRound, LifeBuoy, LogOut, RefreshCw, ShieldCheck, Undo2, Users } from 'lucide-react'
 import { useAuth } from '../../context/useAuth'
-import { authRequest } from '../../services/authClient'
+import { cachedGet } from '../../services/authClient'
 import { getCheckIn, saveCheckIn } from '../../services/checkInService'
 import { ENERGY_LEVELS, ENERGY_MESSAGES } from '../../data/taskTypes'
 import { todayISODate } from '../../utils/time'
@@ -144,7 +144,7 @@ export default function PanelHeader({ role }) {
   useEffect(() => {
     if (!open || !isParent || students !== null) return
 
-    authRequest('/api/parent/students', { method: 'GET' })
+    cachedGet('/api/parent/students')
       .then((data) => setStudents(data.students))
       .catch(() => setStudents([]))
   }, [open, isParent, students])
@@ -229,16 +229,16 @@ export default function PanelHeader({ role }) {
   }
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-end gap-3 border-b border-panel-border bg-panel-surface px-4 md:px-6">
+    <header className="sticky top-0 z-20 flex h-14 min-w-0 items-center justify-end gap-2 border-b border-panel-border bg-panel-surface px-3 sm:gap-3 sm:px-4 md:px-6">
       {actingParent ? (
         <button
           type="button"
           onClick={handleReturnToParent}
           disabled={switching}
-          className="flex items-center gap-1.5 rounded-lg bg-student-theme-soft px-2.5 py-1 text-xs font-medium text-student-theme-text hover:opacity-80 disabled:opacity-60"
+          className="flex min-w-0 items-center gap-1.5 rounded-lg bg-student-theme-soft px-2.5 py-1 text-xs font-medium text-student-theme-text hover:opacity-80 disabled:opacity-60"
         >
           <Undo2 size={13} aria-hidden="true" />
-          Ebeveyn Paneline Dön
+          <span className="hidden sm:inline">Ebeveyn Paneline Dön</span>
         </button>
       ) : null}
 
@@ -247,10 +247,10 @@ export default function PanelHeader({ role }) {
           type="button"
           onClick={handleReturnToAdmin}
           disabled={switching}
-          className="flex items-center gap-1.5 rounded-lg bg-panel-lilac-soft px-2.5 py-1 text-xs font-medium text-panel-lilac hover:opacity-80 disabled:opacity-60"
+          className="flex min-w-0 items-center gap-1.5 rounded-lg bg-panel-lilac-soft px-2.5 py-1 text-xs font-medium text-panel-lilac hover:opacity-80 disabled:opacity-60"
         >
           <Undo2 size={13} aria-hidden="true" />
-          Yönetici Paneline Dön
+          <span className="hidden sm:inline">Yönetici Paneline Dön</span>
         </button>
       ) : null}
 

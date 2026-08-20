@@ -5,7 +5,6 @@ import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
-import { MotionDiv } from '../../ui/motion'
 
 const RESOURCE_BOOK_TYPE_LABELS = {
   konu_anlatimi: 'Konu Anlatımı',
@@ -150,17 +149,17 @@ export default function CoursesPage() {
       ) : resourceBooks.length === 0 ? (
         <EmptyState icon={BookOpen} title="Henüz kaynak atanmadı" description="Ebeveyn panelinden kaynak ataması yapıldığında burada görünür." />
       ) : selectedGroup ? (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="fade-slide-in grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {selectedGroup.books.map((book) => (
             <ResourceCard key={book.id} book={book} />
           ))}
-        </MotionDiv>
+        </div>
       ) : (
-        <MotionDiv initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6">
+        <div className="fade-slide-in grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6">
           {subjectGroups.map((group) => (
             <SubjectShelfCard key={group.id} group={group} onOpen={() => setSelectedSubjectId(group.id)} />
           ))}
-        </MotionDiv>
+        </div>
       )}
     </div>
   )
