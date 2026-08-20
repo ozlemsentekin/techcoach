@@ -533,6 +533,7 @@ export default function WeeklyPlannerGrid({
       }))
     const schoolSlots = (schoolSchedule || [])
       .filter((slot) => slot.dayOfWeek === DAY_KEYS[index] && slot.startTime)
+      .filter((slot) => (!slot.startDate || date >= slot.startDate) && (!slot.endDate || date <= slot.endDate))
       .map((slot, slotIndex) => ({
         id: `school-${date}-${slotIndex}`,
         isSchoolSlot: true,

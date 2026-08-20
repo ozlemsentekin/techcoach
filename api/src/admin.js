@@ -11,6 +11,7 @@ const {
   readSessionToken,
   verifySessionToken,
 } = require('./security')
+const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
 
 async function requireAdmin(request) {
   const token = readSessionToken(request)
@@ -50,6 +51,7 @@ function sanitizeUser(record) {
     parentName: record.parent_full_name,
     lastLoginAt: record.last_login_at,
     createdAt: record.created_at,
+    teacherSubjectIds: record.role === 'ogretmen' ? parseTeacherSubjectIdsJson(record.teacher_subject_ids_json) : undefined,
   }
 }
 
@@ -63,7 +65,7 @@ async function listUsersHandler(request) {
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
       SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.parent_id,
-             p.full_name AS parent_full_name, u.last_login_at, u.created_at
+             p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json
       FROM dbo.Users u
       LEFT JOIN dbo.Users p ON p.id = u.parent_id
       ORDER BY u.created_at ASC;
@@ -120,6 +122,16 @@ async function updateUserHandler(request) {
       return json(400, { error: 'E-posta veya telefon numarasından en az biri girilmeli.' })
     }
 
+    const subjectIdsProvided = typeof payload?.subjectIds !== 'undefined'
+    let teacherSubjectIds = []
+    if (subjectIdsProvided) {
+      const subjectIdsResult = normalizeTeacherSubjectIds(payload.subjectIds)
+      if (subjectIdsResult.error) {
+        return json(400, { error: subjectIdsResult.error })
+      }
+      teacherSubjectIds = subjectIdsResult.value
+    }
+
     // Telefon numarası (yeniden) girildiğinde, kullanıcının bağımsız giriş şifresini
     // de (telefonun son 6 hanesi) günceller.
     const passwordHash = phone ? await hashPassword(defaultPasswordForPhone(phone)) : null
@@ -131,16 +143,22 @@ async function updateUserHandler(request) {
       phone: { type: sql.NVarChar(20), value: phone },
       passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       isAdmin: { type: sql.Bit, value: isAdmin },
+      subjectIdsProvided: { type: sql.Bit, value: subjectIdsProvided },
+      teacherSubjectIdsJson: {
+        type: sql.NVarChar(sql.MAX),
+        value: teacherSubjectIds.length ? JSON.stringify(teacherSubjectIds) : null,
+      },
     })
 
     const result = await requestDb.query(`
       UPDATE dbo.Users
       SET full_name = @fullName, email = @email, phone_number = @phone, is_admin = @isAdmin,
-          password_hash = CASE WHEN @phone IS NOT NULL THEN @passwordHash ELSE password_hash END
+          password_hash = CASE WHEN @phone IS NOT NULL THEN @passwordHash ELSE password_hash END,
+          teacher_subject_ids_json = CASE WHEN @subjectIdsProvided = 1 THEN @teacherSubjectIdsJson ELSE teacher_subject_ids_json END
       WHERE id = @id;
 
       SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.parent_id,
-             p.full_name AS parent_full_name, u.last_login_at, u.created_at
+             p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json
       FROM dbo.Users u
       LEFT JOIN dbo.Users p ON p.id = u.parent_id
       WHERE u.id = @id;

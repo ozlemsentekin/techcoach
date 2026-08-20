@@ -73,15 +73,16 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
           const correctLabel = result?.correctLabels?.[key]
           const isMismatch = Boolean(result) && Boolean(correctLabel) && selected !== correctLabel
           const isWrongSelection = isMismatch && Boolean(selected) && !isBlankSelected
+          const isMistake = isMismatch && Boolean(selected)
           const hasPhoto = Boolean(photos?.[key])
           return (
             <div
               key={key}
-              role={isWrongSelection ? 'button' : undefined}
-              tabIndex={isWrongSelection ? 0 : undefined}
-              onClick={isWrongSelection ? () => onCapture(orderNo) : undefined}
+              role={isMistake ? 'button' : undefined}
+              tabIndex={isMistake ? 0 : undefined}
+              onClick={isMistake ? () => onCapture(orderNo) : undefined}
               onKeyDown={
-                isWrongSelection
+                isMistake
                   ? (event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault()
@@ -91,7 +92,7 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
                   : undefined
               }
               className={`flex items-center gap-1.5 rounded-lg px-1 py-0.5 transition-colors ${
-                isWrongSelection ? 'cursor-pointer bg-panel-red-soft hover:bg-panel-red-soft/70' : ''
+                isMistake ? 'cursor-pointer bg-panel-red-soft hover:bg-panel-red-soft/70' : ''
               }`}
             >
               <span className="w-5 shrink-0 text-right text-sm font-bold text-panel-text-muted">{orderNo}.</span>
@@ -135,7 +136,9 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
                       locked ? 'cursor-not-allowed' : ''
                     } ${
                       isBlankSelected
-                        ? 'border-panel-text-muted bg-panel-text-muted text-white'
+                        ? isMistake
+                          ? 'border-panel-red bg-panel-red text-white'
+                          : 'border-panel-text-muted bg-panel-text-muted text-white'
                         : `border-panel-border text-panel-text-muted ${locked ? '' : 'hover:border-panel-text-muted hover:text-panel-text'}`
                     }`}
                   >
@@ -148,12 +151,15 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
                   Doğru cevap: {correctLabel}
                 </span>
               ) : null}
-              {isWrongSelection ? (
-                <Camera
-                  size={13}
-                  aria-hidden="true"
-                  className={`ml-auto shrink-0 ${hasPhoto ? 'text-student-theme-primary' : 'text-panel-text-muted'}`}
-                />
+              {isMistake ? (
+                <span
+                  title={hasPhoto ? 'Fotoğraf eklendi' : 'Fotoğraf ekle'}
+                  className={`ml-auto flex shrink-0 items-center justify-center rounded-full p-1 transition-colors ${
+                    hasPhoto ? 'bg-student-theme-primary text-student-theme-button-text' : 'text-panel-text-muted'
+                  }`}
+                >
+                  <Camera size={12} aria-hidden="true" />
+                </span>
               ) : null}
             </div>
           )

@@ -14,7 +14,17 @@ const {
 const { sanitizeUser } = require('./auth')
 const { requireStudentContext } = require('./studentScope')
 const { getParentStudentQuota } = require('./entitlements')
-const { LIBRARY_GRADES, fetchLibraryResourceBooks, createLibraryResourceBookSubmission, fetchResourceBookById } = require('./catalog')
+const {
+  LIBRARY_GRADES,
+  fetchLibraryResourceBooks,
+  createLibraryResourceBookSubmission,
+  deleteLibraryResourceBookSubmission,
+  addLibraryResourceBookTopicsSubmission,
+  fetchResourceBookById,
+  fetchLibraryResourceBookDetail,
+  fetchResourceBookStatsForStudent,
+} = require('./catalog')
+const { extractLibraryTocFromImages } = require('./libraryTocExtraction')
 
 const TEACHER_TYPES = new Set(['ozel_ogretmen', 'okul_ogretmeni'])
 const TEACHER_TYPE_LABELS = {
@@ -79,6 +89,8 @@ function sanitizeStudentResourceBook(record) {
     status: record.status,
     assigned: Boolean(record.assigned),
     assignedAt: record.assigned_at || null,
+    completionRate: null,
+    successRate: null,
   }
 }
 
@@ -97,7 +109,25 @@ function sanitizeTeacherResourceBook(record) {
     imageUrl: record.image_url || null,
     assigned: Boolean(record.assigned),
     assignedAt: record.assigned_at || null,
+    completionRate: null,
+    successRate: null,
   }
+}
+
+async function attachResourceBookStats(resourceBooks, studentId) {
+  const assignedBooks = resourceBooks.filter((book) => book.assigned)
+  if (!assignedBooks.length) return resourceBooks
+
+  const stats = await fetchResourceBookStatsForStudent(
+    studentId,
+    assignedBooks.map((book) => book.id),
+  )
+
+  return resourceBooks.map((book) => {
+    const bookStats = stats.get(book.id)
+    if (!bookStats) return book
+    return { ...book, completionRate: bookStats.completionRate, successRate: bookStats.successRate }
+  })
 }
 
 function parseScheduleJson(value) {
@@ -337,7 +367,7 @@ async function fetchStudentResourceBooks(studentId, actorUserId) {
     ORDER BY s.name ASC, p.name ASC, rb.name ASC;
   `)
 
-  return result.recordset.map(sanitizeStudentResourceBook)
+  return attachResourceBookStats(result.recordset.map(sanitizeStudentResourceBook), studentId)
 }
 
 async function fetchStudentTeachers(studentId) {
@@ -439,7 +469,7 @@ async function fetchTeacherResourceBooks(studentId, teacherId) {
     ORDER BY s.name ASC, p.name ASC, rb.name ASC;
   `)
 
-  return result.recordset.map(sanitizeTeacherResourceBook)
+  return attachResourceBookStats(result.recordset.map(sanitizeTeacherResourceBook), studentId)
 }
 
 async function verifySubjectExists(subjectId) {
@@ -983,6 +1013,128 @@ async function createLibraryResourceBookForParentHandler(request) {
 
     console.error('createLibraryResourceBookForParentHandler failed', error)
     return json(500, { error: 'Kaynak gönderilemedi.' })
+  }
+}
+
+async function getLibraryResourceBookDetailForParentHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const resourceBookId = request.params.resourceBookId
+    const detail = await fetchLibraryResourceBookDetail({ resourceBookId, actorUserId: parentId })
+    if (!detail) {
+      return json(404, { error: 'Kaynak bulunamadı.' })
+    }
+
+    return json(200, detail)
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('getLibraryResourceBookDetailForParentHandler failed', error)
+    return json(500, { error: 'Kaynak detayı yüklenemedi.' })
+  }
+}
+
+async function deleteLibraryResourceBookForParentHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const resourceBookId = request.params.resourceBookId
+    const result = await deleteLibraryResourceBookSubmission({
+      actorUserId: parentId,
+      role: 'ebeveyn',
+      resourceBookId,
+    })
+    if (result.error) {
+      return json(404, { error: result.error })
+    }
+
+    return json(200, { success: true })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('deleteLibraryResourceBookForParentHandler failed', error)
+    return json(500, { error: 'Kaynak silinemedi.' })
+  }
+}
+
+async function addLibraryResourceBookTopicsForParentHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const resourceBookId = request.params.resourceBookId
+    const payload = await request.json().catch(() => null)
+    const result = await addLibraryResourceBookTopicsSubmission({
+      actorUserId: parentId,
+      role: 'ebeveyn',
+      resourceBookId,
+      payload,
+    })
+    if (result.error) {
+      return json(400, { error: result.error })
+    }
+
+    return json(200, result.detail)
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('addLibraryResourceBookTopicsForParentHandler failed', error)
+    return json(500, { error: 'İçerik kaydedilemedi.' })
+  }
+}
+
+async function extractLibraryTocForParentHandler(request) {
+  try {
+    const { error } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const payload = await request.json().catch(() => null)
+    const result = await extractLibraryTocFromImages(payload?.images)
+    if (result.error) {
+      return json(400, { error: result.error })
+    }
+
+    return json(200, { topics: result.topics })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('extractLibraryTocForParentHandler failed', error)
+    return json(500, { error: 'İçindekiler okunamadı.' })
   }
 }
 
@@ -1572,6 +1724,10 @@ module.exports = {
   exitStudentHandler,
   listLibraryResourceBooksForParentHandler,
   createLibraryResourceBookForParentHandler,
+  getLibraryResourceBookDetailForParentHandler,
+  deleteLibraryResourceBookForParentHandler,
+  addLibraryResourceBookTopicsForParentHandler,
+  extractLibraryTocForParentHandler,
   listAssignableStudentsForLibraryResourceHandler,
   assignLibraryResourceBookHandler,
   unassignLibraryResourceBookHandler,

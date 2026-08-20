@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
  * GET /api/panel/subjects) alfabetik sırayla gösterir; bir derse tıklamak onu sağdaki
  * "öğrencinin dersleri" listesine taşır, sağdaki bir derse tıklamak geri çıkarır.
  */
-export default function SubjectPicker({ allSubjects, selectedIds, onChange }) {
+export default function SubjectPicker({ allSubjects, selectedIds, onChange, allLabel = 'Tüm Dersler', selectedLabel = 'Öğrencinin Dersleri' }) {
   const selectedSet = new Set(selectedIds || [])
   const available = (allSubjects || []).filter((subject) => !selectedSet.has(subject.id))
   const selected = (allSubjects || []).filter((subject) => selectedSet.has(subject.id))
@@ -22,7 +22,7 @@ export default function SubjectPicker({ allSubjects, selectedIds, onChange }) {
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <div className="rounded-xl border border-panel-border">
         <div className="border-b border-panel-border bg-[#f8f7fb] px-3 py-2 text-sm font-semibold text-panel-text">
-          Tüm Dersler
+          {allLabel}
         </div>
         <div className="max-h-64 overflow-y-auto p-2">
           {available.length === 0 ? (
@@ -45,7 +45,7 @@ export default function SubjectPicker({ allSubjects, selectedIds, onChange }) {
 
       <div className="rounded-xl border border-panel-border">
         <div className="border-b border-panel-border bg-[#f8f7fb] px-3 py-2 text-sm font-semibold text-panel-text">
-          Öğrencinin Dersleri
+          {selectedLabel}
         </div>
         <div className="max-h-64 overflow-y-auto p-2">
           {selected.length === 0 ? (

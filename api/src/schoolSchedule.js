@@ -7,6 +7,7 @@ const { requireStudentContext } = require('./studentScope')
 
 const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const WEEKDAY_KEYS = new Set(['pazartesi', 'sali', 'carsamba', 'persembe', 'cuma', 'cumartesi', 'pazar'])
 const GRADE_OPTIONS = new Set(['1', '2', '3', '4', '5', '6', '7', '8'])
 const MAX_SCHEDULE_ENTRIES = 30
@@ -32,9 +33,22 @@ function parseJsonEntries(value) {
 }
 
 /**
+ * İki girdinin tarih aralığının kesişip kesişmediğini kontrol eder. null/undefined bir uç,
+ * o girdinin sınırsız (her zaman geçerli) olduğu anlamına gelir — bu yüzden tarih aralığı
+ * olmayan bir girdi, tarih aralığı olan başka herhangi bir girdiyle her zaman çakışır.
+ */
+function dateRangesOverlap(aStart, aEnd, bStart, bEnd) {
+  if (aStart && bEnd && aStart > bEnd) return false
+  if (bStart && aEnd && bStart > aEnd) return false
+  return true
+}
+
+/**
  * Bir okul ders programı/öğrenci ders programı girdi listesini doğrular: her girdi için
  * dayOfWeek bilinen 7 günden biri, saatler HH:MM ve başlangıç bitişten önce olmalı; aynı gün
- * içinde çakışan aralıklar (kısmi kesişim dahil) reddedilir.
+ * içinde ve aynı tarih aralığında çakışan saat aralıkları (kısmi kesişim dahil) reddedilir.
+ * startDate/endDate opsiyoneldir — girilmezse girdi her hafta sınırsız geçerli sayılır
+ * (mevcut kayıtlarla geriye dönük uyumluluk için).
  */
 function validateScheduleEntries(rawEntries) {
   if (rawEntries === undefined || rawEntries === null) {
@@ -53,6 +67,8 @@ function validateScheduleEntries(rawEntries) {
     const startTime = raw?.startTime
     const endTime = raw?.endTime
     const lessonName = typeof raw?.lessonName === 'string' ? raw.lessonName.trim() : ''
+    const startDate = typeof raw?.startDate === 'string' ? raw.startDate.trim() : ''
+    const endDate = typeof raw?.endDate === 'string' ? raw.endDate.trim() : ''
 
     if (!WEEKDAY_KEYS.has(dayOfWeek)) {
       return { error: 'Geçerli bir gün seçilmeli.' }
@@ -69,8 +85,27 @@ function validateScheduleEntries(rawEntries) {
     if (lessonName.length > MAX_LESSON_NAME_LENGTH) {
       return { error: `Ders adı en fazla ${MAX_LESSON_NAME_LENGTH} karakter olmalı.` }
     }
+    if ((startDate || endDate) && !(startDate && endDate)) {
+      return { error: 'Tarih aralığının başlangıcı ve bitişi birlikte girilmeli.' }
+    }
+    if (startDate && !DATE_PATTERN.test(startDate)) {
+      return { error: 'Başlangıç tarihi geçersiz.' }
+    }
+    if (endDate && !DATE_PATTERN.test(endDate)) {
+      return { error: 'Bitiş tarihi geçersiz.' }
+    }
+    if (startDate && endDate && startDate > endDate) {
+      return { error: 'Bitiş tarihi başlangıç tarihinden önce olamaz.' }
+    }
 
-    entries.push({ dayOfWeek, startTime, endTime, lessonName: lessonName || null })
+    entries.push({
+      dayOfWeek,
+      startTime,
+      endTime,
+      lessonName: lessonName || null,
+      startDate: startDate || null,
+      endDate: endDate || null,
+    })
   }
 
   const byDay = new Map()
@@ -78,11 +113,13 @@ function validateScheduleEntries(rawEntries) {
     const dayEntries = byDay.get(entry.dayOfWeek) || []
     const start = timeToMinutes(entry.startTime)
     const end = timeToMinutes(entry.endTime)
-    const overlaps = dayEntries.some(
-      (other) => start < timeToMinutes(other.endTime) && end > timeToMinutes(other.startTime),
-    )
+    const overlaps = dayEntries.some((other) => {
+      const timeOverlaps = start < timeToMinutes(other.endTime) && end > timeToMinutes(other.startTime)
+      if (!timeOverlaps) return false
+      return dateRangesOverlap(entry.startDate, entry.endDate, other.startDate, other.endDate)
+    })
     if (overlaps) {
-      return { error: 'Aynı gün içinde çakışan saat aralıkları eklenemez.' }
+      return { error: 'Aynı gün ve tarih aralığında çakışan saat aralıkları eklenemez.' }
     }
     dayEntries.push(entry)
     byDay.set(entry.dayOfWeek, dayEntries)

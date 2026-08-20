@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BookOpen, CalendarDays, GraduationCap, Phone, Plus, School, Users } from 'lucide-react'
+import { AlertCircle, BookOpen, CalendarDays, GraduationCap, Phone, Plus, School, TrendingUp, UserRound, Users } from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
 import EmptyState from '../../shared/EmptyState'
 import LoadingState from '../../shared/LoadingState'
@@ -77,16 +77,7 @@ export default function StudentsPage() {
             return (
               <div
                 key={student.studentTeacherId}
-                role="button"
-                tabIndex={0}
-                onClick={() => navigate(`/teacher/students/${student.studentTeacherId}`)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    navigate(`/teacher/students/${student.studentTeacherId}`)
-                  }
-                }}
-                className="flex cursor-pointer flex-col gap-3 rounded-2xl border border-panel-border bg-panel-surface p-5 text-left shadow-panel-1 transition-colors hover:border-panel-blue"
+                className="flex flex-col gap-4 rounded-2xl border border-panel-border bg-panel-surface p-5 shadow-panel-1"
               >
                 <div className="flex items-center gap-3">
                   <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
@@ -117,19 +108,54 @@ export default function StudentsPage() {
                       <span className="truncate">{lesson}</span>
                     </p>
                   ) : null}
+                  <p className="inline-flex items-center gap-1.5">
+                    <BookOpen size={14} className="shrink-0" aria-hidden="true" />
+                    <span className="truncate">{student.resourceCount} kaynak</span>
+                  </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    setLibraryStudent(student)
-                  }}
-                  className="inline-flex w-fit items-center gap-1.5 rounded-full bg-panel-surface-soft px-2.5 py-1 text-xs font-semibold text-panel-blue transition-colors hover:bg-panel-blue-soft"
-                >
-                  <BookOpen size={12} aria-hidden="true" />
-                  {student.resourceCount} kaynak
-                </button>
+                <div className="flex flex-col gap-1.5">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => navigate(`/teacher/students/${student.studentTeacherId}`)}
+                    className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+                  >
+                    <UserRound size={16} className="shrink-0" aria-hidden="true" />
+                    Detay
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setLibraryStudent(student)}
+                    className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+                  >
+                    <BookOpen size={16} className="shrink-0" aria-hidden="true" />
+                    Kaynaklar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => navigate(`/teacher/students/${student.studentTeacherId}?tab=mistakes`)}
+                    className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+                  >
+                    <AlertCircle size={16} className="shrink-0" aria-hidden="true" />
+                    Hata Defteri
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => navigate(`/teacher/students/${student.studentTeacherId}?tab=analysis`)}
+                    className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+                  >
+                    <TrendingUp size={16} className="shrink-0" aria-hidden="true" />
+                    Gelişim Analizi
+                  </Button>
+                </div>
               </div>
             )
           })}

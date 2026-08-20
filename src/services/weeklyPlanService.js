@@ -279,6 +279,8 @@ export function getSchoolScheduleConflict(schoolSchedule, dateISO, startTime, en
   return (
     schoolSchedule.find((slot) => {
       if (slot.dayOfWeek !== dayOfWeek) return false
+      if (slot.startDate && dateISO < slot.startDate) return false
+      if (slot.endDate && dateISO > slot.endDate) return false
       const slotStart = parseTimeToMinutes(slot.startTime)
       const slotEnd = parseTimeToMinutes(slot.endTime)
       return start < slotEnd && end > slotStart

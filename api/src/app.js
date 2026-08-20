@@ -17,6 +17,10 @@ const {
   updateStudentResourceBooksHandler,
   listLibraryResourceBooksForParentHandler,
   createLibraryResourceBookForParentHandler,
+  getLibraryResourceBookDetailForParentHandler,
+  deleteLibraryResourceBookForParentHandler,
+  addLibraryResourceBookTopicsForParentHandler,
+  extractLibraryTocForParentHandler,
   listAssignableStudentsForLibraryResourceHandler,
   assignLibraryResourceBookHandler,
   unassignLibraryResourceBookHandler,
@@ -47,8 +51,16 @@ const {
   deleteTeacherOneTimeLessonHandler,
   listTeacherResourceBooksHandler,
   listTeacherResourceBookTopicsHandler,
+  markTeacherResourceBookTopicTestCompletionHandler,
+  unmarkTeacherResourceBookTopicTestCompletionHandler,
+  submitTeacherManualOpticalAnswersHandler,
+  saveTeacherManualWrongQuestionPhotoHandler,
   listLibraryResourceBooksForTeacherHandler,
   createLibraryResourceBookForTeacherHandler,
+  getLibraryResourceBookDetailForTeacherHandler,
+  deleteLibraryResourceBookForTeacherHandler,
+  addLibraryResourceBookTopicsForTeacherHandler,
+  extractLibraryTocForTeacherHandler,
   listAssignableStudentsForLibraryResourceHandler: listAssignableStudentsForTeacherLibraryResourceHandler,
   assignLibraryResourceBookHandler: assignTeacherLibraryResourceBookHandler,
   listTeacherStudentHomeworksHandler,
@@ -57,14 +69,22 @@ const {
   listTeacherStudentTasksHandler,
   getTeacherTaskAnswerSheetHandler,
   getTeacherStudentProgressOverviewHandler,
+  listTeacherStudentWrongQuestionsHandler,
+  getTeacherStudentWrongQuestionPhotoHandler,
+  getTeacherStudentWrongQuestionTopicStatsHandler,
+  updateTeacherStudentWrongQuestionHandler,
   grantParentAccessHandler,
   getTeacherEntitlementHandler,
   createTeacherStudentHandler,
+  listTeacherLibraryGradesHandler,
+  addTeacherLibraryGradeHandler,
+  removeTeacherLibraryGradeHandler,
 } = require('./teacher')
 const { listProvincesHandler, listDistrictsHandler, listSchoolsHandler } = require('./geo')
 const {
   listSubjectsHandler,
   listSubjectsForPanelHandler,
+  listSubjectsForRegistrationHandler,
   listPublishersHandler,
   listPublishersForPanelHandler,
   createPublisherHandler,
@@ -80,6 +100,8 @@ const {
   listResourceBookTopicsForPanelHandler,
   markResourceBookTopicTestCompletionHandler,
   unmarkResourceBookTopicTestCompletionHandler,
+  submitManualOpticalAnswersHandler,
+  saveManualWrongQuestionPhotoHandler,
   listResourceBookTopicTestsHandler,
   createResourceBookTopicTestHandler,
   updateResourceBookTopicTestHandler,
@@ -128,8 +150,10 @@ const {
   getCheckInHandler,
   saveCheckInHandler,
   listWrongQuestionsHandler,
+  getWrongQuestionPhotoHandler,
   addWrongQuestionHandler,
   updateWrongQuestionHandler,
+  getWrongQuestionTopicStatsHandler,
   listStudySessionsHandler,
   addStudySessionHandler,
   getProgressOverviewHandler,
@@ -163,6 +187,13 @@ app.http('auth-register', {
   methods: ['POST'],
   route: 'auth/register',
   handler: registerHandler,
+})
+
+app.http('auth-subjects', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'auth/subjects',
+  handler: listSubjectsForRegistrationHandler,
 })
 
 app.http('auth-login', {
@@ -298,6 +329,34 @@ app.http('parent-library-resource-books-create', {
   handler: createLibraryResourceBookForParentHandler,
 })
 
+app.http('parent-library-resource-books-extract-toc', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'parent/library/resource-books/extract-toc',
+  handler: extractLibraryTocForParentHandler,
+})
+
+app.http('parent-library-resource-book-detail', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'parent/library/resource-books/{resourceBookId}',
+  handler: getLibraryResourceBookDetailForParentHandler,
+})
+
+app.http('parent-library-resource-book-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'parent/library/resource-books/{resourceBookId}',
+  handler: deleteLibraryResourceBookForParentHandler,
+})
+
+app.http('parent-library-resource-book-topics-add', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'parent/library/resource-books/{resourceBookId}/topics',
+  handler: addLibraryResourceBookTopicsForParentHandler,
+})
+
 app.http('parent-library-resource-book-assignable-students', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -389,6 +448,27 @@ app.http('panel-teacher-entitlement', {
   handler: getTeacherEntitlementHandler,
 })
 
+app.http('panel-teacher-library-grades-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/library-grades',
+  handler: listTeacherLibraryGradesHandler,
+})
+
+app.http('panel-teacher-library-grades-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/library-grades',
+  handler: addTeacherLibraryGradeHandler,
+})
+
+app.http('panel-teacher-library-grades-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-teacher/library-grades/{grade}',
+  handler: removeTeacherLibraryGradeHandler,
+})
+
 app.http('panel-teacher-parents-list', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -466,6 +546,34 @@ app.http('panel-teacher-resource-book-topics-list', {
   handler: listTeacherResourceBookTopicsHandler,
 })
 
+app.http('panel-teacher-resource-book-topic-test-completion-mark', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel-teacher/students/{studentTeacherId}/resource-book-topic-tests/{testId}/completion',
+  handler: markTeacherResourceBookTopicTestCompletionHandler,
+})
+
+app.http('panel-teacher-resource-book-topic-test-completion-unmark', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-teacher/students/{studentTeacherId}/resource-book-topic-tests/{testId}/completion',
+  handler: unmarkTeacherResourceBookTopicTestCompletionHandler,
+})
+
+app.http('panel-teacher-resource-book-topic-test-optical-completion', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel-teacher/students/{studentTeacherId}/resource-book-topic-tests/{testId}/optical-completion',
+  handler: submitTeacherManualOpticalAnswersHandler,
+})
+
+app.http('panel-teacher-resource-book-topic-test-mistake-photo-save', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel-teacher/students/{studentTeacherId}/resource-book-topic-tests/{testId}/mistakes/{orderNo}',
+  handler: saveTeacherManualWrongQuestionPhotoHandler,
+})
+
 app.http('panel-teacher-library-resource-books-list', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -478,6 +586,34 @@ app.http('panel-teacher-library-resource-books-create', {
   methods: ['POST'],
   route: 'panel-teacher/library/resource-books',
   handler: createLibraryResourceBookForTeacherHandler,
+})
+
+app.http('panel-teacher-library-resource-books-extract-toc', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/library/resource-books/extract-toc',
+  handler: extractLibraryTocForTeacherHandler,
+})
+
+app.http('panel-teacher-library-resource-book-detail', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/library/resource-books/{resourceBookId}',
+  handler: getLibraryResourceBookDetailForTeacherHandler,
+})
+
+app.http('panel-teacher-library-resource-book-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-teacher/library/resource-books/{resourceBookId}',
+  handler: deleteLibraryResourceBookForTeacherHandler,
+})
+
+app.http('panel-teacher-library-resource-book-topics-add', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/library/resource-books/{resourceBookId}/topics',
+  handler: addLibraryResourceBookTopicsForTeacherHandler,
 })
 
 app.http('panel-teacher-library-resource-book-assignable-students', {
@@ -534,6 +670,34 @@ app.http('panel-teacher-progress-overview', {
   methods: ['GET'],
   route: 'panel-teacher/students/{studentTeacherId}/progress-overview',
   handler: getTeacherStudentProgressOverviewHandler,
+})
+
+app.http('panel-teacher-wrong-questions-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/wrong-questions',
+  handler: listTeacherStudentWrongQuestionsHandler,
+})
+
+app.http('panel-teacher-wrong-question-topic-stats', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/wrong-question-topic-stats',
+  handler: getTeacherStudentWrongQuestionTopicStatsHandler,
+})
+
+app.http('panel-teacher-wrong-questions-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-teacher/students/{studentTeacherId}/wrong-questions/{wrongQuestionId}',
+  handler: updateTeacherStudentWrongQuestionHandler,
+})
+
+app.http('panel-teacher-wrong-questions-photo', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/wrong-questions/{wrongQuestionId}/photo',
+  handler: getTeacherStudentWrongQuestionPhotoHandler,
 })
 
 app.http('parent-return', {
@@ -809,6 +973,20 @@ app.http('panel-resource-book-topic-test-completion-unmark', {
   handler: unmarkResourceBookTopicTestCompletionHandler,
 })
 
+app.http('panel-resource-book-topic-test-optical-completion', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel/resource-book-topic-tests/{testId}/optical-completion',
+  handler: submitManualOpticalAnswersHandler,
+})
+
+app.http('panel-resource-book-topic-test-mistake-photo-save', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel/resource-book-topic-tests/{testId}/mistakes/{orderNo}',
+  handler: saveManualWrongQuestionPhotoHandler,
+})
+
 app.http('panel-admin-resource-book-topic-tests-list', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -1080,6 +1258,20 @@ app.http('panel-wrong-questions-update', {
   methods: ['PATCH'],
   route: 'panel/wrong-questions/{wrongQuestionId}',
   handler: updateWrongQuestionHandler,
+})
+
+app.http('panel-wrong-questions-photo', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/wrong-questions/{wrongQuestionId}/photo',
+  handler: getWrongQuestionPhotoHandler,
+})
+
+app.http('panel-wrong-question-topic-stats', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/wrong-question-topic-stats',
+  handler: getWrongQuestionTopicStatsHandler,
 })
 
 app.http('panel-study-sessions-list', {

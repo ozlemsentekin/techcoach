@@ -18,6 +18,7 @@ import { getSchoolScheduleConflict } from '../../../services/weeklyPlanService'
 import { addMinutesToTime, todayISODate } from '../../../utils/time'
 import Badge from '../../ui/Badge'
 import LoadingState from '../../shared/LoadingState'
+import { ResourceBookRates } from '../../shared/ResourceBookCard'
 import { cn } from '../../ui/utils'
 
 const DEFAULT_TASK_TIME = '18:00'
@@ -322,7 +323,7 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
                       key={book.id}
                       type="button"
                       onClick={() => handleSelectResourceBook(book)}
-                      className="flex flex-col items-stretch gap-2 rounded-xl border border-panel-border p-2.5 text-left transition-colors hover:border-panel-blue hover:bg-panel-blue-soft/40"
+                      className="flex min-w-0 flex-col items-stretch gap-2 rounded-xl border border-panel-border p-2.5 text-left transition-colors hover:border-panel-blue hover:bg-panel-blue-soft/40"
                     >
                       <ResourceBookCover book={book} />
                       <div className="flex min-w-0 flex-col gap-1">
@@ -334,6 +335,7 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
                         <p className="text-sm font-semibold leading-snug text-panel-text">{book.name}</p>
                         {book.subjectName ? <p className="text-xs text-panel-text-muted">{book.subjectName}</p> : null}
                       </div>
+                      <ResourceBookRates completionRate={book.completionRate} successRate={book.successRate} className="mt-0" />
                     </button>
                   ))}
                 </div>

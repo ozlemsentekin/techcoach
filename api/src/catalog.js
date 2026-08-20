@@ -4,6 +4,9 @@ const { clearSessionHeaders, json } = require('./http')
 const { requireAdmin } = require('./admin')
 const { isSessionError, readSessionToken, verifySessionToken } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
+const { gradeTestAnswers } = require('./testGrading')
+const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
+const { sanitizeWrongQuestion } = require('./progress')
 
 function sanitizeSubject(record) {
   return {
@@ -22,10 +25,11 @@ function sanitizePublisher(record) {
 }
 
 const RESOURCE_BOOK_TYPES = ['konu_anlatimi', 'soru_bankasi', 'okuma_kitabi', 'etkinlik']
-const RESOURCE_BOOK_GRADES = new Set(['1', '2', '3', '4', '5', '6', '7', '8'])
-// Kütüphane özelliği (veli/öğretmen kaynak gezinme + ekleme) sadece ortaokul kademesini kapsıyor.
-const LIBRARY_GRADES = new Set(['5', '6', '7', '8'])
+const RESOURCE_BOOK_GRADES = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'])
+// Kütüphane özelliği (veli/öğretmen kaynak gezinme + ekleme) ortaokul (5-8) ve lise (9-12) kademelerini kapsıyor.
+const LIBRARY_GRADES = new Set(['5', '6', '7', '8', '9', '10', '11', '12'])
 const LIBRARY_CREATOR_ROLES = new Set(['ogretmen', 'ebeveyn'])
+const MAX_ANSWER_KEY_PHOTOS = 8
 // Bir kaynak onaylıysa herkese, onay bekliyor/reddedildiyse sadece onu ekleyen kişiye görünür.
 const LIBRARY_VISIBILITY_SQL = "(rb.status = 'approved' OR rb.created_by_user_id = @actorUserId)"
 const MAX_RESOURCE_IMAGE_LENGTH = 350000
@@ -63,6 +67,8 @@ function sanitizeResourceBook(record) {
     type: record.resource_type,
     hasAnswerKey: Boolean(record.has_answer_key),
     imageUrl: record.image_url || null,
+    barcode: record.barcode || null,
+    publishYear: record.publish_year || null,
     publishMonthYear: record.publish_month_year || null,
     grade: record.grade || null,
     status: record.status,
@@ -85,6 +91,36 @@ function sanitizeResourceBookPublishMonthYear(value) {
   return { value: publishMonthYear }
 }
 
+const RESOURCE_BOOK_BARCODE_MIN_LENGTH = 4
+const RESOURCE_BOOK_BARCODE_MAX_LENGTH = 50
+
+function sanitizeResourceBookBarcode(value) {
+  const barcode = value?.trim() || ''
+  if (!barcode) {
+    return { error: 'Barkod kodu girilmeli.' }
+  }
+  if (barcode.length < RESOURCE_BOOK_BARCODE_MIN_LENGTH || barcode.length > RESOURCE_BOOK_BARCODE_MAX_LENGTH) {
+    return {
+      error: `Barkod kodu ${RESOURCE_BOOK_BARCODE_MIN_LENGTH}-${RESOURCE_BOOK_BARCODE_MAX_LENGTH} karakter arasında olmalı.`,
+    }
+  }
+  if (/^\d+$/.test(barcode)) {
+    return { error: 'Barkod kodu sadece rakamlardan oluşamaz.' }
+  }
+
+  return { value: barcode }
+}
+
+function sanitizeResourceBookPublishYear(value) {
+  const publishYear = Number(value)
+  const currentYear = new Date().getFullYear()
+  if (!Number.isInteger(publishYear) || publishYear < 1900 || publishYear > currentYear + 1) {
+    return { error: 'Basım yılı geçerli bir yıl olmalı.' }
+  }
+
+  return { value: publishYear }
+}
+
 function sanitizeTestAnswerKeyEntry(record) {
   return {
     orderNo: record.order_no,
@@ -101,11 +137,20 @@ function sanitizeResourceBookTopic(record) {
   }
 }
 
-function sanitizeResourceBookTopicTest(record, completedTestIds, manualTestIds, testResultCounts, assignedTestIds) {
+function sanitizeResourceBookTopicTest(
+  record,
+  completedTestIds,
+  manualTestIds,
+  testResultCounts,
+  assignedTestIds,
+  answerKeyCountByTestId,
+  manualAnswersByTestId,
+) {
   const isGraded = Boolean(completedTestIds && completedTestIds.has(record.id))
   const isManual = Boolean(manualTestIds && manualTestIds.has(record.id))
   const result = testResultCounts ? testResultCounts.get(record.id) : null
   const completed = isGraded || isManual
+  const answerKeyCount = answerKeyCountByTestId ? answerKeyCountByTestId.get(record.id) || 0 : 0
   return {
     id: record.id,
     topicId: record.topic_id,
@@ -124,6 +169,10 @@ function sanitizeResourceBookTopicTest(record, completedTestIds, manualTestIds, 
     // Zaten bir göreve eklenmiş ama henüz tamamlanmamış testler (yeni bir ödeve tekrar
     // eklenmeden önce panelde ayırt edilebilsin diye).
     assignedPending: !completed && Boolean(assignedTestIds && assignedTestIds.has(record.id)),
+    // Testin tüm soruları için cevap anahtarı girilmişse veli optik form ile (cevap anahtarıyla
+    // otomatik notlanan) sonuç girebilir; aksi halde sadece doğru/yanlış/boş sayısını elle girer.
+    hasAnswerKey: answerKeyCount > 0 && answerKeyCount === record.question_count,
+    manualAnswers: manualAnswersByTestId ? manualAnswersByTestId.get(record.id) : undefined,
   }
 }
 
@@ -178,6 +227,24 @@ async function listSubjectsForPanelHandler(request) {
     }
 
     console.error('listSubjectsForPanelHandler failed', error)
+    return json(500, { error: 'Dersler yüklenemedi.' })
+  }
+}
+
+async function listSubjectsForRegistrationHandler() {
+  try {
+    const requestDb = await withRequest({})
+    const result = await requestDb.query(`
+      SELECT id, name, created_at FROM dbo.Subjects ORDER BY name ASC;
+    `)
+
+    return json(200, { subjects: result.recordset.map(sanitizeSubject) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    console.error('listSubjectsForRegistrationHandler failed', error)
     return json(500, { error: 'Dersler yüklenemedi.' })
   }
 }
@@ -392,7 +459,18 @@ async function listResourceBooksForPanelHandler(request) {
       ORDER BY s.name ASC, rb.name ASC;
     `)
 
-    return json(200, { resourceBooks: result.recordset.map(sanitizeResourceBook) })
+    const resourceBooks = result.recordset.map(sanitizeResourceBook)
+    const stats = await fetchResourceBookStatsForStudent(
+      studentId,
+      resourceBooks.map((book) => book.id),
+    )
+    const resourceBooksWithStats = resourceBooks.map((book) => {
+      const bookStats = stats.get(book.id)
+      if (!bookStats) return book
+      return { ...book, completionRate: bookStats.completionRate, successRate: bookStats.successRate }
+    })
+
+    return json(200, { resourceBooks: resourceBooksWithStats })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -568,8 +646,8 @@ async function updateResourceBookHandler(request) {
 const LIBRARY_RESOURCE_BOOK_SELECT = `
   SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
          rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url,
-         rb.publish_month_year, rb.grade, rb.status, rb.created_by_role, rb.created_by_user_id, rb.rejection_reason,
-         rb.created_at
+         rb.barcode, rb.publish_year, rb.publish_month_year, rb.grade, rb.status, rb.created_by_role,
+         rb.created_by_user_id, rb.rejection_reason, rb.created_at
   FROM dbo.ResourceBooks rb
   LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
   LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
@@ -591,7 +669,10 @@ async function fetchLibraryResourceBooks({ grade, subjectId, actorUserId }) {
       AND ${LIBRARY_VISIBILITY_SQL}
     ORDER BY rb.name ASC;
   `)
-  return result.recordset.map(sanitizeResourceBook)
+  return result.recordset.map((record) => ({
+    ...sanitizeResourceBook(record),
+    canDelete: String(record.created_by_user_id).toLowerCase() === String(actorUserId).toLowerCase(),
+  }))
 }
 
 async function fetchResourceBookById(resourceBookId) {
@@ -604,39 +685,99 @@ async function fetchResourceBookById(resourceBookId) {
 }
 
 /**
- * Veli/öğretmenin kütüphaneden tek adımda (kapak + içindekiler) soru bankası kaynağı
- * göndermesi — her zaman status='pending' olarak kaydedilir, admin onayı bekler.
- * Sayfa aralıkları (page_start/page_end) kullanıcıdan istenmez; her testin sadece sayfa
- * SAYISI alınır, testler girildikleri sırayla kitap boyunca kümülatif olarak numaralanır.
+ * Kütüphane kartına tıklandığında açılan detay görünümü: kaynağın kendisi + içerik/test
+ * yapısı (tamamlanma bilgisi olmadan — bu sadece bir öğrenciye özel değil, kaynağın genel
+ * önizlemesi). Onay bekleyen/reddedilen bir kaynak sadece onu ekleyen kullanıcıya görünür.
  */
-async function createLibraryResourceBookSubmission({ actorUserId, role, payload }) {
+async function fetchLibraryResourceBookDetail({ resourceBookId, actorUserId }) {
+  const bookDb = await withRequest({
+    id: { type: sql.UniqueIdentifier, value: resourceBookId },
+    actorUserId: { type: sql.UniqueIdentifier, value: actorUserId },
+  })
+  const bookResult = await bookDb.query(`
+    ${LIBRARY_RESOURCE_BOOK_SELECT}
+    WHERE rb.id = @id AND rb.is_active = 1 AND ${LIBRARY_VISIBILITY_SQL};
+  `)
+  const bookRecord = bookResult.recordset[0]
+  if (!bookRecord) {
+    return null
+  }
+
+  const topicsDb = await withRequest({ resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId } })
+  const topicsResult = await topicsDb.query(`
+    SELECT id, resource_book_id, name, created_at
+    FROM dbo.ResourceBookTopics
+    WHERE resource_book_id = @resourceBookId
+    ORDER BY created_at ASC;
+  `)
+
+  const testsDb = await withRequest({ resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId } })
+  const testsResult = await testsDb.query(`
+    SELECT tt.id, tt.topic_id, tt.topic_name, tt.name, tt.page_start, tt.page_end, tt.page_count, tt.question_count, tt.created_at
+    FROM dbo.ResourceBookTopicTests tt
+    INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
+    CROSS APPLY (
+      SELECT CASE WHEN PATINDEX('[0-9]%', tt.name) = 1
+                  THEN TRY_CAST(LEFT(tt.name, PATINDEX('%[^0-9]%', tt.name + 'x') - 1) AS INT)
+             END AS leading_no
+    ) wk
+    WHERE t.resource_book_id = @resourceBookId
+    ORDER BY ISNULL(wk.leading_no, 999999) ASC, tt.page_start ASC;
+  `)
+
+  const testsByTopicId = new Map()
+  testsResult.recordset.forEach((record) => {
+    const test = sanitizeResourceBookTopicTest(record)
+    if (!testsByTopicId.has(record.topic_id)) testsByTopicId.set(record.topic_id, [])
+    testsByTopicId.get(record.topic_id).push(test)
+  })
+
+  const topics = topicsResult.recordset.map((record) => ({
+    ...sanitizeResourceBookTopic(record),
+    tests: testsByTopicId.get(record.id) || [],
+  }))
+
+  return {
+    resourceBook: {
+      ...sanitizeResourceBook(bookRecord),
+      canDelete: String(bookRecord.created_by_user_id).toLowerCase() === String(actorUserId).toLowerCase(),
+    },
+    topics,
+  }
+}
+
+/**
+ * Kütüphaneye eklenen bir kaynağı, onu ekleyen kişi kaldırır (soft delete: is_active = 0).
+ * Başkasının eklediği bir kaynak silinemez.
+ */
+async function deleteLibraryResourceBookSubmission({ actorUserId, role, resourceBookId }) {
   if (!LIBRARY_CREATOR_ROLES.has(role)) {
     return { error: 'Geçersiz rol.' }
   }
 
-  const name = payload?.name?.trim()
-  const grade = payload?.grade
-  const subjectId = payload?.subjectId
-  const imageResult = sanitizeResourceBookImageUrl(payload?.imageUrl)
-  const publisherId = payload?.publisherId || null
-  const publisherName = payload?.publisherName?.trim() || null
-  const topics = Array.isArray(payload?.topics) ? payload.topics : []
+  const requestDb = await withRequest({
+    id: { type: sql.UniqueIdentifier, value: resourceBookId },
+    actorUserId: { type: sql.UniqueIdentifier, value: actorUserId },
+  })
+  const result = await requestDb.query(`
+    UPDATE dbo.ResourceBooks
+    SET is_active = 0
+    OUTPUT inserted.id
+    WHERE id = @id AND is_active = 1 AND created_by_user_id = @actorUserId;
+  `)
 
-  if (!name || name.length < 2) {
-    return { error: 'Kaynak adı en az 2 karakter olmalı.' }
+  if (!result.recordset[0]) {
+    return { error: 'Kaynak bulunamadı veya bu kaynağı silme yetkiniz yok.' }
   }
-  if (!LIBRARY_GRADES.has(grade)) {
-    return { error: 'Sınıf seçilmeli.' }
-  }
-  if (!subjectId) {
-    return { error: 'Ders seçilmeli.' }
-  }
-  if (imageResult.error) {
-    return { error: imageResult.error }
-  }
-  if (!publisherId && (!publisherName || publisherName.length < 2)) {
-    return { error: 'Yayınevi seçilmeli veya en az 2 karakterli bir isim girilmeli.' }
-  }
+
+  return { success: true }
+}
+
+/**
+ * Kaynak ekleme ve içerik ekleme akışları arasında paylaşılan içerik/test doğrulaması.
+ */
+function validateLibraryTopicsPayload(topicsInput) {
+  const topics = Array.isArray(topicsInput) ? topicsInput : []
   if (!topics.length) {
     return { error: 'En az bir içerik (ünite/bölüm) eklenmeli.' }
   }
@@ -656,7 +797,6 @@ async function createLibraryResourceBookSubmission({ actorUserId, role, payload 
     for (const test of tests) {
       const testTopicName = test?.topicName?.trim()
       const testName = test?.name?.trim()
-      const pageCount = Number(test?.pageCount)
       const questionCount = Number(test?.questionCount)
 
       if (!testTopicName || testTopicName.length < 2) {
@@ -665,15 +805,158 @@ async function createLibraryResourceBookSubmission({ actorUserId, role, payload 
       if (!testName || testName.length < 2) {
         return { error: 'Test adı en az 2 karakter olmalı.' }
       }
-      if (!Number.isInteger(pageCount) || pageCount <= 0) {
-        return { error: 'Sayfa sayısı pozitif bir tam sayı olmalı.' }
-      }
       if (!Number.isInteger(questionCount) || questionCount <= 0) {
         return { error: 'Soru sayısı pozitif bir tam sayı olmalı.' }
       }
-      normalizedTests.push({ topicName: testTopicName, name: testName, pageCount, questionCount })
+
+      // Test başına başlangıç/bitiş sayfası bildirilmişse (AddLibraryResourceWizard) onlar
+      // esas alınır; aksi halde geriye dönük uyumluluk için sadece sayfa SAYISI (pageCount)
+      // bildirilir ve testler kitap boyunca kümülatif olarak numaralanır (insertLibraryResourceBookTopics).
+      const hasExplicitRange = test?.pageStart != null && test?.pageEnd != null
+      if (hasExplicitRange) {
+        const pageStart = Number(test.pageStart)
+        const pageEnd = Number(test.pageEnd)
+        if (!Number.isInteger(pageStart) || pageStart <= 0) {
+          return { error: 'Başlangıç sayfası pozitif bir tam sayı olmalı.' }
+        }
+        if (!Number.isInteger(pageEnd) || pageEnd < pageStart) {
+          return { error: 'Bitiş sayfası başlangıç sayfasından küçük olamaz.' }
+        }
+        normalizedTests.push({ topicName: testTopicName, name: testName, pageStart, pageEnd, questionCount })
+      } else {
+        const pageCount = Number(test?.pageCount)
+        if (!Number.isInteger(pageCount) || pageCount <= 0) {
+          return { error: 'Sayfa sayısı pozitif bir tam sayı olmalı.' }
+        }
+        normalizedTests.push({ topicName: testTopicName, name: testName, pageCount, questionCount })
+      }
     }
     normalizedTopics.push({ name: topicName, tests: normalizedTests })
+  }
+
+  return { topics: normalizedTopics }
+}
+
+/**
+ * Test başına başlangıç/bitiş sayfası bildirilmişse doğrudan kullanılır; bildirilmemişse
+ * (geriye dönük uyumluluk) sadece sayfa SAYISI alınır ve testler girildikleri sırayla kitap
+ * boyunca kümülatif olarak numaralanır.
+ */
+async function insertLibraryResourceBookTopics(resourceBookId, normalizedTopics) {
+  let pageCursor = 1
+  for (const topic of normalizedTopics) {
+    const insertTopicDb = await withRequest({
+      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+      name: { type: sql.NVarChar(200), value: topic.name },
+    })
+    const topicResult = await insertTopicDb.query(`
+      INSERT INTO dbo.ResourceBookTopics (resource_book_id, name)
+      OUTPUT inserted.id
+      VALUES (@resourceBookId, @name);
+    `)
+    const topicId = topicResult.recordset[0].id
+
+    for (const test of topic.tests) {
+      const hasExplicitRange = test.pageStart != null && test.pageEnd != null
+      const pageStart = hasExplicitRange ? test.pageStart : pageCursor
+      const pageEnd = hasExplicitRange ? test.pageEnd : pageStart + test.pageCount - 1
+      const pageCount = hasExplicitRange ? pageEnd - pageStart + 1 : test.pageCount
+      pageCursor = pageEnd + 1
+
+      const insertTestDb = await withRequest({
+        topicId: { type: sql.UniqueIdentifier, value: topicId },
+        topicName: { type: sql.NVarChar(200), value: test.topicName },
+        name: { type: sql.NVarChar(200), value: test.name },
+        pageStart: { type: sql.Int, value: pageStart },
+        pageEnd: { type: sql.Int, value: pageEnd },
+        pageCount: { type: sql.Int, value: pageCount },
+        questionCount: { type: sql.Int, value: test.questionCount },
+      })
+      await insertTestDb.query(`
+        INSERT INTO dbo.ResourceBookTopicTests (topic_id, topic_name, name, page_start, page_end, page_count, question_count)
+        VALUES (@topicId, @topicName, @name, @pageStart, @pageEnd, @pageCount, @questionCount);
+      `)
+    }
+  }
+}
+
+/**
+ * Kaynak eklerken (isteğe bağlı) yüklenen cevap anahtarı sayfa fotoğrafları — kaynağın kendi
+ * doğrulama/notlama akışına dahil edilmez, sadece admin/onay sürecinde referans olarak saklanır.
+ */
+async function insertResourceBookAnswerKeyPhotos(resourceBookId, photoDataUrls) {
+  let sortOrder = 0
+  for (const photoUrl of photoDataUrls) {
+    const insertPhotoDb = await withRequest({
+      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+      sortOrder: { type: sql.Int, value: sortOrder },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoUrl },
+    })
+    await insertPhotoDb.query(`
+      INSERT INTO dbo.ResourceBookAnswerKeyPhotos (resource_book_id, sort_order, photo_url)
+      VALUES (@resourceBookId, @sortOrder, @photoUrl);
+    `)
+    sortOrder += 1
+  }
+}
+
+/**
+ * Veli/öğretmenin kütüphaneden tek adımda (kapak + içindekiler) soru bankası kaynağı
+ * göndermesi — her zaman status='pending' olarak kaydedilir, admin onayı bekler.
+ */
+async function createLibraryResourceBookSubmission({ actorUserId, role, payload }) {
+  if (!LIBRARY_CREATOR_ROLES.has(role)) {
+    return { error: 'Geçersiz rol.' }
+  }
+
+  const name = payload?.name?.trim()
+  const grade = payload?.grade
+  const subjectId = payload?.subjectId
+  const imageResult = sanitizeResourceBookImageUrl(payload?.imageUrl)
+  const publisherId = payload?.publisherId || null
+  const publisherName = payload?.publisherName?.trim() || null
+  const barcodeResult = sanitizeResourceBookBarcode(payload?.barcode)
+  const publishYearResult = sanitizeResourceBookPublishYear(payload?.publishYear)
+
+  if (!name || name.length < 2) {
+    return { error: 'Kaynak adı en az 2 karakter olmalı.' }
+  }
+  if (!LIBRARY_GRADES.has(grade)) {
+    return { error: 'Sınıf seçilmeli.' }
+  }
+  if (!subjectId) {
+    return { error: 'Ders seçilmeli.' }
+  }
+  if (imageResult.error) {
+    return { error: imageResult.error }
+  }
+  if (!publisherId && (!publisherName || publisherName.length < 2)) {
+    return { error: 'Yayınevi seçilmeli veya en az 2 karakterli bir isim girilmeli.' }
+  }
+  if (barcodeResult.error) {
+    return { error: barcodeResult.error }
+  }
+  if (publishYearResult.error) {
+    return { error: publishYearResult.error }
+  }
+
+  const validation = validateLibraryTopicsPayload(payload?.topics)
+  if (validation.error) {
+    return { error: validation.error }
+  }
+  const normalizedTopics = validation.topics
+
+  const answerKeyImagesInput = Array.isArray(payload?.answerKeyImages) ? payload.answerKeyImages : []
+  if (answerKeyImagesInput.length > MAX_ANSWER_KEY_PHOTOS) {
+    return { error: `En fazla ${MAX_ANSWER_KEY_PHOTOS} cevap anahtarı fotoğrafı yükleyebilirsiniz.` }
+  }
+  const normalizedAnswerKeyPhotos = []
+  for (const photo of answerKeyImagesInput) {
+    const photoResult = sanitizeMistakePhoto(photo)
+    if (photoResult.error) {
+      return { error: photoResult.error }
+    }
+    normalizedAnswerKeyPhotos.push(photoResult.value)
   }
 
   const subjectCheckDb = await withRequest({ subjectId: { type: sql.UniqueIdentifier, value: subjectId } })
@@ -698,7 +981,12 @@ async function createLibraryResourceBookSubmission({ actorUserId, role, payload 
   }
 
   const totalPageCount = normalizedTopics.reduce(
-    (sum, topic) => sum + topic.tests.reduce((testSum, test) => testSum + test.pageCount, 0),
+    (sum, topic) =>
+      sum +
+      topic.tests.reduce(
+        (testSum, test) => testSum + (test.pageStart != null ? test.pageEnd - test.pageStart + 1 : test.pageCount),
+        0,
+      ),
     0,
   )
 
@@ -710,6 +998,8 @@ async function createLibraryResourceBookSubmission({ actorUserId, role, payload 
     resourceType: { type: sql.NVarChar(30), value: 'soru_bankasi' },
     hasAnswerKey: { type: sql.Bit, value: true },
     imageUrl: { type: sql.NVarChar(sql.MAX), value: imageResult.value },
+    barcode: { type: sql.NVarChar(50), value: barcodeResult.value },
+    publishYear: { type: sql.SmallInt, value: publishYearResult.value },
     grade: { type: sql.NVarChar(20), value: grade },
     status: { type: sql.NVarChar(20), value: 'pending' },
     createdByRole: { type: sql.NVarChar(20), value: role },
@@ -717,47 +1007,53 @@ async function createLibraryResourceBookSubmission({ actorUserId, role, payload 
   })
   const bookResult = await insertBookDb.query(`
     INSERT INTO dbo.ResourceBooks
-      (publisher_id, subject_id, name, page_count, resource_type, has_answer_key, image_url, grade, status, created_by_role, created_by_user_id)
+      (publisher_id, subject_id, name, page_count, resource_type, has_answer_key, image_url, barcode, publish_year, grade, status, created_by_role, created_by_user_id)
     OUTPUT inserted.id
-    VALUES (@publisherId, @subjectId, @name, @pageCount, @resourceType, @hasAnswerKey, @imageUrl, @grade, @status, @createdByRole, @createdByUserId);
+    VALUES (@publisherId, @subjectId, @name, @pageCount, @resourceType, @hasAnswerKey, @imageUrl, @barcode, @publishYear, @grade, @status, @createdByRole, @createdByUserId);
   `)
   const resourceBookId = bookResult.recordset[0].id
-
-  let pageCursor = 1
-  for (const topic of normalizedTopics) {
-    const insertTopicDb = await withRequest({
-      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
-      name: { type: sql.NVarChar(200), value: topic.name },
-    })
-    const topicResult = await insertTopicDb.query(`
-      INSERT INTO dbo.ResourceBookTopics (resource_book_id, name)
-      OUTPUT inserted.id
-      VALUES (@resourceBookId, @name);
-    `)
-    const topicId = topicResult.recordset[0].id
-
-    for (const test of topic.tests) {
-      const pageStart = pageCursor
-      const pageEnd = pageStart + test.pageCount - 1
-      pageCursor = pageEnd + 1
-
-      const insertTestDb = await withRequest({
-        topicId: { type: sql.UniqueIdentifier, value: topicId },
-        topicName: { type: sql.NVarChar(200), value: test.topicName },
-        name: { type: sql.NVarChar(200), value: test.name },
-        pageStart: { type: sql.Int, value: pageStart },
-        pageEnd: { type: sql.Int, value: pageEnd },
-        pageCount: { type: sql.Int, value: test.pageCount },
-        questionCount: { type: sql.Int, value: test.questionCount },
-      })
-      await insertTestDb.query(`
-        INSERT INTO dbo.ResourceBookTopicTests (topic_id, topic_name, name, page_start, page_end, page_count, question_count)
-        VALUES (@topicId, @topicName, @name, @pageStart, @pageEnd, @pageCount, @questionCount);
-      `)
-    }
-  }
+  await insertLibraryResourceBookTopics(resourceBookId, normalizedTopics)
+  await insertResourceBookAnswerKeyPhotos(resourceBookId, normalizedAnswerKeyPhotos)
 
   return { resourceBook: await fetchResourceBookById(resourceBookId) }
+}
+
+/**
+ * Kütüphanede zaten var olan ama içeriği (ünite/test) hiç girilmemiş bir kaynağa —
+ * fihrist fotoğrafından okunan ya da elle girilen — içerik eklenmesi. Kaynağın kapağı,
+ * yayınevi ve onay durumu değişmez; sadece boş kaynak dolduğu için tekrar kullanılabilir
+ * olsun diye içerik girişi bir kereye mahsus olarak (mevcut içerik varsa reddedilerek) yapılır.
+ */
+async function addLibraryResourceBookTopicsSubmission({ actorUserId, role, resourceBookId, payload }) {
+  if (!LIBRARY_CREATOR_ROLES.has(role)) {
+    return { error: 'Geçersiz rol.' }
+  }
+  if (!resourceBookId) {
+    return { error: 'Kaynak bulunamadı.' }
+  }
+
+  const bookDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: resourceBookId } })
+  const bookResult = await bookDb.query(`SELECT TOP 1 id FROM dbo.ResourceBooks WHERE id = @id AND is_active = 1;`)
+  if (!bookResult.recordset[0]) {
+    return { error: 'Kaynak bulunamadı.' }
+  }
+
+  const topicCountDb = await withRequest({ resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId } })
+  const topicCountResult = await topicCountDb.query(`
+    SELECT COUNT(*) AS topicCount FROM dbo.ResourceBookTopics WHERE resource_book_id = @resourceBookId;
+  `)
+  if (topicCountResult.recordset[0].topicCount > 0) {
+    return { error: 'Bu kaynağa zaten içerik girilmiş.' }
+  }
+
+  const validation = validateLibraryTopicsPayload(payload?.topics)
+  if (validation.error) {
+    return { error: validation.error }
+  }
+
+  await insertLibraryResourceBookTopics(resourceBookId, validation.topics)
+
+  return { detail: await fetchLibraryResourceBookDetail({ resourceBookId, actorUserId }) }
 }
 
 async function reviewResourceBookHandler(request) {
@@ -950,8 +1246,13 @@ async function fetchResourceBookTopicsWithTests(resourceBookId, studentId) {
     SELECT tt.id, tt.topic_id, tt.topic_name, tt.name, tt.page_start, tt.page_end, tt.page_count, tt.question_count, tt.created_at
     FROM dbo.ResourceBookTopicTests tt
     INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
+    CROSS APPLY (
+      SELECT CASE WHEN PATINDEX('[0-9]%', tt.name) = 1
+                  THEN TRY_CAST(LEFT(tt.name, PATINDEX('%[^0-9]%', tt.name + 'x') - 1) AS INT)
+             END AS leading_no
+    ) wk
     WHERE t.resource_book_id = @resourceBookId
-    ORDER BY tt.page_start ASC;
+    ORDER BY ISNULL(wk.leading_no, 999999) ASC, tt.page_start ASC;
   `)
 
   const tasksDb = await withRequest({
@@ -996,13 +1297,42 @@ async function fetchResourceBookTopicsWithTests(resourceBookId, studentId) {
     resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
   })
   const manualCompletionsResult = await manualCompletionsDb.query(`
-    SELECT smtc.test_id
+    SELECT smtc.test_id, smtc.correct_count, smtc.wrong_count, smtc.blank_count, smtc.answers_json
     FROM dbo.StudentManualTestCompletions smtc
     INNER JOIN dbo.ResourceBookTopicTests tt ON tt.id = smtc.test_id
     INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
     WHERE smtc.student_id = @studentId AND t.resource_book_id = @resourceBookId;
   `)
   const manualTestIds = new Set(manualCompletionsResult.recordset.map((row) => row.test_id))
+  const manualAnswersByTestId = new Map()
+  manualCompletionsResult.recordset.forEach((row) => {
+    if (row.answers_json) {
+      try {
+        manualAnswersByTestId.set(row.test_id, JSON.parse(row.answers_json))
+      } catch {
+        // yok say, düzenlenemez ama sonuç sayıları hâlâ gösterilir
+      }
+    }
+    if (row.correct_count === null && row.wrong_count === null && row.blank_count === null) return
+    testResultCounts.set(row.test_id, {
+      correct: row.correct_count,
+      wrong: row.wrong_count,
+      blank: row.blank_count,
+    })
+  })
+
+  const answerKeyCountsDb = await withRequest({
+    resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+  })
+  const answerKeyCountsResult = await answerKeyCountsDb.query(`
+    SELECT tt.id AS test_id, COUNT(tak.id) AS key_count
+    FROM dbo.ResourceBookTopicTests tt
+    INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
+    LEFT JOIN dbo.TestAnswerKeys tak ON tak.test_id = tt.id
+    WHERE t.resource_book_id = @resourceBookId
+    GROUP BY tt.id;
+  `)
+  const answerKeyCountByTestId = new Map(answerKeyCountsResult.recordset.map((row) => [row.test_id, row.key_count]))
 
   const testsByTopicId = new Map()
   testsResult.recordset.forEach((test) => {
@@ -1044,8 +1374,124 @@ async function fetchResourceBookTopicsWithTests(resourceBookId, studentId) {
           if (weekA === null && weekB !== null) return 1
           return a.page_start - b.page_start
         })
-        .map((test) => sanitizeResourceBookTopicTest(test, completedTestIds, manualTestIds, testResultCounts, assignedTestIds)),
+        .map((test) =>
+          sanitizeResourceBookTopicTest(
+            test,
+            completedTestIds,
+            manualTestIds,
+            testResultCounts,
+            assignedTestIds,
+            answerKeyCountByTestId,
+            manualAnswersByTestId,
+          ),
+        ),
     }))
+}
+
+// Kitap listesi ekranlarında (veli/öğretmen kaynak kütüphanesi) her kart için tamamlanma ve
+// başarı oranı göstermek amacıyla, verilen kaynak kitapların tümü için tek seferde toplu
+// istatistik hesaplar (kitap başına ayrı sorgu atmamak için).
+async function fetchResourceBookStatsForStudent(studentId, resourceBookIds) {
+  const stats = new Map()
+  if (!resourceBookIds.length) return stats
+
+  const idBindings = Object.fromEntries(
+    resourceBookIds.map((id, index) => [`resourceBookId${index}`, { type: sql.UniqueIdentifier, value: id }]),
+  )
+  const idPlaceholders = resourceBookIds.map((_, index) => `@resourceBookId${index}`).join(', ')
+
+  const testsDb = await withRequest(idBindings)
+  const testsResult = await testsDb.query(`
+    SELECT tt.id AS test_id, t.resource_book_id
+    FROM dbo.ResourceBookTopicTests tt
+    INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
+    WHERE t.resource_book_id IN (${idPlaceholders});
+  `)
+
+  const bookIdByTestId = new Map()
+  testsResult.recordset.forEach((row) => {
+    bookIdByTestId.set(row.test_id, row.resource_book_id)
+    if (!stats.has(row.resource_book_id)) {
+      stats.set(row.resource_book_id, { totalTests: 0, completedTests: 0, correct: 0, wrong: 0, blank: 0 })
+    }
+    stats.get(row.resource_book_id).totalTests += 1
+  })
+
+  if (!bookIdByTestId.size) return stats
+
+  const completedTestIds = new Set()
+  const testResultCounts = new Map()
+
+  const tasksDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    ...idBindings,
+  })
+  const tasksResult = await tasksDb.query(`
+    SELECT test_results_json
+    FROM dbo.Tasks
+    WHERE student_id = @studentId AND resource_book_id IN (${idPlaceholders}) AND test_results_json IS NOT NULL;
+  `)
+  tasksResult.recordset.forEach((row) => {
+    let results
+    try {
+      results = JSON.parse(row.test_results_json)
+    } catch {
+      return
+    }
+    Object.entries(results || {}).forEach(([testId, result]) => {
+      if (!bookIdByTestId.has(testId)) return
+      completedTestIds.add(testId)
+      const existing = testResultCounts.get(testId)
+      if (!existing || (result?.gradedAt && (!existing.gradedAt || result.gradedAt > existing.gradedAt))) {
+        testResultCounts.set(testId, result)
+      }
+    })
+  })
+
+  const manualDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    ...idBindings,
+  })
+  const manualResult = await manualDb.query(`
+    SELECT smtc.test_id, smtc.correct_count, smtc.wrong_count, smtc.blank_count
+    FROM dbo.StudentManualTestCompletions smtc
+    INNER JOIN dbo.ResourceBookTopicTests tt ON tt.id = smtc.test_id
+    INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
+    WHERE smtc.student_id = @studentId AND t.resource_book_id IN (${idPlaceholders});
+  `)
+  manualResult.recordset.forEach((row) => {
+    if (!bookIdByTestId.has(row.test_id)) return
+    completedTestIds.add(row.test_id)
+    if (row.correct_count === null && row.wrong_count === null && row.blank_count === null) return
+    testResultCounts.set(row.test_id, {
+      correct: row.correct_count,
+      wrong: row.wrong_count,
+      blank: row.blank_count,
+    })
+  })
+
+  completedTestIds.forEach((testId) => {
+    const bookId = bookIdByTestId.get(testId)
+    if (!bookId || !stats.has(bookId)) return
+    const entry = stats.get(bookId)
+    entry.completedTests += 1
+    const result = testResultCounts.get(testId)
+    if (result) {
+      entry.correct += Number(result.correct) || 0
+      entry.wrong += Number(result.wrong) || 0
+      entry.blank += Number(result.blank) || 0
+    }
+  })
+
+  stats.forEach((entry, bookId) => {
+    const answered = entry.correct + entry.wrong + entry.blank
+    stats.set(bookId, {
+      completionRate: entry.totalTests > 0 ? entry.completedTests / entry.totalTests : null,
+      successRate: answered > 0 ? entry.correct / answered : null,
+    })
+  })
+
+  return stats
 }
 
 async function listResourceBookTopicsForPanelHandler(request) {
@@ -1106,6 +1552,13 @@ async function verifyStudentTestAssignment(studentId, testId) {
   return Boolean(result.recordset[0])
 }
 
+function parseNullableCount(value) {
+  if (value === undefined || value === null || value === '') return null
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 0) return null
+  return parsed
+}
+
 async function markResourceBookTopicTestCompletionHandler(request) {
   try {
     const { error, studentId, actorId } = await requireStudentWriteContext(request)
@@ -1119,20 +1572,33 @@ async function markResourceBookTopicTestCompletionHandler(request) {
       return json(404, { error: 'Test bu öğrenciye atanmış bir kaynakta bulunamadı.' })
     }
 
+    const payload = await request.json().catch(() => null)
+    const correctCount = parseNullableCount(payload?.correctCount)
+    const wrongCount = parseNullableCount(payload?.wrongCount)
+    const blankCount = parseNullableCount(payload?.blankCount)
+
     const requestDb = await withRequest({
       studentId: { type: sql.UniqueIdentifier, value: studentId },
       testId: { type: sql.UniqueIdentifier, value: testId },
       markedByUserId: { type: sql.UniqueIdentifier, value: actorId },
+      correctCount: { type: sql.Int, value: correctCount },
+      wrongCount: { type: sql.Int, value: wrongCount },
+      blankCount: { type: sql.Int, value: blankCount },
     })
     await requestDb.query(`
-      INSERT INTO dbo.StudentManualTestCompletions (student_id, test_id, marked_by_user_id)
-      SELECT @studentId, @testId, @markedByUserId
-      WHERE NOT EXISTS (
-        SELECT 1 FROM dbo.StudentManualTestCompletions WHERE student_id = @studentId AND test_id = @testId
-      );
+      MERGE dbo.StudentManualTestCompletions AS target
+      USING (SELECT @studentId AS student_id, @testId AS test_id) AS source
+        ON target.student_id = source.student_id AND target.test_id = source.test_id
+      WHEN MATCHED THEN UPDATE SET
+        correct_count = @correctCount,
+        wrong_count = @wrongCount,
+        blank_count = @blankCount
+      WHEN NOT MATCHED THEN
+        INSERT (student_id, test_id, marked_by_user_id, correct_count, wrong_count, blank_count)
+        VALUES (@studentId, @testId, @markedByUserId, @correctCount, @wrongCount, @blankCount);
     `)
 
-    return json(200, { success: true, completionSource: 'manual' })
+    return json(200, { success: true, completionSource: 'manual', correctCount, wrongCount, blankCount })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -1175,6 +1641,188 @@ async function unmarkResourceBookTopicTestCompletionHandler(request) {
 
     console.error('unmarkResourceBookTopicTestCompletionHandler failed', error)
     return json(500, { error: 'İşaret kaldırılamadı.' })
+  }
+}
+
+async function submitManualOpticalAnswersHandler(request) {
+  try {
+    const { error, studentId, actorId } = await requireStudentWriteContext(request)
+    if (error) {
+      return error
+    }
+
+    const testId = request.params.testId
+    const isAssigned = await verifyStudentTestAssignment(studentId, testId)
+    if (!isAssigned) {
+      return json(404, { error: 'Test bu öğrenciye atanmış bir kaynakta bulunamadı.' })
+    }
+
+    const testDb = await withRequest({ testId: { type: sql.UniqueIdentifier, value: testId } })
+    const testResult = await testDb.query(`SELECT question_count FROM dbo.ResourceBookTopicTests WHERE id = @testId;`)
+    const questionCount = testResult.recordset[0]?.question_count
+    if (!questionCount) {
+      return json(404, { error: 'Test bulunamadı.' })
+    }
+
+    const payload = await request.json().catch(() => null)
+    const { answers, result } = await gradeTestAnswers(testId, questionCount, payload?.answers)
+    if (!result) {
+      return json(400, { error: 'Tüm soruları işaretleyin — bu test için notlama ancak eksiksiz cevap anahtarıyla yapılabilir.' })
+    }
+
+    const requestDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      testId: { type: sql.UniqueIdentifier, value: testId },
+      markedByUserId: { type: sql.UniqueIdentifier, value: actorId },
+      correctCount: { type: sql.Int, value: result.correct },
+      wrongCount: { type: sql.Int, value: result.wrong },
+      blankCount: { type: sql.Int, value: result.blank },
+      answersJson: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(answers) },
+    })
+    await requestDb.query(`
+      MERGE dbo.StudentManualTestCompletions AS target
+      USING (SELECT @studentId AS student_id, @testId AS test_id) AS source
+        ON target.student_id = source.student_id AND target.test_id = source.test_id
+      WHEN MATCHED THEN UPDATE SET
+        correct_count = @correctCount,
+        wrong_count = @wrongCount,
+        blank_count = @blankCount,
+        answers_json = @answersJson
+      WHEN NOT MATCHED THEN
+        INSERT (student_id, test_id, marked_by_user_id, correct_count, wrong_count, blank_count, answers_json)
+        VALUES (@studentId, @testId, @markedByUserId, @correctCount, @wrongCount, @blankCount, @answersJson);
+    `)
+
+    return json(200, {
+      success: true,
+      completionSource: 'manual',
+      correctCount: result.correct,
+      wrongCount: result.wrong,
+      blankCount: result.blank,
+      correctLabels: result.correctLabels,
+      answers,
+    })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('submitManualOpticalAnswersHandler failed', error)
+    return json(500, { error: 'Cevaplar kaydedilemedi.' })
+  }
+}
+
+// Optik formda yanlış işaretlenmiş bir soruya velinin galeriden seçtiği ya da kamerayla çektiği
+// fotoğrafı kaydeder. Doğruluk kontrolünü StudentManualTestCompletions.answers_json + TestAnswerKeys
+// üzerinden server tarafında yapar (client'a güvenmiyoruz); tasks.js'deki Task'a bağlı akışın
+// muadili ama task_id NULL bırakılarak dbo.WrongQuestions'a yazılır (Hata Defterim bu satırları da okur).
+async function saveManualWrongQuestionPhotoHandler(request) {
+  try {
+    const testId = request.params.testId
+    const orderNo = request.params.orderNo
+    const payload = await request.json().catch(() => null)
+    const { error, studentId } = await requireStudentWriteContext(request)
+    if (error) {
+      return error
+    }
+
+    const photoCheck = sanitizeMistakePhoto(payload?.photo)
+    if (photoCheck.error) {
+      return json(400, { error: photoCheck.error })
+    }
+
+    const completionDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      testId: { type: sql.UniqueIdentifier, value: testId },
+    })
+    const completionResult = await completionDb.query(`
+      SELECT answers_json FROM dbo.StudentManualTestCompletions WHERE student_id = @studentId AND test_id = @testId;
+    `)
+    const completionRecord = completionResult.recordset[0]
+    if (!completionRecord) {
+      return json(404, { error: 'Bu test için kaydedilmiş bir sonuç bulunamadı.' })
+    }
+
+    const answers = completionRecord.answers_json ? JSON.parse(completionRecord.answers_json) : {}
+    const studentAnswer = answers[orderNo]
+
+    const keyDb = await withRequest({
+      testId: { type: sql.UniqueIdentifier, value: testId },
+      orderNo: { type: sql.Int, value: Number(orderNo) },
+    })
+    const keyResult = await keyDb.query(`
+      SELECT correct_label FROM dbo.TestAnswerKeys WHERE test_id = @testId AND order_no = @orderNo;
+    `)
+    const correctLabel = keyResult.recordset[0]?.correct_label?.trim()
+
+    const isActuallyWrong = Boolean(correctLabel) && Boolean(studentAnswer) && studentAnswer !== correctLabel
+    if (!isActuallyWrong) {
+      return json(400, { error: 'Bu soru yanlış işaretlenmemiş.' })
+    }
+
+    const testInfoDb = await withRequest({ testId: { type: sql.UniqueIdentifier, value: testId } })
+    const testInfoResult = await testInfoDb.query(`
+      SELECT t.name AS test_name, tp.name AS topic_name, rb.name AS book_name, pub.name AS publisher_name, s.name AS subject_name
+      FROM dbo.ResourceBookTopicTests t
+      JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
+      JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
+      JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
+      LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
+      WHERE t.id = @testId;
+    `)
+    const testInfo = testInfoResult.recordset[0]
+    if (!testInfo) {
+      return json(404, { error: 'Test bulunamadı.' })
+    }
+
+    const bindings = {
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      testId: { type: sql.UniqueIdentifier, value: testId },
+      questionNumber: { type: sql.NVarChar(20), value: orderNo },
+      subject: { type: sql.NVarChar(100), value: testInfo.subject_name || 'Genel' },
+      topic: { type: sql.NVarChar(200), value: testInfo.topic_name || null },
+      testName: { type: sql.NVarChar(200), value: testInfo.test_name || null },
+      bookName: { type: sql.NVarChar(200), value: testInfo.book_name || null },
+      publisherName: { type: sql.NVarChar(200), value: testInfo.publisher_name || null },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoCheck.value },
+      errorType: { type: sql.NVarChar(50), value: 'cevap-kagidi' },
+    }
+
+    const updateDb = await withRequest(bindings)
+    const updateResult = await updateDb.query(`
+      UPDATE dbo.WrongQuestions
+      SET topic = @topic, test_name = @testName, book_name = @bookName, publisher_name = @publisherName, photo_url = @photoUrl
+      OUTPUT ${WRONG_QUESTION_OUTPUT_COLUMNS}
+      WHERE student_id = @studentId AND task_id IS NULL AND test_id = @testId AND question_number = @questionNumber;
+    `)
+
+    let wrongQuestionRecord = updateResult.recordset[0]
+    if (!wrongQuestionRecord) {
+      const insertDb = await withRequest(bindings)
+      const insertResult = await insertDb.query(`
+        INSERT INTO dbo.WrongQuestions (student_id, test_id, subject, topic, test_name, book_name, publisher_name, question_number, error_type, photo_url)
+        OUTPUT ${WRONG_QUESTION_OUTPUT_COLUMNS}
+        VALUES (@studentId, @testId, @subject, @topic, @testName, @bookName, @publisherName, @questionNumber, @errorType, @photoUrl);
+      `)
+      wrongQuestionRecord = insertResult.recordset[0]
+    }
+
+    return json(200, { wrongQuestion: sanitizeWrongQuestion(wrongQuestionRecord) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('saveManualWrongQuestionPhotoHandler failed', error)
+    return json(500, { error: 'Fotoğraf kaydedilemedi.' })
   }
 }
 
@@ -1920,6 +2568,7 @@ async function bulkImportSchoolsHandler(request) {
 module.exports = {
   listSubjectsHandler,
   listSubjectsForPanelHandler,
+  listSubjectsForRegistrationHandler,
   listPublishersHandler,
   listPublishersForPanelHandler,
   createPublisherHandler,
@@ -1932,14 +2581,20 @@ module.exports = {
   LIBRARY_GRADES,
   fetchLibraryResourceBooks,
   createLibraryResourceBookSubmission,
+  deleteLibraryResourceBookSubmission,
+  addLibraryResourceBookTopicsSubmission,
   fetchResourceBookById,
+  fetchLibraryResourceBookDetail,
   listResourceBookTopicsHandler,
   createResourceBookTopicHandler,
   updateResourceBookTopicHandler,
   listResourceBookTopicsForPanelHandler,
   markResourceBookTopicTestCompletionHandler,
   unmarkResourceBookTopicTestCompletionHandler,
+  submitManualOpticalAnswersHandler,
+  saveManualWrongQuestionPhotoHandler,
   fetchResourceBookTopicsWithTests,
+  fetchResourceBookStatsForStudent,
   listResourceBookTopicTestsHandler,
   createResourceBookTopicTestHandler,
   updateResourceBookTopicTestHandler,

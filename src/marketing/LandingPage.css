@@ -4587,6 +4587,36 @@ footer {
   accent-color: #f07b31;
 }
 
+.signup-subjects {
+  display: grid;
+  gap: 6px;
+}
+
+.signup-subjects-label {
+  color: #293064;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.signup-subjects-loading {
+  color: #6d769c;
+  font-size: 13px;
+}
+
+.signup-subjects-list {
+  display: grid;
+  gap: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid #d6def1;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.signup-subject-row {
+  grid-template-columns: 16px 1fr;
+}
+
 .inline-link {
   padding: 0;
   border: 0;

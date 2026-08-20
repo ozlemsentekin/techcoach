@@ -1,7 +1,6 @@
 import { createElement, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
-  BarChart3,
   BookOpenCheck,
   CalendarDays,
   CheckCircle2,
@@ -9,12 +8,14 @@ import {
   Layers3,
   Target,
   Trophy,
+  X,
 } from 'lucide-react'
 import { getProgressOverview } from '../../services/progressService'
 import { calculateNet } from '../../utils/netCalculator'
 import { dateToISO, getMondayOfWeek, todayISODate } from '../../utils/time'
 import PageHeader from '../layout/PageHeader'
 import LoadingState from './LoadingState'
+import { ResourceBookAvatar } from './ResourceBookCard'
 
 const RANGE_FILTERS = [
   { id: 'today', label: 'Bugün' },
@@ -71,6 +72,10 @@ function publisherLabel(item) {
   return item?.publisherName || ''
 }
 
+function resourceImageUrl(item) {
+  return item?.resourceBookImageUrl || undefined
+}
+
 function contentLabel(item) {
   return item?.topic || item?.taskTitle || item?.title || item?.description || 'Genel çalışma'
 }
@@ -119,6 +124,7 @@ function splitTestResults(item, testsById, { idPrefix, minutes, source }) {
         content: testName ? `${topic} · ${testName}` : topic,
         contentGroup: topic,
         resource: resourceLabel(item),
+        resourceImageUrl: resourceImageUrl(item),
         publisher: publisherLabel(item),
         questions,
         correct,
@@ -168,6 +174,7 @@ function buildActivityRecords(overview, testsById) {
       content: contentLabel(session),
       contentGroup: contentLabel(session),
       resource: resourceLabel(session),
+      resourceImageUrl: resourceImageUrl(session),
       publisher: publisherLabel(session),
       questions: asNumber(session.completedQuestionCount),
       correct: asNumber(session.correctCount),
@@ -210,6 +217,7 @@ function buildActivityRecords(overview, testsById) {
       content: contentLabel(task),
       contentGroup: contentLabel(task),
       resource: resourceLabel(task),
+      resourceImageUrl: resourceImageUrl(task),
       publisher: publisherLabel(task),
       questions,
       correct: asNumber(task.correctCount),
@@ -217,6 +225,31 @@ function buildActivityRecords(overview, testsById) {
       blank: asNumber(task.blankCount),
       minutes: asNumber(task.durationMinutes),
       source: 'task',
+    })
+  })
+
+  ;(overview.manualTestCompletions || []).forEach((completion) => {
+    const correct = asNumber(completion.correctCount)
+    const wrong = asNumber(completion.wrongCount)
+    const blank = asNumber(completion.blankCount)
+    if (correct + wrong + blank <= 0) return
+
+    const topic = completion.topicName || completion.testName || 'Genel çalışma'
+    records.push({
+      id: `manual-${completion.testId}`,
+      date: toDateKey(completion.markedAt),
+      subject: subjectLabel(completion),
+      content: completion.testName ? `${topic} · ${completion.testName}` : topic,
+      contentGroup: topic,
+      resource: resourceLabel(completion),
+      resourceImageUrl: resourceImageUrl(completion),
+      publisher: publisherLabel(completion),
+      questions: correct + wrong,
+      correct,
+      wrong,
+      blank,
+      minutes: 0,
+      source: 'manual',
     })
   })
 
@@ -235,6 +268,7 @@ function buildActivityRecords(overview, testsById) {
       content: homework.title || contentLabel(homework),
       contentGroup: homework.title || contentLabel(homework),
       resource: resourceLabel(homework),
+      resourceImageUrl: resourceImageUrl(homework),
       publisher: publisherLabel(homework),
       questions,
       correct: 0,
@@ -263,6 +297,7 @@ function buildSubjectTabs(overview) {
   ;(overview.sessions || []).forEach((session) => addSubject(subjectLabel(session)))
   ;(overview.homeworks || []).forEach((homework) => addSubject(homework.subject))
   ;(overview.wrongQuestions || []).forEach((item) => addSubject(item.subject))
+  ;(overview.manualTestCompletions || []).forEach((item) => addSubject(item.subjectName))
 
   return Array.from(subjects.values()).sort((a, b) => collator.compare(a.label, b.label))
 }
@@ -283,6 +318,7 @@ function aggregateBy(records, keyReader) {
         minutes: 0,
         sessions: 0,
         publishers: new Set(),
+        resourceImageUrl: undefined,
       })
     }
 
@@ -294,6 +330,7 @@ function aggregateBy(records, keyReader) {
     group.minutes += record.minutes
     if (record.source === 'session') group.sessions += 1
     if (record.publisher) group.publishers.add(record.publisher)
+    if (!group.resourceImageUrl && record.resourceImageUrl) group.resourceImageUrl = record.resourceImageUrl
   })
 
   return Array.from(groups.values())
@@ -470,7 +507,7 @@ function InsightPanel({ insights }) {
   )
 }
 
-function BreakdownRows({ rows, emptyLabel }) {
+function BreakdownRows({ rows, emptyLabel, showResourceAvatar, onPreviewImage }) {
   if (!rows.length) {
     return <p className="px-4 py-6 text-sm text-panel-text-muted">{emptyLabel}</p>
   }
@@ -481,30 +518,39 @@ function BreakdownRows({ rows, emptyLabel }) {
     <div className="divide-y divide-panel-border">
       {rows.slice(0, 8).map((row) => (
         <div key={row.key} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_220px] md:items-center">
-          <div className="min-w-0">
-            <div className="flex items-center justify-between gap-3">
-              <p className="truncate text-sm font-bold text-panel-text" title={row.label}>
-                {row.label}
-              </p>
-              <span className="shrink-0 text-sm font-bold text-panel-text">{formatNumber(row.questions)} soru</span>
-            </div>
-            {row.publishers?.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {row.publishers.map((publisher) => (
-                  <span
-                    key={publisher}
-                    className="inline-flex items-center rounded-full bg-panel-surface-soft px-2 py-0.5 text-[11px] font-semibold text-panel-text-muted"
-                  >
-                    {publisher}
-                  </span>
-                ))}
-              </div>
-            )}
-            <div className="mt-2 h-2 rounded-full bg-panel-surface-soft">
-              <div
-                className="h-2 rounded-full bg-student-theme-primary"
-                style={{ width: `${Math.max(6, (row.questions / maxQuestions) * 100)}%` }}
+          <div className="flex min-w-0 items-start gap-3">
+            {showResourceAvatar && (
+              <ResourceBookAvatar
+                book={{ imageUrl: row.resourceImageUrl, name: row.label }}
+                size="row"
+                onClick={row.resourceImageUrl ? () => onPreviewImage({ url: row.resourceImageUrl, name: row.label }) : undefined}
               />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-3">
+                <p className="truncate text-sm font-bold text-panel-text" title={row.label}>
+                  {row.label}
+                </p>
+                <span className="shrink-0 text-sm font-bold text-panel-text">{formatNumber(row.questions)} soru</span>
+              </div>
+              {row.publishers?.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {row.publishers.map((publisher) => (
+                    <span
+                      key={publisher}
+                      className="inline-flex items-center rounded-full bg-panel-surface-soft px-2 py-0.5 text-[11px] font-semibold text-panel-text-muted"
+                    >
+                      {publisher}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="mt-2 h-2 rounded-full bg-panel-surface-soft">
+                <div
+                  className="h-2 rounded-full bg-student-theme-primary"
+                  style={{ width: `${Math.max(6, (row.questions / maxQuestions) * 100)}%` }}
+                />
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-4 gap-2 text-center text-xs">
@@ -527,7 +573,7 @@ function BreakdownRows({ rows, emptyLabel }) {
   )
 }
 
-function BreakdownPanel({ icon, title, subtitle, rows, emptyLabel }) {
+function BreakdownPanel({ icon, title, subtitle, rows, emptyLabel, showResourceAvatar, onPreviewImage }) {
   return (
     <section className="panel-card overflow-hidden">
       <div className="flex items-center justify-between gap-3 border-b border-panel-border px-4 py-4">
@@ -539,8 +585,36 @@ function BreakdownPanel({ icon, title, subtitle, rows, emptyLabel }) {
           {createElement(icon, { size: 18, 'aria-hidden': true })}
         </span>
       </div>
-      <BreakdownRows rows={rows} emptyLabel={emptyLabel} />
+      <BreakdownRows rows={rows} emptyLabel={emptyLabel} showResourceAvatar={showResourceAvatar} onPreviewImage={onPreviewImage} />
     </section>
+  )
+}
+
+function ImagePreviewLightbox({ preview, onClose }) {
+  if (!preview) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        aria-label="Kapat"
+        onClick={onClose}
+        className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+      >
+        <X size={20} aria-hidden="true" />
+      </button>
+      <img
+        src={preview.url}
+        alt={`${preview.name} görseli`}
+        className="max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      />
+    </div>
   )
 }
 
@@ -593,6 +667,7 @@ export default function StudentProgressView({
   const [error, setError] = useState('')
   const [selectedSubjectKey, setSelectedSubjectKey] = useState('')
   const [selectedRange, setSelectedRange] = useState('month')
+  const [previewImage, setPreviewImage] = useState(null)
   const today = useMemo(() => todayISODate(), [])
 
   useEffect(() => {
@@ -668,13 +743,9 @@ export default function StudentProgressView({
 
   const plannedTasks = filteredTasks.length
   const completedTasks = filteredTasks.filter((task) => COMPLETED_STATUSES.has(task.status)).length
-  const completionRate = plannedTasks > 0 ? (completedTasks / plannedTasks) * 100 : NaN
   const accuracy = stats.correct + stats.wrong > 0 ? (stats.correct / (stats.correct + stats.wrong)) * 100 : NaN
-  const pendingWrongCount = filteredWrongRows.filter((item) => item.reviewStatus !== 'ogrenildi').length
   const completedHomeworkQuestions = filteredHomeworks.reduce((sum, homework) => sum + asNumber(homework.completedQuestionCount), 0)
   const totalHomeworkQuestions = filteredHomeworks.reduce((sum, homework) => sum + asNumber(homework.totalQuestionCount), 0)
-  const sessionCount = new Set(filteredRecords.map((record) => record.sessionId).filter(Boolean)).size
-  const hasTaskDurationFallback = filteredRecords.some((record) => !record.sessionId && record.minutes > 0)
   const insights = buildInsights({ stats, contentRows, wrongRows: filteredWrongRows })
 
   if (error) {
@@ -703,7 +774,7 @@ export default function StudentProgressView({
         <RangeFilter selectedRange={selectedRange} onSelect={setSelectedRange} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2">
         <SummaryMetric
           icon={BookOpenCheck}
           title="Çözülen Soru"
@@ -715,24 +786,6 @@ export default function StudentProgressView({
           title="Doğruluk"
           value={formatPercent(accuracy)}
           description={`${formatNet(calculateNet(stats.correct, stats.wrong))} net · ${formatNumber(stats.blank)} boş`}
-        />
-        <SummaryMetric
-          icon={Clock3}
-          title="Çalışma Süresi"
-          value={`${formatNumber(stats.minutes)} dk`}
-          description={
-            sessionCount > 0
-              ? `${formatNumber(sessionCount)} oturum · görev süreleri dahil`
-              : hasTaskDurationFallback
-                ? 'Test çözme görev süreleri dahil'
-                : 'Süre kaydı bekleniyor'
-          }
-        />
-        <SummaryMetric
-          icon={BarChart3}
-          title="Plan Tamamlama"
-          value={formatPercent(completionRate)}
-          description={`${completedTasks} / ${plannedTasks} görev · ${pendingWrongCount} tekrar bekliyor`}
         />
       </div>
 
@@ -752,10 +805,14 @@ export default function StudentProgressView({
           subtitle={`${formatNumber(completedHomeworkQuestions)} / ${formatNumber(totalHomeworkQuestions)} ödev sorusu`}
           rows={bookRows}
           emptyLabel="Bu filtrede kaynak kitap kaydı yok."
+          showResourceAvatar
+          onPreviewImage={setPreviewImage}
         />
       </div>
 
       <RecentActivity records={filteredRecords} />
+
+      <ImagePreviewLightbox preview={previewImage} onClose={() => setPreviewImage(null)} />
     </div>
   )
 }

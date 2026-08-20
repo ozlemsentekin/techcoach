@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, BookOpen, Plus, UserPlus } from 'lucide-react'
+import { ArrowLeft, BookOpen, Plus, Trash2, UserPlus } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
+import { useAuth } from '../../../context/useAuth'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
+import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import { libraryApiBase } from './libraryConstants'
 import AssignLibraryResourceModal from './AssignLibraryResourceModal'
 import AddLibraryResourceWizard from './AddLibraryResourceWizard'
+import LibraryResourceDetailModal from './LibraryResourceDetailModal'
 
 const RESOURCE_BOOK_TYPE_LABELS = {
   konu_anlatimi: 'Konu Anlatımı',
@@ -56,6 +59,7 @@ function StatusBadge({ status }) {
 export default function LibraryGradeDetailPage({ role }) {
   const { grade } = useParams()
   const navigate = useNavigate()
+  const { authUser } = useAuth()
   const basePath = role === 'teacher' ? '/teacher/library' : '/parent/library'
   const apiBase = libraryApiBase(role)
 
@@ -64,7 +68,11 @@ export default function LibraryGradeDetailPage({ role }) {
   const [resourceBooks, setResourceBooks] = useState(null)
   const [error, setError] = useState('')
   const [assignBook, setAssignBook] = useState(null)
+  const [viewBookId, setViewBookId] = useState(null)
   const [showAddWizard, setShowAddWizard] = useState(false)
+  const [deletingBook, setDeletingBook] = useState(null)
+  const [deletingError, setDeletingError] = useState('')
+  const [deletingLoading, setDeletingLoading] = useState(false)
 
   useEffect(() => {
     let ignore = false
@@ -72,7 +80,6 @@ export default function LibraryGradeDetailPage({ role }) {
       .then((data) => {
         if (ignore) return
         setSubjects(data.subjects)
-        setActiveSubjectId((current) => current || data.subjects[0]?.id || null)
       })
       .catch((err) => {
         if (!ignore) setError(err.message)
@@ -81,6 +88,21 @@ export default function LibraryGradeDetailPage({ role }) {
       ignore = true
     }
   }, [])
+
+  // Öğretmenler kütüphanede sadece kendi branşlarının sekmelerini görür; branşı henüz
+  // atanmamış (eski) öğretmen hesaplarında geriye dönük uyumluluk için tüm dersler gösterilir.
+  const teacherSubjectIds = authUser?.teacherSubjectIds
+  const visibleSubjects = useMemo(() => {
+    if (!subjects) return null
+    if (role !== 'teacher' || !teacherSubjectIds?.length) return subjects
+    return subjects.filter((subject) => teacherSubjectIds.includes(subject.id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subjects, role, teacherSubjectIds?.length])
+
+  useEffect(() => {
+    if (!visibleSubjects) return
+    setActiveSubjectId((current) => current || visibleSubjects[0]?.id || null)
+  }, [visibleSubjects])
 
   const loadResourceBooks = () => {
     if (!activeSubjectId) return
@@ -95,7 +117,22 @@ export default function LibraryGradeDetailPage({ role }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSubjectId, grade])
 
-  const activeSubject = subjects?.find((subject) => subject.id === activeSubjectId) || null
+  const activeSubject = visibleSubjects?.find((subject) => subject.id === activeSubjectId) || null
+
+  const handleDeleteBook = async () => {
+    if (!deletingBook) return
+    setDeletingLoading(true)
+    setDeletingError('')
+    try {
+      await authRequest(`${apiBase}/library/resource-books/${deletingBook.id}`, { method: 'DELETE' })
+      setDeletingBook(null)
+      loadResourceBooks()
+    } catch (err) {
+      setDeletingError(err.message)
+    } finally {
+      setDeletingLoading(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -121,11 +158,11 @@ export default function LibraryGradeDetailPage({ role }) {
 
       {error ? <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div> : null}
 
-      {subjects === null ? (
+      {visibleSubjects === null ? (
         <LoadingState label="Dersler yükleniyor..." />
       ) : (
         <div className="flex gap-1 overflow-x-auto border-b border-panel-border">
-          {subjects.map((subject) => (
+          {visibleSubjects.map((subject) => (
             <button
               key={subject.id}
               type="button"
@@ -155,7 +192,16 @@ export default function LibraryGradeDetailPage({ role }) {
           {resourceBooks.map((book) => (
             <div
               key={book.id}
-              className="flex min-h-[128px] items-start gap-3 rounded-xl border border-panel-border bg-panel-surface p-3"
+              role="button"
+              tabIndex={0}
+              onClick={() => setViewBookId(book.id)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  setViewBookId(book.id)
+                }
+              }}
+              className="flex min-h-[128px] cursor-pointer items-start gap-3 rounded-xl border border-panel-border bg-panel-surface p-3 transition-colors hover:border-panel-blue"
             >
               <ResourceAvatar book={book} />
               <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -173,14 +219,33 @@ export default function LibraryGradeDetailPage({ role }) {
                 {book.status === 'rejected' && book.rejectionReason ? (
                   <p className="text-xs text-panel-warm">Gerekçe: {book.rejectionReason}</p>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => setAssignBook(book)}
-                  className="mt-1 inline-flex w-fit items-center gap-1.5 rounded-full bg-panel-blue-soft px-2.5 py-1 text-xs font-semibold text-panel-blue hover:opacity-90"
-                >
-                  <UserPlus size={12} aria-hidden="true" />
-                  Ata
-                </button>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setAssignBook(book)
+                    }}
+                    className="inline-flex w-fit items-center gap-1.5 rounded-full bg-panel-blue-soft px-2.5 py-1 text-xs font-semibold text-panel-blue hover:opacity-90"
+                  >
+                    <UserPlus size={12} aria-hidden="true" />
+                    Ata
+                  </button>
+                  {book.canDelete ? (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setDeletingError('')
+                        setDeletingBook(book)
+                      }}
+                      className="inline-flex w-fit items-center gap-1.5 rounded-full bg-panel-accent-soft px-2.5 py-1 text-xs font-semibold text-panel-warm hover:opacity-90"
+                    >
+                      <Trash2 size={12} aria-hidden="true" />
+                      Sil
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
           ))}
@@ -189,6 +254,39 @@ export default function LibraryGradeDetailPage({ role }) {
 
       {assignBook ? (
         <AssignLibraryResourceModal role={role} resourceBook={assignBook} onClose={() => setAssignBook(null)} />
+      ) : null}
+
+      {viewBookId ? (
+        <LibraryResourceDetailModal
+          role={role}
+          resourceBookId={viewBookId}
+          onClose={() => setViewBookId(null)}
+          onAssign={(book) => {
+            setViewBookId(null)
+            setAssignBook(book)
+          }}
+          onDeleted={() => {
+            setViewBookId(null)
+            loadResourceBooks()
+          }}
+        />
+      ) : null}
+
+      {deletingBook ? (
+        <ConfirmationDialog
+          title="Kaynağı Sil"
+          description={
+            deletingError ||
+            `"${deletingBook.name}" kaynağını kütüphaneden silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`
+          }
+          confirmLabel={deletingLoading ? 'Siliniyor...' : 'Sil'}
+          cancelLabel="Vazgeç"
+          onConfirm={handleDeleteBook}
+          onCancel={() => {
+            setDeletingBook(null)
+            setDeletingError('')
+          }}
+        />
       ) : null}
 
       {showAddWizard && activeSubjectId ? (

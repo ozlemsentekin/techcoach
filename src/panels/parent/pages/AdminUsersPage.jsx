@@ -11,6 +11,7 @@ import Badge from '../../ui/Badge'
 import Button from '../../ui/Button'
 import DataTable from '../../ui/DataTable'
 import { MotionDiv } from '../../ui/motion'
+import SubjectPicker from '../components/SubjectPicker'
 
 const ROLE_TONE = {
   ebeveyn: 'slate',
@@ -69,8 +70,26 @@ function EditUserModal({ user, isSelf, onSaved, onClose }) {
   const [email, setEmail] = useState(user.email || '')
   const [phone, setPhone] = useState(user.phone || '')
   const [isAdmin, setIsAdmin] = useState(user.isAdmin)
+  const [subjectIds, setSubjectIds] = useState(user.teacherSubjectIds || [])
+  const [allSubjects, setAllSubjects] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const isTeacher = user.role === 'ogretmen'
+
+  useEffect(() => {
+    if (!isTeacher) return
+    let ignore = false
+    authRequest('/api/panel-admin/subjects', { method: 'GET' })
+      .then((data) => {
+        if (!ignore) setAllSubjects(data.subjects)
+      })
+      .catch((err) => {
+        if (!ignore) setError(err.message)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [isTeacher])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -94,6 +113,7 @@ function EditUserModal({ user, isSelf, onSaved, onClose }) {
           email: email.trim() || null,
           phone: phone.trim() || null,
           isAdmin,
+          ...(isTeacher ? { subjectIds } : {}),
         }),
       })
       onSaved(data.user)
@@ -152,6 +172,23 @@ function EditUserModal({ user, isSelf, onSaved, onClose }) {
               </span>
             ) : null}
           </label>
+
+          {isTeacher ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-panel-text-muted">Branş</span>
+              {allSubjects === null ? (
+                <p className="text-xs text-panel-text-muted">Dersler yükleniyor...</p>
+              ) : (
+                <SubjectPicker
+                  allSubjects={allSubjects}
+                  selectedIds={subjectIds}
+                  onChange={setSubjectIds}
+                  allLabel="Tüm Dersler"
+                  selectedLabel="Öğretmenin Branşları"
+                />
+              )}
+            </div>
+          ) : null}
 
           <label className={`flex items-center gap-2.5 ${isSelf ? 'opacity-50' : ''}`}>
             <input

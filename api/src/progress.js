@@ -4,6 +4,8 @@ const { json } = require('./http')
 const { isSessionError } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
 
+const MISTAKE_REASONS = ['dikkat-hatasi', 'bilgi-eksikligi']
+
 function toISODate(value) {
   if (!value) return null
   return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10)
@@ -32,8 +34,13 @@ function sanitizeWrongQuestion(record) {
     questionNumber: record.question_number || undefined,
     errorType: record.error_type,
     studentNote: record.student_note || undefined,
+    mistakeReason: record.mistake_reason || undefined,
     reviewStatus: record.review_status,
     resolvedAt: record.resolved_at,
+    // Liste uçları (listWrongQuestionsHandler vb.) her satırın base64 fotoğrafını çekmenin
+    // çok pahalı olması nedeniyle sadece has_photo bayrağını seçer; tam photoUrl sadece tekil
+    // fotoğraf uçlarından (getWrongQuestionPhotoHandler) veya foto kaydeden akışlardan gelir.
+    hasPhoto: record.has_photo !== undefined ? Boolean(record.has_photo) : Boolean(record.photo_url),
     photoUrl: record.photo_url || undefined,
     createdAt: record.created_at,
   }
@@ -116,6 +123,7 @@ function sanitizeProgressTask(record) {
     resourceBookId: record.resource_book_id || undefined,
     resourceBookName: record.resource_book_name || undefined,
     resourceType: record.resource_type || undefined,
+    resourceBookImageUrl: record.image_url || undefined,
     publisherName: record.publisher_name || undefined,
     subjectId: record.resource_subject_id || undefined,
     subjectName: record.resource_subject_name || undefined,
@@ -139,11 +147,32 @@ function sanitizeProgressSession(record) {
     resourceBookId: record.resource_book_id || undefined,
     resourceBookName: record.resource_book_name || undefined,
     resourceType: record.resource_type || undefined,
+    resourceBookImageUrl: record.image_url || undefined,
     publisherName: record.publisher_name || undefined,
     subjectId: record.resource_subject_id || undefined,
     subjectName: record.resource_subject_name || undefined,
     selectedTestIds: parseJson(record.selected_test_ids_json, []),
     testResults: parseJson(record.test_results_json, {}),
+  }
+}
+
+function sanitizeManualTestCompletion(record) {
+  return {
+    testId: record.test_id,
+    testName: record.test_name || undefined,
+    topicName: record.topic_name || undefined,
+    questionCount: record.question_count,
+    resourceBookId: record.resource_book_id,
+    resourceBookName: record.resource_book_name || undefined,
+    resourceType: record.resource_type || undefined,
+    resourceBookImageUrl: record.image_url || undefined,
+    publisherName: record.publisher_name || undefined,
+    subjectId: record.subject_id || undefined,
+    subjectName: record.subject_name || undefined,
+    correctCount: record.correct_count ?? undefined,
+    wrongCount: record.wrong_count ?? undefined,
+    blankCount: record.blank_count ?? undefined,
+    markedAt: record.marked_at,
   }
 }
 
@@ -155,6 +184,7 @@ function sanitizeProgressHomework(record) {
     resourceBookId: record.resource_book_id || undefined,
     resourceBookName: record.resource_book_name || undefined,
     resourceType: record.resource_type || undefined,
+    resourceBookImageUrl: record.image_url || undefined,
     publisherName: record.publisher_name || undefined,
     title: record.title,
     description: record.description || undefined,
@@ -267,7 +297,8 @@ async function listWrongQuestionsHandler(request) {
     })
     const result = await requestDb.query(`
       SELECT id, student_id, task_id, test_id, subject, topic, test_name, book_name, publisher_name,
-             question_number, error_type, student_note, review_status, resolved_at, photo_url, created_at
+             question_number, error_type, student_note, mistake_reason, review_status, resolved_at,
+             CASE WHEN photo_url IS NOT NULL THEN 1 ELSE 0 END AS has_photo, created_at
       FROM dbo.WrongQuestions
       WHERE student_id = @studentId
       ORDER BY created_at DESC;
@@ -285,6 +316,45 @@ async function listWrongQuestionsHandler(request) {
 
     console.error('listWrongQuestionsHandler failed', error)
     return json(500, { error: 'Yanlış sorular yüklenemedi.' })
+  }
+}
+
+// Tek bir yanlış sorunun base64 fotoğrafını getirir. listWrongQuestionsHandler'ın aksine
+// (o sadece has_photo bayrağı döner, bkz. yukarısı) galeri sadece o an gösterilen fotoğrafı
+// bu uçtan tembel (lazy) çeker — onlarca fotoğrafı tek istekte çekmenin getirdiği yavaşlığı önler.
+async function getWrongQuestionPhotoHandler(request) {
+  try {
+    const { error, studentId } = await requireStudentContext(request)
+    if (error) {
+      return error
+    }
+
+    const wrongQuestionId = request.params.wrongQuestionId
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const result = await requestDb.query(`
+      SELECT photo_url FROM dbo.WrongQuestions WHERE id = @id AND student_id = @studentId;
+    `)
+
+    const photoUrl = result.recordset[0]?.photo_url
+    if (!photoUrl) {
+      return json(404, { error: 'Fotoğraf bulunamadı.' })
+    }
+
+    return json(200, { photoUrl })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('getWrongQuestionPhotoHandler failed', error)
+    return json(500, { error: 'Fotoğraf yüklenemedi.' })
   }
 }
 
@@ -360,6 +430,13 @@ async function updateWrongQuestionHandler(request) {
       setClauses.push('student_note = @studentNote')
       bindings.studentNote = { type: sql.NVarChar(1000), value: payload.studentNote || null }
     }
+    if (payload?.mistakeReason !== undefined) {
+      if (!MISTAKE_REASONS.includes(payload.mistakeReason)) {
+        return json(400, { error: 'Geçersiz hata nedeni.' })
+      }
+      setClauses.push('mistake_reason = @mistakeReason')
+      bindings.mistakeReason = { type: sql.NVarChar(30), value: payload.mistakeReason }
+    }
 
     if (setClauses.length === 0) {
       return json(400, { error: 'Güncellenecek alan bulunamadı.' })
@@ -376,7 +453,8 @@ async function updateWrongQuestionHandler(request) {
 
     const fetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: wrongQuestionId } })
     const fetchResult = await fetchDb.query(`
-      SELECT id, student_id, task_id, subject, topic, question_number, error_type, student_note, review_status, resolved_at, created_at
+      SELECT id, student_id, task_id, subject, topic, question_number, error_type, student_note, mistake_reason,
+             review_status, resolved_at, created_at
       FROM dbo.WrongQuestions WHERE id = @id;
     `)
 
@@ -388,6 +466,132 @@ async function updateWrongQuestionHandler(request) {
 
     console.error('updateWrongQuestionHandler failed', error)
     return json(500, { error: 'Kayıt güncellenemedi.' })
+  }
+}
+
+function topicStatsKey(subject, topic) {
+  return `${(subject || '').trim()}::${(topic || '').trim()}`
+}
+
+// Bir öğrencinin fotoğraflı yanlışlarını içerik (konu) bazında kart olarak göstermek için,
+// aynı konudaki TÜM atanmış kaynaklardan (farklı kitap/yayınevi) toplam çözülen soru sayısını ve
+// başarı oranını hesaplar. catalog.js'deki computeResourceBookStats ile aynı JSON-birleştirme
+// mantığını kullanır, ama kitap yerine (ders, konu) çiftine göre gruplar.
+// teacherId verildiğinde (öğretmen panelinden çağrıldığında) testler ayrıca o öğretmene atanmış
+// kaynaklarla sınırlanır (bkz. teacher.js'deki getTeacherStudentProgressOverviewHandler'daki aynı kısıtlama).
+async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId } = {}) {
+  if (!topicKeys.length) return []
+
+  const wantedKeys = new Set(topicKeys.map(({ subject, topic }) => topicStatsKey(subject, topic)))
+
+  const testsDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    ...(teacherId ? { teacherId: { type: sql.UniqueIdentifier, value: teacherId } } : {}),
+  })
+  const testsResult = await testsDb.query(`
+    SELECT tt.id AS test_id, s.name AS subject_name, COALESCE(tt.topic_name, rbt.name) AS topic_name
+    FROM dbo.ResourceBookTopicTests tt
+    JOIN dbo.ResourceBookTopics rbt ON rbt.id = tt.topic_id
+    JOIN dbo.ResourceBooks rb ON rb.id = rbt.resource_book_id
+    JOIN dbo.StudentResourceBooks srb ON srb.resource_book_id = rb.id AND srb.student_id = @studentId
+    LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
+    ${teacherId ? 'JOIN dbo.StudentTeacherResourceBooks strb ON strb.teacher_id = @teacherId AND strb.resource_book_id = rb.id' : ''}
+    WHERE rb.is_active = 1;
+  `)
+
+  const keyByTestId = new Map()
+  testsResult.recordset.forEach((row) => {
+    const key = topicStatsKey(row.subject_name, row.topic_name)
+    if (wantedKeys.has(key)) {
+      keyByTestId.set(row.test_id, key)
+    }
+  })
+  if (!keyByTestId.size) return []
+
+  const testResultCounts = new Map()
+
+  const tasksDb = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
+  const tasksResult = await tasksDb.query(`
+    SELECT test_results_json FROM dbo.Tasks WHERE student_id = @studentId AND test_results_json IS NOT NULL;
+  `)
+  tasksResult.recordset.forEach((row) => {
+    let results
+    try {
+      results = JSON.parse(row.test_results_json)
+    } catch {
+      return
+    }
+    Object.entries(results || {}).forEach(([testId, result]) => {
+      if (!keyByTestId.has(testId)) return
+      const existing = testResultCounts.get(testId)
+      if (!existing || (result?.gradedAt && (!existing.gradedAt || result.gradedAt > existing.gradedAt))) {
+        testResultCounts.set(testId, result)
+      }
+    })
+  })
+
+  const manualDb = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
+  const manualResult = await manualDb.query(`
+    SELECT test_id, correct_count, wrong_count, blank_count
+    FROM dbo.StudentManualTestCompletions
+    WHERE student_id = @studentId;
+  `)
+  manualResult.recordset.forEach((row) => {
+    if (!keyByTestId.has(row.test_id)) return
+    if (row.correct_count === null && row.wrong_count === null && row.blank_count === null) return
+    testResultCounts.set(row.test_id, { correct: row.correct_count, wrong: row.wrong_count, blank: row.blank_count })
+  })
+
+  const totals = new Map()
+  keyByTestId.forEach((key, testId) => {
+    const result = testResultCounts.get(testId)
+    if (!result) return
+    if (!totals.has(key)) totals.set(key, { correct: 0, wrong: 0, blank: 0 })
+    const entry = totals.get(key)
+    entry.correct += Number(result.correct) || 0
+    entry.wrong += Number(result.wrong) || 0
+    entry.blank += Number(result.blank) || 0
+  })
+
+  return topicKeys.map(({ subject, topic }) => {
+    const entry = totals.get(topicStatsKey(subject, topic))
+    const totalAnswered = entry ? entry.correct + entry.wrong + entry.blank : 0
+    return {
+      subject,
+      topic,
+      totalAnswered,
+      successRate: entry && totalAnswered > 0 ? entry.correct / totalAnswered : null,
+    }
+  })
+}
+
+async function getWrongQuestionTopicStatsHandler(request) {
+  try {
+    const { error, studentId } = await requireStudentContext(request)
+    if (error) {
+      return error
+    }
+
+    const requestDb = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
+    const result = await requestDb.query(`
+      SELECT DISTINCT subject, topic
+      FROM dbo.WrongQuestions
+      WHERE student_id = @studentId AND photo_url IS NOT NULL;
+    `)
+
+    const topicStats = await computeWrongQuestionTopicStats(studentId, result.recordset)
+    return json(200, { topicStats })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('getWrongQuestionTopicStatsHandler failed', error)
+    return json(500, { error: 'İçerik istatistikleri yüklenemedi.' })
   }
 }
 
@@ -442,6 +646,7 @@ async function getProgressOverviewHandler(request) {
       sessionsResult,
       homeworksResult,
       wrongQuestionsResult,
+      manualTestCompletionsResult,
     ] = await Promise.all([
       withRequest(bindings).then((requestDb) =>
         requestDb.query(`
@@ -474,7 +679,7 @@ async function getProgressOverviewHandler(request) {
                  t.target_page_count, t.completed_page_count, t.status, t.completed_at,
                  t.correct_count, t.wrong_count, t.blank_count, t.resource_book_id,
                  t.selected_test_ids_json, t.test_results_json, rb.name AS resource_book_name,
-                 rb.resource_type, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
+                 rb.resource_type, rb.image_url, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
                  s.name AS resource_subject_name, t.created_at, t.updated_at
           FROM dbo.Tasks t
           LEFT JOIN dbo.ResourceBooks rb ON rb.id = t.resource_book_id
@@ -492,7 +697,7 @@ async function getProgressOverviewHandler(request) {
                  t.title AS task_title, t.task_type, t.homework_id, t.duration_minutes AS task_duration_minutes,
                  t.subject, t.topic, t.resource_book_id,
                  t.selected_test_ids_json, t.test_results_json, rb.name AS resource_book_name,
-                 rb.resource_type, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
+                 rb.resource_type, rb.image_url, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
                  s.name AS resource_subject_name
           FROM dbo.StudySessions ss
           LEFT JOIN dbo.Tasks t ON t.id = ss.task_id
@@ -506,7 +711,7 @@ async function getProgressOverviewHandler(request) {
       withRequest(bindings).then((requestDb) =>
         requestDb.query(`
           SELECT h.id, h.subject_id, s.name AS subject_name, h.resource_book_id,
-                 rb.name AS resource_book_name, rb.resource_type, p.name AS publisher_name,
+                 rb.name AS resource_book_name, rb.resource_type, rb.image_url, p.name AS publisher_name,
                  h.title, h.description, h.assigned_date, h.due_date,
                  h.total_question_count, h.completed_question_count, h.total_page_count,
                  h.status, h.created_at, h.updated_at
@@ -527,6 +732,22 @@ async function getProgressOverviewHandler(request) {
           ORDER BY created_at DESC;
         `),
       ),
+      withRequest(bindings).then((requestDb) =>
+        requestDb.query(`
+          SELECT smtc.test_id, smtc.correct_count, smtc.wrong_count, smtc.blank_count, smtc.marked_at,
+                 tt.name AS test_name, COALESCE(tt.topic_name, rbt.name) AS topic_name, tt.question_count,
+                 rb.id AS resource_book_id, rb.name AS resource_book_name, rb.resource_type, rb.image_url,
+                 p.name AS publisher_name, rb.subject_id, s.name AS subject_name
+          FROM dbo.StudentManualTestCompletions smtc
+          INNER JOIN dbo.ResourceBookTopicTests tt ON tt.id = smtc.test_id
+          INNER JOIN dbo.ResourceBookTopics rbt ON rbt.id = tt.topic_id
+          INNER JOIN dbo.ResourceBooks rb ON rb.id = rbt.resource_book_id
+          LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
+          LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+          WHERE smtc.student_id = @studentId
+            AND (smtc.correct_count IS NOT NULL OR smtc.wrong_count IS NOT NULL OR smtc.blank_count IS NOT NULL);
+        `),
+      ),
     ])
 
     return json(200, {
@@ -536,6 +757,7 @@ async function getProgressOverviewHandler(request) {
       sessions: sessionsResult.recordset.map(sanitizeProgressSession),
       homeworks: homeworksResult.recordset.map(sanitizeProgressHomework),
       wrongQuestions: wrongQuestionsResult.recordset.map(sanitizeWrongQuestion),
+      manualTestCompletions: manualTestCompletionsResult.recordset.map(sanitizeManualTestCompletion),
     })
   } catch (error) {
     if (isConfigError(error)) {
@@ -664,8 +886,12 @@ module.exports = {
   getCheckInHandler,
   saveCheckInHandler,
   listWrongQuestionsHandler,
+  getWrongQuestionPhotoHandler,
   addWrongQuestionHandler,
   updateWrongQuestionHandler,
+  getWrongQuestionTopicStatsHandler,
+  computeWrongQuestionTopicStats,
+  MISTAKE_REASONS,
   listStudySessionsHandler,
   addStudySessionHandler,
   getProgressOverviewHandler,
@@ -677,4 +903,5 @@ module.exports = {
   sanitizeProgressSession,
   sanitizeProgressHomework,
   sanitizeWrongQuestion,
+  sanitizeManualTestCompletion,
 }

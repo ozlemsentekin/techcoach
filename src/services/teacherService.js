@@ -31,6 +31,24 @@ export async function addTeacherStudent({ studentFullName, subjectId, teacherTyp
   })
 }
 
+/** Kütüphanede gösterilen sınıflar (öğrencilerden otomatik + elle eklenenler). @returns {Promise<{grades: string[], manualGrades: string[]}>} */
+export async function getTeacherLibraryGrades() {
+  return authRequest('/api/panel-teacher/library-grades', { method: 'GET' })
+}
+
+/** Öğretmenin kütüphanesine, öğrenci eklemeden elle bir sınıf ekler. @returns {Promise<{grades: string[], manualGrades: string[]}>} */
+export async function addTeacherLibraryGrade(grade) {
+  return authRequest('/api/panel-teacher/library-grades', {
+    method: 'POST',
+    body: JSON.stringify({ grade }),
+  })
+}
+
+/** Elle eklenmiş bir sınıfı kütüphaneden kaldırır. @returns {Promise<{grades: string[], manualGrades: string[]}>} */
+export async function removeTeacherLibraryGrade(grade) {
+  return authRequest(`/api/panel-teacher/library-grades/${grade}`, { method: 'DELETE' })
+}
+
 /** @returns {Promise<{recurringEntries: Array, oneTimeEntries: Array}>} */
 export async function getTeacherLessonPlan(weekStartISO) {
   const data = await authRequest(`/api/panel-teacher/lesson-plan?weekStart=${weekStartISO}`, { method: 'GET' })
@@ -104,6 +122,33 @@ export async function getTeacherResourceBookTopics(studentTeacherId, resourceBoo
   return data.topics
 }
 
+export async function markTeacherResourceBookTopicTestCompletion(studentTeacherId, testId, counts = {}) {
+  return authRequest(`/api/panel-teacher/students/${studentTeacherId}/resource-book-topic-tests/${testId}/completion`, {
+    method: 'PUT',
+    body: JSON.stringify(counts),
+  })
+}
+
+export async function unmarkTeacherResourceBookTopicTestCompletion(studentTeacherId, testId) {
+  return authRequest(`/api/panel-teacher/students/${studentTeacherId}/resource-book-topic-tests/${testId}/completion`, {
+    method: 'DELETE',
+  })
+}
+
+export async function submitTeacherManualOpticalAnswers(studentTeacherId, testId, answers) {
+  return authRequest(
+    `/api/panel-teacher/students/${studentTeacherId}/resource-book-topic-tests/${testId}/optical-completion`,
+    { method: 'PUT', body: JSON.stringify({ answers }) },
+  )
+}
+
+export async function saveTeacherManualWrongQuestionPhoto(studentTeacherId, testId, orderNo, photoDataUrl) {
+  return authRequest(`/api/panel-teacher/students/${studentTeacherId}/resource-book-topic-tests/${testId}/mistakes/${orderNo}`, {
+    method: 'PUT',
+    body: JSON.stringify({ photo: photoDataUrl }),
+  })
+}
+
 /** @returns {Promise<Array>} */
 export async function getTeacherStudentHomeworks(studentTeacherId) {
   const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/homeworks`, { method: 'GET' })
@@ -146,4 +191,35 @@ export async function getTeacherTaskAnswerSheet(studentTeacherId, taskId) {
 /** @returns {Promise<Object>} */
 export async function getTeacherStudentProgressOverview(studentTeacherId) {
   return authRequest(`/api/panel-teacher/students/${studentTeacherId}/progress-overview`, { method: 'GET' })
+}
+
+/** @returns {Promise<import('./wrongQuestionService').WrongQuestion[]>} */
+export async function getTeacherStudentWrongQuestions(studentTeacherId) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/wrong-questions`, { method: 'GET' })
+  return data.wrongQuestions
+}
+
+/** @returns {Promise<import('./wrongQuestionService').WrongQuestionTopicStats[]>} */
+export async function getTeacherStudentWrongQuestionTopicStats(studentTeacherId) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/wrong-question-topic-stats`, {
+    method: 'GET',
+  })
+  return data.topicStats
+}
+
+/** @returns {Promise<string>} photoUrl */
+export async function getTeacherStudentWrongQuestionPhoto(studentTeacherId, wrongQuestionId) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/wrong-questions/${wrongQuestionId}/photo`, {
+    method: 'GET',
+  })
+  return data.photoUrl
+}
+
+/** @returns {Promise<import('./wrongQuestionService').WrongQuestion>} */
+export async function updateTeacherStudentWrongQuestion(studentTeacherId, wrongQuestionId, updates) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/wrong-questions/${wrongQuestionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  })
+  return data.wrongQuestion
 }

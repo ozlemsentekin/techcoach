@@ -5,11 +5,8 @@ const { isSessionError } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
 const { recordTaskActivities } = require('./taskActivity')
 const { sanitizeWrongQuestion } = require('./progress')
-
-// Öğrencinin cevabını bilmediği bir soruyu bilinçli olarak "boş" işaretlemesini temsil eder.
-// Cevaplanmamış (key hiç yok) durumdan farklıdır: bu işaret "cevaplandı" sayılır (tamamlama
-// sayacına ve testin tam cevaplanma şartına dahil olur) ama notlama sırasında hep boş sayılır.
-const BLANK_ANSWER_LABEL = '-'
+const { sanitizeAnswers, gradeTestAnswers } = require('./testGrading')
+const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
 
 function toISODate(value) {
   if (!value) return null
@@ -778,28 +775,6 @@ async function getTaskAnswerSheetHandler(request) {
   }
 }
 
-const MAX_MISTAKE_PHOTO_LENGTH = 350000
-const MISTAKE_PHOTO_DATA_URL_PATTERN = /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\s]+$/i
-
-function sanitizeMistakePhoto(value) {
-  const photo = typeof value === 'string' ? value.trim() : ''
-  if (!photo) return { error: 'Fotoğraf zorunludur.' }
-  if (photo.length > MAX_MISTAKE_PHOTO_LENGTH) {
-    return { error: 'Fotoğraf çok büyük. Daha küçük bir görsel seçin.' }
-  }
-  if (!MISTAKE_PHOTO_DATA_URL_PATTERN.test(photo)) {
-    return { error: 'Geçerli bir JPG/PNG/WEBP fotoğrafı yükleyin.' }
-  }
-  return { value: photo }
-}
-
-const WRONG_QUESTION_OUTPUT_COLUMNS = `
-  inserted.id, inserted.student_id, inserted.task_id, inserted.test_id, inserted.subject, inserted.topic,
-  inserted.test_name, inserted.book_name, inserted.publisher_name, inserted.question_number,
-  inserted.error_type, inserted.student_note, inserted.review_status, inserted.resolved_at,
-  inserted.photo_url, inserted.created_at
-`
-
 // Cevap kağıdında yanlış işaretlenmiş bir soruya öğrencinin galeriden seçtiği ya da kamerayla
 // çektiği fotoğrafı kaydeder. testId üzerinden yayın evi/kitap/konu/test adını server tarafında
 // çözer (client'a güvenmiyoruz) ve dbo.WrongQuestions'a upsert eder; Hata Defterim bu tabloyu okur.
@@ -843,11 +818,7 @@ async function saveWrongQuestionPhotoHandler(request) {
     const correctLabel = testResult?.correctLabels?.[orderNo]
     const studentAnswer = answers[testId]?.[orderNo]
     const isActuallyWrong =
-      Boolean(testResult) &&
-      Boolean(correctLabel) &&
-      Boolean(studentAnswer) &&
-      studentAnswer !== BLANK_ANSWER_LABEL &&
-      studentAnswer !== correctLabel
+      Boolean(testResult) && Boolean(correctLabel) && Boolean(studentAnswer) && studentAnswer !== correctLabel
     if (!isActuallyWrong) {
       return json(400, { error: 'Bu soru yanlış işaretlenmemiş.' })
     }
@@ -958,14 +929,7 @@ async function saveTaskAnswersHandler(request) {
       if (!testId || !selectedTestIds.includes(testId)) return
       if (results[testId]) return // Değerlendirilmiş test: cevaplar kilitli, üzerine yazılamaz.
 
-      const sanitizedAnswers = {}
-      Object.entries(entry?.answers || {}).forEach(([orderNo, label]) => {
-        const normalizedLabel = typeof label === 'string' ? label.trim().toUpperCase() : ''
-        if (['A', 'B', 'C', 'D', BLANK_ANSWER_LABEL].includes(normalizedLabel)) {
-          sanitizedAnswers[orderNo] = normalizedLabel
-        }
-      })
-      answers[testId] = sanitizedAnswers
+      answers[testId] = sanitizeAnswers(entry?.answers)
     })
 
     const testBindings = {}
@@ -991,31 +955,13 @@ async function saveTaskAnswersHandler(request) {
       const answeredCount = Object.keys(testAnswers).length
       totalCompleted += Math.min(answeredCount, questionCount)
 
-      if (questionCount > 0 && answeredCount >= questionCount) {
-        const keyDb = await withRequest({ testId: { type: sql.UniqueIdentifier, value: testId } })
-        const keyResult = await keyDb.query(`
-          SELECT order_no, correct_label FROM dbo.TestAnswerKeys WHERE test_id = @testId ORDER BY order_no ASC;
-        `)
-
-        if (keyResult.recordset.length === questionCount) {
-          let correct = 0
-          let wrong = 0
-          const correctLabels = {}
-          keyResult.recordset.forEach((row) => {
-            const correctLabel = row.correct_label.trim()
-            correctLabels[String(row.order_no)] = correctLabel
-            const studentLabel = testAnswers[String(row.order_no)]
-            if (!studentLabel || studentLabel === BLANK_ANSWER_LABEL) return
-            if (studentLabel === correctLabel) correct += 1
-            else wrong += 1
-          })
-          const blank = questionCount - correct - wrong
-          results[testId] = { correct, wrong, blank, gradedAt: new Date().toISOString(), correctLabels }
-          totalCorrect += correct
-          totalWrong += wrong
-          totalBlank += blank
-          continue
-        }
+      const { result } = await gradeTestAnswers(testId, questionCount, testAnswers)
+      if (result) {
+        results[testId] = result
+        totalCorrect += result.correct
+        totalWrong += result.wrong
+        totalBlank += result.blank
+        continue
       }
 
       delete results[testId]

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
+  AlertCircle,
   BookOpen,
   Calendar,
   GraduationCap,
@@ -627,6 +628,16 @@ function StudentCard({ student, onOpenLibrary, onOpenProfile, onOpenTeachers }) 
         >
           <BookOpen size={16} className="shrink-0" aria-hidden="true" />
           Kaynaklar
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => navigate(`/parent/mistakes?studentId=${student.id}`)}
+          className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+        >
+          <AlertCircle size={16} className="shrink-0" aria-hidden="true" />
+          Hata Defteri
         </Button>
         <Button
           type="button"

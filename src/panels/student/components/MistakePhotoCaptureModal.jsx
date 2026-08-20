@@ -2,7 +2,8 @@ import { useId, useState } from 'react'
 import { Camera, ImagePlus, X } from 'lucide-react'
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+const MAX_UPLOAD_MB = 8
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 const MAX_OUTPUT_DIMENSION = 1400
 const OUTPUT_QUALITY = 0.82
 
@@ -32,7 +33,7 @@ async function resizeQuestionPhoto(file) {
     throw new Error('JPG, PNG veya WEBP görsel seçin.')
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    throw new Error('Görsel en fazla 8 MB olabilir.')
+    throw new Error(`Görsel en fazla ${MAX_UPLOAD_MB} MB olabilir.`)
   }
 
   const sourceUrl = await readFileAsDataUrl(file)
@@ -156,6 +157,8 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
             onChange={handleInputChange}
           />
         </div>
+
+        <p className="mt-3 text-xs text-panel-text-muted">JPG, PNG veya WEBP · en fazla {MAX_UPLOAD_MB} MB</p>
       </div>
     </div>
   )

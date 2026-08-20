@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, GraduationCap, TrendingUp } from 'lucide-react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { AlertCircle, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, GraduationCap, TrendingUp } from 'lucide-react'
 import LoadingState from '../../shared/LoadingState'
 import Button from '../../ui/Button'
 import WeeklyPlannerGrid from '../../parent/components/WeeklyPlannerGrid'
 import AssignTaskModal from '../../shared/homework/AssignTaskModal'
 import StudentProgressView from '../../shared/StudentProgressView'
+import WrongQuestionsView from '../../shared/WrongQuestionsView'
 import AssignHomeworkModal from '../components/AssignHomeworkModal'
 import TaskDetailModal from '../components/TaskDetailModal'
 import TaskOpticalResultModal from '../components/TaskOpticalResultModal'
@@ -16,17 +17,27 @@ import {
   addTeacherHomework,
   assignTeacherHomeworkTask,
   getTeacherStudentProgressOverview,
+  getTeacherStudentWrongQuestions,
+  getTeacherStudentWrongQuestionTopicStats,
+  getTeacherStudentWrongQuestionPhoto,
+  updateTeacherStudentWrongQuestion,
 } from '../../../services/teacherService'
 import { addDaysISO, getMondayOfWeek, todayISODate } from '../../../utils/time'
 import { getWeekDates } from '../../../services/weeklyPlanService'
 
 const currentWeekStart = getMondayOfWeek(todayISODate())
 
+const VALID_TABS = ['calendar', 'analysis', 'mistakes']
+
 export default function StudentDetailPage() {
   const { studentTeacherId } = useParams()
+  const [searchParams] = useSearchParams()
   const [student, setStudent] = useState(null)
   const [studentError, setStudentError] = useState('')
-  const [activeTab, setActiveTab] = useState('calendar')
+  const [activeTab, setActiveTab] = useState(() => {
+    const requestedTab = searchParams.get('tab')
+    return VALID_TABS.includes(requestedTab) ? requestedTab : 'calendar'
+  })
 
   const [weekOffset, setWeekOffset] = useState(0)
   const weekStart = addDaysISO(currentWeekStart, weekOffset * 7)
@@ -175,6 +186,16 @@ export default function StudentDetailPage() {
           <TrendingUp size={15} aria-hidden="true" />
           Gelişim Analizi
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('mistakes')}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+            activeTab === 'mistakes' ? 'bg-panel-blue text-white' : 'text-panel-text-muted hover:text-panel-text'
+          }`}
+        >
+          <AlertCircle size={15} aria-hidden="true" />
+          Hata Defteri
+        </button>
       </div>
 
       {banner ? (
@@ -236,13 +257,24 @@ export default function StudentDetailPage() {
             />
           )}
         </div>
-      ) : (
+      ) : activeTab === 'analysis' ? (
         <StudentProgressView
           studentId={studentTeacherId}
           title="Gelişim Analizi"
           emptySubtitle={`${student.subjectName || 'Bu ders'} için ilerleme burada görünecek.`}
           buildSubtitle={() => `${student.subjectName || 'Ders'} için emek, doğruluk ve kaynak ilerlemesi.`}
           fetchOverview={getTeacherStudentProgressOverview}
+        />
+      ) : (
+        <WrongQuestionsView
+          fetchWrongQuestions={() => getTeacherStudentWrongQuestions(studentTeacherId)}
+          fetchTopicStats={() => getTeacherStudentWrongQuestionTopicStats(studentTeacherId)}
+          fetchPhoto={(id) => getTeacherStudentWrongQuestionPhoto(studentTeacherId, id)}
+          updateMistakeReason={(id, mistakeReason) =>
+            updateTeacherStudentWrongQuestion(studentTeacherId, id, { mistakeReason })
+          }
+          title="Hata Defteri"
+          subtitle={`${student.subjectName || 'Bu ders'} için fotoğraflanan yanlış sorular.`}
         />
       )}
 

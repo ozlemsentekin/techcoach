@@ -3,6 +3,7 @@ const { isCaptchaConfigured, isConfigError } = require('./config')
 const { clearSessionHeaders, createSessionHeaders, getClientIp, json } = require('./http')
 const { consumeRateLimit } = require('./rate-limit')
 const { verifyTurnstileToken } = require('./turnstile')
+const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
 const {
   createSessionToken,
   defaultPasswordForPhone,
@@ -38,6 +39,7 @@ function sanitizeUser(record) {
     createdAt: record.created_at,
     needsConsent: !record.aydinlatma_accepted_at || !record.kvkk_accepted_at,
     themeId: record.theme_id || null,
+    teacherSubjectIds: record.role === 'ogretmen' ? parseTeacherSubjectIdsJson(record.teacher_subject_ids_json) : undefined,
   }
 }
 
@@ -101,6 +103,18 @@ async function registerHandler(request) {
   const role = payload.role === 'ogretmen' ? 'ogretmen' : 'ebeveyn'
   const hasTrialCoupon = String(payload.couponCode || '').trim() === TRIAL_COUPON_CODE
 
+  let teacherSubjectIds = []
+  if (role === 'ogretmen') {
+    const subjectIdsResult = normalizeTeacherSubjectIds(payload.subjectIds)
+    if (subjectIdsResult.error) {
+      return json(400, { error: subjectIdsResult.error })
+    }
+    if (subjectIdsResult.value.length === 0) {
+      return json(400, { error: 'Öğretmen branşınızı seçmelisiniz.' })
+    }
+    teacherSubjectIds = subjectIdsResult.value
+  }
+
   try {
     const { user, entitlement } = await withTransaction(async (requestInTransaction) => {
       const insertUserDb = requestInTransaction({
@@ -110,14 +124,18 @@ async function registerHandler(request) {
         passwordHash: { type: sql.NVarChar(255), value: passwordHash },
         role: { type: sql.NVarChar(20), value: role },
         consentAt: { type: sql.DateTime2, value: now },
+        teacherSubjectIdsJson: {
+          type: sql.NVarChar(sql.MAX),
+          value: teacherSubjectIds.length ? JSON.stringify(teacherSubjectIds) : null,
+        },
       })
 
       const result = await insertUserDb.query(`
-        INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
+        INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at, teacher_subject_ids_json)
         OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
                inserted.is_admin, inserted.last_login_at, inserted.created_at,
-               inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at
-        VALUES (@fullName, @email, @phone, @passwordHash, @role, @consentAt, @consentAt);
+               inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at, inserted.teacher_subject_ids_json
+        VALUES (@fullName, @email, @phone, @passwordHash, @role, @consentAt, @consentAt, @teacherSubjectIdsJson);
       `)
 
       const insertedUser = sanitizeUser(result.recordset[0])
@@ -214,6 +232,7 @@ async function loginHandler(request) {
         u.created_at,
         u.aydinlatma_accepted_at,
         u.kvkk_accepted_at,
+        u.teacher_subject_ids_json,
         sp.theme_id,
         e.status AS entitlement_status, e.source AS entitlement_source,
         e.current_period_end AS entitlement_current_period_end
@@ -305,7 +324,7 @@ async function meHandler(request) {
     const result = await requestDb.query(`
       SELECT TOP 1
         u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.last_login_at, u.created_at,
-        u.aydinlatma_accepted_at, u.kvkk_accepted_at, u.funded_by_teacher_id,
+        u.aydinlatma_accepted_at, u.kvkk_accepted_at, u.funded_by_teacher_id, u.teacher_subject_ids_json,
         sp.theme_id,
         e.status AS entitlement_status, e.source AS entitlement_source,
         e.current_period_end AS entitlement_current_period_end

@@ -7,6 +7,8 @@ const tones = {
   slate: 'border-panel-slate/25 bg-panel-slate-soft text-panel-slate',
   accent: 'border-panel-accent/25 bg-panel-accent-soft text-panel-accent',
   warm: 'border-panel-warm/25 bg-panel-accent-soft text-panel-warm',
+  red: 'border-panel-red/25 bg-panel-red-soft text-panel-red',
+  yellow: 'border-panel-yellow/25 bg-panel-yellow-soft text-panel-yellow',
   neutral: 'border-panel-border bg-panel-bg text-panel-text-muted',
 }
 

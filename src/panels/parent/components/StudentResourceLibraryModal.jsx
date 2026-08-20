@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, Plus, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from 'lucide-react'
 import Badge from '../../ui/Badge'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
+import { ResourceBookAvatar, ResourceBookRates } from '../../shared/ResourceBookCard'
 import { authRequest } from '../../../services/authClient'
 import StudentResourceAssignModal from './StudentResourceAssignModal'
+import ManualOpticalAnswerModal from '../../shared/ManualOpticalAnswerModal'
 
 function groupResourceBooksBySubject(resourceBooks) {
   const groups = new Map()
@@ -25,22 +27,74 @@ function groupResourceBooksBySubject(resourceBooks) {
   return Array.from(groups.values())
 }
 
-function ResourceBookAvatar({ book, size = 'md' }) {
-  const dimension = size === 'lg' ? 'h-14 w-14' : 'h-10 w-10'
-  if (book?.imageUrl) {
-    return (
-      <img
-        src={book.imageUrl}
-        alt={`${book.name} görseli`}
-        className={`${dimension} shrink-0 rounded-lg border border-panel-border object-cover`}
-      />
-    )
-  }
+function ManualResultForm({ test, onCancel, onSave, onSaveWithoutResults, saving, error }) {
+  const [correctCount, setCorrectCount] = useState(test.correctCount ?? '')
+  const [wrongCount, setWrongCount] = useState(test.wrongCount ?? '')
+  const [blankCount, setBlankCount] = useState(test.blankCount ?? '')
 
   return (
-    <span className={`flex ${dimension} shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue`}>
-      <BookOpen size={size === 'lg' ? 22 : 17} aria-hidden="true" />
-    </span>
+    <div className="ml-5.5 mt-1 flex flex-col gap-2 rounded-lg border border-panel-border bg-panel-surface-soft p-2.5">
+      <p className="text-[11px] text-panel-text-muted">{test.questionCount} soru · isteğe bağlı sonuç girebilirsiniz</p>
+      <div className="grid grid-cols-3 gap-2">
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] font-medium text-panel-text-muted">Doğru</span>
+          <input
+            type="number"
+            min="0"
+            value={correctCount}
+            onChange={(event) => setCorrectCount(event.target.value)}
+            className="rounded-md border border-panel-border px-2 py-1 text-sm text-panel-text"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] font-medium text-panel-text-muted">Yanlış</span>
+          <input
+            type="number"
+            min="0"
+            value={wrongCount}
+            onChange={(event) => setWrongCount(event.target.value)}
+            className="rounded-md border border-panel-border px-2 py-1 text-sm text-panel-text"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] font-medium text-panel-text-muted">Boş</span>
+          <input
+            type="number"
+            min="0"
+            value={blankCount}
+            onChange={(event) => setBlankCount(event.target.value)}
+            className="rounded-md border border-panel-border px-2 py-1 text-sm text-panel-text"
+          />
+        </label>
+      </div>
+      {error ? <p className="text-[11px] text-panel-warm">{error}</p> : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={saving}
+          onClick={() => onSave({ correctCount, wrongCount, blankCount })}
+        >
+          {saving ? 'Kaydediliyor...' : 'Kaydet'}
+        </Button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={onSaveWithoutResults}
+          className="text-xs font-medium text-panel-blue hover:underline disabled:opacity-50"
+        >
+          Sayı girmeden işaretle
+        </button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={onCancel}
+          className="ml-auto text-xs font-medium text-panel-text-muted hover:underline disabled:opacity-50"
+        >
+          Vazgeç
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -50,6 +104,9 @@ function BookTopics({ student, book }) {
   const [collapsedTopicIds, setCollapsedTopicIds] = useState(new Set())
   const [savingTestIds, setSavingTestIds] = useState(new Set())
   const [rowErrors, setRowErrors] = useState({})
+  const [editingTestId, setEditingTestId] = useState(null)
+  const [editError, setEditError] = useState('')
+  const [opticalTest, setOpticalTest] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -79,22 +136,31 @@ function BookTopics({ student, book }) {
     })
   }
 
-  const applyCompletionSource = (testId, completionSource) => {
+  const applyCompletionSource = (testId, completionSource, resultCounts = {}) => {
     setTopics((current) =>
       current.map((topic) => ({
         ...topic,
         tests: topic.tests.map((test) =>
-          test.id === testId ? { ...test, completed: Boolean(completionSource), completionSource } : test,
+          test.id === testId
+            ? {
+                ...test,
+                completed: Boolean(completionSource),
+                completionSource,
+                correctCount: resultCounts.correctCount,
+                wrongCount: resultCounts.wrongCount,
+                blankCount: resultCounts.blankCount,
+              }
+            : test,
         ),
       })),
     )
   }
 
-  const toggleManualCompletion = async (test) => {
+  const unmarkManualCompletion = async (test) => {
     if (savingTestIds.has(test.id)) return
 
-    const wasManual = test.completionSource === 'manual'
     const previousSource = test.completionSource
+    const previousResults = { correctCount: test.correctCount, wrongCount: test.wrongCount, blankCount: test.blankCount }
 
     setSavingTestIds((prev) => new Set(prev).add(test.id))
     setRowErrors((prev) => {
@@ -104,20 +170,14 @@ function BookTopics({ student, book }) {
     })
 
     // Optimistic update: kullanıcı isteğin sonucunu beklemeden anında tepki görsün.
-    applyCompletionSource(test.id, wasManual ? null : 'manual')
+    applyCompletionSource(test.id, null)
 
     try {
-      if (wasManual) {
-        await authRequest(`/api/panel/resource-book-topic-tests/${test.id}/completion?studentId=${student.id}`, {
-          method: 'DELETE',
-        })
-      } else {
-        await authRequest(`/api/panel/resource-book-topic-tests/${test.id}/completion?studentId=${student.id}`, {
-          method: 'PUT',
-        })
-      }
+      await authRequest(`/api/panel/resource-book-topic-tests/${test.id}/completion?studentId=${student.id}`, {
+        method: 'DELETE',
+      })
     } catch (err) {
-      applyCompletionSource(test.id, previousSource)
+      applyCompletionSource(test.id, previousSource, previousResults)
       setRowErrors((prev) => ({ ...prev, [test.id]: err.message }))
     } finally {
       setSavingTestIds((prev) => {
@@ -126,6 +186,49 @@ function BookTopics({ student, book }) {
         return next
       })
     }
+  }
+
+  const saveManualCompletion = async (test, { correctCount, wrongCount, blankCount } = {}) => {
+    setSavingTestIds((prev) => new Set(prev).add(test.id))
+    setEditError('')
+
+    const toNullableInt = (value) => {
+      if (value === '' || value === undefined || value === null) return undefined
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? parsed : undefined
+    }
+
+    const body = {
+      correctCount: toNullableInt(correctCount),
+      wrongCount: toNullableInt(wrongCount),
+      blankCount: toNullableInt(blankCount),
+    }
+
+    try {
+      await authRequest(`/api/panel/resource-book-topic-tests/${test.id}/completion?studentId=${student.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      })
+      applyCompletionSource(test.id, 'manual', body)
+      setEditingTestId(null)
+    } catch (err) {
+      setEditError(err.message)
+    } finally {
+      setSavingTestIds((prev) => {
+        const next = new Set(prev)
+        next.delete(test.id)
+        return next
+      })
+    }
+  }
+
+  const applyOpticalResult = (testId, updates) => {
+    setTopics((current) =>
+      current.map((topic) => ({
+        ...topic,
+        tests: topic.tests.map((test) => (test.id === testId ? { ...test, completed: true, ...updates } : test)),
+      })),
+    )
   }
 
   if (error) {
@@ -143,12 +246,48 @@ function BookTopics({ student, book }) {
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs text-panel-text-muted">
-        Bir testin kutusuna tıklayarak tamamlandı olarak işaretleyebilir veya işareti kaldırabilirsiniz —
-        değişiklik anında kaydedilir, ayrı bir kaydet adımı gerekmez.
+        Bir testin kutusuna tıklayınca, cevap anahtarı girilmiş testler için optik form açılır (şıkları
+        işaretleyin, doğru/yanlış/boş otomatik hesaplanır); diğerlerinde sayıyı elle girersiniz. Elle işaretlenmiş
+        bir testin kutusuna tekrar tıklamak işareti kaldırır; sonuçları değiştirmek için kalem simgesini kullanın.
       </p>
+      {opticalTest ? (
+        <ManualOpticalAnswerModal
+          test={opticalTest}
+          onClose={() => setOpticalTest(null)}
+          onSaved={(testId, updates) => {
+            applyOpticalResult(testId, updates)
+          }}
+          submitAnswers={(answers) =>
+            authRequest(
+              `/api/panel/resource-book-topic-tests/${opticalTest.id}/optical-completion?studentId=${student.id}`,
+              { method: 'PUT', body: JSON.stringify({ answers }) },
+            )
+          }
+          submitPhoto={(orderNo, dataUrl) =>
+            authRequest(`/api/panel/resource-book-topic-tests/${opticalTest.id}/mistakes/${orderNo}?studentId=${student.id}`, {
+              method: 'PUT',
+              body: JSON.stringify({ photo: dataUrl }),
+            })
+          }
+          fetchExistingPhotos={() =>
+            authRequest(`/api/panel/wrong-questions?studentId=${student.id}`).then((data) => {
+              const photos = {}
+              ;(data.wrongQuestions || [])
+                .filter((item) => item.testId === opticalTest.id && item.photoUrl)
+                .forEach((item) => {
+                  photos[item.questionNumber] = item.photoUrl
+                })
+              return photos
+            })
+          }
+        />
+      ) : null}
       <div className="flex flex-col rounded-xl border border-panel-border p-2">
         {topics.map((topic) => {
           const isCollapsed = collapsedTopicIds.has(topic.id)
+          const totalTests = topic.tests.length
+          const completedTests = topic.tests.filter((test) => test.completed).length
+          const completionPercentage = totalTests > 0 ? Math.round((completedTests / totalTests) * 100) : 0
           return (
             <div key={topic.id} className="py-0.5">
               <button
@@ -161,13 +300,29 @@ function BookTopics({ student, book }) {
                 ) : (
                   <ChevronDown size={14} className="shrink-0 text-panel-text-muted" />
                 )}
-                <span className="font-medium text-panel-text">{topic.name}</span>
+                <span className="min-w-0 flex-1 truncate font-medium text-panel-text">{topic.name}</span>
+                {totalTests > 0 ? (
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-panel-surface-soft sm:block">
+                      <span
+                        className="block h-full rounded-full bg-panel-blue transition-all"
+                        style={{ width: `${completionPercentage}%` }}
+                      />
+                    </span>
+                    <span className="text-[11px] font-medium tabular-nums text-panel-text-muted">
+                      {completedTests}/{totalTests} · %{completionPercentage}
+                    </span>
+                  </span>
+                ) : null}
               </button>
               {topic.tests.length && !isCollapsed ? (
                 <div className="ml-6 flex flex-col">
                   {topic.tests.map((test) => {
                     const isGraded = test.completionSource === 'graded'
+                    const isManual = test.completionSource === 'manual'
                     const isSaving = savingTestIds.has(test.id)
+                    const hasResults =
+                      test.correctCount !== undefined || test.wrongCount !== undefined || test.blankCount !== undefined
                     return (
                       <div key={test.id} className="relative rounded-lg px-2 py-1">
                         <div className="flex items-center gap-2 text-xs">
@@ -182,11 +337,20 @@ function BookTopics({ student, book }) {
                             <button
                               type="button"
                               disabled={isSaving}
-                              onClick={() => toggleManualCompletion(test)}
+                              onClick={() => {
+                                if (isManual) {
+                                  unmarkManualCompletion(test)
+                                } else if (test.hasAnswerKey) {
+                                  setOpticalTest(test)
+                                } else {
+                                  setEditError('')
+                                  setEditingTestId(test.id)
+                                }
+                              }}
                               title={
                                 rowErrors[test.id]
                                   ? rowErrors[test.id]
-                                  : test.completionSource === 'manual'
+                                  : isManual
                                     ? 'İşareti kaldır'
                                     : 'Tamamlandı olarak işaretle'
                               }
@@ -196,12 +360,12 @@ function BookTopics({ student, book }) {
                                 className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border transition-colors ${
                                   rowErrors[test.id]
                                     ? 'border-panel-warm'
-                                    : test.completionSource === 'manual'
+                                    : isManual
                                       ? 'border-panel-blue bg-panel-blue text-white'
                                       : 'border-panel-border bg-white hover:border-panel-blue'
                                 }`}
                               >
-                                {test.completionSource === 'manual' ? <Check size={10} strokeWidth={3} /> : null}
+                                {isManual ? <Check size={10} strokeWidth={3} /> : null}
                               </span>
                             </button>
                           )}
@@ -214,10 +378,34 @@ function BookTopics({ student, book }) {
                             <span className="truncate">
                               {test.name} · s.{test.pageStart}-{test.pageEnd} · {test.questionCount} soru
                             </span>
-                            {test.completionSource === 'manual' ? (
+                            {isManual ? (
                               <Badge tone="lilac" className="shrink-0">
                                 Elle işaretlendi
                               </Badge>
+                            ) : null}
+                            {isManual && hasResults ? (
+                              <span className="flex shrink-0 items-center gap-1">
+                                <Badge tone="sage">D:{test.correctCount ?? 0}</Badge>
+                                <Badge tone="red">Y:{test.wrongCount ?? 0}</Badge>
+                                <Badge tone="yellow">B:{test.blankCount ?? 0}</Badge>
+                              </span>
+                            ) : null}
+                            {isManual ? (
+                              <button
+                                type="button"
+                                title="Sonuçları düzenle"
+                                onClick={() => {
+                                  if (test.hasAnswerKey) {
+                                    setOpticalTest(test)
+                                  } else {
+                                    setEditError('')
+                                    setEditingTestId(test.id)
+                                  }
+                                }}
+                                className="shrink-0 text-panel-text-muted hover:text-panel-blue"
+                              >
+                                <Pencil size={12} aria-hidden="true" />
+                              </button>
                             ) : null}
                           </span>
                         </div>
@@ -225,6 +413,21 @@ function BookTopics({ student, book }) {
                           <span className="absolute left-5.5 top-full z-10 whitespace-nowrap rounded-md border border-panel-border bg-white px-2 py-1 text-[11px] text-panel-warm shadow-sm">
                             {rowErrors[test.id]}
                           </span>
+                        ) : null}
+                        {editingTestId === test.id ? (
+                          <ManualResultForm
+                            test={test}
+                            saving={isSaving}
+                            error={editError}
+                            onCancel={() => {
+                              setEditingTestId(null)
+                              setEditError('')
+                            }}
+                            onSave={(counts) => saveManualCompletion(test, counts)}
+                            onSaveWithoutResults={() =>
+                              saveManualCompletion(test, { correctCount: '', wrongCount: '', blankCount: '' })
+                            }
+                          />
                         ) : null}
                       </div>
                     )
@@ -275,7 +478,7 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
 
   const activeSubject = subjectGroups.find((group) => group.id === activeSubjectId) || null
 
-  const title = selectedBook ? selectedBook.name : `${student.fullName} · Kaynaklar`
+  const title = selectedBook ? selectedBook.name : 'Kaynaklar'
 
   const handleRemoveBook = async () => {
     if (!removingBook) return
@@ -321,11 +524,13 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
             ) : null}
             <div className="min-w-0">
               <h2 className="truncate text-base font-semibold text-panel-text">{title}</h2>
-              {selectedBook?.publisherName ? (
-                <p className="text-xs text-panel-text-muted">{selectedBook.publisherName}</p>
-              ) : !selectedBook ? (
+              {selectedBook ? (
+                selectedBook.publisherName ? (
+                  <p className="text-xs text-panel-text-muted">{selectedBook.publisherName}</p>
+                ) : null
+              ) : (
                 <p className="text-xs text-panel-text-muted">{student.fullName}</p>
-              ) : null}
+              )}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -371,7 +576,7 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
           ) : resourceBooks.length === 0 ? (
             <p className="p-2 text-sm text-panel-text-muted">Bu öğrenci için atanmış kaynak yok.</p>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3">
               {(activeSubject?.books || []).map((book) => (
                 <div
                   key={book.id}
@@ -384,7 +589,7 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
                       setSelectedBook(book)
                     }
                   }}
-                  className="relative flex cursor-pointer items-center gap-3 rounded-xl border border-panel-border p-3 pr-10 text-left hover:border-panel-blue"
+                  className="group relative flex cursor-pointer items-start gap-3.5 rounded-2xl border border-panel-border bg-white p-3.5 pr-9 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-panel-blue hover:shadow-md"
                 >
                   <button
                     type="button"
@@ -399,13 +604,14 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
                     <Trash2 size={15} aria-hidden="true" />
                   </button>
                   <ResourceBookAvatar book={book} size="lg" />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     {book.publisherName ? (
                       <Badge tone="lilac" className="mb-1 w-fit">
                         {book.publisherName}
                       </Badge>
                     ) : null}
-                    <p className="truncate text-sm font-semibold text-panel-text">{book.name}</p>
+                    <p className="truncate text-sm font-semibold text-panel-text group-hover:text-panel-blue">{book.name}</p>
+                    <ResourceBookRates completionRate={book.completionRate} successRate={book.successRate} />
                   </div>
                 </div>
               ))}

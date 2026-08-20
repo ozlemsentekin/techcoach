@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CheckCircle2, GraduationCap, UserPlus, Users } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { panelPathForRole } from '../utils/panelPath'
+import { authRequest } from '../services/authClient'
 import { LEGAL_CONTENT } from './legalContent'
 import TurnstileWidget from './TurnstileWidget'
 import './LandingPage.css'
@@ -138,14 +139,38 @@ export default function SignUpPage() {
   const [showRegisterModal, setShowRegisterModal] = useState(false)
   const [infoModal, setInfoModal] = useState(null)
   const [turnstileToken, setTurnstileToken] = useState('')
+  const [subjects, setSubjects] = useState(null)
+  const [subjectIds, setSubjectIds] = useState([])
   const turnstileRef = useRef(null)
 
   const plan = PLANS[role]
+
+  useEffect(() => {
+    if (role !== 'ogretmen' || subjects !== null) return
+    let ignore = false
+    authRequest('/api/auth/subjects', { method: 'GET' })
+      .then((data) => {
+        if (!ignore) setSubjects(data.subjects)
+      })
+      .catch(() => {
+        if (!ignore) setSubjects([])
+      })
+    return () => {
+      ignore = true
+    }
+  }, [role, subjects])
+
+  const toggleSubject = (subjectId) => {
+    setSubjectIds((current) =>
+      current.includes(subjectId) ? current.filter((id) => id !== subjectId) : [...current, subjectId],
+    )
+  }
 
   const handleSelectPlan = (nextRole) => {
     setSelectedPlan(nextRole)
     setRole(nextRole)
     setBillingCycle('monthly')
+    setSubjectIds([])
     setShowRegisterModal(true)
   }
 
@@ -174,6 +199,9 @@ export default function SignUpPage() {
     if (!form.acceptAydinlatma || !form.acceptKvkk) {
       return 'Devam etmek için aydınlatma ve KVKK onaylarını vermelisiniz.'
     }
+    if (role === 'ogretmen' && subjectIds.length === 0) {
+      return 'Branşınızı seçmelisiniz.'
+    }
     return null
   }
 
@@ -195,6 +223,7 @@ export default function SignUpPage() {
         acceptKvkk: form.acceptKvkk,
         role,
         turnstileToken: turnstileToken || undefined,
+        ...(role === 'ogretmen' ? { subjectIds } : {}),
       })
       if (user?.role) {
         navigate(panelPathForRole(user.role))
@@ -310,6 +339,28 @@ export default function SignUpPage() {
                 value={form.couponCode}
                 onChange={handleInputChange}
               />
+
+              {role === 'ogretmen' ? (
+                <div className="signup-subjects">
+                  <span className="signup-subjects-label">Branşınız</span>
+                  {subjects === null ? (
+                    <p className="signup-subjects-loading">Dersler yükleniyor...</p>
+                  ) : (
+                    <div className="signup-subjects-list">
+                      {subjects.map((subject) => (
+                        <label key={subject.id} className="check-row signup-subject-row">
+                          <input
+                            type="checkbox"
+                            checked={subjectIds.includes(subject.id)}
+                            onChange={() => toggleSubject(subject.id)}
+                          />
+                          <span>{subject.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
 
               <div className="auth-hint">
                 Şifreniz otomatik olarak telefon numaranızın son 6 hanesi olacaktır
