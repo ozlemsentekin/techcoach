@@ -105,7 +105,7 @@ export default function ResourceImageField({
           onDrop={handleDrop}
         >
           {value ? (
-            <img
+            <img loading="lazy" decoding="async"
               src={value}
               alt="Görsel"
               className={`h-full w-full border border-[#e5e8e9] object-cover shadow-sm ${previewShapeClass}`}
@@ -183,7 +183,7 @@ export default function ResourceImageField({
         onDrop={handleDrop}
       >
         {value ? (
-          <img
+          <img loading="lazy" decoding="async"
             src={value}
             alt="Görsel"
             className={`h-20 w-20 border border-[#e5e8e9] object-cover shadow-sm ${previewShapeClass}`}

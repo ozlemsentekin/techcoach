@@ -750,7 +750,7 @@ function AddQuestionsFromImageModal({ test, onClose, onQuestionsSaved }) {
               </label>
 
               {previewUrl ? (
-                <img src={previewUrl} alt="Önizleme" className="max-h-80 w-full rounded-xl border border-[#e5e8e9] object-contain" />
+                <img loading="lazy" decoding="async" src={previewUrl} alt="Önizleme" className="max-h-80 w-full rounded-xl border border-[#e5e8e9] object-contain" />
               ) : null}
 
               <Button type="button" disabled={!file || extracting} size="md" className="w-full" onClick={handleExtract}>
@@ -1326,7 +1326,7 @@ function BookBlock({
             {expanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
           </button>
           {book.imageUrl ? (
-            <img
+            <img loading="lazy" decoding="async"
               src={book.imageUrl}
               alt={`${book.name} görseli`}
               className="h-11 w-11 shrink-0 rounded-[10px] border border-[#e4e5ec] object-cover"

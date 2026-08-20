@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Library, Plus, Users, X } from 'lucide-react'
-import { authRequest, cachedGet } from '../../../services/authClient'
+import { cachedGet } from '../../../services/authClient'
 import { addTeacherLibraryGrade, getTeacherLibraryGrades, removeTeacherLibraryGrade } from '../../../services/teacherService'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'

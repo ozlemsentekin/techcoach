@@ -216,7 +216,7 @@ function BookRow({ book, publishersById, onEditBook, onToggleActive }) {
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#edf0f1] px-4 py-2.5">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         {book.imageUrl ? (
-          <img src={book.imageUrl} alt={`${book.name} görseli`} className="h-8 w-8 rounded-lg object-cover" />
+          <img loading="lazy" decoding="async" src={book.imageUrl} alt={`${book.name} görseli`} className="h-8 w-8 rounded-lg object-cover" />
         ) : null}
         <span className="truncate text-sm font-medium text-[#253d3e]">{book.name}</span>
         <button

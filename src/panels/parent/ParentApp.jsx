@@ -1,7 +1,7 @@
 import { createElement, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
-import { authRequest, cachedGet } from '../../services/authClient'
+import { cachedGet } from '../../services/authClient'
 import ThemeProvider from '../../theme/ThemeProvider'
 import PanelLayout from '../layout/PanelLayout'
 import LoadingState from '../shared/LoadingState'

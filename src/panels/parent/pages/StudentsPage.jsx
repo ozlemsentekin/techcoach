@@ -46,7 +46,7 @@ const INITIAL_FORM = {
 function StudentAvatar({ student }) {
   if (student.photoUrl) {
     return (
-      <img
+      <img loading="lazy" decoding="async"
         src={student.photoUrl}
         alt={`${student.fullName} fotoğrafı`}
         className="h-12 w-12 shrink-0 rounded-xl border border-panel-border object-cover"

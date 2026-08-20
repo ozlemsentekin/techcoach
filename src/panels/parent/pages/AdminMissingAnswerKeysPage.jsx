@@ -45,7 +45,7 @@ export default function AdminMissingAnswerKeysPage() {
               >
                 <div className="flex items-start gap-3">
                   {book.imageUrl ? (
-                    <img src={book.imageUrl} alt={`${book.name} görseli`} className="h-14 w-14 shrink-0 rounded-xl object-cover" />
+                    <img loading="lazy" decoding="async" src={book.imageUrl} alt={`${book.name} görseli`} className="h-14 w-14 shrink-0 rounded-xl object-cover" />
                   ) : (
                     <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-panel-slate-soft text-panel-slate">
                       <BookOpen size={20} aria-hidden="true" />
@@ -80,7 +80,7 @@ export default function AdminMissingAnswerKeysPage() {
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     {book.imageUrl ? (
-                      <img src={book.imageUrl} alt={`${book.name} görseli`} className="h-8 w-8 rounded-lg object-cover" />
+                      <img loading="lazy" decoding="async" src={book.imageUrl} alt={`${book.name} görseli`} className="h-8 w-8 rounded-lg object-cover" />
                     ) : null}
                     <span className="truncate text-sm font-medium text-[#253d3e]">{book.name}</span>
                   </div>

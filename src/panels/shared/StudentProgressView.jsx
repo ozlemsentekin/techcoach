@@ -586,7 +586,7 @@ function ImagePreviewLightbox({ preview, onClose }) {
       >
         <X size={20} aria-hidden="true" />
       </button>
-      <img
+      <img loading="lazy" decoding="async"
         src={preview.url}
         alt={`${preview.name} görseli`}
         className="max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl"

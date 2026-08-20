@@ -160,7 +160,7 @@ export default function WrongQuestionGalleryModal({ title, items, initialIndex =
 
         <div className="flex min-h-[240px] max-h-[50vh] max-w-full items-center justify-center">
           {currentPhotoUrl ? (
-            <img
+            <img loading="lazy" decoding="async"
               src={currentPhotoUrl}
               alt={`${item.topic || title || 'Soru'} fotoğrafı`}
               onClick={() => setZoomed(true)}
@@ -205,7 +205,7 @@ export default function WrongQuestionGalleryModal({ title, items, initialIndex =
           aria-label="Fotoğrafı kapat"
           onClick={() => setZoomed(false)}
         >
-          <img
+          <img loading="lazy" decoding="async"
             src={currentPhotoUrl}
             alt={`${item.topic || title || 'Soru'} fotoğrafı büyütülmüş`}
             className="max-h-[95vh] max-w-[95vw] rounded-xl object-contain shadow-2xl"

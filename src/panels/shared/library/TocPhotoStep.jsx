@@ -62,7 +62,7 @@ export default function TocPhotoStep({ tocImages, setTocImages, extracting, tocE
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {tocImages.map((image, index) => (
             <div key={image.id} className="group relative overflow-hidden rounded-lg border border-panel-border">
-              <img src={image.dataUrl} alt={`İçindekiler ${index + 1}`} className="h-28 w-full object-cover" />
+              <img loading="lazy" decoding="async" src={image.dataUrl} alt={`İçindekiler ${index + 1}`} className="h-28 w-full object-cover" />
               <button
                 type="button"
                 aria-label="Fotoğrafı kaldır"

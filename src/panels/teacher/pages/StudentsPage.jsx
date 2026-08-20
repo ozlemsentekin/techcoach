@@ -14,7 +14,7 @@ import { formatDateShort } from '../../../utils/time'
 function StudentAvatar({ student }) {
   if (student.studentPhotoUrl) {
     return (
-      <img
+      <img loading="lazy" decoding="async"
         src={student.studentPhotoUrl}
         alt={`${student.studentFullName} fotoğrafı`}
         className="h-12 w-12 shrink-0 rounded-xl border border-panel-border object-cover"

@@ -227,7 +227,7 @@ function PhotoUploadStep({
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {images.map((image, index) => (
             <div key={image.id} className="group relative overflow-hidden rounded-lg border border-panel-border">
-              <img src={image.dataUrl} alt={`${altPrefix} ${index + 1}`} className="h-28 w-full object-cover" />
+              <img loading="lazy" decoding="async" src={image.dataUrl} alt={`${altPrefix} ${index + 1}`} className="h-28 w-full object-cover" />
               <button
                 type="button"
                 aria-label="Fotoğrafı kaldır"

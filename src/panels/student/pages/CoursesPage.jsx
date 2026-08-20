@@ -33,7 +33,7 @@ function groupResourceBooksBySubject(resourceBooks) {
 function ResourceCover({ book, className = 'h-20 w-16' }) {
   if (book?.imageUrl) {
     return (
-      <img
+      <img loading="lazy" decoding="async"
         src={book.imageUrl}
         alt={`${book.name} görseli`}
         className={`${className} shrink-0 rounded-lg border border-[#e4e7ea] object-cover shadow-sm`}

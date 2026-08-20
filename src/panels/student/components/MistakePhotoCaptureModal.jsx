@@ -110,7 +110,7 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
         </div>
 
         {preview ? (
-          <img
+          <img loading="lazy" decoding="async"
             src={preview}
             alt="Soru fotoğrafı önizleme"
             className="mt-4 max-h-64 w-full rounded-xl border border-panel-border object-contain"

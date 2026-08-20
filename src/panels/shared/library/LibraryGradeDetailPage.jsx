@@ -25,7 +25,7 @@ const RESOURCE_BOOK_TYPE_LABELS = {
 function ResourceAvatar({ book }) {
   if (book.imageUrl) {
     return (
-      <img
+      <img loading="lazy" decoding="async"
         src={book.imageUrl}
         alt={`${book.name} görseli`}
         className="h-14 w-14 shrink-0 rounded-xl border border-panel-border object-cover"

@@ -75,7 +75,7 @@ function filterTopicsBySearch(topics, query) {
 function ResourceBookCover({ book }) {
   if (book?.imageUrl) {
     return (
-      <img
+      <img loading="lazy" decoding="async"
         src={book.imageUrl}
         alt={`${book.name} görseli`}
         className="aspect-[3/4] w-full rounded-lg border border-panel-border object-cover"

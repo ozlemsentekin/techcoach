@@ -62,7 +62,7 @@ export default function LibraryResourceDetailModal({ role, resourceBookId, onClo
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             {book?.imageUrl ? (
-              <img
+              <img loading="lazy" decoding="async"
                 src={book.imageUrl}
                 alt={`${book.name} görseli`}
                 className="h-14 w-14 shrink-0 rounded-xl border border-panel-border object-cover"

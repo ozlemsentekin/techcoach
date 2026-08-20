@@ -5,7 +5,7 @@ import Badge from '../../ui/Badge'
 function ResourceBookAvatar({ book }) {
   if (book?.imageUrl) {
     return (
-      <img
+      <img loading="lazy" decoding="async"
         src={book.imageUrl}
         alt={`${book.name} görseli`}
         className="h-8 w-8 shrink-0 rounded-lg border border-panel-border object-cover"
