@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, ArrowLeft, BookOpen, Layers } from 'lucide-react'
+import { AlertCircle, ArrowLeft, BookOpen, ChevronRight, Layers } from 'lucide-react'
 import PageHeader from '../layout/PageHeader'
 import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
@@ -9,11 +9,11 @@ import { MotionDiv } from '../ui/motion'
 import WrongQuestionGalleryModal from './WrongQuestionGalleryModal'
 
 const SHELF_TONES = [
-  'border-panel-blue bg-panel-blue-soft',
-  'border-panel-lilac bg-panel-lilac-soft',
-  'border-panel-sage bg-panel-sage-soft',
-  'border-panel-warm bg-panel-accent-soft',
-  'border-panel-slate bg-panel-slate-soft',
+  { icon: 'bg-panel-blue-soft text-panel-blue', hoverBorder: 'hover:border-panel-blue' },
+  { icon: 'bg-panel-lilac-soft text-panel-lilac', hoverBorder: 'hover:border-panel-lilac' },
+  { icon: 'bg-panel-sage-soft text-panel-sage', hoverBorder: 'hover:border-panel-sage' },
+  { icon: 'bg-panel-accent-soft text-panel-warm', hoverBorder: 'hover:border-panel-warm' },
+  { icon: 'bg-panel-slate-soft text-panel-slate', hoverBorder: 'hover:border-panel-slate' },
 ]
 
 function topicStatsKey(subject, topic) {
@@ -30,9 +30,14 @@ function groupBySubjectAndTopic(wrongQuestions) {
     const subjectGroup = bySubject.get(item.subject)
     subjectGroup.items.push(item)
 
-    const topicKey = item.topic || ''
+    // Grouped by kitap adı (bookName), not the free-text topic label: the same book's tests can
+    // carry differently-worded topic strings (renamed/re-entered over time), which fragmented one
+    // book into several cards, while unrelated books sharing a generic "1. Ünite - ..." topic name
+    // got merged into one. bookName is the stable identifier; topic falls back only for legacy
+    // manually-entered rows that have no linked book.
+    const topicKey = item.bookName || item.topic || ''
     if (!subjectGroup.topicsByKey.has(topicKey)) {
-      subjectGroup.topicsByKey.set(topicKey, { topic: item.topic || null, items: [] })
+      subjectGroup.topicsByKey.set(topicKey, { topic: item.bookName || item.topic || null, items: [] })
     }
     subjectGroup.topicsByKey.get(topicKey).items.push(item)
   })
@@ -51,15 +56,20 @@ function SubjectShelfCard({ subject, count, tone, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-col items-start gap-3 rounded-2xl border-l-[6px] p-4 text-left shadow-sm transition-transform hover:-translate-y-0.5 ${tone}`}
+      className={`group flex items-center gap-4 rounded-2xl border border-panel-border bg-panel-surface p-5 text-left shadow-panel-1 transition-all hover:-translate-y-0.5 hover:shadow-panel-2 ${tone.hoverBorder}`}
     >
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/70 text-panel-text">
-        <BookOpen size={20} aria-hidden="true" />
+      <span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${tone.icon}`}>
+        <BookOpen size={24} aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <h3 className="truncate text-base font-bold text-panel-text">{subject}</h3>
+        <p className="mt-0.5 text-sm text-panel-text-muted">{count} soru</p>
       </div>
-      <div>
-        <h3 className="text-base font-semibold text-panel-text">{subject}</h3>
-        <p className="text-sm text-panel-text-muted">{count} soru</p>
-      </div>
+      <ChevronRight
+        size={18}
+        className="shrink-0 text-panel-text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-panel-text"
+        aria-hidden="true"
+      />
     </button>
   )
 }
@@ -213,7 +223,7 @@ export default function WrongQuestionsView({
         <MotionDiv
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
         >
           {groups.map((group, index) => (
             <SubjectShelfCard
