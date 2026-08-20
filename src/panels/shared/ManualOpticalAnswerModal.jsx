@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, CheckCircle2, XCircle, MinusCircle, Camera } from 'lucide-react'
+import { X, CheckCircle2, XCircle, MinusCircle, Camera, Check } from 'lucide-react'
 import Badge from '../ui/Badge'
 import MistakePhotoCaptureModal from '../student/components/MistakePhotoCaptureModal'
 
@@ -27,14 +27,14 @@ function ResultBadge({ result }) {
 // Veli ve öğretmen panelinde ortak kullanılan optik cevap formu. Öğrencinin kendi cevap kağıdı
 // akışının (TaskAnswerSheetModal) aksine kilitlenmez — veli/öğretmen fiziksel kitaptaki sonucu
 // aktarırken bir yanlışı fark edip istediği an düzeltebilmeli. Panel'e özgü kısımlar (API yolları,
-// yetkilendirme) submitAnswers/submitPhoto/fetchExistingPhotos callback'leri üzerinden dışarıdan verilir.
+// yetkilendirme) submitAnswers/submitPhoto callback'leri ve initialPhotos ile dışarıdan verilir.
 export default function ManualOpticalAnswerModal({
   test,
   onClose,
   onSaved,
   submitAnswers,
   submitPhoto,
-  fetchExistingPhotos,
+  initialPhotos,
 }) {
   const initialAnswers = test.manualAnswers || {}
   const wasAlreadyGraded = test.completionSource === 'manual' && test.correctCount !== undefined
@@ -48,7 +48,7 @@ export default function ManualOpticalAnswerModal({
       : null,
   )
   const [correctLabels, setCorrectLabels] = useState(null)
-  const [photosByQuestion, setPhotosByQuestion] = useState({})
+  const [photosByQuestion, setPhotosByQuestion] = useState(() => ({ ...(initialPhotos || {}) }))
   const [capturingOrderNo, setCapturingOrderNo] = useState(null)
 
   const questionNumbers = Array.from({ length: test.questionCount }, (_, index) => index + 1)
@@ -81,24 +81,6 @@ export default function ManualOpticalAnswerModal({
   useEffect(() => {
     if (wasAlreadyGraded && Object.keys(initialAnswers).length === test.questionCount) {
       submit(initialAnswers)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Daha önce bu test için eklenmiş Hata Defteri fotoğrafları varsa, kamera ikonunun "dolu"
-  // görünmesi için önceden yükle (opsiyonel — panel bunu desteklemiyorsa atlanır).
-  useEffect(() => {
-    if (!fetchExistingPhotos) return undefined
-    let ignore = false
-    fetchExistingPhotos()
-      .then((photos) => {
-        if (!ignore && photos) setPhotosByQuestion((prev) => ({ ...photos, ...prev }))
-      })
-      .catch(() => {
-        // Sessizce yok say: kamera ikonu boş görünür, fotoğraf yine de eklenebilir.
-      })
-    return () => {
-      ignore = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -231,12 +213,15 @@ export default function ManualOpticalAnswerModal({
                   ) : null}
                   {isMistake ? (
                     <span
-                      title={hasPhoto ? 'Fotoğraf eklendi' : 'Fotoğraf ekle'}
-                      className={`ml-auto flex shrink-0 items-center justify-center rounded-full p-1 transition-colors ${
-                        hasPhoto ? 'bg-panel-blue text-white' : 'text-panel-text-muted'
+                      title={hasPhoto ? 'Fotoğraf eklendi · değiştirmek için dokun' : 'Fotoğraf eksik · eklemek için dokun'}
+                      className={`ml-auto flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-1 text-[10px] font-semibold transition-colors ${
+                        hasPhoto
+                          ? 'border-panel-sage bg-panel-sage text-white'
+                          : 'border-panel-warm bg-white text-panel-warm'
                       }`}
                     >
                       <Camera size={12} aria-hidden="true" />
+                      {hasPhoto ? <Check size={10} strokeWidth={3} aria-hidden="true" /> : null}
                     </span>
                   ) : null}
                 </div>

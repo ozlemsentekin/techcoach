@@ -1222,6 +1222,22 @@ function BookBlock({
   const [expandedTopicId, setExpandedTopicId] = useState(null)
   const blockRef = useRef(null)
 
+  // Content entry can create several topic rows with the same name under one book (e.g. one per
+  // "İçerik Ekle" click). Merge those into a single group by name so the panel shows one section
+  // per topic instead of repeating the same heading.
+  const groupedTopics = useMemo(() => {
+    const groups = new Map()
+    topics.forEach((topic) => {
+      const existing = groups.get(topic.name)
+      if (existing) {
+        existing.topicIds.push(topic.id)
+      } else {
+        groups.set(topic.name, { representative: topic, topicIds: [topic.id] })
+      }
+    })
+    return Array.from(groups.values())
+  }, [topics])
+
   useEffect(() => {
     if (isFocused && blockRef.current) {
       blockRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -1364,14 +1380,14 @@ function BookBlock({
           <p className="border-t border-[#eeeff3] px-[18px] py-2 text-xs text-[#8a849d]">Bu kitaba ait içerik yok.</p>
         ) : (
           <div className="flex flex-col divide-y divide-[#eeeff3] border-t border-[#eeeff3] bg-white">
-            {topics.map((topic) => (
+            {groupedTopics.map(({ representative, topicIds }) => (
               <TopicBlock
-                key={topic.id}
-                topic={topic}
-                tests={tests.filter((test) => test.topicId === topic.id)}
-                expanded={expandedTopicId === topic.id}
+                key={representative.id}
+                topic={representative}
+                tests={tests.filter((test) => topicIds.includes(test.topicId))}
+                expanded={expandedTopicId === representative.id}
                 onToggle={() =>
-                  setExpandedTopicId((current) => (current === topic.id ? null : topic.id))
+                  setExpandedTopicId((current) => (current === representative.id ? null : representative.id))
                 }
                 onAddTest={onAddTest}
                 onEditTopic={onEditTopic}

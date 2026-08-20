@@ -2048,17 +2048,37 @@ async function listTeacherStudentWrongQuestionsHandler(request) {
 
     const subjectName = await resolveTeacherSubjectName(subjectId)
 
+    // Bkz. progress.js listWrongQuestionsHandler'daki aynı gerekçe: BookTopics ekranı sadece o
+    // kitaptaki testler için fotoğraf durumunu sorduğundan, resourceBookId verildiğinde sorguyu
+    // o kitapla sınırlıyoruz — büyük hata defterlerinde bu ekranın yavaş açılmasını önler.
+    const resourceBookId = request.query.get('resourceBookId')
+
     const requestDb = await withRequest({
       studentId: { type: sql.UniqueIdentifier, value: studentId },
       subject: { type: sql.NVarChar(100), value: subjectName },
+      ...(resourceBookId ? { resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId } } : {}),
     })
+    // Bkz. progress.js listWrongQuestionsHandler'daki aynı gerekçe: kaynağın içerik ağacı
+    // sonradan yeniden düzenlenmişse (testler farklı bir üniteye taşınmışsa) test_id üzerinden
+    // katalogdaki güncel konu/kitap/yayın evi adına öncelik veriyoruz, tablodaki bayat metin
+    // sadece test_id'siz eski manuel kayıtlar için geri düşüş.
     const result = await requestDb.query(`
-      SELECT id, student_id, task_id, test_id, subject, topic, test_name, book_name, publisher_name,
-             question_number, error_type, student_note, mistake_reason, review_status, resolved_at,
-             CASE WHEN photo_url IS NOT NULL THEN 1 ELSE 0 END AS has_photo, created_at
-      FROM dbo.WrongQuestions
-      WHERE student_id = @studentId AND subject = @subject
-      ORDER BY created_at DESC;
+      SELECT wq.id, wq.student_id, wq.task_id, wq.test_id, wq.subject, wq.test_name,
+             wq.question_number, wq.error_type, wq.student_note, wq.mistake_reason,
+             wq.review_status, wq.resolved_at,
+             CASE WHEN wq.photo_url IS NOT NULL THEN 1 ELSE 0 END AS has_photo, wq.created_at,
+             COALESCE(tp.name, wq.topic) AS topic,
+             COALESCE(rb.name, wq.book_name) AS book_name,
+             COALESCE(pub.name, wq.publisher_name) AS publisher_name,
+             rb.image_url AS book_image_url
+      FROM dbo.WrongQuestions wq
+      LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
+      LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
+      LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
+      LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
+      WHERE wq.student_id = @studentId AND wq.subject = @subject
+      ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''}
+      ORDER BY wq.created_at DESC;
     `)
 
     return json(200, { wrongQuestions: result.recordset.map(sanitizeWrongQuestion) })
@@ -2108,10 +2128,14 @@ async function getTeacherStudentWrongQuestionTopicStatsHandler(request) {
       studentId: { type: sql.UniqueIdentifier, value: studentId },
       subject: { type: sql.NVarChar(100), value: subjectName },
     })
+    // Bkz. progress.js getWrongQuestionTopicStatsHandler'daki aynı gerekçe: anahtar kümesi
+    // wq.topic yerine COALESCE(tp.name, wq.topic) canlı adına göre çıkarılmalı.
     const result = await requestDb.query(`
-      SELECT DISTINCT subject, topic
-      FROM dbo.WrongQuestions
-      WHERE student_id = @studentId AND subject = @subject AND photo_url IS NOT NULL;
+      SELECT DISTINCT wq.subject, COALESCE(tp.name, wq.topic) AS topic
+      FROM dbo.WrongQuestions wq
+      LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
+      LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
+      WHERE wq.student_id = @studentId AND wq.subject = @subject AND wq.photo_url IS NOT NULL;
     `)
 
     const topicStats = await computeWrongQuestionTopicStats(studentId, result.recordset, { teacherId: studentTeacherId })

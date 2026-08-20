@@ -10,6 +10,7 @@ import { authRequest } from './authClient'
  * @property {string} [testName]
  * @property {string} [bookName]
  * @property {string} [publisherName]
+ * @property {string} [bookImageUrl]
  * @property {string} [questionNumber]
  * @property {string} errorType
  * @property {string} [studentNote]

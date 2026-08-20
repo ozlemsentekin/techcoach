@@ -42,6 +42,7 @@ function sanitizeWrongQuestion(record) {
     // fotoğraf uçlarından (getWrongQuestionPhotoHandler) veya foto kaydeden akışlardan gelir.
     hasPhoto: record.has_photo !== undefined ? Boolean(record.has_photo) : Boolean(record.photo_url),
     photoUrl: record.photo_url || undefined,
+    bookImageUrl: record.book_image_url || undefined,
     createdAt: record.created_at,
   }
 }
@@ -292,16 +293,37 @@ async function listWrongQuestionsHandler(request) {
       return error
     }
 
+    // Kaynak kitap ekranı (BookTopics) sadece o kitaptaki testler için fotoğraf durumunu
+    // sorduğundan, öğrencinin tüm geçmişini çekmek yerine resourceBookId verildiğinde sorguyu
+    // o kitapla sınırlıyoruz — büyük hata defterlerinde bu ekranın yavaş açılmasını önler.
+    const resourceBookId = request.query.get('resourceBookId')
+
     const requestDb = await withRequest({
       studentId: { type: sql.UniqueIdentifier, value: studentId },
+      ...(resourceBookId ? { resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId } } : {}),
     })
+    // topic/book_name/publisher_name kolonları o anki değerin bir anlık görüntüsü (kaydedildiği
+    // ana ait): kaynağın içerik ağacı sonradan yeniden düzenlenirse (ör. testler farklı bir
+    // ünitede toplanırsa) eski kayıt bayatlar. Bu yüzden test_id üzerinden katalogdaki güncel
+    // konu/kitap/yayın evi adına öncelik veriyoruz; test_id'siz eski manuel kayıtlarda tabloya
+    // kaydedilmiş metne geri düşülür.
     const result = await requestDb.query(`
-      SELECT id, student_id, task_id, test_id, subject, topic, test_name, book_name, publisher_name,
-             question_number, error_type, student_note, mistake_reason, review_status, resolved_at,
-             CASE WHEN photo_url IS NOT NULL THEN 1 ELSE 0 END AS has_photo, created_at
-      FROM dbo.WrongQuestions
-      WHERE student_id = @studentId
-      ORDER BY created_at DESC;
+      SELECT wq.id, wq.student_id, wq.task_id, wq.test_id, wq.subject, wq.test_name,
+             wq.question_number, wq.error_type, wq.student_note, wq.mistake_reason,
+             wq.review_status, wq.resolved_at,
+             CASE WHEN wq.photo_url IS NOT NULL THEN 1 ELSE 0 END AS has_photo, wq.created_at,
+             COALESCE(tp.name, wq.topic) AS topic,
+             COALESCE(rb.name, wq.book_name) AS book_name,
+             COALESCE(pub.name, wq.publisher_name) AS publisher_name,
+             rb.image_url AS book_image_url
+      FROM dbo.WrongQuestions wq
+      LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
+      LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
+      LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
+      LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
+      WHERE wq.student_id = @studentId
+      ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''}
+      ORDER BY wq.created_at DESC;
     `)
 
     return json(200, { wrongQuestions: result.recordset.map(sanitizeWrongQuestion) })
@@ -572,11 +594,17 @@ async function getWrongQuestionTopicStatsHandler(request) {
       return error
     }
 
+    // computeWrongQuestionTopicStats, katalogdaki güncel konu adlarına göre eşleştirme yapıyor
+    // (bkz. aşağıdaki fonksiyon yorumu); bu yüzden anahtar kümesi de wq.topic yerine aynı
+    // COALESCE(tp.name, wq.topic) canlı adına göre çıkarılmalı, yoksa listWrongQuestionsHandler'ın
+    // gösterdiği (canlı) konu adıyla burada üretilen istatistik anahtarı eşleşmez.
     const requestDb = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
     const result = await requestDb.query(`
-      SELECT DISTINCT subject, topic
-      FROM dbo.WrongQuestions
-      WHERE student_id = @studentId AND photo_url IS NOT NULL;
+      SELECT DISTINCT wq.subject, COALESCE(tp.name, wq.topic) AS topic
+      FROM dbo.WrongQuestions wq
+      LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
+      LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
+      WHERE wq.student_id = @studentId AND wq.photo_url IS NOT NULL;
     `)
 
     const topicStats = await computeWrongQuestionTopicStats(studentId, result.recordset)

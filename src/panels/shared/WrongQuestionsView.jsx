@@ -34,6 +34,11 @@ function groupBySubjectAndTopic(wrongQuestions) {
     const subjectGroup = bySubject.get(item.subject)
     subjectGroup.items.push(item)
 
+    // "İçerik Grubuna Göre" sekmesi gerçek konu adına (topic) göre gruplar — farklı kitapların
+    // testleri aynı konuyu işliyorsa (ör. "1. Ünite - Çarpanlar, Katlar ve Üslü İfadeler") tek
+    // kartta birleşmesi beklenen davranıştır. Kitap bazlı, kararlı kimlikli gruplama zaten ayrı
+    // "Kaynağa Göre" sekmesinde (bkz. groupBySubjectAndSource) sunuluyor; bookName'i burada
+    // önceliklendirmek iki sekmeyi aynılaştırır ve bu fonksiyona daha önce yanlışlıkla eklenmişti.
     const topicKey = item.topic || item.bookName || ''
     if (!subjectGroup.topicsByKey.has(topicKey)) {
       subjectGroup.topicsByKey.set(topicKey, { topic: item.topic || item.bookName || null, items: [] })
@@ -69,6 +74,7 @@ function groupBySubjectAndSource(wrongQuestions) {
       subjectGroup.sourcesByKey.set(sourceKey, {
         bookName: item.bookName || null,
         publisherName: item.publisherName || null,
+        bookImageUrl: item.bookImageUrl || null,
         items: [],
         topicsByKey: new Map(),
       })
@@ -192,7 +198,7 @@ function GroupModeToggle({ mode, onChange }) {
   )
 }
 
-function SourceProfileCard({ bookName, publisherName, wrongCount, onClick }) {
+function SourceProfileCard({ bookName, publisherName, bookImageUrl, wrongCount, onClick }) {
   return (
     <button
       type="button"
@@ -204,7 +210,7 @@ function SourceProfileCard({ bookName, publisherName, wrongCount, onClick }) {
         {publisherName || 'Yayın evi belirtilmemiş'}
       </span>
       <div className="flex items-center gap-3">
-        <ResourceBookAvatar book={{ name: bookName }} size="md" />
+        <ResourceBookAvatar book={{ name: bookName, imageUrl: bookImageUrl }} size="md" />
         <h3 className="line-clamp-2 min-w-0 flex-1 text-sm font-bold leading-snug text-panel-text">
           {bookName || 'Kaynak belirtilmemiş'}
         </h3>
@@ -228,6 +234,7 @@ export default function WrongQuestionsView({
   title = 'Hata Defterim',
   subtitle = 'Fotoğrafını çektiğin yanlış sorular ders ders burada.',
   headerActions,
+  hideHeaderWhenUnselected = false,
 }) {
   const [wrongQuestions, setWrongQuestions] = useState(null)
   const [topicStats, setTopicStats] = useState([])
@@ -255,8 +262,14 @@ export default function WrongQuestionsView({
 
   const contentGroups = useMemo(() => (wrongQuestions ? groupBySubjectAndTopic(wrongQuestions) : []), [wrongQuestions])
   const sourceGroups = useMemo(() => (wrongQuestions ? groupBySubjectAndSource(wrongQuestions) : []), [wrongQuestions])
-  const selectedContentGroup = contentGroups.find((group) => group.subject === selectedSubject) || null
-  const selectedSourceGroup = sourceGroups.find((group) => group.subject === selectedSubject) || null
+  const hasSingleSubject = contentGroups.length === 1
+
+  // Tek ders varsa (ör. öğretmen-öğrenci ilişkisi zaten tek derse özgü), ders seçim
+  // ekranını atlayıp doğrudan o dersin içeriğini gösteriyoruz.
+  const effectiveSelectedSubject = selectedSubject ?? (hasSingleSubject ? contentGroups[0].subject : null)
+
+  const selectedContentGroup = contentGroups.find((group) => group.subject === effectiveSelectedSubject) || null
+  const selectedSourceGroup = sourceGroups.find((group) => group.subject === effectiveSelectedSubject) || null
   const activeSource =
     groupMode === 'source' && selectedSourceKey
       ? selectedSourceGroup?.sources.find((source) => sourceKeyFor(source.bookName) === selectedSourceKey) || null
@@ -270,7 +283,7 @@ export default function WrongQuestionsView({
 
   const activeTopics = activeSource ? activeSource.topics : groupMode === 'topic' ? selectedContentGroup?.topics : null
   const galleryTopicGroup = activeTopics?.find(
-    (topicGroup) => topicStatsKey(selectedSubject, topicGroup.topic) === galleryTopicKey,
+    (topicGroup) => topicStatsKey(effectiveSelectedSubject, topicGroup.topic) === galleryTopicKey,
   )
 
   const handleSelectSubject = (subject) => {
@@ -311,20 +324,24 @@ export default function WrongQuestionsView({
             </div>
           }
         />
-      ) : selectedSubject ? (
+      ) : effectiveSelectedSubject ? (
         <PageHeader
-          title={selectedSubject}
+          title={effectiveSelectedSubject}
           subtitle={`${selectedContentGroup?.items.length ?? 0} yanlış soru`}
           actions={
             <div className="flex items-center gap-2">
               {headerActions}
-              <Button variant="secondary" onClick={handleBackToSubjects}>
-                <ArrowLeft size={15} aria-hidden="true" />
-                Derslere Dön
-              </Button>
+              {hasSingleSubject ? null : (
+                <Button variant="secondary" onClick={handleBackToSubjects}>
+                  <ArrowLeft size={15} aria-hidden="true" />
+                  Derslere Dön
+                </Button>
+              )}
             </div>
           }
         />
+      ) : hideHeaderWhenUnselected ? (
+        headerActions ? <div className="flex justify-end">{headerActions}</div> : null
       ) : (
         <PageHeader title={title} subtitle={subtitle} actions={headerActions} />
       )}
@@ -347,15 +364,15 @@ export default function WrongQuestionsView({
         >
           {activeSource.topics.map((topicGroup) => (
             <ContentTopicCard
-              key={topicStatsKey(selectedSubject, topicGroup.topic)}
+              key={topicStatsKey(effectiveSelectedSubject, topicGroup.topic)}
               topic={topicGroup.topic}
               wrongCount={topicGroup.items.length}
-              stats={topicStatsMap.get(topicStatsKey(selectedSubject, topicGroup.topic))}
-              onClick={() => setGalleryTopicKey(topicStatsKey(selectedSubject, topicGroup.topic))}
+              stats={topicStatsMap.get(topicStatsKey(effectiveSelectedSubject, topicGroup.topic))}
+              onClick={() => setGalleryTopicKey(topicStatsKey(effectiveSelectedSubject, topicGroup.topic))}
             />
           ))}
         </MotionDiv>
-      ) : selectedSubject ? (
+      ) : effectiveSelectedSubject ? (
         <div className="flex flex-col gap-4">
           <GroupModeToggle mode={groupMode} onChange={handleChangeGroupMode} />
           {groupMode === 'source' ? (
@@ -369,6 +386,7 @@ export default function WrongQuestionsView({
                   key={sourceKeyFor(source.bookName)}
                   bookName={source.bookName}
                   publisherName={source.publisherName}
+                  bookImageUrl={source.bookImageUrl}
                   wrongCount={source.items.length}
                   onClick={() => setSelectedSourceKey(sourceKeyFor(source.bookName))}
                 />
@@ -382,11 +400,11 @@ export default function WrongQuestionsView({
             >
               {selectedContentGroup?.topics.map((topicGroup) => (
                 <ContentTopicCard
-                  key={topicStatsKey(selectedSubject, topicGroup.topic)}
+                  key={topicStatsKey(effectiveSelectedSubject, topicGroup.topic)}
                   topic={topicGroup.topic}
                   wrongCount={topicGroup.items.length}
-                  stats={topicStatsMap.get(topicStatsKey(selectedSubject, topicGroup.topic))}
-                  onClick={() => setGalleryTopicKey(topicStatsKey(selectedSubject, topicGroup.topic))}
+                  stats={topicStatsMap.get(topicStatsKey(effectiveSelectedSubject, topicGroup.topic))}
+                  onClick={() => setGalleryTopicKey(topicStatsKey(effectiveSelectedSubject, topicGroup.topic))}
                 />
               ))}
             </MotionDiv>

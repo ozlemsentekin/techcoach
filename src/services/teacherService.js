@@ -194,8 +194,11 @@ export async function getTeacherStudentProgressOverview(studentTeacherId) {
 }
 
 /** @returns {Promise<import('./wrongQuestionService').WrongQuestion[]>} */
-export async function getTeacherStudentWrongQuestions(studentTeacherId) {
-  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/wrong-questions`, { method: 'GET' })
+export async function getTeacherStudentWrongQuestions(studentTeacherId, resourceBookId) {
+  const query = resourceBookId ? `?resourceBookId=${resourceBookId}` : ''
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/wrong-questions${query}`, {
+    method: 'GET',
+  })
   return data.wrongQuestions
 }
 

@@ -273,8 +273,7 @@ export default function StudentDetailPage() {
           updateMistakeReason={(id, mistakeReason) =>
             updateTeacherStudentWrongQuestion(studentTeacherId, id, { mistakeReason })
           }
-          title="Hata Defteri"
-          subtitle={`${student.subjectName || 'Bu ders'} için fotoğraflanan yanlış sorular.`}
+          hideHeaderWhenUnselected
         />
       )}
 

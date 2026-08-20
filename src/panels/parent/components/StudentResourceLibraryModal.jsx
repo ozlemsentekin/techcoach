@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, Check, ChevronDown, ChevronRight, ImageOff, Pencil, Plus, Trash2, X } from 'lucide-react'
 import Badge from '../../ui/Badge'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
@@ -107,6 +107,7 @@ function BookTopics({ student, book }) {
   const [editingTestId, setEditingTestId] = useState(null)
   const [editError, setEditError] = useState('')
   const [opticalTest, setOpticalTest] = useState(null)
+  const [wrongQuestions, setWrongQuestions] = useState([])
 
   useEffect(() => {
     let ignore = false
@@ -126,6 +127,41 @@ function BookTopics({ student, book }) {
       ignore = true
     }
   }, [student.id, book.id])
+
+  // Hata defterine hangi testlerden en az bir soru fotoğrafı eklenmiş, hangilerinden hiç
+  // eklenmemiş olduğunu bilmek için tek seferde çekilir (liste ekranındaki uyarı ikonu ve optik
+  // form açıldığında kamera rozetleri buradan beslenir — testi her açışta ayrıca istek atmayız).
+  useEffect(() => {
+    let ignore = false
+
+    authRequest(`/api/panel/wrong-questions?studentId=${student.id}&resourceBookId=${book.id}`)
+      .then((data) => {
+        if (!ignore) setWrongQuestions(data.wrongQuestions || [])
+      })
+      .catch(() => {
+        // Sessizce yok say: uyarı ikonu gösterilmez ama liste yine çalışır.
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [student.id, book.id])
+
+  const testIdsWithMistakePhotos = useMemo(
+    () => new Set(wrongQuestions.filter((item) => item.hasPhoto && item.testId).map((item) => item.testId)),
+    [wrongQuestions],
+  )
+
+  const applyWrongQuestionPhoto = (wrongQuestion) => {
+    if (!wrongQuestion) return
+    setWrongQuestions((prev) => {
+      const index = prev.findIndex((item) => item.id === wrongQuestion.id)
+      if (index === -1) return [...prev, wrongQuestion]
+      const next = [...prev]
+      next[index] = wrongQuestion
+      return next
+    })
+  }
 
   const toggleTopicCollapsed = (topicId) => {
     setCollapsedTopicIds((prev) => {
@@ -267,19 +303,19 @@ function BookTopics({ student, book }) {
             authRequest(`/api/panel/resource-book-topic-tests/${opticalTest.id}/mistakes/${orderNo}?studentId=${student.id}`, {
               method: 'PUT',
               body: JSON.stringify({ photo: dataUrl }),
+            }).then((data) => {
+              applyWrongQuestionPhoto(data.wrongQuestion)
+              return data
             })
           }
-          fetchExistingPhotos={() =>
-            authRequest(`/api/panel/wrong-questions?studentId=${student.id}`).then((data) => {
-              const photos = {}
-              ;(data.wrongQuestions || [])
-                .filter((item) => item.testId === opticalTest.id && item.photoUrl)
-                .forEach((item) => {
-                  photos[item.questionNumber] = item.photoUrl
-                })
-              return photos
-            })
-          }
+          // Hangi sorulara zaten fotoğraf eklenmiş bilgisi BookTopics'te tek seferde çekilen
+          // wrongQuestions listesinden geliyor; modal her açıldığında ayrıca istek atmıyoruz.
+          initialPhotos={wrongQuestions
+            .filter((item) => item.testId === opticalTest.id && item.hasPhoto)
+            .reduce((acc, item) => {
+              acc[item.questionNumber] = true
+              return acc
+            }, {})}
         />
       ) : null}
       <div className="flex flex-col rounded-xl border border-panel-border p-2">
@@ -323,6 +359,11 @@ function BookTopics({ student, book }) {
                     const isSaving = savingTestIds.has(test.id)
                     const hasResults =
                       test.correctCount !== undefined || test.wrongCount !== undefined || test.blankCount !== undefined
+                    const needsMistakePhotos =
+                      isManual &&
+                      test.hasAnswerKey &&
+                      (Number(test.wrongCount) > 0 || Number(test.blankCount) > 0) &&
+                      !testIdsWithMistakePhotos.has(test.id)
                     return (
                       <div key={test.id} className="relative rounded-lg px-2 py-1">
                         <div className="flex items-center gap-2 text-xs">
@@ -388,6 +429,14 @@ function BookTopics({ student, book }) {
                                 <Badge tone="sage">D:{test.correctCount ?? 0}</Badge>
                                 <Badge tone="red">Y:{test.wrongCount ?? 0}</Badge>
                                 <Badge tone="yellow">B:{test.blankCount ?? 0}</Badge>
+                              </span>
+                            ) : null}
+                            {needsMistakePhotos ? (
+                              <span
+                                title="Hata defterine bu testten hiç soru fotoğrafı eklenmemiş"
+                                className="flex shrink-0 items-center justify-center text-panel-warm"
+                              >
+                                <ImageOff size={13} aria-hidden="true" />
                               </span>
                             ) : null}
                             {isManual ? (
