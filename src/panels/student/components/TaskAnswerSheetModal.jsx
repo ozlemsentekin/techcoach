@@ -80,25 +80,12 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
           return (
             <div
               key={key}
-              role={isMistake ? 'button' : undefined}
-              tabIndex={isMistake ? 0 : undefined}
-              onClick={isMistake ? () => onCapture(orderNo) : undefined}
-              onKeyDown={
-                isMistake
-                  ? (event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        onCapture(orderNo)
-                      }
-                    }
-                  : undefined
-              }
-              className={`grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-x-1.5 gap-y-1 rounded-lg px-1 py-1 transition-colors sm:flex sm:items-center ${
-                isMistake ? 'cursor-pointer bg-panel-red-soft hover:bg-panel-red-soft/70' : ''
+              className={`flex min-w-0 items-center gap-1.5 rounded-lg px-1 py-1 transition-colors ${
+                isMistake ? 'bg-panel-red-soft' : ''
               }`}
             >
               <span className="w-5 shrink-0 text-right text-sm font-bold text-panel-text-muted">{orderNo}.</span>
-              <div className="flex min-w-0 flex-wrap gap-1">
+              <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-hidden">
                 {OPTIONS.map((option) => {
                   const isSelected = selected === option
                   const isCorrectReveal = isMismatch && !isSelected && option === correctLabel
@@ -109,7 +96,10 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
                       disabled={locked}
                       aria-pressed={isSelected}
                       aria-label={`${orderNo}. soru için ${option} şıkkı`}
-                      onClick={() => onSelect(orderNo, isSelected ? null : option)}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onSelect(orderNo, isSelected ? null : option)
+                      }}
                       className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
                         locked ? 'cursor-not-allowed' : ''
                       } ${
@@ -133,7 +123,10 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
                     aria-pressed={isBlankSelected}
                     aria-label={`${orderNo}. soruyu boş bırak`}
                     title="Boş bırak"
-                    onClick={() => onSelect(orderNo, isBlankSelected ? null : BLANK_LABEL)}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onSelect(orderNo, isBlankSelected ? null : BLANK_LABEL)
+                    }}
                     className={`flex h-6 shrink-0 items-center justify-center rounded-full border px-1.5 text-[10px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary ${
                       locked ? 'cursor-not-allowed' : ''
                     } ${
@@ -148,20 +141,28 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
                   </button>
                 ) : null}
               </div>
-              {isMistake ? (
-                <span
-                  title={hasPhoto ? 'Fotoğraf eklendi' : 'Fotoğraf ekle'}
-                  className={`ml-auto flex shrink-0 items-center justify-center rounded-full p-1 transition-colors ${
-                    hasPhoto ? 'bg-student-theme-primary text-student-theme-button-text' : 'text-panel-text-muted'
-                  }`}
-                >
-                  <Camera size={12} aria-hidden="true" />
-                </span>
-              ) : null}
               {isMismatch && correctLabel ? (
-                <span className="col-start-2 col-end-4 min-w-0 text-[10px] italic leading-none text-panel-text-muted sm:col-auto sm:truncate">
-                  Doğru cevap: {correctLabel}
-                </span>
+                <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                  <span className="whitespace-nowrap text-[10px] italic leading-none text-panel-text-muted">
+                    <span className="sm:hidden">Doğru: {correctLabel}</span>
+                    <span className="hidden sm:inline">Doğru cevap: {correctLabel}</span>
+                  </span>
+                  {isMistake ? (
+                    <button
+                      type="button"
+                      aria-label={hasPhoto ? `${orderNo}. soru fotoğrafını değiştir` : `${orderNo}. soru için fotoğraf ekle`}
+                      title={hasPhoto ? 'Fotoğraf eklendi' : 'Fotoğraf ekle'}
+                      onClick={() => onCapture(orderNo)}
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${
+                        hasPhoto
+                          ? 'bg-student-theme-primary text-student-theme-button-text'
+                          : 'bg-white text-panel-text-muted hover:bg-student-theme-soft hover:text-student-theme-text'
+                      }`}
+                    >
+                      <Camera size={13} aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           )

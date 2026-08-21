@@ -51,10 +51,10 @@ function TestSection({ test }) {
           return (
             <div
               key={key}
-              className={`grid min-w-0 grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-1.5 gap-y-1 rounded-lg px-1 py-0.5 sm:flex sm:gap-1.5 ${isWrongSelection ? 'bg-panel-red-soft' : ''}`}
+              className={`flex min-w-0 items-center gap-1.5 rounded-lg px-1 py-0.5 ${isWrongSelection ? 'bg-panel-red-soft' : ''}`}
             >
               <span className="w-5 shrink-0 text-right text-sm font-bold text-panel-text-muted">{orderNo}.</span>
-              <div className="flex min-w-0 flex-wrap gap-1">
+              <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-hidden">
                 {OPTIONS.map((option) => {
                   const isSelected = selected === option
                   const isCorrectReveal = isMismatch && !isSelected && option === correctLabel
@@ -82,8 +82,9 @@ function TestSection({ test }) {
                 ) : null}
               </div>
               {isMismatch && correctLabel ? (
-                <span className="col-start-2 min-w-0 truncate text-[10px] italic leading-none text-panel-text-muted sm:col-auto">
-                  Doğru cevap: {correctLabel}
+                <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] italic leading-none text-panel-text-muted">
+                  <span className="sm:hidden">Doğru: {correctLabel}</span>
+                  <span className="hidden sm:inline">Doğru cevap: {correctLabel}</span>
                 </span>
               ) : null}
             </div>

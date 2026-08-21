@@ -126,7 +126,7 @@ export default function ManualOpticalAnswerModal({
 
           {result ? (
             <p className="mb-3 text-xs text-panel-text-muted">
-              Yanlış işaretlenen sorularda doğru cevap sarıyla gösterilir; fotoğraf eklemek için ilgili satıra
+              Yanlış işaretlenen sorularda doğru cevap sarıyla gösterilir; fotoğraf eklemek için kamera ikonuna
               dokunun. Cevapları değiştirdikçe sonuç güncel kalması için "Kaydet ve Notla"ya tekrar basın.
             </p>
           ) : null}
@@ -146,25 +146,12 @@ export default function ManualOpticalAnswerModal({
               return (
                 <div
                   key={key}
-                  role={isMistake ? 'button' : undefined}
-                  tabIndex={isMistake ? 0 : undefined}
-                  onClick={isMistake ? () => setCapturingOrderNo(orderNo) : undefined}
-                  onKeyDown={
-                    isMistake
-                      ? (event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            setCapturingOrderNo(orderNo)
-                          }
-                        }
-                      : undefined
-                  }
-                  className={`grid min-w-0 grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-1 rounded-lg px-1 py-1 transition-colors sm:flex sm:gap-1.5 ${
-                    isMistake ? 'cursor-pointer bg-panel-red-soft hover:bg-panel-red-soft/70' : ''
+                  className={`flex min-w-0 items-center gap-1.5 rounded-lg px-1 py-1 transition-colors ${
+                    isMistake ? 'bg-panel-red-soft' : ''
                   }`}
                 >
                   <span className="w-5 shrink-0 text-right text-sm font-bold text-panel-text-muted">{orderNo}.</span>
-                  <div className="flex min-w-0 flex-wrap gap-1">
+                  <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-hidden">
                     {OPTIONS.map((option) => {
                       const isSelected = selected === option
                       const isCorrectReveal = isMismatch && !isSelected && option === correctLabel
@@ -174,7 +161,10 @@ export default function ManualOpticalAnswerModal({
                           type="button"
                           aria-pressed={isSelected}
                           aria-label={`${orderNo}. soru için ${option} şıkkı`}
-                          onClick={() => handleSelect(orderNo, option)}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handleSelect(orderNo, option)
+                          }}
                           className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors ${
                             isSelected
                               ? isWrongSelection
@@ -194,7 +184,10 @@ export default function ManualOpticalAnswerModal({
                       aria-pressed={isBlankSelected}
                       aria-label={`${orderNo}. soruyu boş bırak`}
                       title="Boş bırak"
-                      onClick={() => handleSelect(orderNo, BLANK_LABEL)}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleSelect(orderNo, BLANK_LABEL)
+                      }}
                       className={`flex h-7 shrink-0 items-center justify-center rounded-full border px-1.5 text-[10px] font-semibold transition-colors ${
                         isBlankSelected
                           ? isMistake
@@ -207,22 +200,39 @@ export default function ManualOpticalAnswerModal({
                     </button>
                   </div>
                   {isMismatch && correctLabel ? (
-                    <span className="col-start-2 col-end-4 min-w-0 truncate text-[11px] italic leading-none text-panel-text-muted sm:col-auto">
-                      Doğru cevap: {correctLabel}
-                    </span>
-                  ) : null}
-                  {isMistake ? (
-                    <span
-                      title={hasPhoto ? 'Fotoğraf eklendi · değiştirmek için dokun' : 'Fotoğraf eksik · eklemek için dokun'}
-                      className={`ml-auto flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-1 text-[10px] font-semibold transition-colors ${
-                        hasPhoto
-                          ? 'border-panel-sage bg-panel-sage text-white'
-                          : 'border-panel-warm bg-white text-panel-warm'
-                      }`}
-                    >
-                      <Camera size={12} aria-hidden="true" />
-                      {hasPhoto ? <Check size={10} strokeWidth={3} aria-hidden="true" /> : null}
-                    </span>
+                    <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                      <span className="whitespace-nowrap text-[11px] italic leading-none text-panel-text-muted">
+                        <span className="sm:hidden">Doğru: {correctLabel}</span>
+                        <span className="hidden sm:inline">Doğru cevap: {correctLabel}</span>
+                      </span>
+                      {isMistake ? (
+                        <button
+                          type="button"
+                          aria-label={
+                            hasPhoto
+                              ? `${orderNo}. soru fotoğrafını değiştir`
+                              : `${orderNo}. soru için fotoğraf ekle`
+                          }
+                          title={hasPhoto ? 'Fotoğraf eklendi · değiştirmek için dokun' : 'Fotoğraf eksik · eklemek için dokun'}
+                          onClick={() => setCapturingOrderNo(orderNo)}
+                          className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                            hasPhoto
+                              ? 'border-panel-sage bg-panel-sage text-white'
+                              : 'border-panel-warm bg-white text-panel-warm hover:bg-panel-warm hover:text-white'
+                          }`}
+                        >
+                          <Camera size={14} aria-hidden="true" />
+                          {hasPhoto ? (
+                            <Check
+                              size={11}
+                              strokeWidth={3}
+                              aria-hidden="true"
+                              className="absolute -right-0.5 -top-0.5 rounded-full bg-white text-panel-sage"
+                            />
+                          ) : null}
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               )
