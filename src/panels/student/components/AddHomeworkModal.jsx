@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
-import { Check, ChevronDown, ChevronRight, Loader2, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Check, ChevronDown, ChevronRight, Loader2, Search, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { todayISODate } from '../../../utils/time'
 import Badge from '../../ui/Badge'
 import { cn } from '../../ui/utils'
 import ResourceBookSelect from '../../shared/homework/ResourceBookSelect'
+import { filterTopicsBySearch } from '../../shared/homework/topicSearch'
 
 function buildNote(resourceBookName, topics, selectedTestIds) {
   const lines = []
@@ -46,6 +47,7 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
   const [topicsError, setTopicsError] = useState('')
   const [selectedTestIds, setSelectedTestIds] = useState(new Set())
   const [collapsedTopicIds, setCollapsedTopicIds] = useState(new Set())
+  const [searchQuery, setSearchQuery] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
 
@@ -132,6 +134,10 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
   const primaryButtonClass = isStudentPanel
     ? 'bg-student-theme-primary text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline-student-theme-primary'
     : 'bg-panel-warm text-white hover:bg-panel-warm/90 focus-visible:outline-panel-warm'
+  const filteredTopics = useMemo(
+    () => (topics ? filterTopicsBySearch(topics, searchQuery) : topics),
+    [topics, searchQuery],
+  )
 
   useEffect(() => {
     if (isReadingBook) return
@@ -155,6 +161,7 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
     setTopics(null)
     setSelectedTestIds(new Set())
     setCollapsedTopicIds(new Set())
+    setSearchQuery('')
   }
 
   const handleResourceBookChange = (event) => {
@@ -163,6 +170,7 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
     setSelectedTestIds(new Set())
     setCollapsedTopicIds(new Set())
     setTotalPageCount(0)
+    setSearchQuery('')
   }
 
   const toggleTopicCollapsed = (topicId) => {
@@ -292,14 +300,30 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
                     {selectedSummary}
                   </Badge>
                 </div>
+                <div className="relative">
+                  <Search
+                    size={15}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-panel-text-muted"
+                    aria-hidden="true"
+                  />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Konu, test veya sayfa ara..."
+                    className="w-full rounded-xl border border-panel-border bg-panel-surface py-2 pl-9 pr-3 text-sm text-panel-text"
+                  />
+                </div>
                 <div className="max-h-[38dvh] overflow-y-auto rounded-xl border border-panel-border p-1.5 sm:max-h-64">
                   {topics === null ? (
                     <p className="p-2 text-xs text-panel-text-muted">İçerikler yükleniyor...</p>
-                  ) : topics.length === 0 ? (
-                    <p className="p-2 text-xs text-panel-text-muted">Bu kaynağa ait içerik yok</p>
+                  ) : filteredTopics.length === 0 ? (
+                    <p className="p-2 text-xs text-panel-text-muted">
+                      {searchQuery.trim() ? 'Aramayla eşleşen içerik yok' : 'Bu kaynağa ait içerik yok'}
+                    </p>
                   ) : (
-                    topics.map((topic) => {
-                      const isCollapsed = collapsedTopicIds.has(topic.id)
+                    filteredTopics.map((topic) => {
+                      const isCollapsed = !searchQuery.trim() && collapsedTopicIds.has(topic.id)
                       return (
                         <div key={topic.id} className="py-0.5">
                           <button

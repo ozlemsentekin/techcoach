@@ -17,6 +17,7 @@ import { todayISODate } from '../../../utils/time'
 import Badge from '../../ui/Badge'
 import LoadingState from '../../shared/LoadingState'
 import { ResourceBookRates } from '../../shared/ResourceBookCard'
+import { filterTopicsBySearch } from '../../shared/homework/topicSearch'
 import { cn } from '../../ui/utils'
 import { getTeacherResourceBooks, getTeacherResourceBookTopics } from '../../../services/teacherService'
 
@@ -51,25 +52,6 @@ function sumSelectedQuestions(topics, selectedTestIds) {
 function formatWizardDate(dateISO) {
   if (!dateISO) return ''
   return new Date(dateISO).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', weekday: 'long' })
-}
-
-function normalizeText(value) {
-  return (value || '').toLocaleLowerCase('tr-TR')
-}
-
-/** Arama kutusuna göre konu/test ağacını filtreler; konu adı eşleşirse altındaki tüm testler kalır. */
-function filterTopicsBySearch(topics, query) {
-  const trimmed = query.trim()
-  if (!trimmed) return topics
-  const q = normalizeText(trimmed)
-  return topics
-    .map((topic) => {
-      const topicMatches = normalizeText(topic.name).includes(q)
-      const tests = topicMatches ? topic.tests : topic.tests.filter((test) => normalizeText(test.name).includes(q))
-      if (!topicMatches && tests.length === 0) return null
-      return { ...topic, tests }
-    })
-    .filter(Boolean)
 }
 
 function ResourceBookCover({ book }) {
@@ -346,7 +328,7 @@ export default function AssignHomeworkModal({ studentTeacherId, subjectName, def
                       type="text"
                       value={searchQuery}
                       onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder="Konu veya test ara..."
+                      placeholder="Konu, test veya sayfa ara..."
                       className="w-full rounded-xl border border-panel-border py-2 pl-9 pr-3 text-sm text-panel-text"
                     />
                   </div>
