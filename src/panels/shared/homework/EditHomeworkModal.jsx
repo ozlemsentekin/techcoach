@@ -140,6 +140,7 @@ export default function EditHomeworkModal({ homework, onSave, onClose }) {
               value={resourceBookId}
               onChange={setResourceBookId}
               disabled={!subjectId || !resourceBooks?.length}
+              variant="panel"
               placeholder={
                 !subjectId
                   ? 'Önce ders seçin'
@@ -205,7 +206,7 @@ export default function EditHomeworkModal({ homework, onSave, onClose }) {
           <button
             type="submit"
             disabled={saving || !resourceBookId}
-            className="flex items-center justify-center gap-2 rounded-xl bg-[#1c2b5e] px-4 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex items-center justify-center gap-2 rounded-xl bg-panel-warm px-4 py-3 text-sm font-semibold text-white hover:bg-panel-warm/90 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {saving ? <Loader2 size={16} className="animate-spin" /> : null}
             {saving ? 'Kaydediliyor...' : 'Kaydet'}

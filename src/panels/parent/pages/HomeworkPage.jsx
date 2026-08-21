@@ -155,7 +155,7 @@ export default function HomeworkPage() {
         </>
       )}
 
-      {showModal ? <AddHomeworkModal onSave={handleSave} onClose={() => setShowModal(false)} /> : null}
+      {showModal ? <AddHomeworkModal panelRole="parent" onSave={handleSave} onClose={() => setShowModal(false)} /> : null}
 
       {assigningTaskHomework ? (
         <AssignTaskModal

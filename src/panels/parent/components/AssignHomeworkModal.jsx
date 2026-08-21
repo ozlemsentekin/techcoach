@@ -85,7 +85,7 @@ function ResourceBookCover({ book }) {
   }
 
   return (
-    <span className="flex aspect-[3/4] w-full items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
+    <span className="flex aspect-[3/4] w-full items-center justify-center rounded-lg bg-panel-warm-soft text-panel-warm">
       <BookOpen size={28} aria-hidden="true" />
     </span>
   )
@@ -323,7 +323,7 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
                       key={book.id}
                       type="button"
                       onClick={() => handleSelectResourceBook(book)}
-                      className="grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-3 rounded-xl border border-panel-border p-2.5 text-left transition-colors hover:border-panel-blue hover:bg-panel-blue-soft/40 sm:flex sm:flex-col sm:items-stretch sm:gap-2"
+                      className="grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-3 rounded-xl border border-panel-border p-2.5 text-left transition-colors hover:border-panel-warm hover:bg-panel-warm-soft/50 sm:flex sm:flex-col sm:items-stretch sm:gap-2"
                     >
                       <ResourceBookCover book={book} />
                       <div className="flex min-w-0 flex-col gap-1">
@@ -374,7 +374,7 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
                             <button
                               type="button"
                               onClick={() => toggleTopicCollapsed(topic.id)}
-                              className="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-sm hover:bg-panel-blue-soft"
+                              className="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-sm hover:bg-panel-warm-soft/70"
                             >
                               {isCollapsed ? (
                                 <ChevronRight size={14} className="shrink-0 text-panel-text-muted" />
@@ -393,11 +393,11 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
                                         ? 'cursor-not-allowed opacity-50'
                                         : test.assignedPending
                                           ? 'bg-panel-accent-soft hover:bg-panel-accent-soft/80'
-                                          : 'hover:bg-panel-blue-soft'
+                                          : 'hover:bg-panel-warm-soft/70'
                                     }`}
                                   >
                                     {test.completed ? (
-                                      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm bg-panel-blue text-white">
+                                      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm bg-panel-warm text-white">
                                         <Check size={10} strokeWidth={3} />
                                       </span>
                                     ) : (
@@ -407,30 +407,25 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
                                         onChange={() => toggleTest(test.id)}
                                       />
                                     )}
-                                    <span className="flex min-w-0 flex-col gap-0.5 text-panel-text-muted sm:flex-row sm:items-center sm:gap-1.5">
-                                      {test.topicName ? (
-                                        <Badge tone="slate" className="w-fit shrink-0">
-                                          {test.topicName}
-                                        </Badge>
-                                      ) : null}
-                                      <span className="truncate">
-                                        {test.name} · s.{test.pageStart}-{test.pageEnd} · {test.questionCount} soru
-                                        {test.completed && test.correctCount != null ? (
-                                          <span className="ml-1 text-[10px] text-panel-text-muted">
-                                            {'('}
-                                            <span className="inline-flex items-center gap-0.5 align-middle text-panel-sage">
-                                              <CheckCircle2 size={9} aria-hidden="true" />
-                                              {test.correctCount}D
-                                            </span>
-                                            {', '}
-                                            <span className="inline-flex items-center gap-0.5 align-middle text-panel-red">
-                                              <XCircle size={9} aria-hidden="true" />
-                                              {test.wrongCount}Y
-                                            </span>
-                                            {`, ${test.blankCount}B)`}
-                                          </span>
-                                        ) : null}
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block truncate text-sm font-medium text-panel-text">{test.name}</span>
+                                      <span className="mt-0.5 block truncate text-xs text-panel-text-muted">
+                                        s.{test.pageStart}-{test.pageEnd} · {test.questionCount} soru
                                       </span>
+                                      {test.completed && test.correctCount != null ? (
+                                        <span className="mt-0.5 block text-[10px] text-panel-text-muted">
+                                          <span className="inline-flex items-center gap-0.5 align-middle text-panel-sage">
+                                            <CheckCircle2 size={9} aria-hidden="true" />
+                                            {test.correctCount}D
+                                          </span>
+                                          {' · '}
+                                          <span className="inline-flex items-center gap-0.5 align-middle text-panel-red">
+                                            <XCircle size={9} aria-hidden="true" />
+                                            {test.wrongCount}Y
+                                          </span>
+                                          {` · ${test.blankCount}B`}
+                                        </span>
+                                      ) : null}
                                     </span>
                                   </label>
                                 ))}
@@ -488,8 +483,8 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
                           className={cn(
                             'rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors',
                             durationPreset === preset
-                              ? 'bg-panel-blue text-white'
-                              : 'bg-panel-blue-soft text-panel-blue hover:bg-panel-blue hover:text-white',
+                              ? 'bg-panel-warm text-white'
+                              : 'bg-panel-warm-soft text-panel-warm hover:bg-panel-warm hover:text-white',
                           )}
                         >
                           {preset} dk
@@ -501,8 +496,8 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
                         className={cn(
                           'rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors',
                           durationPreset === 'custom'
-                            ? 'bg-panel-blue text-white'
-                            : 'bg-panel-blue-soft text-panel-blue hover:bg-panel-blue hover:text-white',
+                            ? 'bg-panel-warm text-white'
+                            : 'bg-panel-warm-soft text-panel-warm hover:bg-panel-warm hover:text-white',
                         )}
                       >
                         Özel
@@ -534,7 +529,7 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
             <button
               type="submit"
               disabled={saving}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-panel-blue px-4 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-panel-warm px-4 py-3 text-sm font-semibold text-white hover:bg-panel-warm/90 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : null}
               {saving ? 'Kaydediliyor...' : 'Ödevi Kaydet'}

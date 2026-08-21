@@ -385,6 +385,52 @@ button {
   background-image: none;
 }
 
+[data-panel-role='parent'] :where(button.bg-panel-blue, a.bg-panel-blue, button[class*='bg-[#1c2b5e]'], a[class*='bg-[#1c2b5e]']),
+[data-panel-role='teacher'] :where(button.bg-panel-blue, a.bg-panel-blue, button[class*='bg-[#1c2b5e]'], a[class*='bg-[#1c2b5e]']) {
+  background-color: var(--color-panel-warm) !important;
+}
+
+[data-panel-role='parent'] :where(button.bg-panel-blue-soft, a.bg-panel-blue-soft),
+[data-panel-role='teacher'] :where(button.bg-panel-blue-soft, a.bg-panel-blue-soft) {
+  background-color: var(--color-panel-warm-soft) !important;
+}
+
+[data-panel-role='parent'] :where(button.border-panel-blue, a.border-panel-blue),
+[data-panel-role='teacher'] :where(button.border-panel-blue, a.border-panel-blue) {
+  border-color: var(--color-panel-warm) !important;
+}
+
+[data-panel-role='parent'] :where(button.border-panel-blue-soft, a.border-panel-blue-soft),
+[data-panel-role='teacher'] :where(button.border-panel-blue-soft, a.border-panel-blue-soft) {
+  border-color: var(--color-panel-warm-soft) !important;
+}
+
+[data-panel-role='parent'] :where(button.text-panel-blue, a.text-panel-blue),
+[data-panel-role='teacher'] :where(button.text-panel-blue, a.text-panel-blue) {
+  color: var(--color-panel-warm) !important;
+}
+
+[data-panel-role='parent'] :where(button.hover\:bg-panel-blue:hover, a.hover\:bg-panel-blue:hover),
+[data-panel-role='teacher'] :where(button.hover\:bg-panel-blue:hover, a.hover\:bg-panel-blue:hover) {
+  background-color: var(--color-panel-warm) !important;
+  color: #ffffff !important;
+}
+
+[data-panel-role='parent'] :where(button.hover\:bg-panel-blue-soft:hover, a.hover\:bg-panel-blue-soft:hover),
+[data-panel-role='teacher'] :where(button.hover\:bg-panel-blue-soft:hover, a.hover\:bg-panel-blue-soft:hover) {
+  background-color: var(--color-panel-warm-soft) !important;
+}
+
+[data-panel-role='parent'] :where(button.hover\:border-panel-blue:hover, a.hover\:border-panel-blue:hover),
+[data-panel-role='teacher'] :where(button.hover\:border-panel-blue:hover, a.hover\:border-panel-blue:hover) {
+  border-color: var(--color-panel-warm) !important;
+}
+
+[data-panel-role='parent'] :where(button.hover\:text-panel-blue:hover, a.hover\:text-panel-blue:hover),
+[data-panel-role='teacher'] :where(button.hover\:text-panel-blue:hover, a.hover\:text-panel-blue:hover) {
+  color: var(--color-panel-warm) !important;
+}
+
 .student-theme-banner {
   background:
     linear-gradient(

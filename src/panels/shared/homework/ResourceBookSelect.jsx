@@ -1,28 +1,36 @@
 import { useEffect, useRef, useState } from 'react'
 import { BookOpen, ChevronDown } from 'lucide-react'
 import Badge from '../../ui/Badge'
+import { cn } from '../../ui/utils'
 
-function ResourceBookAvatar({ book }) {
+function ResourceBookAvatar({ book, variant }) {
   if (book?.imageUrl) {
     return (
       <img loading="lazy" decoding="async"
         src={book.imageUrl}
         alt={`${book.name} görseli`}
-        className="h-8 w-8 shrink-0 rounded-lg border border-panel-border object-cover"
+        className="h-9 w-9 shrink-0 rounded-lg border border-panel-border object-cover"
       />
     )
   }
 
   return (
-    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-student-theme-soft text-student-theme-text">
+    <span
+      className={cn(
+        'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+        variant === 'student' ? 'bg-student-theme-soft text-student-theme-text' : 'bg-panel-warm-soft text-panel-warm',
+      )}
+    >
       <BookOpen size={15} aria-hidden="true" />
     </span>
   )
 }
 
-export default function ResourceBookSelect({ resourceBooks, value, onChange, disabled, placeholder }) {
+export default function ResourceBookSelect({ resourceBooks, value, onChange, disabled, placeholder, variant = 'student' }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef(null)
+  const hoverClass = variant === 'student' ? 'hover:bg-student-theme-soft' : 'hover:bg-panel-warm-soft/70'
+  const hoverTextClass = variant === 'student' ? 'hover:text-student-theme-text' : 'hover:text-panel-warm'
 
   useEffect(() => {
     if (!open) return undefined
@@ -50,17 +58,19 @@ export default function ResourceBookSelect({ resourceBooks, value, onChange, dis
         type="button"
         disabled={disabled}
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border border-panel-border p-3 text-left text-sm text-panel-text disabled:opacity-60"
+        className="flex min-h-14 w-full items-center justify-between gap-2 rounded-xl border border-panel-border bg-panel-surface p-3 text-left text-sm text-panel-text disabled:opacity-60"
       >
         {selected ? (
-          <span className="flex min-w-0 items-center gap-2">
-            <ResourceBookAvatar book={selected} />
-            {selected.publisherName ? (
-              <Badge tone="lilac" className="shrink-0">
-                {selected.publisherName}
-              </Badge>
-            ) : null}
-            <span className="min-w-0 truncate">{selected.name}</span>
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <ResourceBookAvatar book={selected} variant={variant} />
+            <span className="flex min-w-0 flex-1 flex-col gap-1">
+              {selected.publisherName ? (
+                <Badge tone="lilac" className="w-fit max-w-full truncate">
+                  {selected.publisherName}
+                </Badge>
+              ) : null}
+              <span className="block min-w-0 truncate font-medium">{selected.name}</span>
+            </span>
           </span>
         ) : (
           <span className="truncate text-panel-text-muted">{placeholder}</span>
@@ -73,7 +83,7 @@ export default function ResourceBookSelect({ resourceBooks, value, onChange, dis
           <button
             type="button"
             onClick={() => selectOption('')}
-            className="flex w-full items-center rounded-lg px-2 py-1.5 text-left text-sm text-panel-text-muted hover:bg-student-theme-soft hover:text-student-theme-text"
+            className={cn('flex w-full items-center rounded-lg px-2 py-2 text-left text-sm text-panel-text-muted', hoverClass, hoverTextClass)}
           >
             {placeholder}
           </button>
@@ -82,15 +92,17 @@ export default function ResourceBookSelect({ resourceBooks, value, onChange, dis
               key={book.id}
               type="button"
               onClick={() => selectOption(book.id)}
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-student-theme-soft"
+              className={cn('flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left text-sm', hoverClass)}
             >
-              <ResourceBookAvatar book={book} />
-              {book.publisherName ? (
-                <Badge tone="lilac" className="shrink-0">
-                  {book.publisherName}
-                </Badge>
-              ) : null}
-              <span className="truncate text-panel-text">{book.name}</span>
+              <ResourceBookAvatar book={book} variant={variant} />
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                {book.publisherName ? (
+                  <Badge tone="lilac" className="w-fit max-w-full truncate">
+                    {book.publisherName}
+                  </Badge>
+                ) : null}
+                <span className="line-clamp-2 text-panel-text">{book.name}</span>
+              </span>
             </button>
           ))}
         </div>
