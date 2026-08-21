@@ -65,7 +65,7 @@ export default function ManualOpticalAnswerModal({
     setError('')
     try {
       const data = await submitAnswers(submittedAnswers)
-      if (seq !== submitSeqRef.current) return
+      if (seq !== submitSeqRef.current) return false
       setResult({ correctCount: data.correctCount, wrongCount: data.wrongCount, blankCount: data.blankCount })
       setCorrectLabels(data.correctLabels || null)
       onSaved(test.id, {
@@ -75,9 +75,11 @@ export default function ManualOpticalAnswerModal({
         blankCount: data.blankCount,
         manualAnswers: data.answers,
       })
+      return true
     } catch (err) {
-      if (seq !== submitSeqRef.current) return
-      setError(err.message)
+      if (seq !== submitSeqRef.current) return false
+      setError(err.message || 'Cevaplar kaydedilemedi.')
+      return false
     } finally {
       if (seq === submitSeqRef.current) setSaving(false)
     }
@@ -103,6 +105,11 @@ export default function ManualOpticalAnswerModal({
   }
 
   const handleSave = () => submit(answers)
+
+  const handleSaveAndClose = async () => {
+    const saved = await submit(answers)
+    if (saved) onClose()
+  }
 
   const handleSavePhoto = async (dataUrl) => {
     if (!capturingOrderNo) return
@@ -248,20 +255,29 @@ export default function ManualOpticalAnswerModal({
         </div>
 
         <div className="border-t border-panel-border p-4">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !allAnswered}
-            className="w-full rounded-xl bg-panel-blue px-4 py-3 text-sm font-semibold text-white hover:bg-panel-blue/90 disabled:opacity-50"
-          >
-            {saving
-              ? 'Kaydediliyor...'
-              : allAnswered
-                ? result
-                  ? 'Yeniden Kaydet ve Notla'
-                  : 'Kaydet ve Notla'
-                : `Tüm soruları işaretleyin (${answeredCount}/${test.questionCount})`}
-          </button>
+          {!allAnswered ? (
+            <p className="mb-2 text-center text-xs font-semibold text-panel-text-muted">
+              Tüm soruları işaretleyin ({answeredCount}/{test.questionCount})
+            </p>
+          ) : null}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !allAnswered}
+              className="min-h-12 rounded-xl border border-panel-blue px-3 py-3 text-sm font-semibold text-panel-blue hover:bg-panel-blue-soft disabled:border-panel-border disabled:text-panel-text-muted disabled:opacity-60"
+            >
+              {saving ? 'Kaydediliyor...' : 'Kaydet'}
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveAndClose}
+              disabled={saving || !allAnswered}
+              className="min-h-12 rounded-xl bg-panel-blue px-3 py-3 text-sm font-semibold text-white hover:bg-panel-blue/90 disabled:opacity-60"
+            >
+              {saving ? 'Kaydediliyor...' : 'Kaydet Kapat'}
+            </button>
+          </div>
         </div>
       </div>
 
