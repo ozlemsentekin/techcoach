@@ -19,7 +19,7 @@ export default function Button({ className, variant = 'primary', size = 'md', ty
     <button
       type={type}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center gap-2 rounded-xl font-medium transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-blue disabled:pointer-events-none disabled:opacity-50',
+        'inline-flex min-w-0 max-w-full shrink-0 items-center justify-center gap-2 rounded-xl text-center font-medium transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-blue disabled:pointer-events-none disabled:opacity-50',
         variants[variant],
         sizes[size],
         className,

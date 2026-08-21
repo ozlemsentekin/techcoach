@@ -6,13 +6,13 @@ function PasswordField({ label, value, onChange, autoComplete, visible, onToggle
   return (
     <label className="block">
       <span className="mb-1 block text-sm font-medium text-panel-text">{label}</span>
-      <span className="relative flex items-center">
+      <span className="relative flex min-w-0 items-center">
         <input
           type={visible ? 'text' : 'password'}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           autoComplete={autoComplete}
-          className="w-full rounded-xl border border-panel-border px-3 py-2.5 pr-10 text-base text-panel-text"
+          className="min-w-0 w-full rounded-xl border border-panel-border px-3 py-2.5 pr-10 text-base text-panel-text"
         />
         <button
           type="button"
@@ -65,13 +65,13 @@ export default function ChangePasswordDialog({ onClose }) {
 
   if (success) {
     return (
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">
-        <div className="w-full max-w-sm rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-lg sm:rounded-2xl sm:p-6">
+      <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-black/30 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">
+        <div className="w-full min-w-0 max-w-full overflow-x-hidden rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-lg sm:max-w-sm sm:rounded-2xl sm:p-6">
           <div className="flex items-center gap-2 text-emerald-600">
             <Check size={20} aria-hidden="true" />
             <h2 className="text-lg font-semibold text-panel-text">Şifre değiştirildi</h2>
           </div>
-          <p className="mt-3 text-base text-panel-text-muted">
+          <p className="mt-3 break-words text-base text-panel-text-muted">
             Yeni şifren kaydedildi, bir sonraki girişte bu şifreyi kullanabilirsin.
           </p>
           <button
@@ -87,10 +87,10 @@ export default function ChangePasswordDialog({ onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-black/30 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-lg sm:rounded-2xl sm:p-6"
+        className="w-full min-w-0 max-w-full overflow-x-hidden rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-lg sm:max-w-sm sm:rounded-2xl sm:p-6"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">

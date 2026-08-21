@@ -67,7 +67,7 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
         <ResultBadge result={result} />
       </div>
 
-      <div className="mt-1.5 grid grid-cols-1 gap-y-1">
+      <div className="mt-1.5 grid min-w-0 grid-cols-1 gap-y-1">
         {Array.from({ length: test.questionCount }, (_, index) => index + 1).map((orderNo) => {
           const key = String(orderNo)
           const selected = answers[key]
@@ -93,7 +93,7 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
                     }
                   : undefined
               }
-              className={`grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-x-1.5 gap-y-1 rounded-lg px-1 py-1 transition-colors sm:flex sm:items-center ${
+              className={`grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-x-1.5 gap-y-1 rounded-lg px-1 py-1 transition-colors sm:flex sm:items-center ${
                 isMistake ? 'cursor-pointer bg-panel-red-soft hover:bg-panel-red-soft/70' : ''
               }`}
             >
@@ -285,8 +285,8 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 md:items-center md:p-4">
-      <div className="flex h-full w-full max-w-2xl flex-col border border-panel-border bg-panel-surface md:h-auto md:max-h-[85vh] md:max-w-4xl md:rounded-2xl xl:max-w-6xl 2xl:max-w-7xl">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center overflow-hidden bg-black/30 p-0 md:items-center md:p-4">
+      <div className="flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden border border-panel-border bg-panel-surface md:h-auto md:max-h-[85vh] md:max-w-4xl md:rounded-2xl xl:max-w-6xl 2xl:max-w-7xl">
         <div className="flex items-start justify-between gap-3 border-b border-panel-border p-4 sm:p-5">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-panel-text">Cevap Kağıdı</h2>
@@ -299,7 +299,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3">
           {error ? <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div> : null}
 
           {tests === null ? (
@@ -307,7 +307,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
           ) : tests.length === 0 ? (
             <p className="text-sm text-panel-text-muted">Bu göreve bağlı test bulunamadı.</p>
           ) : (
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
+            <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
               {tests.map((test) => (
                 <TestSection
                   key={test.id}

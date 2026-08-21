@@ -105,19 +105,19 @@ export default function ManualOpticalAnswerModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/30 md:items-center">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-t-3xl border border-panel-border bg-panel-surface md:max-h-[85vh] md:rounded-2xl">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center overflow-hidden bg-black/30 md:items-center md:p-4">
+      <div className="flex max-h-[90vh] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-t-3xl border border-panel-border bg-panel-surface md:max-h-[85vh] md:max-w-2xl md:rounded-2xl">
         <div className="flex items-center justify-between border-b border-panel-border p-4">
           <div className="min-w-0">
             <h2 className="truncate text-base font-semibold text-panel-text">Optik Form · {test.name}</h2>
-            {test.topicName ? <p className="text-xs text-panel-text-muted">{test.topicName}</p> : null}
+            {test.topicName ? <p className="truncate text-xs text-panel-text-muted">{test.topicName}</p> : null}
           </div>
           <button type="button" aria-label="Kapat" onClick={onClose} className="shrink-0 text-panel-text-muted hover:text-panel-text">
             <X size={20} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Badge tone="slate">{test.questionCount} soru</Badge>
             <span className="text-xs text-panel-text-muted">{answeredCount}/{test.questionCount} işaretlendi</span>
@@ -133,7 +133,7 @@ export default function ManualOpticalAnswerModal({
 
           {error ? <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{error}</div> : null}
 
-          <div className="flex flex-col gap-y-0.5">
+          <div className="flex min-w-0 flex-col gap-y-0.5">
             {questionNumbers.map((orderNo) => {
               const key = String(orderNo)
               const selected = answers[key]
@@ -159,12 +159,12 @@ export default function ManualOpticalAnswerModal({
                         }
                       : undefined
                   }
-                  className={`flex items-center gap-1.5 rounded-lg px-1 py-1 transition-colors ${
+                  className={`grid min-w-0 grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-1 rounded-lg px-1 py-1 transition-colors sm:flex sm:gap-1.5 ${
                     isMistake ? 'cursor-pointer bg-panel-red-soft hover:bg-panel-red-soft/70' : ''
                   }`}
                 >
                   <span className="w-5 shrink-0 text-right text-sm font-bold text-panel-text-muted">{orderNo}.</span>
-                  <div className="flex shrink-0 gap-1">
+                  <div className="flex min-w-0 flex-wrap gap-1">
                     {OPTIONS.map((option) => {
                       const isSelected = selected === option
                       const isCorrectReveal = isMismatch && !isSelected && option === correctLabel
@@ -207,7 +207,7 @@ export default function ManualOpticalAnswerModal({
                     </button>
                   </div>
                   {isMismatch && correctLabel ? (
-                    <span className="min-w-0 truncate text-[11px] italic leading-none text-panel-text-muted">
+                    <span className="col-start-2 col-end-4 min-w-0 truncate text-[11px] italic leading-none text-panel-text-muted sm:col-auto">
                       Doğru cevap: {correctLabel}
                     </span>
                   ) : null}

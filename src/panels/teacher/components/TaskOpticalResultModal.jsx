@@ -10,7 +10,7 @@ const BLANK_LABEL = '-'
 function ResultBadge({ result }) {
   if (!result) return null
   return (
-    <div className="flex flex-nowrap items-center justify-between gap-1 rounded-xl bg-panel-blue-soft/60 px-2 py-1.5 text-xs font-semibold">
+    <div className="flex min-w-0 flex-wrap items-center justify-between gap-1 rounded-xl bg-panel-blue-soft/60 px-2 py-1.5 text-xs font-semibold">
       <span className="flex shrink-0 items-center gap-1 text-emerald-600">
         <CheckCircle2 size={13} aria-hidden="true" /> {result.correct} Doğru
       </span>
@@ -29,7 +29,7 @@ function ResultBadge({ result }) {
 function TestSection({ test }) {
   const { result, answers } = test
   return (
-    <div className="flex flex-col gap-1.5 rounded-2xl border border-panel-border p-2.5">
+    <div className="flex min-w-0 flex-col gap-1.5 rounded-2xl border border-panel-border p-2.5">
       <h3
         className="min-w-0 truncate text-xs font-semibold text-panel-text"
         title={test.topicName ? `${test.name} · ${test.topicName}` : test.name}
@@ -40,7 +40,7 @@ function TestSection({ test }) {
 
       <ResultBadge result={result} />
 
-      <div className="grid grid-cols-1 gap-y-0.5">
+      <div className="grid min-w-0 grid-cols-1 gap-y-0.5">
         {Array.from({ length: test.questionCount }, (_, index) => index + 1).map((orderNo) => {
           const key = String(orderNo)
           const selected = answers[key]
@@ -51,10 +51,10 @@ function TestSection({ test }) {
           return (
             <div
               key={key}
-              className={`flex items-center gap-1.5 rounded-lg px-1 py-0.5 ${isWrongSelection ? 'bg-panel-red-soft' : ''}`}
+              className={`grid min-w-0 grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-1.5 gap-y-1 rounded-lg px-1 py-0.5 sm:flex sm:gap-1.5 ${isWrongSelection ? 'bg-panel-red-soft' : ''}`}
             >
               <span className="w-5 shrink-0 text-right text-sm font-bold text-panel-text-muted">{orderNo}.</span>
-              <div className="flex shrink-0 gap-1">
+              <div className="flex min-w-0 flex-wrap gap-1">
                 {OPTIONS.map((option) => {
                   const isSelected = selected === option
                   const isCorrectReveal = isMismatch && !isSelected && option === correctLabel
@@ -82,7 +82,7 @@ function TestSection({ test }) {
                 ) : null}
               </div>
               {isMismatch && correctLabel ? (
-                <span className="min-w-0 truncate text-[10px] italic leading-none text-panel-text-muted">
+                <span className="col-start-2 min-w-0 truncate text-[10px] italic leading-none text-panel-text-muted sm:col-auto">
                   Doğru cevap: {correctLabel}
                 </span>
               ) : null}
@@ -115,19 +115,19 @@ export default function TaskOpticalResultModal({ task, studentTeacherId, onClose
   }, [studentTeacherId, task.id])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 md:items-center">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-t-3xl border border-panel-border bg-panel-surface md:max-h-[85vh] md:max-w-4xl md:rounded-2xl xl:max-w-6xl 2xl:max-w-7xl">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-black/30 md:items-center md:p-4">
+      <div className="flex max-h-[90vh] w-full min-w-0 max-w-full flex-col overflow-hidden rounded-t-3xl border border-panel-border bg-panel-surface md:max-h-[85vh] md:max-w-4xl md:rounded-2xl xl:max-w-6xl 2xl:max-w-7xl">
         <div className="flex items-center justify-between border-b border-panel-border p-5">
-          <div>
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold text-panel-text">Optik Sonuç · Cevap Anahtarı</h2>
-            <p className="text-sm text-panel-text-muted">{task.description || task.title}</p>
+            <p className="truncate text-sm text-panel-text-muted">{task.description || task.title}</p>
           </div>
           <button type="button" aria-label="Kapat" onClick={onClose} className="text-panel-text-muted hover:text-panel-text">
             <X size={20} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3">
+        <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3">
           {error ? <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div> : null}
 
           {tests === null ? (
@@ -135,7 +135,7 @@ export default function TaskOpticalResultModal({ task, studentTeacherId, onClose
           ) : tests.length === 0 ? (
             <p className="text-sm text-panel-text-muted">Bu göreve bağlı test bulunamadı.</p>
           ) : (
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
+            <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
               {tests.map((test) => (
                 <TestSection key={test.id} test={test} />
               ))}

@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Camera, ImagePlus, X } from 'lucide-react'
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -56,11 +56,21 @@ async function resizeQuestionPhoto(file) {
 }
 
 export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoUrl, onClose, onSave }) {
-  const cameraInputId = useId()
-  const galleryInputId = useId()
+  const cameraInputRef = useRef(null)
+  const galleryInputRef = useRef(null)
   const [preview, setPreview] = useState(existingPhotoUrl || '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  const openFilePicker = (inputRef) => {
+    if (busy) return
+    const input = inputRef.current
+    if (!input) {
+      setError('Dosya seçici açılamadı.')
+      return
+    }
+    input.click()
+  }
 
   const handleFile = async (file) => {
     if (!file) return
@@ -80,21 +90,22 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
 
   const handleInputChange = (event) => {
     const file = event.target.files?.[0] || null
-    event.target.value = ''
     handleFile(file)
   }
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-black/30 p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Soru fotoğrafı ekle"
     >
-      <div className="w-full max-w-sm rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-lg sm:rounded-2xl sm:p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-panel-text">{questionLabel ? `${questionLabel}. Soru Fotoğrafı` : 'Soru Fotoğrafı'}</h2>
+      <div className="min-w-0 w-full max-w-sm overflow-x-hidden rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-lg sm:rounded-2xl sm:p-6">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="break-words text-lg font-semibold leading-tight text-panel-text">
+              {questionLabel ? `${questionLabel}. Soru Fotoğrafı` : 'Soru Fotoğrafı'}
+            </h2>
             <p className="mt-1 text-sm text-panel-text-muted">
               Fotoğrafı Hata Defterim'de daha sonra tekrar görebilirsin.
             </p>
@@ -120,40 +131,50 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
         {error ? <p className="mt-3 text-sm text-panel-warm">{error}</p> : null}
 
         <div className="mt-5 flex flex-col gap-2">
-          <label
-            htmlFor={cameraInputId}
-            className={`flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-student-theme-primary text-sm font-semibold text-student-theme-button-text hover:bg-student-theme-hover ${
+          <button
+            type="button"
+            onClick={() => openFilePicker(cameraInputRef)}
+            disabled={busy}
+            className={`flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl bg-student-theme-primary px-4 py-3 text-sm font-semibold leading-tight text-student-theme-button-text hover:bg-student-theme-hover disabled:cursor-not-allowed disabled:opacity-60 ${
               busy ? 'pointer-events-none opacity-60' : ''
             }`}
           >
             <Camera size={16} aria-hidden="true" />
-            {busy ? 'Yükleniyor...' : preview ? 'Yeniden Çek' : 'Kamera ile Çek'}
-          </label>
+            <span className="min-w-0 truncate">{busy ? 'Yükleniyor...' : preview ? 'Yeniden Çek' : 'Kamera ile Çek'}</span>
+          </button>
           <input
-            id={cameraInputId}
+            ref={cameraInputRef}
             type="file"
             accept="image/*"
             capture="environment"
             disabled={busy}
-            className="hidden"
+            className="sr-only"
+            onClick={(event) => {
+              event.currentTarget.value = ''
+            }}
             onChange={handleInputChange}
           />
 
-          <label
-            htmlFor={galleryInputId}
-            className={`flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-panel-border text-sm font-semibold text-panel-text hover:bg-panel-surface-soft ${
+          <button
+            type="button"
+            onClick={() => openFilePicker(galleryInputRef)}
+            disabled={busy}
+            className={`flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-panel-border px-4 py-3 text-sm font-semibold leading-tight text-panel-text hover:bg-panel-surface-soft disabled:cursor-not-allowed disabled:opacity-60 ${
               busy ? 'pointer-events-none opacity-60' : ''
             }`}
           >
             <ImagePlus size={16} aria-hidden="true" />
-            Galeriden Seç
-          </label>
+            <span className="min-w-0 truncate">Galeriden Seç</span>
+          </button>
           <input
-            id={galleryInputId}
+            ref={galleryInputRef}
             type="file"
             accept="image/jpeg,image/png,image/webp"
             disabled={busy}
-            className="hidden"
+            className="sr-only"
+            onClick={(event) => {
+              event.currentTarget.value = ''
+            }}
             onChange={handleInputChange}
           />
         </div>

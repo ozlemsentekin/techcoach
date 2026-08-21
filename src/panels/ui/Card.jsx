@@ -1,7 +1,7 @@
 import { cn } from './utils'
 
 export function Card({ className, ...props }) {
-  return <div className={cn('panel-card', className)} {...props} />
+  return <div className={cn('panel-card min-w-0', className)} {...props} />
 }
 
 export function CardHeader({ className, ...props }) {
