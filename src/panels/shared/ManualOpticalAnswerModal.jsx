@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { X, CheckCircle2, XCircle, MinusCircle, Camera, Check } from 'lucide-react'
 import Badge from '../ui/Badge'
 import MistakePhotoCaptureModal from '../student/components/MistakePhotoCaptureModal'
@@ -50,16 +50,22 @@ export default function ManualOpticalAnswerModal({
   const [correctLabels, setCorrectLabels] = useState(null)
   const [photosByQuestion, setPhotosByQuestion] = useState(() => ({ ...(initialPhotos || {}) }))
   const [capturingOrderNo, setCapturingOrderNo] = useState(null)
+  const submitSeqRef = useRef(0)
 
   const questionNumbers = Array.from({ length: test.questionCount }, (_, index) => index + 1)
   const answeredCount = Object.keys(answers).length
   const allAnswered = answeredCount === test.questionCount
 
+  // Aynı anda birden fazla submit isteği yarışabilir (bkz. aşağıdaki mount-time sessiz yeniden
+  // notlama). Sıra numarasıyla, ekrana her zaman en SON atılan isteğin sonucu yansır; geç dönen
+  // eski bir yanıt taze bir kaydı ezmesin diye yok sayılır.
   const submit = async (submittedAnswers) => {
+    const seq = ++submitSeqRef.current
     setSaving(true)
     setError('')
     try {
       const data = await submitAnswers(submittedAnswers)
+      if (seq !== submitSeqRef.current) return
       setResult({ correctCount: data.correctCount, wrongCount: data.wrongCount, blankCount: data.blankCount })
       setCorrectLabels(data.correctLabels || null)
       onSaved(test.id, {
@@ -70,9 +76,10 @@ export default function ManualOpticalAnswerModal({
         manualAnswers: data.answers,
       })
     } catch (err) {
+      if (seq !== submitSeqRef.current) return
       setError(err.message)
     } finally {
-      setSaving(false)
+      if (seq === submitSeqRef.current) setSaving(false)
     }
   }
 
