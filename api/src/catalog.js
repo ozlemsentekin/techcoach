@@ -661,18 +661,22 @@ const LIBRARY_RESOURCE_BOOK_SELECT = `
  * Kütüphane rafı: bir sınıf + ders için görülebilir kaynaklar. Onaylı kaynaklar herkese,
  * onay bekleyen/reddedilen kaynaklar ise sadece onu ekleyen kullanıcıya görünür.
  */
-async function fetchLibraryResourceBooks({ grade, subjectId, actorUserId, source }) {
+// limit varsayılanı yüksek tutulur (200) ki bugünkü tam liste davranışı fiilen değişmesin —
+// sadece kaynak sayısı büyüdükçe listenin sınırsız büyümesine karşı bir güvenlik sınırı sağlar.
+async function fetchLibraryResourceBooks({ grade, subjectId, actorUserId, source, limit = 200 }) {
   const requestDb = await withRequest({
     grade: { type: sql.NVarChar(20), value: grade },
     subjectId: { type: sql.UniqueIdentifier, value: subjectId },
     actorUserId: { type: sql.UniqueIdentifier, value: actorUserId },
+    limit: { type: sql.Int, value: limit },
     ...(source ? { source: { type: sql.NVarChar(20), value: source } } : {}),
   })
   const result = await requestDb.query(`
     ${LIBRARY_RESOURCE_BOOK_SELECT}
     WHERE rb.is_active = 1 AND rb.grade = @grade AND rb.subject_id = @subjectId
       AND ${LIBRARY_VISIBILITY_SQL} ${source ? 'AND rb.resource_source = @source' : ''}
-    ORDER BY rb.name ASC;
+    ORDER BY rb.name ASC
+    OFFSET 0 ROWS FETCH NEXT @limit ROWS ONLY;
   `)
   return result.recordset.map((record) => ({
     ...sanitizeResourceBook(record),

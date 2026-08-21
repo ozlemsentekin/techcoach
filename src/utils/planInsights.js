@@ -12,8 +12,10 @@ const MAX_CONTINUOUS_STUDY_MINUTES = 90
  * Brief'in haftalık plan yoğunluk uyarısı kurallarını (bölüm 10) bir güne uygular.
  * Sistem hiçbir zaman engellemez, yalnızca yapıcı bir dille öneri sunar.
  */
-export function evaluateDayBalance(tasks) {
-  const sorted = [...tasks].sort((a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime))
+export function evaluateDayBalance(tasks, { alreadySorted = false } = {}) {
+  const sorted = alreadySorted
+    ? tasks
+    : [...tasks].sort((a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime))
   const warnings = []
 
   const academicMinutes = sorted

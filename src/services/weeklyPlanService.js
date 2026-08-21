@@ -1,4 +1,4 @@
-import { getTasksForDate, postTask, patchTask, removeTask } from './taskService'
+import { getTasksForDate, getTasksForDateRange, postTask, patchTask, removeTask } from './taskService'
 import { getHomeworks } from './homeworkService'
 import { authRequest } from './authClient'
 import { addDaysISO, getMondayOfWeek, getWeekdayKey, parseTimeToMinutes } from '../utils/time'
@@ -36,6 +36,46 @@ async function fetchDayTasks(date) {
   return { draftTasks, liveTasks }
 }
 
+function groupTasksByDate(tasks, dates) {
+  const tasksByDate = Object.fromEntries(dates.map((date) => [date, []]))
+  tasks.forEach((task) => {
+    if (tasksByDate[task.date]) tasksByDate[task.date].push(task)
+  })
+  return tasksByDate
+}
+
+async function fetchWeekTaskLists(weekStartDateISO) {
+  const weekDates = getWeekDates(weekStartDateISO)
+  const weekEndDateISO = weekDates[weekDates.length - 1]
+  const [draftTasks, liveTasks] = await Promise.all([
+    getTasksForDateRange(weekStartDateISO, weekEndDateISO, { isDraft: true }),
+    getTasksForDateRange(weekStartDateISO, weekEndDateISO, { isDraft: false }),
+  ])
+
+  return {
+    weekDates,
+    draftTasks,
+    liveTasks,
+    draftTasksByDate: groupTasksByDate(draftTasks, weekDates),
+    liveTasksByDate: groupTasksByDate(liveTasks, weekDates),
+  }
+}
+
+export async function getWeekPlans(weekStartDateISO) {
+  const { weekDates, draftTasksByDate, liveTasksByDate } = await fetchWeekTaskLists(weekStartDateISO)
+  const tasksByDate = {}
+  const dayStatusByDate = {}
+
+  weekDates.forEach((date) => {
+    const draftTasks = draftTasksByDate[date] || []
+    const liveTasks = liveTasksByDate[date] || []
+    tasksByDate[date] = [...liveTasks, ...draftTasks]
+    dayStatusByDate[date] = draftTasks.length > 0 ? 'taslak' : liveTasks.length > 0 ? 'yayinlandi' : 'bos'
+  })
+
+  return { tasksByDate, dayStatusByDate }
+}
+
 /** Bir günün canlı görevlerini, varsa bekleyen taslak eklemeleriyle birlikte döner (taslak canlıyı gizlemez). */
 export async function getDraftTasksForDate(date) {
   const { draftTasks, liveTasks } = await fetchDayTasks(date)
@@ -54,15 +94,10 @@ export async function getDayPlan(date) {
 }
 
 export async function cleanupUnlinkedHomeworkTasksForWeek(weekStartDateISO) {
-  const weekDates = getWeekDates(weekStartDateISO)
+  const { draftTasks, liveTasks } = await fetchWeekTaskLists(weekStartDateISO)
+  const unlinkedHomeworkTasks = [...draftTasks, ...liveTasks].filter((task) => task.taskType === 'odev' && !task.homeworkId)
 
-  await Promise.all(
-    weekDates.map(async (date) => {
-      const { draftTasks, liveTasks } = await fetchDayTasks(date)
-      const unlinkedHomeworkTasks = [...draftTasks, ...liveTasks].filter((task) => task.taskType === 'odev' && !task.homeworkId)
-      await Promise.all(unlinkedHomeworkTasks.map((task) => removeTask(task.id)))
-    }),
-  )
+  await Promise.all(unlinkedHomeworkTasks.map((task) => removeTask(task.id)))
 }
 
 /**
@@ -122,11 +157,8 @@ export async function deleteDraftTask(date, taskId) {
 
 /** Taslağı olan her günü canlıya yazar ve haftanın durumunu 'yayinlandi' yapar. */
 export async function publishWeek(weekStartDateISO) {
-  const weekDates = getWeekDates(weekStartDateISO)
-
-  for (const date of weekDates) {
-    await publishDayTasks(date)
-  }
+  const { draftTasks } = await fetchWeekTaskLists(weekStartDateISO)
+  await Promise.all(draftTasks.map((task) => patchTask(task.id, { isDraft: false })))
 
   return setPlanStatus(weekStartDateISO, 'yayinlandi')
 }
@@ -136,16 +168,20 @@ export async function copyPreviousWeek(weekStartDateISO) {
   const previousWeekStart = addDaysISO(weekStartDateISO, -7)
   const previousWeekDates = getWeekDates(previousWeekStart)
   const weekDates = getWeekDates(weekStartDateISO)
+  const previousWeekEnd = previousWeekDates[previousWeekDates.length - 1]
+  const weekEnd = weekDates[weekDates.length - 1]
 
-  for (let index = 0; index < previousWeekDates.length; index += 1) {
-    const sourceDate = previousWeekDates[index]
-    const targetDate = weekDates[index]
-    const sourceTasks = await getTasksForDate(sourceDate, { isDraft: false })
-    const existingDraft = await getTasksForDate(targetDate, { isDraft: true })
+  const [sourceTasks, existingDraftTasks] = await Promise.all([
+    getTasksForDateRange(previousWeekStart, previousWeekEnd, { isDraft: false }),
+    getTasksForDateRange(weekStartDateISO, weekEnd, { isDraft: true }),
+  ])
+  const sourceTasksByDate = groupTasksByDate(sourceTasks, previousWeekDates)
 
-    await Promise.all(existingDraft.map((task) => removeTask(task.id)))
-    await Promise.all(
-      sourceTasks.map((task) =>
+  await Promise.all(existingDraftTasks.map((task) => removeTask(task.id)))
+  await Promise.all(
+    previousWeekDates.flatMap((sourceDate, index) => {
+      const targetDate = weekDates[index]
+      return (sourceTasksByDate[sourceDate] || []).map((task) =>
         postTask({
           ...task,
           id: undefined,
@@ -177,12 +213,14 @@ export async function copyPreviousWeek(weekStartDateISO) {
           rescheduledTo: null,
           rescheduleReason: null,
         }),
-      ),
-    )
-  }
+      )
+    }),
+  )
 
   await setPlanStatus(weekStartDateISO, 'taslak')
-  return Promise.all(weekDates.map((date) => getTasksForDate(date, { isDraft: true })))
+  const copiedDraftTasks = await getTasksForDateRange(weekStartDateISO, weekEnd, { isDraft: true })
+  const copiedDraftTasksByDate = groupTasksByDate(copiedDraftTasks, weekDates)
+  return weekDates.map((date) => copiedDraftTasksByDate[date] || [])
 }
 
 /**

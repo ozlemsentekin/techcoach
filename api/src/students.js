@@ -975,7 +975,16 @@ async function listLibraryResourceBooksForParentHandler(request) {
       return json(400, { error: 'Geçersiz kaynak türü.' })
     }
 
-    const resourceBooks = await fetchLibraryResourceBooks({ grade, subjectId, actorUserId: parentId, source })
+    const requestedLimit = Number(request.query.get('limit'))
+    const limit = Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 500) : undefined
+
+    const resourceBooks = await fetchLibraryResourceBooks({
+      grade,
+      subjectId,
+      actorUserId: parentId,
+      source,
+      ...(limit ? { limit } : {}),
+    })
     return json(200, { resourceBooks })
   } catch (error) {
     if (isConfigError(error)) {

@@ -161,10 +161,14 @@ export default function TaskListSection({
 
   const sorted = useMemo(() => getSortedTasks(tasks), [tasks])
 
-  const filtered = sorted.filter((task) => {
-    if (filter === 'done' && BREAK_TASK_TYPES.has(task.taskType)) return false
-    return getAssignmentStatus(task).filterKey === filter
-  })
+  const filtered = useMemo(
+    () =>
+      sorted.filter((task) => {
+        if (filter === 'done' && BREAK_TASK_TYPES.has(task.taskType)) return false
+        return getAssignmentStatus(task).filterKey === filter
+      }),
+    [filter, sorted],
+  )
 
   const grouped = useMemo(() => {
     const byLabel = new Map()

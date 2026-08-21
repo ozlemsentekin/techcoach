@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../../context/useAuth'
 import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Clock3, Coffee, Copy, Info, Star } from 'lucide-react'
 import {
   getWeekDates,
   getDraftTasksForDate,
-  getDayPlan,
+  getWeekPlans,
   getSchoolSchedule,
   cleanupUnlinkedHomeworkTasksForWeek,
   saveTaskForDay,
@@ -86,8 +86,8 @@ export default function WeeklyPlanPage() {
   const restricted = Boolean(authUser?.restricted)
   const [searchParams, setSearchParams] = useSearchParams()
   const [weekOffset, setWeekOffset] = useState(0)
-  const weekStart = addDaysISO(currentWeekStart, weekOffset * 7)
-  const weekDates = getWeekDates(weekStart)
+  const weekStart = useMemo(() => addDaysISO(currentWeekStart, weekOffset * 7), [weekOffset])
+  const weekDates = useMemo(() => getWeekDates(weekStart), [weekStart])
 
   const [tasksByDate, setTasksByDate] = useState({})
   const [dayStatusByDate, setDayStatusByDate] = useState({})
@@ -98,18 +98,27 @@ export default function WeeklyPlanPage() {
   const [homeworkModalDate, setHomeworkModalDate] = useState('')
   const [banner, setBanner] = useState('')
 
-  const refresh = async (nextWeekStart = weekStart) => {
-    const days = getWeekDates(nextWeekStart)
+  const loadWeekPlans = useCallback(async (nextWeekStart) => {
     await cleanupUnlinkedHomeworkTasksForWeek(nextWeekStart)
-    const dayPlans = await Promise.all(days.map((date) => getDayPlan(date)))
-    setTasksByDate(Object.fromEntries(days.map((date, index) => [date, dayPlans[index].tasks])))
-    setDayStatusByDate(Object.fromEntries(days.map((date, index) => [date, dayPlans[index].status])))
-  }
+    return getWeekPlans(nextWeekStart)
+  }, [])
+
+  const applyWeekPlans = useCallback((plans) => {
+    setTasksByDate(plans.tasksByDate)
+    setDayStatusByDate(plans.dayStatusByDate)
+  }, [])
+
+  const refresh = useCallback(async (nextWeekStart = weekStart) => {
+    applyWeekPlans(await loadWeekPlans(nextWeekStart))
+  }, [applyWeekPlans, loadWeekPlans, weekStart])
 
   useEffect(() => {
     let ignore = false
     setLoading(true)
-    refresh(weekStart)
+    loadWeekPlans(weekStart)
+      .then((plans) => {
+        if (!ignore) applyWeekPlans(plans)
+      })
       .catch((err) => {
         if (!ignore) setLoadError(err.message)
       })
@@ -119,8 +128,7 @@ export default function WeeklyPlanPage() {
     return () => {
       ignore = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekOffset])
+  }, [applyWeekPlans, loadWeekPlans, weekStart])
 
   useEffect(() => {
     getSchoolSchedule()
@@ -206,8 +214,12 @@ export default function WeeklyPlanPage() {
     showBanner(`${minutes} dakikalık mola eklendi.`)
   }
 
-  const allTasks = weekDates.flatMap((date) => tasksByDate[date] || [])
-  const weekSummary = getWeekSummary(allTasks)
+  const allTasks = useMemo(() => weekDates.flatMap((date) => tasksByDate[date] || []), [tasksByDate, weekDates])
+  const weekSummary = useMemo(() => getWeekSummary(allTasks), [allTasks])
+  const getExistingTasksForDrawer = useCallback(
+    (date) => tasksByDate[date] || getDraftTasksForDate(date),
+    [tasksByDate],
+  )
 
   return (
     <div className="flex w-full flex-col gap-5">
@@ -319,7 +331,7 @@ export default function WeeklyPlanPage() {
               initialTask={drawerState.initialTask}
               initialTemplate={drawerState.initialTemplate}
               defaultDate={drawerState.defaultDate}
-              getExistingTasksForDate={(date) => tasksByDate[date] || getDraftTasksForDate(date)}
+              getExistingTasksForDate={getExistingTasksForDrawer}
               schoolSchedule={schoolSchedule}
               onSave={handleSaveDrawerTask}
               onDelete={handleDeleteTask}

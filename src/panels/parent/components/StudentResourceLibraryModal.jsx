@@ -33,9 +33,9 @@ function ManualResultForm({ test, onCancel, onSave, onSaveWithoutResults, saving
   const [blankCount, setBlankCount] = useState(test.blankCount ?? '')
 
   return (
-    <div className="ml-5.5 mt-1 flex flex-col gap-2 rounded-lg border border-panel-border bg-panel-surface-soft p-2.5">
+    <div className="ml-0 mt-1 flex min-w-0 flex-col gap-2 rounded-lg border border-panel-border bg-panel-surface-soft p-2.5 sm:ml-5.5">
       <p className="text-[11px] text-panel-text-muted">{test.questionCount} soru · isteğe bağlı sonuç girebilirsiniz</p>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-3">
         <label className="flex flex-col gap-1">
           <span className="text-[11px] font-medium text-panel-text-muted">Doğru</span>
           <input
@@ -280,8 +280,8 @@ function BookTopics({ student, book }) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <p className="text-xs text-panel-text-muted">
+    <div className="flex min-w-0 flex-col gap-2">
+      <p className="break-words text-xs text-panel-text-muted">
         Bir testin kutusuna tıklayınca, cevap anahtarı girilmiş testler için optik form açılır (şıkları
         işaretleyin, doğru/yanlış/boş otomatik hesaplanır); diğerlerinde sayıyı elle girersiniz. Elle işaretlenmiş
         bir testin kutusuna tekrar tıklamak işareti kaldırır; sonuçları değiştirmek için kalem simgesini kullanın.
@@ -318,7 +318,7 @@ function BookTopics({ student, book }) {
             }, {})}
         />
       ) : null}
-      <div className="flex flex-col rounded-xl border border-panel-border p-2">
+      <div className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-panel-border p-1.5 sm:p-2">
         {topics.map((topic) => {
           const isCollapsed = collapsedTopicIds.has(topic.id)
           const totalTests = topic.tests.length
@@ -329,7 +329,7 @@ function BookTopics({ student, book }) {
               <button
                 type="button"
                 onClick={() => toggleTopicCollapsed(topic.id)}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-panel-blue-soft"
+                className="flex w-full min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-left text-sm hover:bg-panel-blue-soft sm:gap-2 sm:px-2"
               >
                 {isCollapsed ? (
                   <ChevronRight size={14} className="shrink-0 text-panel-text-muted" />
@@ -352,7 +352,7 @@ function BookTopics({ student, book }) {
                 ) : null}
               </button>
               {topic.tests.length && !isCollapsed ? (
-                <div className="ml-6 flex flex-col">
+                <div className="ml-0 flex min-w-0 flex-col pl-4 sm:ml-6 sm:pl-0">
                   {topic.tests.map((test) => {
                     const isGraded = test.completionSource === 'graded'
                     const isManual = test.completionSource === 'manual'
@@ -365,11 +365,11 @@ function BookTopics({ student, book }) {
                       (Number(test.wrongCount) > 0 || Number(test.blankCount) > 0) &&
                       !testIdsWithMistakePhotos.has(test.id)
                     return (
-                      <div key={test.id} className="relative rounded-lg px-2 py-1">
-                        <div className="flex items-center gap-2 text-xs">
+                      <div key={test.id} className="relative min-w-0 rounded-lg px-1.5 py-1 sm:px-2">
+                        <div className="grid min-w-0 grid-cols-[1.625rem_minmax(0,1fr)] items-start gap-1.5 text-xs sm:gap-2">
                           {isGraded ? (
                             <span
-                              className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm bg-panel-blue text-white"
+                              className="mt-1 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm bg-panel-blue text-white"
                               title="Dijital olarak değerlendirilmiş"
                             >
                               <Check size={10} strokeWidth={3} />
@@ -395,7 +395,7 @@ function BookTopics({ student, book }) {
                                     ? 'İşareti kaldır'
                                     : 'Tamamlandı olarak işaretle'
                               }
-                              className={`-m-1.5 flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-sm p-1.5 disabled:opacity-50`}
+                              className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-sm p-1.5 disabled:opacity-50"
                             >
                               <span
                                 className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border transition-colors ${
@@ -410,13 +410,13 @@ function BookTopics({ student, book }) {
                               </span>
                             </button>
                           )}
-                          <span className="flex min-w-0 items-center gap-1.5 text-panel-text-muted">
+                          <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-panel-text-muted">
                             {test.topicName ? (
-                              <Badge tone="slate" className="shrink-0">
+                              <Badge tone="slate" className="max-w-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap sm:max-w-[18rem]">
                                 {test.topicName}
                               </Badge>
                             ) : null}
-                            <span className="truncate">
+                            <span className="min-w-0 flex-[1_1_12rem] truncate">
                               {test.name} · s.{test.pageStart}-{test.pageEnd} · {test.questionCount} soru
                             </span>
                             {isManual ? (
@@ -425,7 +425,7 @@ function BookTopics({ student, book }) {
                               </Badge>
                             ) : null}
                             {isManual && hasResults ? (
-                              <span className="flex shrink-0 items-center gap-1">
+                              <span className="flex flex-wrap items-center gap-1">
                                 <Badge tone="sage">D:{test.correctCount ?? 0}</Badge>
                                 <Badge tone="red">Y:{test.wrongCount ?? 0}</Badge>
                                 <Badge tone="yellow">B:{test.blankCount ?? 0}</Badge>
@@ -459,7 +459,7 @@ function BookTopics({ student, book }) {
                           </span>
                         </div>
                         {rowErrors[test.id] ? (
-                          <span className="absolute left-5.5 top-full z-10 whitespace-nowrap rounded-md border border-panel-border bg-white px-2 py-1 text-[11px] text-panel-warm shadow-sm">
+                          <span className="absolute left-0 right-0 top-full z-10 rounded-md border border-panel-border bg-white px-2 py-1 text-[11px] text-panel-warm shadow-sm">
                             {rowErrors[test.id]}
                           </span>
                         ) : null}
@@ -557,8 +557,8 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
-      <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-[88vh] sm:max-h-[92vh] sm:rounded-2xl sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center overflow-hidden bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-[88vh] sm:max-h-[92vh] sm:max-w-5xl sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             {selectedBook ? (
@@ -615,7 +615,7 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
           </div>
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
           {selectedBook ? (
             <BookTopics key={selectedBook.id} student={student} book={selectedBook} />
           ) : error ? (

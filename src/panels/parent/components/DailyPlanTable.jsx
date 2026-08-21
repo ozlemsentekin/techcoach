@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ArrowRightLeft,
@@ -17,7 +17,6 @@ import {
   NotebookPen,
   Pencil,
   Plus,
-  Printer,
   Sun,
   Trash2,
   Users,
@@ -118,8 +117,8 @@ const STATUS_STYLES = {
 }
 
 const DAILY_FLOW_FILTERS = [
-  { key: 'pending', label: 'Bekleyen' },
   { key: 'all', label: 'Tümü' },
+  { key: 'pending', label: 'Bekleyen' },
   { key: 'done', label: 'Tamamlanan' },
 ]
 
@@ -470,14 +469,22 @@ function TaskActionsMenu({ isOpen, onToggle, onClose, onEdit, onDelete }) {
       const menuHeight = menuRef.current?.offsetHeight || ACTION_MENU_ESTIMATED_HEIGHT
       setMenuPosition(getActionMenuPosition(buttonRect, menuHeight))
     }
+    let frameId = null
+    const scheduleMenuPositionUpdate = () => {
+      if (frameId !== null) return
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null
+        updateMenuPosition()
+      })
+    }
 
-    const frameId = window.requestAnimationFrame(updateMenuPosition)
-    window.addEventListener('resize', updateMenuPosition)
-    window.addEventListener('scroll', updateMenuPosition, true)
+    scheduleMenuPositionUpdate()
+    window.addEventListener('resize', scheduleMenuPositionUpdate)
+    window.addEventListener('scroll', scheduleMenuPositionUpdate, true)
     return () => {
-      window.cancelAnimationFrame(frameId)
-      window.removeEventListener('resize', updateMenuPosition)
-      window.removeEventListener('scroll', updateMenuPosition, true)
+      if (frameId !== null) window.cancelAnimationFrame(frameId)
+      window.removeEventListener('resize', scheduleMenuPositionUpdate)
+      window.removeEventListener('scroll', scheduleMenuPositionUpdate, true)
     }
   }, [isOpen])
 
@@ -632,22 +639,30 @@ function TaskAgendaItem({
 
 export default function DailyPlanTable({ tasks, onEdit, onDelete, onAddTask, onOpenAnswerSheet }) {
   const [openMenuId, setOpenMenuId] = useState(null)
-  const [agendaFilter, setAgendaFilter] = useState('pending')
+  const [agendaFilter, setAgendaFilter] = useState('all')
 
-  const sorted = getSortedTasks(tasks)
-  const filterCounts = sorted.reduce(
-    (counts, task) => {
-      const filterKey = getDailyFlowFilterKey(task)
-      counts.all += 1
-      if (filterKey) counts[filterKey] += 1
-      return counts
-    },
-    { all: 0, pending: 0, done: 0 },
+  const sorted = useMemo(() => getSortedTasks(tasks), [tasks])
+  const filterCounts = useMemo(
+    () =>
+      sorted.reduce(
+        (counts, task) => {
+          const filterKey = getDailyFlowFilterKey(task)
+          counts.all += 1
+          if (filterKey) counts[filterKey] += 1
+          return counts
+        },
+        { all: 0, pending: 0, done: 0 },
+      ),
+    [sorted],
   )
-  const visibleTasks = sorted.filter((task) => {
-    if (agendaFilter === 'all') return true
-    return getDailyFlowFilterKey(task) === agendaFilter
-  })
+  const visibleTasks = useMemo(
+    () =>
+      sorted.filter((task) => {
+        if (agendaFilter === 'all') return true
+        return getDailyFlowFilterKey(task) === agendaFilter
+      }),
+    [agendaFilter, sorted],
+  )
   const emptyCopy = FILTER_EMPTY_COPY[agendaFilter] || FILTER_EMPTY_COPY.all
 
   const selectAgendaFilter = (filter) => {
@@ -657,13 +672,13 @@ export default function DailyPlanTable({ tasks, onEdit, onDelete, onAddTask, onO
 
   return (
     <section className="panel-card overflow-hidden">
-      <div className="flex flex-col gap-4 border-b border-panel-border p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 border-b border-panel-border bg-panel-surface-soft/35 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
-            <CalendarDays size={19} aria-hidden="true" />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-panel-accent-soft text-panel-blue">
+            <CalendarDays size={17} aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <h2 className="text-xl font-bold text-panel-text">Günün Akışı</h2>
+            <h2 className="text-lg font-bold text-panel-text sm:text-xl">Günün Akışı</h2>
             <p className="mt-0.5 text-sm text-panel-text-muted">{getDailyFlowSummary(agendaFilter, filterCounts)}</p>
           </div>
         </div>
@@ -672,24 +687,15 @@ export default function DailyPlanTable({ tasks, onEdit, onDelete, onAddTask, onO
           {sorted.length > 0 ? (
             <DailyFlowFilter activeFilter={agendaFilter} counts={filterCounts} onChange={selectAgendaFilter} />
           ) : null}
-
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3.5 text-sm font-medium text-panel-text transition-colors hover:bg-panel-surface-soft"
-          >
-            <Printer size={16} aria-hidden="true" />
-            Yazdır
-          </button>
         </div>
       </div>
 
       {sorted.length === 0 ? (
-        <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
-            <CalendarDays size={22} aria-hidden="true" />
+        <div className="flex flex-col items-center justify-center px-5 py-7 text-center">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-panel-accent-soft text-panel-blue">
+            <CalendarDays size={20} aria-hidden="true" />
           </span>
-          <h3 className="mt-4 text-lg font-semibold text-panel-text">Bugün plan boş</h3>
+          <h3 className="mt-3 text-base font-semibold text-panel-text">Bugün plan boş</h3>
           <p className="mt-1 max-w-sm text-sm text-panel-text-muted">
             {onAddTask ? 'Aylin için ilk görevi ekleyebilirsin.' : 'Öğretmenin planladığı görevler burada görünecek.'}
           </p>
@@ -705,11 +711,11 @@ export default function DailyPlanTable({ tasks, onEdit, onDelete, onAddTask, onO
           ) : null}
         </div>
       ) : visibleTasks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-panel-surface-soft text-panel-text-muted">
-            <CalendarDays size={22} aria-hidden="true" />
+        <div className="flex flex-col items-center justify-center px-5 py-7 text-center">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-panel-surface-soft text-panel-text-muted">
+            <CalendarDays size={20} aria-hidden="true" />
           </span>
-          <h3 className="mt-4 text-lg font-semibold text-panel-text">{emptyCopy.title}</h3>
+          <h3 className="mt-3 text-base font-semibold text-panel-text">{emptyCopy.title}</h3>
           <p className="mt-1 max-w-sm text-sm text-panel-text-muted">{emptyCopy.description}</p>
         </div>
       ) : (
