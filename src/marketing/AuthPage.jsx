@@ -18,6 +18,12 @@ function normalizePhoneInput(value) {
   return value.replace(/\D/g, '').slice(0, 11)
 }
 
+function blurActiveControl() {
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur()
+  }
+}
+
 export default function AuthPage() {
   const navigate = useNavigate()
   const { authUser, sessionLoading, authLoading, authError, authMessage, login, setAuthError } = useAuth()
@@ -26,6 +32,7 @@ export default function AuthPage() {
 
   useEffect(() => {
     if (!sessionLoading && authUser?.role) {
+      blurActiveControl()
       navigate(panelPathForRole(authUser.role), { replace: true })
     }
   }, [authUser, sessionLoading, navigate])
@@ -50,9 +57,12 @@ export default function AuthPage() {
       return
     }
 
+    blurActiveControl()
+
     try {
       const user = await login({ phone: form.phone, password: form.password })
       if (user?.role) {
+        blurActiveControl()
         navigate(panelPathForRole(user.role))
       }
     } catch {

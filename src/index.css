@@ -79,6 +79,11 @@ body,
   overflow-x: hidden;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   font-family: var(--tc-font-stack);
   background: var(--tc-bg);
@@ -105,6 +110,20 @@ select,
 textarea,
 button {
   max-width: 100%;
+}
+
+@media (max-width: 767px) {
+  input[type='text'],
+  input[type='email'],
+  input[type='tel'],
+  input[type='password'],
+  input[type='search'],
+  input[type='number'],
+  input:not([type]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }
 
 :where([data-panel-role], [data-panel-role] main, [data-panel-role] section, [data-panel-role] article, [data-panel-role] form, [data-panel-role] label, [data-panel-role] div) {

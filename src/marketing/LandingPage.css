@@ -4592,7 +4592,8 @@ footer {
   border-radius: 12px;
   background: #fff;
   padding: 13px 12px;
-  font-size: 15px;
+  font-size: 16px;
+  line-height: 1.35;
   color: #1e244e;
   outline: none;
 }
@@ -5798,7 +5799,7 @@ footer {
   .login-form input[type='tel'],
   .login-form input[type='password'] {
     padding: 11px 10px;
-    font-size: 14px;
+    font-size: 16px;
   }
 
   .auth-chip {
