@@ -26,7 +26,7 @@ import {
 import { calculateNet } from '../../../utils/netCalculator'
 import { getSortedTasks } from '../../../utils/taskSelectors'
 import { parseTimeToMinutes } from '../../../utils/time'
-import { STATUS_LABELS, TASK_TYPES } from '../../../data/taskTypes'
+import { HOMEWORK_TASK_TYPES, STATUS_LABELS, TASK_TYPES } from '../../../data/taskTypes'
 
 const SUBJECT_BADGES = {
   Türkçe: { icon: BookOpen, text: 'text-panel-slate', soft: 'bg-panel-slate-soft', border: 'border-panel-slate/25' },
@@ -41,7 +41,7 @@ const DEFAULT_SUBJECT_BADGE = {
 }
 
 const BREAK_TASK_TYPES = new Set(['mola', 'dinlenme', 'yemek', 'yemek-dinlenme'])
-const HOMEWORK_TASK_TYPES = new Set(['odev', 'odev-kontrolu'])
+const DAILY_HOMEWORK_TASK_TYPES = new Set([...HOMEWORK_TASK_TYPES, 'odev-kontrolu'])
 const ACTIVITY_TASK_TYPES = new Set(['serbest-zaman', 'sosyal-aktivite', 'spor', 'sanat-hobi', 'uyku-hazirligi', 'gunluk-rutin'])
 
 const TASK_KIND_STYLES = {
@@ -143,7 +143,7 @@ function normalizeText(value) {
 
 function getTaskKind(task) {
   if (BREAK_TASK_TYPES.has(task.taskType)) return 'break'
-  if (HOMEWORK_TASK_TYPES.has(task.taskType)) return 'homework'
+  if (DAILY_HOMEWORK_TASK_TYPES.has(task.taskType)) return 'homework'
   if (ACTIVITY_TASK_TYPES.has(task.taskType)) return 'activity'
   return 'study'
 }
@@ -185,7 +185,7 @@ function formatDuration(task) {
 }
 
 function getQuestionBankHomeworkCount(task) {
-  if (task.taskType !== 'odev' || task.resourceType !== 'soru_bankasi') return 0
+  if (!HOMEWORK_TASK_TYPES.has(task.taskType) || task.resourceType !== 'soru_bankasi') return 0
   return Number(task.targetQuestionCount) || 0
 }
 

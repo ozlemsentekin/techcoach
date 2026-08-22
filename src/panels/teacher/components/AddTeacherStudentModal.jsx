@@ -6,15 +6,9 @@ import { useAuth } from '../../../context/useAuth'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
 
-const TEACHER_TYPE_OPTIONS = [
-  { value: 'okul_ogretmeni', label: 'Okul Öğretmeni' },
-  { value: 'ozel_ogretmen', label: 'Özel Öğretmen' },
-]
-
 const INITIAL_FORM = {
   studentFullName: '',
   subjectId: '',
-  teacherType: 'okul_ogretmeni',
   parentFullName: '',
   parentPhone: '',
 }
@@ -178,30 +172,6 @@ export default function AddTeacherStudentModal({ onCreated, onClose }) {
                     </span>
                   ) : null}
                 </label>
-
-                <div className="flex flex-col gap-2">
-                  <span className="text-sm font-medium text-panel-text-muted">Öğretmen Tipi</span>
-                  <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
-                    {TEACHER_TYPE_OPTIONS.map((option) => {
-                      const selected = form.teacherType === option.value
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          aria-pressed={selected}
-                          onClick={() => setForm((current) => ({ ...current, teacherType: option.value }))}
-                          className={`rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors ${
-                            selected
-                              ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
-                              : 'border-panel-border bg-white text-panel-text-muted hover:bg-panel-surface-soft'
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
 
                 <label className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium text-panel-text-muted">Veli Ad Soyad</span>

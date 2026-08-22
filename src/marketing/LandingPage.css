@@ -4509,6 +4509,20 @@ footer {
   gap: 10px;
 }
 
+.footer-contact {
+  font-size: 13px;
+}
+
+.footer-contact a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.footer-contact a:hover {
+  color: var(--indigo);
+  text-decoration: underline;
+}
+
 .footer-copyright {
   font-size: 14px;
 }

@@ -114,6 +114,8 @@ export default function AuthPage() {
                 id="auth-password"
                 name="password"
                 type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 placeholder="Şifreniz"
                 autoComplete="current-password"
                 required

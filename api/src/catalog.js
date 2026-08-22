@@ -454,7 +454,8 @@ async function listResourceBooksForPanelHandler(request) {
     )
     const result = await requestDb.query(`
       SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.publish_month_year, rb.grade, rb.created_at
+             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url,
+             rb.publish_month_year, rb.grade, rb.resource_source, rb.created_at
       FROM dbo.StudentResourceBooks srb
       INNER JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id
       LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
@@ -716,8 +717,7 @@ async function fetchLibraryResourceBookDetail({ resourceBookId, actorUserId }) {
   const topicsResult = await topicsDb.query(`
     SELECT id, resource_book_id, name, created_at
     FROM dbo.ResourceBookTopics
-    WHERE resource_book_id = @resourceBookId
-    ORDER BY created_at ASC;
+    WHERE resource_book_id = @resourceBookId;
   `)
 
   const testsDb = await withRequest({ resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId } })
@@ -736,14 +736,13 @@ async function fetchLibraryResourceBookDetail({ resourceBookId, actorUserId }) {
 
   const testsByTopicId = new Map()
   testsResult.recordset.forEach((record) => {
-    const test = sanitizeResourceBookTopicTest(record)
     if (!testsByTopicId.has(record.topic_id)) testsByTopicId.set(record.topic_id, [])
-    testsByTopicId.get(record.topic_id).push(test)
+    testsByTopicId.get(record.topic_id).push(record)
   })
 
-  const topics = topicsResult.recordset.map((record) => ({
-    ...sanitizeResourceBookTopic(record),
-    tests: testsByTopicId.get(record.id) || [],
+  const topics = groupAndOrderTopicsByPage(topicsResult.recordset, testsByTopicId).map(({ topic, tests }) => ({
+    ...sanitizeResourceBookTopic(topic),
+    tests: tests.map((test) => sanitizeResourceBookTopicTest(test)),
   }))
 
   return {
@@ -1239,6 +1238,58 @@ function extractWeekNumber(name) {
   return match ? parseInt(match[1], 10) : null
 }
 
+// Topics have no page number of their own, so order them by their earliest test's page — the
+// order a reader would actually encounter them in the book, not creation order. Also merges any
+// ResourceBookTopics rows that share a name (content entry sometimes creates one per test added)
+// into a single group so callers show one section per topic instead of repeating headings.
+// `topicRecords`/`testsByTopicId` values are raw SQL rows (snake_case); sanitize after calling.
+function groupAndOrderTopicsByPage(topicRecords, testsByTopicId) {
+  const topicGroupsByName = new Map()
+  topicRecords.forEach((topic) => {
+    const group = topicGroupsByName.get(topic.name)
+    if (!group) {
+      topicGroupsByName.set(topic.name, { representative: topic, ids: [topic.id] })
+    } else {
+      group.ids.push(topic.id)
+      if (new Date(topic.created_at) < new Date(group.representative.created_at)) {
+        group.representative = topic
+      }
+    }
+  })
+
+  return Array.from(topicGroupsByName.values())
+    .map(({ representative, ids }) => {
+      const topicTests = ids.flatMap((id) => testsByTopicId.get(id) || [])
+      const minPageStart = topicTests.length ? Math.min(...topicTests.map((t) => t.page_start)) : null
+      return { topic: representative, topicTests, minPageStart }
+    })
+    .sort((a, b) => {
+      if (a.minPageStart === null && b.minPageStart === null) {
+        return new Date(a.topic.created_at) - new Date(b.topic.created_at)
+      }
+      if (a.minPageStart === null) return 1
+      if (b.minPageStart === null) return -1
+      if (a.minPageStart !== b.minPageStart) return a.minPageStart - b.minPageStart
+      // Tests independently paginated per topic (e.g. weekly denemeler each starting at
+      // page 1) tie on minPageStart — fall back to topic creation order in that case.
+      return new Date(a.topic.created_at) - new Date(b.topic.created_at)
+    })
+    .map(({ topic, topicTests }) => ({
+      topic,
+      // Weekly tests are independently paginated (each often starting at page 1), so they tie
+      // on page_start — sort by the week number embedded in the name (e.g. "05. Hafta - ...")
+      // instead, falling back to page_start when a name has no leading week number.
+      tests: [...topicTests].sort((a, b) => {
+        const weekA = extractWeekNumber(a.name)
+        const weekB = extractWeekNumber(b.name)
+        if (weekA !== null && weekB !== null && weekA !== weekB) return weekA - weekB
+        if (weekA !== null && weekB === null) return -1
+        if (weekA === null && weekB !== null) return 1
+        return a.page_start - b.page_start
+      }),
+    }))
+}
+
 async function fetchResourceBookTopicsWithTests(resourceBookId, studentId) {
   const requestDb = await withRequest({
     resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
@@ -1355,67 +1406,20 @@ async function fetchResourceBookTopicsWithTests(resourceBookId, studentId) {
     testsByTopicId.set(test.topic_id, list)
   })
 
-  // Content entry sometimes creates several ResourceBookTopics rows with the same name under one
-  // book (e.g. one per test added). Merge those into a single group by name so the panel shows one
-  // section per topic instead of repeating the same heading.
-  const topicGroupsByName = new Map()
-  topicsResult.recordset.forEach((topic) => {
-    const group = topicGroupsByName.get(topic.name)
-    if (!group) {
-      topicGroupsByName.set(topic.name, { representative: topic, ids: [topic.id] })
-    } else {
-      group.ids.push(topic.id)
-      if (new Date(topic.created_at) < new Date(group.representative.created_at)) {
-        group.representative = topic
-      }
-    }
-  })
-
-  // Topics have no page number of their own, so order them by their earliest test's page — the
-  // order a student would actually encounter them in the book, not alphabetical.
-  return Array.from(topicGroupsByName.values())
-    .map(({ representative, ids }) => {
-      const topicTests = ids.flatMap((id) => testsByTopicId.get(id) || [])
-      const minPageStart = topicTests.length ? Math.min(...topicTests.map((t) => t.page_start)) : null
-      return { topic: representative, topicTests, minPageStart }
-    })
-    .sort((a, b) => {
-      if (a.minPageStart === null && b.minPageStart === null) {
-        return new Date(a.topic.created_at) - new Date(b.topic.created_at)
-      }
-      if (a.minPageStart === null) return 1
-      if (b.minPageStart === null) return -1
-      if (a.minPageStart !== b.minPageStart) return a.minPageStart - b.minPageStart
-      // Tests independently paginated per topic (e.g. weekly denemeler each starting at
-      // page 1) tie on minPageStart — fall back to topic creation order in that case.
-      return new Date(a.topic.created_at) - new Date(b.topic.created_at)
-    })
-    .map(({ topic, topicTests }) => ({
-      ...sanitizeResourceBookTopic(topic),
-      // Weekly tests are independently paginated (each often starting at page 1), so they tie
-      // on page_start — sort by the week number embedded in the name (e.g. "05. Hafta - ...")
-      // instead, falling back to page_start when a name has no leading week number.
-      tests: [...topicTests]
-        .sort((a, b) => {
-          const weekA = extractWeekNumber(a.name)
-          const weekB = extractWeekNumber(b.name)
-          if (weekA !== null && weekB !== null && weekA !== weekB) return weekA - weekB
-          if (weekA !== null && weekB === null) return -1
-          if (weekA === null && weekB !== null) return 1
-          return a.page_start - b.page_start
-        })
-        .map((test) =>
-          sanitizeResourceBookTopicTest(
-            test,
-            completedTestIds,
-            manualTestIds,
-            testResultCounts,
-            assignedTestIds,
-            answerKeyCountByTestId,
-            manualAnswersByTestId,
-          ),
-        ),
-    }))
+  return groupAndOrderTopicsByPage(topicsResult.recordset, testsByTopicId).map(({ topic, tests }) => ({
+    ...sanitizeResourceBookTopic(topic),
+    tests: tests.map((test) =>
+      sanitizeResourceBookTopicTest(
+        test,
+        completedTestIds,
+        manualTestIds,
+        testResultCounts,
+        assignedTestIds,
+        answerKeyCountByTestId,
+        manualAnswersByTestId,
+      ),
+    ),
+  }))
 }
 
 // Kitap listesi ekranlarında (veli/öğretmen kaynak kütüphanesi) her kart için tamamlanma ve

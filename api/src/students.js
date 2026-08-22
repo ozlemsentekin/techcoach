@@ -87,6 +87,7 @@ function sanitizeStudentResourceBook(record) {
     hasAnswerKey: Boolean(record.has_answer_key),
     imageUrl: record.image_url || null,
     grade: record.grade || null,
+    resourceSource: record.resource_source || null,
     status: record.status,
     assigned: Boolean(record.assigned),
     assignedAt: record.assigned_at || null,
@@ -355,6 +356,7 @@ async function fetchStudentResourceBooks(studentId, actorUserId) {
   const result = await requestDb.query(`
     SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
            rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.grade, rb.status,
+           rb.resource_source,
            CASE WHEN srb.resource_book_id IS NULL THEN 0 ELSE 1 END AS assigned,
            srb.assigned_at
     FROM dbo.ResourceBooks rb

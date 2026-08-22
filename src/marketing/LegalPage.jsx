@@ -45,7 +45,12 @@ export default function LegalPage({ slug: slugProp }) {
       </main>
 
       <footer>
-        <div className="container">© 2026 TechCoach · Disiplin. Analiz. Başarı.</div>
+        <div className="container footer-inner">
+          <div className="footer-contact">
+            <a href="mailto:admin@techcoach.com.tr">admin@techcoach.com.tr</a>
+          </div>
+          <div className="footer-copyright">© 2026 TechCoach · Disiplin. Analiz. Başarı.</div>
+        </div>
       </footer>
     </div>
   )

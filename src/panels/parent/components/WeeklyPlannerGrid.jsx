@@ -16,29 +16,30 @@ import {
   ScanLine,
   School,
   Star,
-  Target,
+  Timer,
   UploadCloud,
   XCircle,
 } from 'lucide-react'
+import { HOMEWORK_TASK_TYPES } from '../../../data/taskTypes'
 import { todayISODate, WEEKDAY_KEYS as DAY_KEYS } from '../../../utils/time'
 
 const BREAK_DURATION_OPTIONS = [15, 30, 45, 60]
 
 const DAY_LABELS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar']
+const DAY_SHORT_LABELS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
 
 // student.schedule (bkz. StudentTeacherModal) dayOfWeek'i bu Türkçe slug'larla saklar;
 // weekDates her zaman Pazartesi'den başladığı için index eşlemesi doğrudan yapılabilir.
 
 const QUICK_ADD_TEMPLATES = {
   lesson: {
-    label: 'Ders',
+    label: 'Soru Bankası Ödevi',
     task: {
-      title: 'Ders',
-      taskType: 'ders-calisma',
+      title: 'Soru Bankası Ödevi',
+      taskType: 'soru-bankasi-odevi',
       startTime: '15:00',
       endTime: '16:00',
       durationMinutes: 60,
-      description: 'Online veya yüz yüze ders.',
     },
   },
   break: {
@@ -126,6 +127,10 @@ function formatDayDate(dateISO) {
   return new Date(dateISO).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })
 }
 
+function formatShortDayDate(dateISO) {
+  return new Date(dateISO).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })
+}
+
 function normalizeText(value) {
   return value.toLocaleLowerCase('tr-TR')
 }
@@ -159,14 +164,30 @@ function getTaskTag(task) {
 // createTaskForHomework/AssignHomeworkModal, ödevin notunu hep "{kaynak adı}\n- {konu}: {test adları}"
 // biçiminde üretir (bkz. teacher/components/AssignHomeworkModal.jsx buildNote). İlk satır zaten
 // resourceBookName ile aynı olduğundan kartta tekrar etmeyip sadece "- " ile başlayan konu/test
-// satırlarını ayıklıyor, ":" yerine "-" koyarak "konu - test adı" biçimine çeviriyoruz.
-function getTaskTestLines(task) {
+// satırlarını ayıklıyoruz. Bir satırda birden fazla test varsa her testi ayrı "konu - test"
+// satırına böleriz.
+function getTaskTestRows(task) {
   if (!task.description) return []
   return task.description
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.startsWith('- '))
-    .map((line) => line.slice(2).replace(/:\s*/, ' - '))
+    .flatMap((line) => {
+      const detail = line.slice(2).trim()
+      const separatorIndex = detail.indexOf(':')
+
+      if (separatorIndex === -1) return [detail]
+
+      const topic = detail.slice(0, separatorIndex).trim()
+      const testNames = detail
+        .slice(separatorIndex + 1)
+        .split(',')
+        .map((testName) => testName.trim())
+        .filter(Boolean)
+
+      if (!testNames.length) return [topic]
+      return testNames.map((testName) => `${topic} - ${testName}`)
+    })
 }
 
 // Ödev notu yukarıdaki kalıba uymuyorsa (ör. elle eklenmiş bir ders görevi) eski davranışa
@@ -193,11 +214,43 @@ function getPageProgress(task) {
   return `${task.targetPageCount} sayfa`
 }
 
+function formatCompletionDuration(totalSeconds) {
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return null
+  if (totalSeconds < 60) return '<1 dk'
+
+  const totalMinutes = Math.round(totalSeconds / 60)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+
+  if (hours && minutes) return `${hours} sa ${minutes} dk`
+  if (hours) return `${hours} sa`
+  return `${totalMinutes} dk`
+}
+
+function getCompletionTimerInfo(task) {
+  if (task.status !== 'tamamlandi') return null
+  if (!task.timerStartedAt) return { tone: 'muted', label: 'Sayaç tutulmadı' }
+
+  const savedSeconds = Number(task.timerElapsedSeconds)
+  if (Number.isFinite(savedSeconds) && savedSeconds >= 0) {
+    return { tone: 'tracked', label: `Sayaç süresi: ${formatCompletionDuration(savedSeconds)}` }
+  }
+
+  const startedMs = new Date(task.timerStartedAt).getTime()
+  const endedMs = new Date(task.completedAt || task.timerStoppedAt).getTime()
+  if (Number.isFinite(startedMs) && Number.isFinite(endedMs)) {
+    const elapsedSeconds = Math.max(0, Math.round((endedMs - startedMs) / 1000))
+    return { tone: 'tracked', label: `Sayaç süresi: ${formatCompletionDuration(elapsedSeconds)}` }
+  }
+
+  return { tone: 'muted', label: 'Sayaç süresi hesaplanamadı' }
+}
+
 // Ödev (soru bankası/kitap) görevleri için kart başındaki ders ikonu yerine tamamlanma
 // durumunu gösteririz: tamamlandıysa tik, aksi halde bekliyor ikonu. Diğer görev tiplerinde
 // (ders, mola, serbest zaman) durum kavramı anlamlı olmadığından konu ikonu korunur.
 function getHomeworkStatusIcon(task) {
-  if (task.taskType !== 'odev') return null
+  if (!HOMEWORK_TASK_TYPES.has(task.taskType)) return null
   const isDone = task.status === 'tamamlandi'
   return {
     Icon: isDone ? CheckCircle2 : Clock,
@@ -206,7 +259,22 @@ function getHomeworkStatusIcon(task) {
 }
 
 function isTaskGraded(task) {
-  return task.taskType === 'odev' && task.status === 'tamamlandi' && task.correctCount != null
+  return HOMEWORK_TASK_TYPES.has(task.taskType) && task.status === 'tamamlandi' && task.correctCount != null
+}
+
+function CompletionTimerNote({ info }) {
+  if (!info) return null
+
+  return (
+    <span
+      className={`mt-0.5 flex items-center gap-1 px-1 text-[10px] font-semibold leading-snug ${
+        info.tone === 'tracked' ? 'text-panel-blue' : 'text-panel-text-muted'
+      }`}
+    >
+      <Timer size={11} className="shrink-0" aria-hidden="true" />
+      <span>{info.label}</span>
+    </span>
+  )
 }
 
 // Net = doğru - yanlış/4 (klasik 4 yanlış 1 doğruyu götürür kuralı); başarı yüzdesi doğru
@@ -284,9 +352,15 @@ function QuickBreakMenu({ task, onPick, onClose }) {
 // Öğretmenin bu öğrenciyle sabit ders programındaki (bkz. StudentTeachers.schedule_json) bir
 // zaman dilimini temsil eden salt okunur, sahte "görev" kartı. Gerçek bir Tasks satırı değildir;
 // sadece o saatin dolu olduğunu haftalık takvimde ayrı bir renkle göstermek için render edilir.
-function ScheduleSlotCard({ task }) {
+function ScheduleSlotCard({ task, muted = false }) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-[#f07b31]/45 bg-white px-2.5 py-2 text-panel-blue shadow-[0_8px_20px_-6px_rgba(240,123,49,0.4)]">
+    <div
+      className={`flex flex-col gap-1 rounded-xl border px-3 py-2.5 ${
+        muted
+          ? 'border-slate-200 bg-white/80 text-slate-500 shadow-none'
+          : 'border-[#f07b31]/45 bg-white text-panel-blue shadow-[0_8px_20px_-6px_rgba(240,123,49,0.4)]'
+      }`}
+    >
       <span className="inline-flex items-center gap-1.5 text-xs font-semibold">
         <CalendarDays size={12} aria-hidden="true" />
         {task.startTime}-{task.endTime}
@@ -300,9 +374,13 @@ function ScheduleSlotCard({ task }) {
 // SchoolClassSchedules) bir zaman dilimini temsil eden salt okunur, sahte "görev" kartı.
 // Gerçek bir Tasks satırı değildir; o saatin okulda geçtiğini göstermek ve o saate ödev
 // eklenmesini engellemek (bkz. AddTaskDrawer/AssignHomeworkModal) için kullanılır.
-function SchoolSlotCard({ task }) {
+function SchoolSlotCard({ task, muted = false }) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-slate-300 bg-slate-100 px-2.5 py-2 text-slate-600">
+    <div
+      className={`flex flex-col gap-1 rounded-xl border px-3 py-2.5 ${
+        muted ? 'border-slate-200 bg-white/75 text-slate-500' : 'border-slate-300 bg-slate-100 text-slate-600'
+      }`}
+    >
       <span className="inline-flex items-center gap-1.5 text-xs font-semibold">
         <School size={12} aria-hidden="true" />
         {task.startTime}-{task.endTime}
@@ -312,25 +390,26 @@ function SchoolSlotCard({ task }) {
   )
 }
 
-function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet }) {
+function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, muted = false }) {
   const [showBreakMenu, setShowBreakMenu] = useState(false)
 
-  if (task.isScheduleSlot) return <ScheduleSlotCard task={task} />
-  if (task.isSchoolSlot) return <SchoolSlotCard task={task} />
+  if (task.isScheduleSlot) return <ScheduleSlotCard task={task} muted={muted} />
+  if (task.isSchoolSlot) return <SchoolSlotCard task={task} muted={muted} />
 
   const style = getTaskStyle(task)
-  const isHomework = task.taskType === 'odev'
+  const isHomework = HOMEWORK_TASK_TYPES.has(task.taskType)
   const homeworkStatus = getHomeworkStatusIcon(task)
   const Icon = homeworkStatus?.Icon || style.icon
   const iconClassName = homeworkStatus?.iconClassName || style.iconClassName
   const canAddBreak = typeof onQuickAddBreak === 'function' && !['mola', 'dinlenme'].includes(task.taskType) && Boolean(task.endTime)
   const tag = isHomework ? getTaskTag(task) : null
-  const testLines = isHomework ? getTaskTestLines(task) : []
-  const fallbackDetail = !isHomework || testLines.length === 0 ? getFallbackDetail(task) : null
+  const testRows = isHomework ? getTaskTestRows(task) : []
+  const fallbackDetail = !isHomework || testRows.length === 0 ? getFallbackDetail(task) : null
   const source = isHomework ? getTaskSource(task) : null
   const questionProgress = getQuestionProgress(task)
   const pageProgress = getPageProgress(task)
   const graded = isTaskGraded(task)
+  const completionTimerInfo = isHomework ? getCompletionTimerInfo(task) : null
 
   const handlePick = (minutes) => {
     setShowBreakMenu(false)
@@ -339,7 +418,11 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet }) {
 
   return (
     <div
-      className={`group relative flex min-h-[60px] w-full flex-col gap-1.5 rounded-xl border px-2.5 py-2 shadow-[0_1px_4px_rgba(49,42,92,0.06)] transition duration-150 hover:-translate-y-0.5 hover:shadow-sm ${showBreakMenu ? 'z-30' : ''} ${style.card}`}
+      className={`group relative flex min-h-[68px] w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 transition duration-150 ${
+        muted
+          ? 'border-slate-200 bg-white/80 text-slate-500 opacity-80 grayscale'
+          : `shadow-[0_1px_4px_rgba(49,42,92,0.06)] hover:-translate-y-0.5 hover:shadow-sm ${style.card}`
+      } ${showBreakMenu ? 'z-30' : ''}`}
     >
       <div className="flex items-stretch gap-1">
         <button
@@ -347,7 +430,7 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet }) {
           onClick={() => onEditTask(task)}
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
-          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}>
+          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}>
             <Icon size={21} strokeWidth={2.2} aria-hidden="true" />
           </span>
           <span className="min-w-0 flex-1">
@@ -399,26 +482,31 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet }) {
         ) : null}
       </div>
 
-      {source ? (
-        <span
-          title={source}
-          className="flex items-center gap-1 pl-11 text-[11px] font-semibold leading-snug text-panel-text-muted"
-        >
-          <Library size={11} className="shrink-0" aria-hidden="true" />
-          <span className="truncate">{source}</span>
-        </span>
-      ) : null}
+      {source || testRows.length ? (
+        <div className="pl-11">
+          {source ? (
+            <span
+              title={source}
+              className="flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-snug text-panel-text-muted"
+            >
+              <Library size={11} className="shrink-0" aria-hidden="true" />
+              <span className="truncate">{source}</span>
+            </span>
+          ) : null}
 
-      {testLines.length ? (
-        <div className="flex items-start gap-1 pl-11">
-          <Target size={11} className="mt-0.5 shrink-0 text-panel-text-muted" aria-hidden="true" />
-          <div className="min-w-0 flex-1">
-            {testLines.map((line, index) => (
-              <p key={index} className="break-words text-[11px] font-medium leading-snug text-panel-text-muted">
-                {line}
-              </p>
-            ))}
-          </div>
+          {testRows.length ? (
+            <div className="mt-1 grid gap-0.5 border-l border-panel-blue-soft/80 pl-2">
+              {testRows.map((line, index) => (
+                <p key={index} className="break-words text-[11px] font-medium leading-snug text-panel-text-muted">
+                  {line}
+                </p>
+              ))}
+            </div>
+          ) : fallbackDetail ? (
+            <p className="mt-1 whitespace-pre-line break-words border-l border-panel-blue-soft/80 pl-2 text-[11px] font-medium leading-snug text-panel-text-muted">
+              {fallbackDetail}
+            </p>
+          ) : null}
         </div>
       ) : fallbackDetail ? (
         <p className="whitespace-pre-line break-words pl-11 text-[11px] font-medium leading-snug text-panel-text-muted">
@@ -441,6 +529,7 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet }) {
       ) : null}
 
       {graded ? <GradeSummaryBar task={task} onViewAnswerSheet={onViewAnswerSheet} /> : null}
+      <CompletionTimerNote info={completionTimerInfo} />
     </div>
   )
 }
@@ -504,6 +593,17 @@ export default function WeeklyPlannerGrid({
 }) {
   const [expandedActionDate, setExpandedActionDate] = useState(null)
   const currentDate = todayISODate()
+  const weekKey = weekDates.join('|')
+  const [pastDayExpansion, setPastDayExpansion] = useState({ weekKey: '', expandedDates: new Set() })
+  const expandedPastDates = pastDayExpansion.weekKey === weekKey ? pastDayExpansion.expandedDates : new Set()
+  const hasCollapsedPastDay = weekDates.some((date) => date < currentDate && !expandedPastDates.has(date))
+  const compactPastGridStyle = hasCollapsedPastDay
+    ? {
+        '--weekly-plan-columns': weekDates
+          .map((date) => (date < currentDate && !expandedPastDates.has(date) ? '2.5rem' : 'minmax(18rem, 22rem)'))
+          .join(' '),
+      }
+    : undefined
 
   const handleAddHomework = (date) => {
     if (date < currentDate || typeof onAddHomework !== 'function') return
@@ -518,8 +618,21 @@ export default function WeeklyPlannerGrid({
   }
 
   const handlePublishDay = (date) => {
+    if (typeof onPublishDay !== 'function') return
     setExpandedActionDate(null)
     onPublishDay(date)
+  }
+
+  const togglePastDay = (date) => {
+    setPastDayExpansion((current) => {
+      const next = current.weekKey === weekKey ? new Set(current.expandedDates) : new Set()
+      if (next.has(date)) {
+        next.delete(date)
+      } else {
+        next.add(date)
+      }
+      return { weekKey, expandedDates: next }
+    })
   }
 
   const renderDayColumn = (date, index) => {
@@ -541,35 +654,105 @@ export default function WeeklyPlannerGrid({
         endTime: slot.endTime,
         lessonName: slot.lessonName,
       }))
-    const tasks = [...(tasksByDate[date] || []), ...scheduleSlots, ...schoolSlots].sort((a, b) =>
+    const tasks = [...(tasksByDate?.[date] || []), ...scheduleSlots, ...schoolSlots].sort((a, b) =>
       (a.startTime || '').localeCompare(b.startTime || ''),
     )
     const isPastDay = date < currentDate
+    const isToday = date === currentDate
+    const isPastDayExpanded = expandedPastDates.has(date)
+    const isCollapsed = isPastDay && !isPastDayExpanded
     const isActionsExpanded = expandedActionDate === date && !isPastDay
     const dayStatus = dayStatusByDate?.[date]
     const hasPendingDraft = dayStatus === 'taslak'
+    const shellTone = isPastDay
+      ? 'border-slate-200 bg-slate-50/80 shadow-none'
+      : 'border-panel-border bg-panel-surface shadow-[0_2px_10px_rgba(49,42,92,0.06)]'
+    const headerTone = isPastDay
+      ? 'border-slate-200 bg-slate-100/90'
+      : isToday
+        ? 'border-panel-blue bg-panel-blue'
+        : 'border-panel-blue-soft bg-panel-blue-soft/80'
+    const titleTone = isPastDay ? 'text-slate-600' : isToday ? 'text-white' : 'text-panel-text'
+    const dateTone = isPastDay ? 'text-slate-500' : isToday ? 'text-white/85' : 'text-panel-blue'
+
+    if (isCollapsed) {
+      return (
+        <button
+          key={date}
+          type="button"
+          onClick={() => togglePastDay(date)}
+          title={`${DAY_LABELS[index]} gününü göster`}
+          aria-label={`${DAY_LABELS[index]} gününü göster`}
+          aria-expanded="false"
+          className="weekly-plan-collapsed-day group flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/90 px-2.5 py-2.5 text-left text-slate-600 transition-colors duration-150 hover:border-slate-300 hover:bg-white md:min-h-[18rem] md:flex-col md:items-center md:gap-2 md:px-1.5 md:py-2.5 md:text-center"
+        >
+          <span className="h-9 w-1 shrink-0 rounded-full bg-slate-300 md:hidden" aria-hidden="true" />
+          <span className="min-w-0 flex-1 md:hidden">
+            <span className="block truncate text-sm font-extrabold text-slate-700">{DAY_LABELS[index]}</span>
+            <span className="mt-0.5 block truncate text-xs font-bold text-slate-500">{formatDayDate(date)}</span>
+          </span>
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors duration-150 group-hover:text-slate-700 md:h-6 md:w-6">
+            <ChevronDown size={17} className="-rotate-90" aria-hidden="true" />
+          </span>
+          <span className="hidden min-h-0 flex-1 items-center justify-center overflow-hidden md:flex">
+            <span className="weekly-plan-collapsed-day__vertical text-[11px] font-extrabold leading-none tracking-normal text-slate-700">
+              {DAY_SHORT_LABELS[index]} · {formatShortDayDate(date)}
+            </span>
+          </span>
+        </button>
+      )
+    }
 
     return (
       <div
         key={date}
-        className="flex min-h-[32rem] min-w-0 flex-col rounded-2xl border border-panel-border bg-panel-surface shadow-[0_2px_10px_rgba(49,42,92,0.06)] lg:min-h-[38rem]"
+        className={`flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border transition-colors duration-150 ${shellTone} ${
+          isToday ? 'ring-2 ring-panel-blue-soft' : ''
+        }`}
       >
-        <div className="rounded-t-2xl border-b border-panel-blue-soft bg-panel-blue-soft px-3 py-4 text-center">
-          <p className="break-words text-base font-extrabold leading-tight text-panel-text">{DAY_LABELS[index]}</p>
-          <p className="mt-1 break-words text-sm font-bold leading-tight text-panel-blue">{formatDayDate(date)}</p>
-          {hasPendingDraft ? (
-            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-700">
-              Taslak · Yayınlanmadı
-            </span>
-          ) : null}
+        <div className={`border-b px-3 py-3 ${headerTone}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className={`break-words text-base font-extrabold leading-tight ${titleTone}`}>{DAY_LABELS[index]}</p>
+              <p className={`mt-1 break-words text-sm font-bold leading-tight ${dateTone}`}>{formatDayDate(date)}</p>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1.5">
+              {isToday ? (
+                <span className="rounded-full bg-white/15 px-2 py-1 text-[10px] font-extrabold text-white">Bugün</span>
+              ) : null}
+              {hasPendingDraft ? (
+                <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-extrabold text-amber-700">
+                  Taslak
+                </span>
+              ) : null}
+              {isPastDay ? (
+                <button
+                  type="button"
+                  onClick={() => togglePastDay(date)}
+                  title={isCollapsed ? 'Geçmiş günü göster' : 'Geçmiş günü kapat'}
+                  aria-label={isCollapsed ? `${DAY_LABELS[index]} gününü göster` : `${DAY_LABELS[index]} gününü kapat`}
+                  aria-expanded={!isCollapsed}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white/80 text-slate-500 transition-colors duration-150 hover:bg-white hover:text-slate-700"
+                >
+                  <ChevronDown
+                    size={17}
+                    className={`transition-transform duration-150 ${isCollapsed ? '' : 'rotate-180'}`}
+                    aria-hidden="true"
+                  />
+                </button>
+              ) : null}
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-1 flex-col gap-3 px-3 py-4">
+        {isCollapsed ? null : (
+        <div className={`flex flex-1 flex-col gap-3 px-3 py-3.5 ${isPastDay ? 'bg-slate-50/70' : ''}`}>
           {isPastDay || typeof onAddHomework !== 'function' ? null : (
             <button
               type="button"
               onClick={() => handleAddHomework(date)}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#f07b31] bg-[#f07b31] px-3 text-sm font-bold text-white shadow-sm transition-colors duration-150 hover:bg-[#d9691f]"
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#f07b31] bg-[#f07b31] px-3 text-sm font-bold text-white shadow-sm transition-colors duration-150 hover:bg-[#d9691f]"
             >
               <Plus size={18} aria-hidden="true" />
               Ödev Ekle
@@ -577,38 +760,47 @@ export default function WeeklyPlannerGrid({
           )}
 
           <div className="flex flex-1 flex-col gap-2">
-            {tasks.map((task) => (
+            {tasks.length ? tasks.map((task) => (
               <TaskCard
                 key={task.id}
                 task={task}
                 onEditTask={onEditTask}
                 onViewAnswerSheet={onViewAnswerSheet}
+                muted={isPastDay}
                 onQuickAddBreak={
-                  isPastDay || typeof onQuickAddBreak !== 'function' || task.isScheduleSlot
+                  isPastDay || typeof onQuickAddBreak !== 'function' || task.isScheduleSlot || task.isSchoolSlot
                     ? undefined
                     : (pickedTask, minutes) => onQuickAddBreak(date, pickedTask, minutes)
                 }
               />
-            ))}
+            )) : (
+              <div
+                className={`flex min-h-20 flex-1 items-center justify-center rounded-xl border border-dashed px-3 py-6 text-center text-sm font-semibold ${
+                  isPastDay
+                    ? 'border-slate-200 bg-white/70 text-slate-500'
+                    : 'border-panel-blue-soft bg-panel-surface-soft/70 text-panel-text-muted'
+                }`}
+              >
+                {isPastDay ? 'Bu güne kayıt eklenmemiş.' : 'Bu gün için plan boş.'}
+              </div>
+            )}
           </div>
 
+          {!isPastDay && typeof onAddTask === 'function' ? (
           <div className="mt-auto grid gap-2">
-            {typeof onAddTask === 'function' ? (
-              <button
-                type="button"
-                aria-expanded={isActionsExpanded}
-                onClick={() => setExpandedActionDate(isActionsExpanded ? null : date)}
-                disabled={isPastDay}
-                className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3 text-xs font-bold text-panel-text shadow-sm transition-colors duration-150 hover:bg-panel-surface-soft disabled:cursor-not-allowed disabled:bg-panel-surface-soft disabled:text-panel-text-muted disabled:shadow-none"
-              >
-                Diğer
-                <ChevronDown
-                  size={16}
-                  className={`transition-transform duration-150 ${isActionsExpanded ? 'rotate-180' : ''}`}
-                  aria-hidden="true"
-                />
-              </button>
-            ) : null}
+            <button
+              type="button"
+              aria-expanded={isActionsExpanded}
+              onClick={() => setExpandedActionDate(isActionsExpanded ? null : date)}
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3 text-xs font-bold text-panel-text shadow-sm transition-colors duration-150 hover:bg-panel-surface-soft"
+            >
+              Diğer
+              <ChevronDown
+                size={16}
+                className={`transition-transform duration-150 ${isActionsExpanded ? 'rotate-180' : ''}`}
+                aria-hidden="true"
+              />
+            </button>
 
             {isActionsExpanded ? (
               <div className="grid gap-2 rounded-xl border border-panel-border bg-panel-surface-soft p-2">
@@ -623,51 +815,52 @@ export default function WeeklyPlannerGrid({
                   </button>
                 ) : null}
 
-                <button
-                  type="button"
-                  onClick={() => handleAddTask(date, QUICK_ADD_TEMPLATES.lesson)}
-                  className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 text-xs font-bold text-panel-blue transition-colors duration-150 hover:bg-slate-100/70"
-                >
-                  <BookOpen size={16} aria-hidden="true" />
-                  <span className="min-w-0 truncate">Ders Ekle</span>
-                </button>
+              <button
+                type="button"
+                onClick={() => handleAddTask(date, QUICK_ADD_TEMPLATES.lesson)}
+                className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 text-xs font-bold text-panel-blue transition-colors duration-150 hover:bg-slate-100/70"
+              >
+                <NotebookPen size={16} aria-hidden="true" />
+                <span className="min-w-0 truncate">Soru Bankası Ödevi</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleAddTask(date, QUICK_ADD_TEMPLATES.break)}
-                  className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-amber-100 bg-amber-50/70 px-3 text-xs font-bold text-panel-warm transition-colors duration-150 hover:bg-amber-100/70"
-                >
-                  <Coffee size={16} aria-hidden="true" />
-                  <span className="min-w-0 truncate">Mola Ekle</span>
-                </button>
+              <button
+                type="button"
+                onClick={() => handleAddTask(date, QUICK_ADD_TEMPLATES.break)}
+                className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-amber-100 bg-amber-50/70 px-3 text-xs font-bold text-panel-warm transition-colors duration-150 hover:bg-amber-100/70"
+              >
+                <Coffee size={16} aria-hidden="true" />
+                <span className="min-w-0 truncate">Mola Ekle</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleAddTask(date, QUICK_ADD_TEMPLATES.activity)}
-                  className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-emerald-100 bg-emerald-50/80 px-3 text-xs font-bold text-emerald-700 transition-colors duration-150 hover:bg-emerald-100/70"
-                >
-                  <Star size={16} aria-hidden="true" />
-                  <span className="min-w-0 truncate">Aktivite Ekle</span>
-                </button>
+              <button
+                type="button"
+                onClick={() => handleAddTask(date, QUICK_ADD_TEMPLATES.activity)}
+                className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-emerald-100 bg-emerald-50/80 px-3 text-xs font-bold text-emerald-700 transition-colors duration-150 hover:bg-emerald-100/70"
+              >
+                <Star size={16} aria-hidden="true" />
+                <span className="min-w-0 truncate">Aktivite Ekle</span>
+              </button>
               </div>
             ) : null}
           </div>
+          ) : null}
         </div>
+        )}
       </div>
     )
   }
 
-  const weekdayDates = weekDates.slice(0, 5)
-  const weekendDates = weekDates.slice(5, 7)
-
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {weekdayDates.map((date, index) => renderDayColumn(date, index))}
-      </div>
-      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {weekendDates.map((date, index) => renderDayColumn(date, index + 5))}
-      </div>
+    <div
+      className={
+        hasCollapsedPastDay
+          ? 'weekly-plan-grid weekly-plan-grid--compact-past min-w-0 items-stretch gap-2'
+          : 'grid min-w-0 grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-7'
+      }
+      style={compactPastGridStyle}
+    >
+      {weekDates.map((date, index) => renderDayColumn(date, index))}
     </div>
   )
 }

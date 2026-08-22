@@ -42,6 +42,8 @@ const {
 const {
   listTeacherStudentsHandler,
   getTeacherStudentHandler,
+  updateTeacherStudentStatusHandler,
+  deleteTeacherStudentHandler,
   listTeacherParentsHandler,
   getTeacherLessonPlanHandler,
   addTeacherRecurringLessonSlotHandler,
@@ -440,6 +442,20 @@ app.http('panel-teacher-student-get', {
   methods: ['GET'],
   route: 'panel-teacher/students/{studentTeacherId}',
   handler: getTeacherStudentHandler,
+})
+
+app.http('panel-teacher-student-status-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-teacher/students/{studentTeacherId}/status',
+  handler: updateTeacherStudentStatusHandler,
+})
+
+app.http('panel-teacher-student-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-teacher/students/{studentTeacherId}',
+  handler: deleteTeacherStudentHandler,
 })
 
 app.http('panel-teacher-students-create', {

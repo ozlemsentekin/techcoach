@@ -706,6 +706,10 @@ async function deleteTaskHandler(request) {
 // getTaskAnswerSheetHandler (öğrenci) ve panel-teacher'daki salt okunur öğretmen görünümü
 // aynı sorgu mantığını paylaşır; auth/scope kontrolü çağıran handler'a ait olduğundan burada
 // sadece taskId + studentId ile veri çekilir.
+//
+// Fotoğraflar burada tam photo_url olarak dönmez. Cevap kağıdında onlarca base64 görseli tek
+// response'a gömmek modalı gereksiz yavaşlatıyordu; liste sadece ikon için id/hasPhoto taşır,
+// gerçek görsel /wrong-questions/{id}/photo uçlarından tıklanınca tembel çekilir.
 async function fetchTaskAnswerSheetData(taskId, studentId) {
   const taskDb = await withRequest({
     id: { type: sql.UniqueIdentifier, value: taskId },
@@ -756,14 +760,14 @@ async function fetchTaskAnswerSheetData(taskId, studentId) {
 
   const photosDb = await withRequest({ taskId: { type: sql.UniqueIdentifier, value: taskId } })
   const photosResult = await photosDb.query(`
-    SELECT test_id, question_number, photo_url FROM dbo.WrongQuestions
+    SELECT id, test_id, question_number, 1 AS has_photo FROM dbo.WrongQuestions
     WHERE task_id = @taskId AND photo_url IS NOT NULL;
   `)
   const photos = {}
   photosResult.recordset.forEach((row) => {
     if (!row.test_id) return
     photos[row.test_id] = photos[row.test_id] || {}
-    photos[row.test_id][row.question_number] = row.photo_url
+    photos[row.test_id][row.question_number] = { id: row.id, hasPhoto: Boolean(row.has_photo) }
   })
 
   return { tests, photos }

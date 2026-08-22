@@ -1,5 +1,5 @@
 import { Clock, HelpCircle, BookOpen } from 'lucide-react'
-import { TASK_TYPES } from '../../../data/taskTypes'
+import { HOMEWORK_TASK_TYPES, TASK_TYPES } from '../../../data/taskTypes'
 
 const DOT_CLASSES = [
   'bg-panel-blue',
@@ -12,7 +12,6 @@ const DOT_CLASSES = [
 
 const WORKED_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
 const READING_RESOURCE_TYPE = 'okuma_kitabi'
-const HOMEWORK_TASK_TYPE = 'odev'
 
 function getSubjectLabel(task) {
   return task.subject || TASK_TYPES[task.taskType]?.label || 'Genel'
@@ -84,7 +83,7 @@ function SubjectDetailList({ items, formatValue, columns = 2 }) {
 
 export default function StudentStatsCards({ tasks = [] }) {
   const workedTasks = tasks.filter((task) => WORKED_STATUSES.has(task.status))
-  const workedHomeworkTasks = workedTasks.filter((task) => task.taskType === HOMEWORK_TASK_TYPE)
+  const workedHomeworkTasks = workedTasks.filter((task) => HOMEWORK_TASK_TYPES.has(task.taskType))
 
   const timeBySubject = aggregateBySubject(
     workedHomeworkTasks.filter((task) => task.resourceType !== READING_RESOURCE_TYPE),

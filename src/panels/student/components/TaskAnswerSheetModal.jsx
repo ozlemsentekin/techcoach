@@ -7,13 +7,36 @@ import {
   removeTaskTest,
   saveWrongQuestionPhoto,
 } from '../../../services/taskService'
+import { getWrongQuestionPhoto } from '../../../services/wrongQuestionService'
 import LoadingState from '../../shared/LoadingState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
+import QuestionPhotoViewerModal from '../../shared/QuestionPhotoViewerModal'
 import MistakePhotoCaptureModal from './MistakePhotoCaptureModal'
 
 const OPTIONS = ['A', 'B', 'C', 'D']
 // Backend'deki BLANK_ANSWER_LABEL ile eşleşmeli (api/src/tasks.js).
 const BLANK_LABEL = '-'
+
+function getPhotoEntry(entry) {
+  if (!entry) return null
+  if (typeof entry === 'string') return { photoUrl: entry, hasPhoto: true }
+  if (entry === true) return { hasPhoto: true }
+  return entry
+}
+
+function hasPhotoEntry(entry) {
+  const photoEntry = getPhotoEntry(entry)
+  return Boolean(photoEntry?.hasPhoto || photoEntry?.photoUrl || photoEntry?.id)
+}
+
+function hasViewablePhoto(entry) {
+  const photoEntry = getPhotoEntry(entry)
+  return Boolean(photoEntry?.photoUrl || photoEntry?.id)
+}
+
+function getPhotoUrl(entry) {
+  return getPhotoEntry(entry)?.photoUrl || ''
+}
 
 function buildInitialAnswers(tests) {
   const initial = {}
@@ -40,7 +63,7 @@ function ResultBadge({ result }) {
   )
 }
 
-function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapture }) {
+function TestSection({ test, answers, result, photos, photoMode, onSelect, onRemove, onCapture, onViewPhoto }) {
   const locked = Boolean(result)
   return (
     <div className="min-w-0 rounded-2xl border border-panel-border p-2.5">
@@ -76,7 +99,10 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
           const isMismatch = Boolean(result) && Boolean(correctLabel) && selected !== correctLabel
           const isWrongSelection = isMismatch && Boolean(selected) && !isBlankSelected
           const isMistake = isMismatch && Boolean(selected)
-          const hasPhoto = Boolean(photos?.[key])
+          const photoEntry = getPhotoEntry(photos?.[key])
+          const hasPhoto = hasPhotoEntry(photoEntry)
+          const canViewPhoto = hasViewablePhoto(photoEntry)
+          const shouldShowPhotoButton = isMistake && (photoMode === 'view' ? canViewPhoto : true)
           return (
             <div
               key={key}
@@ -147,15 +173,23 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
                     <span className="sm:hidden">Doğru: {correctLabel}</span>
                     <span className="hidden sm:inline">Doğru cevap: {correctLabel}</span>
                   </span>
-                  {isMistake ? (
+                  {shouldShowPhotoButton ? (
                     <button
                       type="button"
-                      aria-label={hasPhoto ? `${orderNo}. soru fotoğrafını değiştir` : `${orderNo}. soru için fotoğraf ekle`}
-                      title={hasPhoto ? 'Fotoğraf eklendi' : 'Fotoğraf ekle'}
-                      onClick={() => onCapture(orderNo)}
+                      aria-label={
+                        photoMode === 'view'
+                          ? `${orderNo}. soru fotoğrafını görüntüle`
+                          : hasPhoto
+                            ? `${orderNo}. soru fotoğrafını değiştir`
+                            : `${orderNo}. soru için fotoğraf ekle`
+                      }
+                      title={photoMode === 'view' ? 'Fotoğrafı görüntüle' : hasPhoto ? 'Fotoğraf eklendi' : 'Fotoğraf ekle'}
+                      onClick={() => (photoMode === 'view' ? onViewPhoto(orderNo, photoEntry) : onCapture(orderNo))}
                       className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${
-                        hasPhoto
-                          ? 'bg-student-theme-primary text-student-theme-button-text'
+                        photoMode === 'view'
+                          ? 'border border-panel-blue bg-white text-panel-blue hover:bg-panel-blue hover:text-white'
+                          : hasPhoto
+                            ? 'bg-student-theme-primary text-student-theme-button-text'
                           : 'bg-white text-panel-text-muted hover:bg-student-theme-soft hover:text-student-theme-text'
                       }`}
                     >
@@ -172,7 +206,7 @@ function TestSection({ test, answers, result, photos, onSelect, onRemove, onCapt
   )
 }
 
-export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSaved }) {
+export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'edit', onClose, onSaved }) {
   const [tests, setTests] = useState(null)
   const [error, setError] = useState('')
   const [answersByTest, setAnswersByTest] = useState({})
@@ -186,6 +220,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
   const [removeSaving, setRemoveSaving] = useState(false)
   const [photosByTest, setPhotosByTest] = useState({})
   const [capturingQuestion, setCapturingQuestion] = useState(null)
+  const [photoViewer, setPhotoViewer] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -267,8 +302,14 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
     if (!capturingQuestion) return
     const { testId, orderNo } = capturingQuestion
     const key = String(orderNo)
-    await saveWrongQuestionPhoto(task.id, testId, key, dataUrl)
-    setPhotosByTest((prev) => ({ ...prev, [testId]: { ...prev[testId], [key]: dataUrl } }))
+    const wrongQuestion = await saveWrongQuestionPhoto(task.id, testId, key, dataUrl)
+    setPhotosByTest((prev) => ({
+      ...prev,
+      [testId]: {
+        ...prev[testId],
+        [key]: { id: wrongQuestion.id, hasPhoto: true, photoUrl: wrongQuestion.photoUrl || dataUrl },
+      },
+    }))
   }
 
   const handleSaveNote = async () => {
@@ -316,9 +357,19 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
                   answers={answersByTest[test.id] || {}}
                   result={resultsByTest[test.id]}
                   photos={photosByTest[test.id]}
+                  photoMode={photoMode}
                   onSelect={(orderNo, label) => handleSelect(test.id, orderNo, label)}
                   onRemove={setRemovingTest}
                   onCapture={(orderNo) => setCapturingQuestion({ testId: test.id, orderNo })}
+                  onViewPhoto={(orderNo, photoEntry) =>
+                    setPhotoViewer({
+                      testId: test.id,
+                      orderNo,
+                      title: `${test.name} · ${orderNo}. soru`,
+                      subtitle: test.topicName,
+                      photo: photoEntry,
+                    })
+                  }
                 />
               ))}
             </div>
@@ -382,9 +433,32 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, onClose, onSav
       {capturingQuestion ? (
         <MistakePhotoCaptureModal
           questionLabel={capturingQuestion.orderNo}
-          existingPhotoUrl={photosByTest[capturingQuestion.testId]?.[String(capturingQuestion.orderNo)]}
+          existingPhotoUrl={getPhotoUrl(photosByTest[capturingQuestion.testId]?.[String(capturingQuestion.orderNo)])}
           onClose={() => setCapturingQuestion(null)}
           onSave={handleSavePhoto}
+        />
+      ) : null}
+
+      {photoViewer ? (
+        <QuestionPhotoViewerModal
+          title={photoViewer.title}
+          subtitle={photoViewer.subtitle}
+          photoId={photoViewer.photo?.id}
+          photoUrl={photoViewer.photo?.photoUrl}
+          fetchPhoto={getWrongQuestionPhoto}
+          onLoaded={(photoUrl) => {
+            setPhotosByTest((prev) => ({
+              ...prev,
+              [photoViewer.testId]: {
+                ...prev[photoViewer.testId],
+                [String(photoViewer.orderNo)]: { ...photoViewer.photo, photoUrl },
+              },
+            }))
+            setPhotoViewer((current) =>
+              current ? { ...current, photo: { ...current.photo, photoUrl } } : current,
+            )
+          }}
+          onClose={() => setPhotoViewer(null)}
         />
       ) : null}
     </div>

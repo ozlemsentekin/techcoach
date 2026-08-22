@@ -38,6 +38,14 @@
   --color-panel-red-soft: #f7e3df;
   --color-panel-yellow: #b8933a;
   --color-panel-yellow-soft: #f8f0da;
+  /*
+   * Başarı oranı göstergeleri için sabit trafik ışığı yeşili — panel-sage'den kasıtlı olarak
+   * ayrı tutulur çünkü panel-sage her temada farklı bir tona boyanır (ör. "techcoach" temasında
+   * altın/amber olur ve panel-yellow ile neredeyse aynı görünür). %90+ eşiği her temada aynı,
+   * belirgin yeşil olmalı (bkz. rateTones.js successRateTone).
+   */
+  --color-panel-green: #3f8f5f;
+  --color-panel-green-soft: #e3f3e8;
 
   /*
    * "Görevlerim" ve benzer öğrenci-paneli bileşenleri için tema-duyarlı takma adlar.
@@ -130,20 +138,53 @@ button {
   min-width: 0;
 }
 
-:where(.fixed.inset-0) {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
+@layer base {
+  :where(.fixed.inset-0) {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
 
-:where(.fixed.inset-0 > *) {
-  min-width: 0;
-  max-width: 100%;
+  :where(.fixed.inset-0 > *) {
+    min-width: 0;
+    max-width: 100%;
+  }
 }
 
 @media (max-width: 767px) {
   [data-panel-role] main {
     padding-left: max(0.875rem, env(safe-area-inset-left));
     padding-right: max(0.875rem, env(safe-area-inset-right));
+  }
+}
+
+.weekly-plan-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.weekly-plan-collapsed-day__vertical {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+}
+
+@media (min-width: 640px) {
+  .weekly-plan-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .weekly-plan-grid--compact-past {
+    grid-template-columns: var(--weekly-plan-columns);
+    justify-content: start;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+    scroll-snap-type: x proximity;
+  }
+
+  .weekly-plan-grid--compact-past > * {
+    scroll-snap-align: start;
   }
 }
 

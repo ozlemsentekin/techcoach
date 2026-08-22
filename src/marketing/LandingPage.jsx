@@ -337,6 +337,9 @@ export default function LandingPage() {
             <img src="/payment-mastercard.svg" alt="Mastercard" height="20" />
             <img src="/payment-iyzico.svg" alt="iyzico ile öde" height="20" />
           </div>
+          <div className="footer-contact">
+            <a href="mailto:admin@techcoach.com.tr">admin@techcoach.com.tr</a>
+          </div>
           <div className="footer-copyright">© 2026 TechCoach · Disiplin. Analiz. Başarı.</div>
         </div>
       </footer>

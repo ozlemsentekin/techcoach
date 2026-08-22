@@ -134,6 +134,7 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
   const primaryButtonClass = isStudentPanel
     ? 'bg-student-theme-primary text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline-student-theme-primary'
     : 'bg-panel-warm text-white hover:bg-panel-warm/90 focus-visible:outline-panel-warm'
+  const needsContentWidth = Boolean(resourceBookId && !isReadingBook)
   const filteredTopics = useMemo(
     () => (topics ? filterTopicsBySearch(topics, searchQuery) : topics),
     [topics, searchQuery],
@@ -231,7 +232,10 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
     <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-black/30 p-0 sm:items-center sm:p-4">
       <form
         onSubmit={handleSubmit}
-        className="flex h-full w-full max-w-3xl flex-col overflow-hidden border border-panel-border bg-panel-surface shadow-panel-1 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl"
+        className={cn(
+          'flex h-full w-full flex-col overflow-hidden border border-panel-border bg-panel-surface shadow-panel-1 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl',
+          needsContentWidth ? 'sm:max-w-2xl' : 'sm:max-w-xl',
+        )}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-panel-border px-4 py-3 sm:px-6">
           <div className="min-w-0">

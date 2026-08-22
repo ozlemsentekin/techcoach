@@ -1,15 +1,34 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, BookOpen, CalendarDays, GraduationCap, Phone, Plus, School, TrendingUp, UserRound, Users } from 'lucide-react'
+import {
+  AlertCircle,
+  BookOpen,
+  CalendarDays,
+  GraduationCap,
+  Phone,
+  Plus,
+  Power,
+  School,
+  Trash2,
+  TrendingUp,
+  UserRound,
+  Users,
+} from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
+import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import EmptyState from '../../shared/EmptyState'
 import LoadingState from '../../shared/LoadingState'
 import { SuccessRateBadge } from '../../shared/ResourceBookCard'
 import Button from '../../ui/Button'
 import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
 import AddTeacherStudentModal from '../components/AddTeacherStudentModal'
-import { getTeacherStudents } from '../../../services/teacherService'
+import { deleteTeacherStudent, getTeacherStudents, updateTeacherStudentStatus } from '../../../services/teacherService'
 import { formatDateShort } from '../../../utils/time'
+
+const STATUS_FILTERS = [
+  { value: 'active', label: 'Aktif' },
+  { value: 'all', label: 'Tümü' },
+]
 
 function StudentAvatar({ student }) {
   if (student.studentPhotoUrl) {
@@ -44,15 +63,18 @@ function schoolText(student) {
 
 export default function StudentsPage() {
   const [students, setStudents] = useState(null)
+  const [statusFilter, setStatusFilter] = useState('active')
   const [error, setError] = useState('')
   const [libraryStudent, setLibraryStudent] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [deleteStudent, setDeleteStudent] = useState(null)
+  const [actionStudentId, setActionStudentId] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
     let ignore = false
 
-    getTeacherStudents()
+    getTeacherStudents(statusFilter)
       .then((data) => {
         if (!ignore) setStudents(data)
       })
@@ -63,7 +85,47 @@ export default function StudentsPage() {
     return () => {
       ignore = true
     }
-  }, [])
+  }, [statusFilter])
+
+  const handleStatusChange = async (student, isActive) => {
+    setActionStudentId(student.studentTeacherId)
+    setError('')
+    try {
+      const data = await updateTeacherStudentStatus(student.studentTeacherId, isActive)
+      setStudents((current) => {
+        if (!current) return current
+        if (statusFilter === 'active' && !data.student.isActive) {
+          return current.filter((item) => item.studentTeacherId !== student.studentTeacherId)
+        }
+        return current.map((item) =>
+          item.studentTeacherId === student.studentTeacherId
+            ? { ...item, isActive: data.student.isActive }
+            : item,
+        )
+      })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setActionStudentId(null)
+    }
+  }
+
+  const handleDeleteConfirmed = async () => {
+    if (!deleteStudent || actionStudentId) return
+    setActionStudentId(deleteStudent.studentTeacherId)
+    setError('')
+    try {
+      await deleteTeacherStudent(deleteStudent.studentTeacherId)
+      setStudents((current) =>
+        current ? current.filter((student) => student.studentTeacherId !== deleteStudent.studentTeacherId) : current,
+      )
+      setDeleteStudent(null)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setActionStudentId(null)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -78,6 +140,30 @@ export default function StudentsPage() {
         }
       />
 
+      <div className="inline-flex w-fit rounded-xl border border-panel-border bg-panel-surface p-1 shadow-sm">
+        {STATUS_FILTERS.map((filter) => {
+          const selected = statusFilter === filter.value
+          return (
+            <button
+              key={filter.value}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => {
+                if (selected) return
+                setError('')
+                setStudents(null)
+                setStatusFilter(filter.value)
+              }}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                selected ? 'bg-panel-blue text-white shadow-sm' : 'text-panel-text-muted hover:bg-panel-surface-soft'
+              }`}
+            >
+              {filter.label}
+            </button>
+          )
+        })}
+      </div>
+
       {error ? (
         <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
       ) : students === null ? (
@@ -85,23 +171,37 @@ export default function StudentsPage() {
       ) : students.length === 0 ? (
         <EmptyState
           icon={GraduationCap}
-          title="Henüz öğrenci yok"
-          description="Bir veli size panel yetkisi verdiğinde öğrencileri burada listelenir."
+          title={statusFilter === 'active' ? 'Aktif öğrenci yok' : 'Henüz öğrenci yok'}
+          description={
+            statusFilter === 'active'
+              ? 'Pasif öğrencileri görmek için Tümü filtresini seçebilirsiniz.'
+              : 'Bir veli size panel yetkisi verdiğinde öğrencileri burada listelenir.'
+          }
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {students.map((student) => {
             const lesson = nextLessonText(student)
             const school = schoolText(student)
+            const isBusy = actionStudentId === student.studentTeacherId
             return (
               <div
                 key={student.studentTeacherId}
-                className="flex flex-col gap-4 rounded-2xl border border-panel-border bg-panel-surface p-5 shadow-panel-1"
+                className={`flex flex-col gap-4 rounded-2xl border border-panel-border p-5 shadow-panel-1 ${
+                  student.isActive ? 'bg-panel-surface' : 'bg-panel-surface-soft'
+                }`}
               >
                 <div className="flex items-center gap-3">
                   <StudentAvatar student={student} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-base font-bold text-panel-text">{student.studentFullName}</p>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p className="truncate text-base font-bold text-panel-text">{student.studentFullName}</p>
+                      {student.isActive ? null : (
+                        <span className="shrink-0 rounded-full bg-panel-border px-2 py-0.5 text-xs font-semibold text-panel-text-muted">
+                          Pasif
+                        </span>
+                      )}
+                    </div>
                     <div className="mt-0.5 flex items-center gap-1.5">
                       <p className="truncate text-sm text-panel-text-muted">{student.subjectName || 'Ders seçilmedi'}</p>
                       {student.subjectName ? <SuccessRateBadge value={student.successRate} /> : null}
@@ -140,6 +240,7 @@ export default function StudentsPage() {
                     variant="secondary"
                     size="sm"
                     onClick={() => navigate(`/teacher/students/${student.studentTeacherId}`)}
+                    disabled={!student.isActive || isBusy}
                     className="h-auto w-full justify-start gap-2.5 px-3 py-2"
                   >
                     <UserRound size={16} className="shrink-0" aria-hidden="true" />
@@ -150,6 +251,7 @@ export default function StudentsPage() {
                     variant="secondary"
                     size="sm"
                     onClick={() => setLibraryStudent(student)}
+                    disabled={!student.isActive || isBusy}
                     className="h-auto w-full justify-start gap-2.5 px-3 py-2"
                   >
                     <BookOpen size={16} className="shrink-0" aria-hidden="true" />
@@ -160,6 +262,7 @@ export default function StudentsPage() {
                     variant="secondary"
                     size="sm"
                     onClick={() => navigate(`/teacher/students/${student.studentTeacherId}?tab=mistakes`)}
+                    disabled={!student.isActive || isBusy}
                     className="h-auto w-full justify-start gap-2.5 px-3 py-2"
                   >
                     <AlertCircle size={16} className="shrink-0" aria-hidden="true" />
@@ -170,11 +273,36 @@ export default function StudentsPage() {
                     variant="secondary"
                     size="sm"
                     onClick={() => navigate(`/teacher/students/${student.studentTeacherId}?tab=analysis`)}
+                    disabled={!student.isActive || isBusy}
                     className="h-auto w-full justify-start gap-2.5 px-3 py-2"
                   >
                     <TrendingUp size={16} className="shrink-0" aria-hidden="true" />
                     Gelişim Analizi
                   </Button>
+                  <div className="grid grid-cols-2 gap-1.5 pt-1">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={isBusy}
+                      onClick={() => handleStatusChange(student, !student.isActive)}
+                      className="h-auto justify-start gap-2 px-3 py-2"
+                    >
+                      <Power size={15} className="shrink-0" aria-hidden="true" />
+                      {student.isActive ? 'Pasifle' : 'Aktifle'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={isBusy}
+                      onClick={() => setDeleteStudent(student)}
+                      className="h-auto justify-start gap-2 border-red-200 px-3 py-2 text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 size={15} className="shrink-0" aria-hidden="true" />
+                      Sil
+                    </Button>
+                  </div>
                 </div>
               </div>
             )
@@ -185,7 +313,7 @@ export default function StudentsPage() {
       {students && students.length > 0 ? (
         <p className="inline-flex items-center gap-1.5 text-sm text-panel-text-muted">
           <Users size={14} aria-hidden="true" />
-          {students.length} öğrenci
+          {statusFilter === 'active' ? `${students.length} aktif öğrenci` : `${students.length} öğrenci kaydı`}
         </p>
       ) : null}
 
@@ -198,11 +326,23 @@ export default function StudentsPage() {
           onCreated={() => {
             setShowAddModal(false)
             setStudents(null)
-            getTeacherStudents()
+            getTeacherStudents(statusFilter)
               .then(setStudents)
               .catch((err) => setError(err.message))
           }}
           onClose={() => setShowAddModal(false)}
+        />
+      ) : null}
+
+      {deleteStudent ? (
+        <ConfirmationDialog
+          title="Öğrenciyi Sil"
+          description={`${deleteStudent.studentFullName} için öğretmen bağlantısı ve bu bağlantıya ait veriler kalıcı silinecek. Öğretmen kotasından oluşturulmuşsa öğrenci hesabı da silinir.`}
+          confirmLabel={actionStudentId === deleteStudent.studentTeacherId ? 'Siliniyor...' : 'Sil'}
+          onConfirm={handleDeleteConfirmed}
+          onCancel={() => {
+            if (!actionStudentId) setDeleteStudent(null)
+          }}
         />
       ) : null}
     </div>

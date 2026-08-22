@@ -19,7 +19,7 @@ import { calculateNet } from '../../../utils/netCalculator'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { parseAssignmentDetails } from '../../../utils/assignmentDetails'
 import { daysLate, formatDateShort, formatSecondsAsTimer, taskTimeState, todayISODate } from '../../../utils/time'
-import { BREAK_TASK_TYPES } from '../../../data/taskTypes'
+import { BREAK_TASK_TYPES, HOMEWORK_TASK_TYPES } from '../../../data/taskTypes'
 import { SUBJECT_STYLES, DEFAULT_SUBJECT_STYLE } from './subjectStyles'
 
 const STATUS_ICONS = { Circle, Timer, CheckCircle2, Eye, HelpCircle, RotateCcw, AlertTriangle }
@@ -95,7 +95,7 @@ function formatResultNumber(value) {
 }
 
 function getOpticalResult(task) {
-  if (task.taskType !== 'odev' || task.resourceType !== 'soru_bankasi' || task.status !== 'tamamlandi') return null
+  if (!HOMEWORK_TASK_TYPES.has(task.taskType) || task.resourceType !== 'soru_bankasi' || task.status !== 'tamamlandi') return null
 
   const testResults = Object.values(task.testResults || {}).filter(Boolean)
   const hasAggregateResult = [task.correctCount, task.wrongCount, task.blankCount].some(hasCountValue)
@@ -230,7 +230,7 @@ export default function TaskListCard({
   const showActionColumn = showActionButton || showUndoButton
   const showTimerControl =
     showActionButton &&
-    task.taskType === 'odev' &&
+    HOMEWORK_TASK_TYPES.has(task.taskType) &&
     task.resourceType === 'soru_bankasi' &&
     !['tamamlandi', 'yeniden-planlandi'].includes(task.status)
   const timerRunning = isTimerRunning(task)

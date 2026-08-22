@@ -37,7 +37,7 @@ async function requireTeacherSession(request) {
  * SQL'de öğretmenin sadece kendi dersine ait veriyi görmesini/yönetmesini
  * garanti etmek için kullanılır.
  */
-async function requireTeacherStudentContext(request, { studentTeacherId: bodyId } = {}) {
+async function requireTeacherStudentContext(request, { studentTeacherId: bodyId, includeInactive = false } = {}) {
   const token = readSessionToken(request)
   if (!token) {
     return { error: json(401, { error: 'Oturum bulunamadı.' }) }
@@ -54,10 +54,11 @@ async function requireTeacherStudentContext(request, { studentTeacherId: bodyId 
     teacherUserId: { type: sql.UniqueIdentifier, value: session.sub },
   })
   const result = await requestDb.query(`
-    SELECT st.id, st.student_id, st.subject_id, st.teacher_type, u.full_name AS student_full_name
+    SELECT st.id, st.student_id, st.subject_id, st.teacher_type, st.is_active, u.full_name AS student_full_name
     FROM dbo.StudentTeachers st
     INNER JOIN dbo.Users u ON u.id = st.student_id
-    WHERE st.id = @id AND st.teacher_user_id = @teacherUserId;
+    WHERE st.id = @id AND st.teacher_user_id = @teacherUserId
+      ${includeInactive ? '' : 'AND st.is_active = 1'};
   `)
   const record = result.recordset[0]
   if (!record) {
@@ -70,6 +71,7 @@ async function requireTeacherStudentContext(request, { studentTeacherId: bodyId 
     studentTeacherId: record.id,
     studentFullName: record.student_full_name,
     teacherType: record.teacher_type,
+    isActive: Boolean(record.is_active),
     actorId: session.sub,
     actorRole: 'ogretmen',
   }

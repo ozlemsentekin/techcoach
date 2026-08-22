@@ -1,11 +1,23 @@
 import { useEffect, useState } from 'react'
-import { X, CheckCircle2, XCircle, MinusCircle } from 'lucide-react'
-import { getTeacherTaskAnswerSheet } from '../../../services/teacherService'
+import { X, CheckCircle2, XCircle, MinusCircle, Camera } from 'lucide-react'
+import { getTeacherStudentWrongQuestionPhoto, getTeacherTaskAnswerSheet } from '../../../services/teacherService'
 import LoadingState from '../../shared/LoadingState'
+import QuestionPhotoViewerModal from '../../shared/QuestionPhotoViewerModal'
 
 const OPTIONS = ['A', 'B', 'C', 'D']
 // Backend'deki BLANK_ANSWER_LABEL ile eşleşmeli (api/src/tasks.js).
 const BLANK_LABEL = '-'
+
+function getPhotoEntry(photos, key) {
+  const entry = photos?.[key]
+  if (!entry) return null
+  if (typeof entry === 'string') return { photoUrl: entry, hasPhoto: true }
+  return entry
+}
+
+function hasViewablePhoto(entry) {
+  return Boolean(entry?.photoUrl || entry?.id)
+}
 
 function ResultBadge({ result }) {
   if (!result) return null
@@ -26,7 +38,7 @@ function ResultBadge({ result }) {
 
 // Öğretmen görünümü salt okunur: öğrencinin kaydettiği cevaplar ve doğru/yanlış/boş
 // durumu gösterilir ama düzenlenemez, testler kaldırılamaz.
-function TestSection({ test }) {
+function TestSection({ test, photos, onViewPhoto }) {
   const { result, answers } = test
   return (
     <div className="flex min-w-0 flex-col gap-1.5 rounded-2xl border border-panel-border p-2.5">
@@ -48,10 +60,13 @@ function TestSection({ test }) {
           const correctLabel = result?.correctLabels?.[key]
           const isMismatch = Boolean(result) && Boolean(correctLabel) && selected !== correctLabel
           const isWrongSelection = isMismatch && Boolean(selected) && !isBlankSelected
+          const isWrongOrBlank = isMismatch && Boolean(selected)
+          const photoEntry = getPhotoEntry(photos, key)
+          const hasPhoto = hasViewablePhoto(photoEntry)
           return (
             <div
               key={key}
-              className={`flex min-w-0 items-center gap-1.5 rounded-lg px-1 py-0.5 ${isWrongSelection ? 'bg-panel-red-soft' : ''}`}
+              className={`flex min-w-0 items-center gap-1.5 rounded-lg px-1 py-0.5 ${isWrongOrBlank ? 'bg-panel-red-soft' : ''}`}
             >
               <span className="w-5 shrink-0 text-right text-sm font-bold text-panel-text-muted">{orderNo}.</span>
               <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-hidden">
@@ -82,10 +97,23 @@ function TestSection({ test }) {
                 ) : null}
               </div>
               {isMismatch && correctLabel ? (
-                <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] italic leading-none text-panel-text-muted">
-                  <span className="sm:hidden">Doğru: {correctLabel}</span>
-                  <span className="hidden sm:inline">Doğru cevap: {correctLabel}</span>
-                </span>
+                <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                  <span className="whitespace-nowrap text-[10px] italic leading-none text-panel-text-muted">
+                    <span className="sm:hidden">Doğru: {correctLabel}</span>
+                    <span className="hidden sm:inline">Doğru cevap: {correctLabel}</span>
+                  </span>
+                  {isWrongOrBlank && hasPhoto ? (
+                    <button
+                      type="button"
+                      aria-label={`${orderNo}. soru fotoğrafını görüntüle`}
+                      title="Fotoğrafı görüntüle"
+                      onClick={() => onViewPhoto(test, orderNo, photoEntry)}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-panel-blue bg-white text-panel-blue transition-colors hover:bg-panel-blue hover:text-white"
+                    >
+                      <Camera size={13} aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           )
@@ -97,14 +125,18 @@ function TestSection({ test }) {
 
 export default function TaskOpticalResultModal({ task, studentTeacherId, onClose }) {
   const [tests, setTests] = useState(null)
+  const [photosByTest, setPhotosByTest] = useState({})
+  const [photoViewer, setPhotoViewer] = useState(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
     let ignore = false
 
     getTeacherTaskAnswerSheet(studentTeacherId, task.id)
-      .then(({ tests: fetchedTests }) => {
-        if (!ignore) setTests(fetchedTests)
+      .then(({ tests: fetchedTests, photos }) => {
+        if (ignore) return
+        setTests(fetchedTests)
+        setPhotosByTest(photos || {})
       })
       .catch((err) => {
         if (!ignore) setError(err.message)
@@ -138,12 +170,48 @@ export default function TaskOpticalResultModal({ task, studentTeacherId, onClose
           ) : (
             <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
               {tests.map((test) => (
-                <TestSection key={test.id} test={test} />
+                <TestSection
+                  key={test.id}
+                  test={test}
+                  photos={photosByTest[test.id]}
+                  onViewPhoto={(selectedTest, orderNo, photoEntry) =>
+                    setPhotoViewer({
+                      testId: selectedTest.id,
+                      orderNo,
+                      title: `${selectedTest.name} · ${orderNo}. soru`,
+                      subtitle: selectedTest.topicName,
+                      photo: photoEntry,
+                    })
+                  }
+                />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {photoViewer ? (
+        <QuestionPhotoViewerModal
+          title={photoViewer.title}
+          subtitle={photoViewer.subtitle}
+          photoId={photoViewer.photo?.id}
+          photoUrl={photoViewer.photo?.photoUrl}
+          fetchPhoto={(wrongQuestionId) => getTeacherStudentWrongQuestionPhoto(studentTeacherId, wrongQuestionId)}
+          onLoaded={(photoUrl) => {
+            setPhotosByTest((prev) => ({
+              ...prev,
+              [photoViewer.testId]: {
+                ...prev[photoViewer.testId],
+                [String(photoViewer.orderNo)]: { ...photoViewer.photo, photoUrl },
+              },
+            }))
+            setPhotoViewer((current) =>
+              current ? { ...current, photo: { ...current.photo, photoUrl } } : current,
+            )
+          }}
+          onClose={() => setPhotoViewer(null)}
+        />
+      ) : null}
     </div>
   )
 }

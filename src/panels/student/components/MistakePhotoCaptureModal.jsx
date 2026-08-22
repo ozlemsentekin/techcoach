@@ -8,7 +8,6 @@ const MAX_OUTPUT_DIMENSION = 1400
 const OUTPUT_QUALITY = 0.82
 const EDITOR_QUALITY = 0.92
 const FULL_CROP = { x: 0, y: 0, width: 1, height: 1 }
-const DEFAULT_CROP = { x: 0.06, y: 0.06, width: 0.88, height: 0.88 }
 const MIN_CROP_SIZE = 0.16
 
 function loadImage(src) {
@@ -131,7 +130,7 @@ async function rotateEditablePhoto(draft, direction) {
 
 // Profil görseli gibi kareye zorlamıyoruz: soru fotoğrafında düzenlenen alan korunur,
 // sadece uzun kenar MAX_OUTPUT_DIMENSION'a indirilip JPEG'e sıkıştırılır.
-async function renderEditedQuestionPhoto(draft) {
+async function renderEditedQuestionPhoto(draft, { maxDimension = MAX_OUTPUT_DIMENSION, quality = OUTPUT_QUALITY } = {}) {
   const image = await loadImage(draft.sourceUrl)
   const width = image.naturalWidth || image.width
   const height = image.naturalHeight || image.height
@@ -140,7 +139,7 @@ async function renderEditedQuestionPhoto(draft) {
   const sourceY = Math.round(crop.y * height)
   const sourceWidth = Math.max(1, Math.round(crop.width * width))
   const sourceHeight = Math.max(1, Math.round(crop.height * height))
-  const scale = Math.min(1, MAX_OUTPUT_DIMENSION / Math.max(sourceWidth, sourceHeight))
+  const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight))
   const outputWidth = Math.max(1, Math.round(sourceWidth * scale))
   const outputHeight = Math.max(1, Math.round(sourceHeight * scale))
 
@@ -152,12 +151,36 @@ async function renderEditedQuestionPhoto(draft) {
   context.fillRect(0, 0, outputWidth, outputHeight)
   context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, outputWidth, outputHeight)
 
-  return canvas.toDataURL('image/jpeg', OUTPUT_QUALITY)
+  return {
+    dataUrl: canvas.toDataURL('image/jpeg', quality),
+    width: outputWidth,
+    height: outputHeight,
+  }
+}
+
+function FilePickerControl({ accept, capture, disabled, onChange, className, children }) {
+  return (
+    <label
+      aria-disabled={disabled ? 'true' : undefined}
+      className={`relative cursor-pointer overflow-hidden ${disabled ? 'pointer-events-none opacity-60' : ''} ${className}`}
+    >
+      <span className="pointer-events-none flex min-w-0 items-center justify-center gap-2">{children}</span>
+      <input
+        type="file"
+        accept={accept}
+        capture={capture}
+        disabled={disabled}
+        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+        onClick={(event) => {
+          event.currentTarget.value = ''
+        }}
+        onChange={onChange}
+      />
+    </label>
+  )
 }
 
 export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoUrl, onClose, onSave }) {
-  const cameraInputRef = useRef(null)
-  const galleryInputRef = useRef(null)
   const cropFrameRef = useRef(null)
   const [preview, setPreview] = useState(existingPhotoUrl || '')
   const [draft, setDraft] = useState(null)
@@ -196,16 +219,6 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
       window.removeEventListener('pointercancel', handleEnd)
     }
   }, [cropDrag])
-
-  const openFilePicker = (inputRef) => {
-    if (busy) return
-    const input = inputRef.current
-    if (!input) {
-      setError('Dosya seçici açılamadı.')
-      return
-    }
-    input.click()
-  }
 
   const startCropInteraction = (event, action) => {
     if (!draft) return
@@ -263,10 +276,39 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
       if (!current) return current
       return {
         ...current,
-        crop: hasCustomCrop(current.crop) ? current.crop : { ...DEFAULT_CROP },
+        crop: hasCustomCrop(current.crop) ? current.crop : { ...FULL_CROP },
       }
     })
     setCropMode(true)
+  }
+
+  const handleFinishCrop = async () => {
+    if (!draft) return
+    if (!hasCustomCrop(draft.crop)) {
+      setCropMode(false)
+      return
+    }
+
+    setBusy(true)
+    setError('')
+    try {
+      const croppedPhoto = await renderEditedQuestionPhoto(draft, {
+        maxDimension: MAX_OUTPUT_DIMENSION,
+        quality: EDITOR_QUALITY,
+      })
+      setDraft({
+        sourceUrl: croppedPhoto.dataUrl,
+        width: croppedPhoto.width,
+        height: croppedPhoto.height,
+        crop: { ...FULL_CROP },
+      })
+      setCropMode(false)
+      setCropDrag(null)
+    } catch (err) {
+      setError(err.message || 'Fotoğraf kırpılamadı.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const handleResetCrop = () => {
@@ -279,7 +321,7 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
     setBusy(true)
     setError('')
     try {
-      const dataUrl = await renderEditedQuestionPhoto(draft)
+      const { dataUrl } = await renderEditedQuestionPhoto(draft)
       setPreview(dataUrl)
       await onSave(dataUrl)
       onClose()
@@ -387,7 +429,7 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
                 </button>
                 <button
                   type="button"
-                  onClick={cropMode ? () => setCropMode(false) : handleEnableCrop}
+                  onClick={cropMode ? handleFinishCrop : handleEnableCrop}
                   disabled={busy}
                   className={`flex min-h-10 min-w-0 items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold disabled:opacity-60 ${
                     cropMode
@@ -426,22 +468,23 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
                     Kırpmayı Sıfırla
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => openFilePicker(cameraInputRef)}
+                <FilePickerControl
+                  accept="image/*"
+                  capture="environment"
                   disabled={busy}
-                  className="rounded-xl border border-panel-border px-3 py-2 text-xs font-semibold text-panel-text hover:bg-panel-surface-soft disabled:opacity-60"
+                  onChange={handleInputChange}
+                  className="rounded-xl border border-panel-border px-3 py-2 text-xs font-semibold text-panel-text hover:bg-panel-surface-soft"
                 >
                   Yeniden Çek
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openFilePicker(galleryInputRef)}
+                </FilePickerControl>
+                <FilePickerControl
+                  accept="image/jpeg,image/png,image/webp"
                   disabled={busy}
-                  className="rounded-xl border border-panel-border px-3 py-2 text-xs font-semibold text-panel-text hover:bg-panel-surface-soft disabled:opacity-60"
+                  onChange={handleInputChange}
+                  className="rounded-xl border border-panel-border px-3 py-2 text-xs font-semibold text-panel-text hover:bg-panel-surface-soft"
                 >
                   Galeriden Değiştir
-                </button>
+                </FilePickerControl>
                 <button
                   type="button"
                   onClick={handleCancelEdit}
@@ -465,60 +508,33 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
               ) : null}
 
               <div className="mt-5 flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={() => openFilePicker(cameraInputRef)}
+                <FilePickerControl
+                  accept="image/*"
+                  capture="environment"
                   disabled={busy}
-                  className={`flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl bg-student-theme-primary px-4 py-3 text-sm font-semibold leading-tight text-student-theme-button-text hover:bg-student-theme-hover disabled:cursor-not-allowed disabled:opacity-60 ${
-                    busy ? 'pointer-events-none opacity-60' : ''
-                  }`}
+                  onChange={handleInputChange}
+                  className="flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl bg-student-theme-primary px-4 py-3 text-sm font-semibold leading-tight text-student-theme-button-text hover:bg-student-theme-hover"
                 >
                   <Camera size={16} aria-hidden="true" />
                   <span className="min-w-0 truncate">
                     {busy ? 'Hazırlanıyor...' : preview ? 'Yeniden Çek' : 'Kamera ile Çek'}
                   </span>
-                </button>
+                </FilePickerControl>
 
-                <button
-                  type="button"
-                  onClick={() => openFilePicker(galleryInputRef)}
+                <FilePickerControl
+                  accept="image/jpeg,image/png,image/webp"
                   disabled={busy}
-                  className={`flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-panel-border px-4 py-3 text-sm font-semibold leading-tight text-panel-text hover:bg-panel-surface-soft disabled:cursor-not-allowed disabled:opacity-60 ${
-                    busy ? 'pointer-events-none opacity-60' : ''
-                  }`}
+                  onChange={handleInputChange}
+                  className="flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-panel-border px-4 py-3 text-sm font-semibold leading-tight text-panel-text hover:bg-panel-surface-soft"
                 >
                   <ImagePlus size={16} aria-hidden="true" />
                   <span className="min-w-0 truncate">Galeriden Seç</span>
-                </button>
+                </FilePickerControl>
               </div>
 
               <p className="mt-3 text-xs text-panel-text-muted">JPG, PNG veya WEBP · en fazla {MAX_UPLOAD_MB} MB</p>
             </>
           )}
-
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            disabled={busy}
-            className="sr-only"
-            onClick={(event) => {
-              event.currentTarget.value = ''
-            }}
-            onChange={handleInputChange}
-          />
-          <input
-            ref={galleryInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            disabled={busy}
-            className="sr-only"
-            onClick={(event) => {
-              event.currentTarget.value = ''
-            }}
-            onChange={handleInputChange}
-          />
 
           {error ? <p className="mt-3 text-sm text-panel-warm">{error}</p> : null}
         </div>

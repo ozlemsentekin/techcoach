@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Check, ChevronDown, ChevronRight, ImageOff, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, ChevronRight, ImageOff, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import Badge from '../../ui/Badge'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
@@ -8,6 +8,7 @@ import { ResourceBookAvatar, ResourceBookRates } from '../../shared/ResourceBook
 import { authRequest } from '../../../services/authClient'
 import StudentResourceAssignModal from './StudentResourceAssignModal'
 import ManualOpticalAnswerModal from '../../shared/ManualOpticalAnswerModal'
+import { filterTopicsBySearch } from '../../shared/homework/topicSearch'
 
 function groupResourceBooksBySubject(resourceBooks) {
   const groups = new Map()
@@ -108,6 +109,8 @@ function BookTopics({ student, book }) {
   const [editError, setEditError] = useState('')
   const [opticalTest, setOpticalTest] = useState(null)
   const [wrongQuestions, setWrongQuestions] = useState([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showUnsolvedOnly, setShowUnsolvedOnly] = useState(false)
 
   useEffect(() => {
     let ignore = false
@@ -267,6 +270,26 @@ function BookTopics({ student, book }) {
     )
   }
 
+  const hasSearchQuery = searchQuery.trim().length > 0
+  const filteredTopics = useMemo(() => {
+    if (!topics) return topics
+
+    const matchingTopics = filterTopicsBySearch(topics, searchQuery)
+    if (!showUnsolvedOnly) return matchingTopics
+
+    return matchingTopics
+      .map((topic) => ({
+        ...topic,
+        tests: topic.tests.filter((test) => !test.completed),
+      }))
+      .filter((topic) => topic.tests.length > 0)
+  }, [topics, searchQuery, showUnsolvedOnly])
+  const emptyFilteredMessage = showUnsolvedOnly
+    ? hasSearchQuery
+      ? 'Arama ve çözülmemiş filtresiyle eşleşen içerik yok.'
+      : 'Çözülmemiş test yok.'
+    : 'Aramayla eşleşen içerik yok.'
+
   if (error) {
     return <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
   }
@@ -286,6 +309,41 @@ function BookTopics({ student, book }) {
         işaretleyin, doğru/yanlış/boş otomatik hesaplanır); diğerlerinde sayıyı elle girersiniz. Elle işaretlenmiş
         bir testin kutusuna tekrar tıklamak işareti kaldırır; sonuçları değiştirmek için kalem simgesini kullanın.
       </p>
+      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="relative min-w-0">
+          <Search
+            size={15}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-panel-text-muted"
+            aria-hidden="true"
+          />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Konu, test veya sayfa ara..."
+            className="w-full rounded-xl border border-panel-border bg-white py-2 pl-9 pr-10 text-sm text-panel-text outline-none focus:border-panel-blue focus:ring-2 focus:ring-panel-blue/10"
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              aria-label="Aramayı temizle"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-text"
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+        <label className="inline-flex h-10 min-w-0 items-center gap-2 rounded-xl border border-panel-border bg-white px-3 text-sm font-medium text-panel-text hover:bg-panel-surface-soft">
+          <input
+            type="checkbox"
+            checked={showUnsolvedOnly}
+            onChange={(event) => setShowUnsolvedOnly(event.target.checked)}
+            className="h-4 w-4 shrink-0 rounded border-panel-border accent-panel-blue"
+          />
+          <span className="truncate">Çözülmemiş testler</span>
+        </label>
+      </div>
       {opticalTest ? (
         <ManualOpticalAnswerModal
           test={opticalTest}
@@ -319,173 +377,177 @@ function BookTopics({ student, book }) {
         />
       ) : null}
       <div className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-panel-border p-1.5 sm:p-2">
-        {topics.map((topic) => {
-          const isCollapsed = collapsedTopicIds.has(topic.id)
-          const totalTests = topic.tests.length
-          const completedTests = topic.tests.filter((test) => test.completed).length
-          const completionPercentage = totalTests > 0 ? Math.round((completedTests / totalTests) * 100) : 0
-          return (
-            <div key={topic.id} className="py-0.5">
-              <button
-                type="button"
-                onClick={() => toggleTopicCollapsed(topic.id)}
-                className="flex w-full min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-left text-sm hover:bg-panel-blue-soft sm:gap-2 sm:px-2"
-              >
-                {isCollapsed ? (
-                  <ChevronRight size={14} className="shrink-0 text-panel-text-muted" />
-                ) : (
-                  <ChevronDown size={14} className="shrink-0 text-panel-text-muted" />
-                )}
-                <span className="min-w-0 flex-1 truncate font-medium text-panel-text">{topic.name}</span>
-                {totalTests > 0 ? (
-                  <span className="flex shrink-0 items-center gap-2">
-                    <span className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-panel-surface-soft sm:block">
-                      <span
-                        className="block h-full rounded-full bg-panel-blue transition-all"
-                        style={{ width: `${completionPercentage}%` }}
-                      />
+        {filteredTopics.length === 0 ? (
+          <p className="p-2 text-xs text-panel-text-muted">{emptyFilteredMessage}</p>
+        ) : (
+          filteredTopics.map((topic) => {
+            const isCollapsed = !hasSearchQuery && !showUnsolvedOnly && collapsedTopicIds.has(topic.id)
+            const totalTests = topic.tests.length
+            const completedTests = topic.tests.filter((test) => test.completed).length
+            const completionPercentage = totalTests > 0 ? Math.round((completedTests / totalTests) * 100) : 0
+            return (
+              <div key={topic.id} className="py-0.5">
+                <button
+                  type="button"
+                  onClick={() => toggleTopicCollapsed(topic.id)}
+                  className="flex w-full min-w-0 items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-left text-sm hover:bg-panel-blue-soft sm:gap-2 sm:px-2"
+                >
+                  {isCollapsed ? (
+                    <ChevronRight size={14} className="shrink-0 text-panel-text-muted" />
+                  ) : (
+                    <ChevronDown size={14} className="shrink-0 text-panel-text-muted" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate font-medium text-panel-text">{topic.name}</span>
+                  {totalTests > 0 ? (
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-panel-surface-soft sm:block">
+                        <span
+                          className="block h-full rounded-full bg-panel-blue transition-all"
+                          style={{ width: `${completionPercentage}%` }}
+                        />
+                      </span>
+                      <span className="text-[11px] font-medium tabular-nums text-panel-text-muted">
+                        {completedTests}/{totalTests} · %{completionPercentage}
+                      </span>
                     </span>
-                    <span className="text-[11px] font-medium tabular-nums text-panel-text-muted">
-                      {completedTests}/{totalTests} · %{completionPercentage}
-                    </span>
-                  </span>
-                ) : null}
-              </button>
-              {topic.tests.length && !isCollapsed ? (
-                <div className="ml-0 flex min-w-0 flex-col pl-4 sm:ml-6 sm:pl-0">
-                  {topic.tests.map((test) => {
-                    const isGraded = test.completionSource === 'graded'
-                    const isManual = test.completionSource === 'manual'
-                    const isSaving = savingTestIds.has(test.id)
-                    const hasResults =
-                      test.correctCount !== undefined || test.wrongCount !== undefined || test.blankCount !== undefined
-                    const needsMistakePhotos =
-                      isManual &&
-                      test.hasAnswerKey &&
-                      (Number(test.wrongCount) > 0 || Number(test.blankCount) > 0) &&
-                      !testIdsWithMistakePhotos.has(test.id)
-                    return (
-                      <div key={test.id} className="relative min-w-0 rounded-lg px-1.5 py-1 sm:px-2">
-                        <div className="grid min-w-0 grid-cols-[1.625rem_minmax(0,1fr)] items-start gap-1.5 text-xs sm:gap-2">
-                          {isGraded ? (
-                            <span
-                              className="mt-1 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm bg-panel-blue text-white"
-                              title="Dijital olarak değerlendirilmiş"
-                            >
-                              <Check size={10} strokeWidth={3} />
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={isSaving}
-                              onClick={() => {
-                                if (isManual) {
-                                  unmarkManualCompletion(test)
-                                } else if (test.hasAnswerKey) {
-                                  setOpticalTest(test)
-                                } else {
-                                  setEditError('')
-                                  setEditingTestId(test.id)
-                                }
-                              }}
-                              title={
-                                rowErrors[test.id]
-                                  ? rowErrors[test.id]
-                                  : isManual
-                                    ? 'İşareti kaldır'
-                                    : 'Tamamlandı olarak işaretle'
-                              }
-                              className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-sm p-1.5 disabled:opacity-50"
-                            >
+                  ) : null}
+                </button>
+                {topic.tests.length > 0 && !isCollapsed ? (
+                  <div className="ml-0 flex min-w-0 flex-col pl-4 sm:ml-6 sm:pl-0">
+                    {topic.tests.map((test) => {
+                      const isGraded = test.completionSource === 'graded'
+                      const isManual = test.completionSource === 'manual'
+                      const isSaving = savingTestIds.has(test.id)
+                      const hasResults =
+                        test.correctCount !== undefined || test.wrongCount !== undefined || test.blankCount !== undefined
+                      const needsMistakePhotos =
+                        isManual &&
+                        test.hasAnswerKey &&
+                        (Number(test.wrongCount) > 0 || Number(test.blankCount) > 0) &&
+                        !testIdsWithMistakePhotos.has(test.id)
+                      return (
+                        <div key={test.id} className="relative min-w-0 rounded-lg px-1.5 py-1 sm:px-2">
+                          <div className="grid min-w-0 grid-cols-[1.625rem_minmax(0,1fr)] items-start gap-1.5 text-xs sm:gap-2">
+                            {isGraded ? (
                               <span
-                                className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border transition-colors ${
-                                  rowErrors[test.id]
-                                    ? 'border-panel-warm'
-                                    : isManual
-                                      ? 'border-panel-blue bg-panel-blue text-white'
-                                      : 'border-panel-border bg-white hover:border-panel-blue'
-                                }`}
+                                className="mt-1 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm bg-panel-blue text-white"
+                                title="Dijital olarak değerlendirilmiş"
                               >
-                                {isManual ? <Check size={10} strokeWidth={3} /> : null}
+                                <Check size={10} strokeWidth={3} />
                               </span>
-                            </button>
-                          )}
-                          <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-panel-text-muted">
-                            {test.topicName ? (
-                              <Badge tone="slate" className="max-w-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap sm:max-w-[18rem]">
-                                {test.topicName}
-                              </Badge>
-                            ) : null}
-                            <span className="min-w-0 flex-[1_1_12rem] truncate">
-                              {test.name} · s.{test.pageStart}-{test.pageEnd} · {test.questionCount} soru
-                            </span>
-                            {isManual ? (
-                              <Badge tone="lilac" className="shrink-0">
-                                Elle işaretlendi
-                              </Badge>
-                            ) : null}
-                            {isManual && hasResults ? (
-                              <span className="flex flex-wrap items-center gap-1">
-                                <Badge tone="sage">D:{test.correctCount ?? 0}</Badge>
-                                <Badge tone="red">Y:{test.wrongCount ?? 0}</Badge>
-                                <Badge tone="yellow">B:{test.blankCount ?? 0}</Badge>
-                              </span>
-                            ) : null}
-                            {needsMistakePhotos ? (
-                              <span
-                                title="Hata defterine bu testten hiç soru fotoğrafı eklenmemiş"
-                                className="flex shrink-0 items-center justify-center text-panel-warm"
-                              >
-                                <ImageOff size={13} aria-hidden="true" />
-                              </span>
-                            ) : null}
-                            {isManual ? (
+                            ) : (
                               <button
                                 type="button"
-                                title="Sonuçları düzenle"
+                                disabled={isSaving}
                                 onClick={() => {
-                                  if (test.hasAnswerKey) {
+                                  if (isManual) {
+                                    unmarkManualCompletion(test)
+                                  } else if (test.hasAnswerKey) {
                                     setOpticalTest(test)
                                   } else {
                                     setEditError('')
                                     setEditingTestId(test.id)
                                   }
                                 }}
-                                className="shrink-0 text-panel-text-muted hover:text-panel-blue"
+                                title={
+                                  rowErrors[test.id]
+                                    ? rowErrors[test.id]
+                                    : isManual
+                                      ? 'İşareti kaldır'
+                                      : 'Tamamlandı olarak işaretle'
+                                }
+                                className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-sm p-1.5 disabled:opacity-50"
                               >
-                                <Pencil size={12} aria-hidden="true" />
+                                <span
+                                  className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border transition-colors ${
+                                    rowErrors[test.id]
+                                      ? 'border-panel-warm'
+                                      : isManual
+                                        ? 'border-panel-blue bg-panel-blue text-white'
+                                        : 'border-panel-border bg-white hover:border-panel-blue'
+                                  }`}
+                                >
+                                  {isManual ? <Check size={10} strokeWidth={3} /> : null}
+                                </span>
                               </button>
-                            ) : null}
-                          </span>
+                            )}
+                            <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-panel-text-muted">
+                              {test.topicName ? (
+                                <Badge tone="slate" className="max-w-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap sm:max-w-[18rem]">
+                                  {test.topicName}
+                                </Badge>
+                              ) : null}
+                              <span className="min-w-0 flex-[1_1_12rem] truncate">
+                                {test.name} · s.{test.pageStart}-{test.pageEnd} · {test.questionCount} soru
+                              </span>
+                              {isManual ? (
+                                <Badge tone="lilac" className="shrink-0">
+                                  Elle işaretlendi
+                                </Badge>
+                              ) : null}
+                              {isManual && hasResults ? (
+                                <span className="flex flex-wrap items-center gap-1">
+                                  <Badge tone="sage">D:{test.correctCount ?? 0}</Badge>
+                                  <Badge tone="red">Y:{test.wrongCount ?? 0}</Badge>
+                                  <Badge tone="yellow">B:{test.blankCount ?? 0}</Badge>
+                                </span>
+                              ) : null}
+                              {needsMistakePhotos ? (
+                                <span
+                                  title="Hata defterine bu testten hiç soru fotoğrafı eklenmemiş"
+                                  className="flex shrink-0 items-center justify-center text-panel-warm"
+                                >
+                                  <ImageOff size={13} aria-hidden="true" />
+                                </span>
+                              ) : null}
+                              {isManual ? (
+                                <button
+                                  type="button"
+                                  title="Sonuçları düzenle"
+                                  onClick={() => {
+                                    if (test.hasAnswerKey) {
+                                      setOpticalTest(test)
+                                    } else {
+                                      setEditError('')
+                                      setEditingTestId(test.id)
+                                    }
+                                  }}
+                                  className="shrink-0 text-panel-text-muted hover:text-panel-blue"
+                                >
+                                  <Pencil size={12} aria-hidden="true" />
+                                </button>
+                              ) : null}
+                            </span>
+                          </div>
+                          {rowErrors[test.id] ? (
+                            <span className="absolute left-0 right-0 top-full z-10 rounded-md border border-panel-border bg-white px-2 py-1 text-[11px] text-panel-warm shadow-sm">
+                              {rowErrors[test.id]}
+                            </span>
+                          ) : null}
+                          {editingTestId === test.id ? (
+                            <ManualResultForm
+                              test={test}
+                              saving={isSaving}
+                              error={editError}
+                              onCancel={() => {
+                                setEditingTestId(null)
+                                setEditError('')
+                              }}
+                              onSave={(counts) => saveManualCompletion(test, counts)}
+                              onSaveWithoutResults={() =>
+                                saveManualCompletion(test, { correctCount: '', wrongCount: '', blankCount: '' })
+                              }
+                            />
+                          ) : null}
                         </div>
-                        {rowErrors[test.id] ? (
-                          <span className="absolute left-0 right-0 top-full z-10 rounded-md border border-panel-border bg-white px-2 py-1 text-[11px] text-panel-warm shadow-sm">
-                            {rowErrors[test.id]}
-                          </span>
-                        ) : null}
-                        {editingTestId === test.id ? (
-                          <ManualResultForm
-                            test={test}
-                            saving={isSaving}
-                            error={editError}
-                            onCancel={() => {
-                              setEditingTestId(null)
-                              setEditError('')
-                            }}
-                            onSave={(counts) => saveManualCompletion(test, counts)}
-                            onSaveWithoutResults={() =>
-                              saveManualCompletion(test, { correctCount: '', wrongCount: '', blankCount: '' })
-                            }
-                          />
-                        ) : null}
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : null}
-            </div>
-          )
-        })}
+                      )
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })
+        )}
       </div>
     </div>
   )
@@ -558,7 +620,7 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center overflow-hidden bg-black/30 p-0 sm:items-center sm:p-4">
-      <div className="flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-[88vh] sm:max-h-[92vh] sm:max-w-5xl sm:rounded-2xl sm:p-6">
+      <div className="flex h-full w-full max-w-4xl min-w-0 flex-col overflow-hidden border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-[88vh] sm:max-h-[92vh] sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             {selectedBook ? (

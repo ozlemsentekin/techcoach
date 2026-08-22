@@ -1,6 +1,15 @@
 import { parseTimeToMinutes } from './time'
+import { HOMEWORK_TASK_TYPES } from '../data/taskTypes'
 
-const STUDY_TASK_TYPES = new Set(['ders-calisma', 'test-cozme', 'konu-tekrari', 'odev', 'kisa-akademik', 'deneme-sinavi', 'yanlis-tekrari'])
+const STUDY_TASK_TYPES = new Set([
+  'ders-calisma',
+  'test-cozme',
+  'konu-tekrari',
+  ...HOMEWORK_TASK_TYPES,
+  'kisa-akademik',
+  'deneme-sinavi',
+  'yanlis-tekrari',
+])
 const REST_TASK_TYPES = new Set(['mola', 'dinlenme', 'serbest-zaman', 'yemek', 'yemek-dinlenme'])
 const TEST_TASK_TYPES = new Set(['test-cozme', 'deneme-sinavi'])
 

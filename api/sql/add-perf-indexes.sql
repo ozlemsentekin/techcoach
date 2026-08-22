@@ -13,3 +13,12 @@ BEGIN
   CREATE INDEX IX_Tasks_HomeworkId ON dbo.Tasks (homework_id) WHERE homework_id IS NOT NULL WITH (ONLINE = ON);
 END
 GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_WrongQuestions_TaskId_TestQuestion' AND object_id = OBJECT_ID('dbo.WrongQuestions'))
+BEGIN
+  CREATE INDEX IX_WrongQuestions_TaskId_TestQuestion
+    ON dbo.WrongQuestions (task_id, test_id, question_number)
+    WHERE task_id IS NOT NULL
+    WITH (ONLINE = ON);
+END
+GO

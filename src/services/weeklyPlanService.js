@@ -1,6 +1,7 @@
 import { getTasksForDate, getTasksForDateRange, postTask, patchTask, removeTask } from './taskService'
 import { getHomeworks } from './homeworkService'
 import { authRequest } from './authClient'
+import { HOMEWORK_TASK_TYPES } from '../data/taskTypes'
 import { addDaysISO, getMondayOfWeek, getWeekdayKey, parseTimeToMinutes } from '../utils/time'
 
 /**
@@ -8,7 +9,15 @@ import { addDaysISO, getMondayOfWeek, getWeekdayKey, parseTimeToMinutes } from '
  */
 
 const MAX_DAILY_ACADEMIC_MINUTES = 240
-const STUDY_TASK_TYPES = new Set(['ders-calisma', 'test-cozme', 'konu-tekrari', 'odev', 'kisa-akademik', 'deneme-sinavi', 'yanlis-tekrari'])
+const STUDY_TASK_TYPES = new Set([
+  'ders-calisma',
+  'test-cozme',
+  'konu-tekrari',
+  ...HOMEWORK_TASK_TYPES,
+  'kisa-akademik',
+  'deneme-sinavi',
+  'yanlis-tekrari',
+])
 
 /** Pazartesi başlangıçlı 7 günlük tarih dizisi döner. */
 export function getWeekDates(weekStartDateISO) {

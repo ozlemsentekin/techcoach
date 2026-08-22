@@ -10,6 +10,7 @@ import { getNextTask } from '../../../utils/taskSelectors'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { FOCUS_TASK_TYPES } from '../../../data/taskTypes'
 import StudentWelcomeBanner from '../components/StudentWelcomeBanner'
+import StudentStatsCards from '../components/StudentStatsCards'
 import TaskListSection from '../components/TaskListSection'
 import TaskFocusScreen from '../components/TaskFocusScreen'
 import SessionCompletionModal from '../components/SessionCompletionModal'
@@ -442,19 +443,27 @@ export default function TodayPage() {
         </div>
       ) : null}
 
-      <TaskListSection
-        tasks={listTasks}
-        onStartTimer={handleStartTimer}
-        onComplete={handleCompleteInline}
-        onUndoComplete={handleUndoComplete}
-        onPartialComplete={handlePartialComplete}
-        onReschedule={(task) => setReschedulingTask(task)}
-        onHelp={handleHelp}
-        onAnswerSheetSaved={handleAnswerSheetSaved}
-        onSaveReadingProgress={handleSaveReadingProgress}
-        onSaveQuestionCount={handleSaveQuestionCount}
-        onSaveNotes={handleSaveNotes}
-      />
+      <div className="flex flex-col gap-5">
+        <div className="order-2 md:order-none">
+          <StudentStatsCards tasks={tasks} />
+        </div>
+
+        <div className="order-1 md:order-none">
+          <TaskListSection
+            tasks={listTasks}
+            onStartTimer={handleStartTimer}
+            onComplete={handleCompleteInline}
+            onUndoComplete={handleUndoComplete}
+            onPartialComplete={handlePartialComplete}
+            onReschedule={(task) => setReschedulingTask(task)}
+            onHelp={handleHelp}
+            onAnswerSheetSaved={handleAnswerSheetSaved}
+            onSaveReadingProgress={handleSaveReadingProgress}
+            onSaveQuestionCount={handleSaveQuestionCount}
+            onSaveNotes={handleSaveNotes}
+          />
+        </div>
+      </div>
 
       {focusTask ? (
         <TaskFocusScreen

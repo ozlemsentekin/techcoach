@@ -163,11 +163,11 @@ export default function StudentDetailPage() {
         </div>
       </div>
 
-      <div className="flex w-fit gap-1 rounded-xl border border-panel-border bg-panel-surface p-1">
+      <div className="flex w-full gap-1 overflow-x-auto rounded-xl border border-panel-border bg-panel-surface p-1 sm:w-fit">
         <button
           type="button"
           onClick={() => setActiveTab('calendar')}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+          className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
             activeTab === 'calendar' ? 'bg-panel-blue text-white' : 'text-panel-text-muted hover:text-panel-text'
           }`}
         >
@@ -177,7 +177,7 @@ export default function StudentDetailPage() {
         <button
           type="button"
           onClick={() => setActiveTab('analysis')}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+          className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
             activeTab === 'analysis' ? 'bg-panel-blue text-white' : 'text-panel-text-muted hover:text-panel-text'
           }`}
         >
@@ -187,7 +187,7 @@ export default function StudentDetailPage() {
         <button
           type="button"
           onClick={() => setActiveTab('mistakes')}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+          className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
             activeTab === 'mistakes' ? 'bg-panel-blue text-white' : 'text-panel-text-muted hover:text-panel-text'
           }`}
         >
@@ -204,12 +204,12 @@ export default function StudentDetailPage() {
 
       {activeTab === 'calendar' ? (
         <div className="flex flex-col gap-5">
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
             <Button
               type="button"
               variant="secondary"
               onClick={() => setWeekOffset((current) => current - 1)}
-              className="h-11 border-panel-blue-soft px-4 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50"
+              className="h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4"
             >
               <ChevronLeft size={18} aria-hidden="true" />
               Önceki Hafta
@@ -220,8 +220,8 @@ export default function StudentDetailPage() {
               onClick={() => setWeekOffset(0)}
               className={
                 weekOffset === 0
-                  ? 'h-11 px-4 text-sm font-semibold'
-                  : 'h-11 border-panel-blue-soft px-4 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50'
+                  ? 'h-11 w-full px-3 text-sm font-semibold sm:w-auto sm:px-4'
+                  : 'h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4'
               }
             >
               <CalendarDays size={18} aria-hidden="true" />
@@ -231,7 +231,7 @@ export default function StudentDetailPage() {
               type="button"
               variant="secondary"
               onClick={() => setWeekOffset((current) => current + 1)}
-              className="h-11 border-panel-blue-soft px-4 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50"
+              className="h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4"
             >
               Sonraki Hafta
               <ChevronRight size={18} aria-hidden="true" />

@@ -1,8 +1,9 @@
 import { authRequest, cachedGet, invalidateCache } from './authClient'
 
 /** @returns {Promise<Array>} */
-export async function getTeacherStudents() {
-  const data = await cachedGet('/api/panel-teacher/students')
+export async function getTeacherStudents(status = 'active') {
+  const query = status ? `?status=${encodeURIComponent(status)}` : ''
+  const data = await cachedGet(`/api/panel-teacher/students${query}`)
   return data.students
 }
 
@@ -30,11 +31,28 @@ export async function getTeacherEntitlement() {
 }
 
 /** Öğretmenin kendi panel kotasından doğrudan bir öğrenci eklemesini sağlar. */
-export async function addTeacherStudent({ studentFullName, subjectId, teacherType, parentFullName, parentPhone }) {
+export async function addTeacherStudent({ studentFullName, subjectId, parentFullName, parentPhone }) {
   const result = await authRequest('/api/panel-teacher/students', {
     method: 'POST',
-    body: JSON.stringify({ studentFullName, subjectId, teacherType, parentFullName, parentPhone }),
+    body: JSON.stringify({ studentFullName, subjectId, parentFullName, parentPhone }),
   })
+  invalidateCache('/api/panel-teacher/students')
+  return result
+}
+
+/** Öğretmenin öğrenci bağlantısını aktif/pasif yapar. */
+export async function updateTeacherStudentStatus(studentTeacherId, isActive) {
+  const result = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isActive }),
+  })
+  invalidateCache('/api/panel-teacher/students')
+  return result
+}
+
+/** Öğretmenin öğrenci bağlantısını kalıcı siler. */
+export async function deleteTeacherStudent(studentTeacherId) {
+  const result = await authRequest(`/api/panel-teacher/students/${studentTeacherId}`, { method: 'DELETE' })
   invalidateCache('/api/panel-teacher/students')
   return result
 }

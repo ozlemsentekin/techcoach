@@ -30,7 +30,7 @@ export function invalidateCache(path) {
     return
   }
   for (const key of getCache.keys()) {
-    if (key === path || key.startsWith(`${path}/`)) getCache.delete(key)
+    if (key === path || key.startsWith(`${path}/`) || key.startsWith(`${path}?`)) getCache.delete(key)
   }
 }
 

@@ -51,6 +51,7 @@ export const LEGAL_CONTENT = {
       'Ödeme, iyzico ödeme altyapısı üzerinden kredi kartı/banka kartı ile güvenli şekilde alınır. Hizmet bedeli ve kapsamı, satın alma sırasında Alıcı\'ya açıkça gösterilir.',
       'Cayma Hakkı: Alıcı, dijital içerik niteliğindeki hizmetin ifasına Alıcı\'nın onayı ile hemen başlanması hâlinde, Mesafeli Sözleşmeler Yönetmeliği\'nin 15. maddesi uyarınca cayma hakkını kullanamaz. Hizmetin henüz ifasına başlanmamışsa Alıcı, hiçbir gerekçe göstermeksizin ve cezai şart ödemeksizin 14 gün içinde cayma hakkını kullanabilir.',
       'İfa ve Teslimat: Hizmet, ödemenin onaylanmasının ardından Alıcı\'nın hesabına anında (elektronik ortamda) tanımlanır; fiziksel bir teslimat söz konusu değildir.',
+      'İade: Hizmetin ifasına Alıcı\'nın onayı ile başlanmış olması hâlinde ödenen bedel iade edilmez. Hizmetin ifasına henüz başlanmamışsa, satın alma tarihinden itibaren 14 gün içinde admin@techcoach.com.tr adresine iletilen iade talepleri değerlendirilir ve uygun bulunan iadeler ödemenin yapıldığı karta iyzico altyapısı üzerinden yapılır. Detaylı teslimat ve iade şartları için Teslimat ve İade Şartları sayfası geçerlidir.',
       'Uyuşmazlıklarda Tüketici Hakem Heyetleri ve Tüketici Mahkemeleri yetkilidir.',
     ],
   },

@@ -16,6 +16,7 @@ import {
   Dumbbell,
   Music,
   Moon,
+  School,
   Star,
   Sparkles,
 } from 'lucide-react'
@@ -38,6 +39,7 @@ const ICONS = {
   Dumbbell,
   Music,
   Moon,
+  School,
   Star,
 }
 

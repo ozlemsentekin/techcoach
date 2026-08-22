@@ -6,6 +6,7 @@ CREATE TABLE dbo.StudentTeachers (
     teacher_full_name NVARCHAR(120) NOT NULL,
     phone NVARCHAR(30) NOT NULL,
     teacher_type NVARCHAR(30) NOT NULL CONSTRAINT CK_StudentTeachers_TeacherType CHECK (teacher_type IN (N'ozel_ogretmen', N'okul_ogretmeni')),
+    is_active BIT NOT NULL CONSTRAINT DF_StudentTeachers_IsActive DEFAULT 1,
     schedule_json NVARCHAR(MAX) NULL,
     created_at DATETIME2 NOT NULL CONSTRAINT DF_StudentTeachers_CreatedAt DEFAULT SYSUTCDATETIME(),
     updated_at DATETIME2 NOT NULL CONSTRAINT DF_StudentTeachers_UpdatedAt DEFAULT SYSUTCDATETIME()

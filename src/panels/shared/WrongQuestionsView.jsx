@@ -5,8 +5,10 @@ import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
 import Button from '../ui/Button'
 import Badge from '../ui/Badge'
+import { cn } from '../ui/utils'
 import WrongQuestionGalleryModal from './WrongQuestionGalleryModal'
 import { ResourceBookAvatar } from './ResourceBookCard'
+import { RATE_TONES, successRateTone } from './rateTones'
 
 const NO_BOOK_KEY = '__kaynaksiz__'
 const sourceKeyFor = (bookName) => bookName || NO_BOOK_KEY
@@ -133,6 +135,7 @@ function SubjectShelfCard({ subject, count, tone, onClick }) {
 
 function ContentTopicCard({ topic, wrongCount, stats, scopeLabel, onClick }) {
   const successPercent = stats?.successRate != null ? Math.round(stats.successRate * 100) : null
+  const colors = RATE_TONES[successRateTone(stats?.successRate)]
   return (
     <button
       type="button"
@@ -144,23 +147,25 @@ function ContentTopicCard({ topic, wrongCount, stats, scopeLabel, onClick }) {
           <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
             <Layers size={16} aria-hidden="true" />
           </span>
-          <h3 className="text-sm font-semibold leading-snug text-panel-text">{topic || 'Genel'}</h3>
+          <h3 className="line-clamp-2 min-h-10 text-sm font-semibold leading-snug text-panel-text">
+            {topic || 'Genel'}
+          </h3>
         </div>
         <Badge tone="warm" className="shrink-0">
           {wrongCount} yanlış
         </Badge>
       </div>
 
-      <div className="rounded-lg bg-panel-sage-soft px-2 py-1.5">
+      <div className={cn('rounded-lg px-2 py-1.5', colors.chip)}>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-semibold text-panel-sage">Başarı Oranı</span>
-          <span className="text-sm font-bold tabular-nums text-panel-sage">
+          <span className={cn('text-[11px] font-semibold', colors.text)}>Başarı Oranı</span>
+          <span className={cn('text-sm font-bold tabular-nums', colors.text)}>
             {successPercent != null ? `%${successPercent}` : '—'}
           </span>
         </div>
         <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/70">
           <div
-            className="h-full rounded-full bg-panel-sage transition-all"
+            className={cn('h-full rounded-full transition-all', colors.bar)}
             style={{ width: `${successPercent ?? 0}%` }}
           />
         </div>

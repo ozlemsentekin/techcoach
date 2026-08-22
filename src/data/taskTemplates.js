@@ -14,7 +14,7 @@ export const TASK_TEMPLATES = [
   },
   {
     label: '45 dk ödev',
-    task: { title: 'Okul Ödevi', taskType: 'odev', durationMinutes: 45 },
+    task: { title: 'Okul Ödevi', taskType: 'okul-odevi', durationMinutes: 45 },
   },
   {
     label: '30 dk yanlış tekrar',

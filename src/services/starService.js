@@ -1,10 +1,11 @@
 import { taskTimeState } from '../utils/time'
+import { HOMEWORK_TASK_TYPES } from '../data/taskTypes'
 
 const STUDY_TASK_TYPES = new Set([
   'ders-calisma',
   'test-cozme',
   'konu-tekrari',
-  'odev',
+  ...HOMEWORK_TASK_TYPES,
   'odev-kontrolu',
   'kisa-akademik',
   'deneme-sinavi',

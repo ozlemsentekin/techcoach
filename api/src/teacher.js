@@ -1,4 +1,4 @@
-const { sql, withRequest } = require('./db')
+const { sql, withRequest, withTransaction } = require('./db')
 const { isConfigError } = require('./config')
 const { clearSessionHeaders, json } = require('./http')
 const {
@@ -68,6 +68,8 @@ const TEACHER_TYPE_LABELS = {
   okul_ogretmeni: 'Okul Öğretmeni',
 }
 
+const STUDENT_STATUS_FILTERS = new Set(['active', 'inactive', 'all'])
+
 function parseScheduleJson(value) {
   if (!value) return []
   try {
@@ -87,6 +89,11 @@ function handleError(error, fallbackLabel, fallbackMessage) {
   }
   console.error(`${fallbackLabel} failed`, error)
   return json(500, { error: fallbackMessage })
+}
+
+function normalizeStudentStatusFilter(value) {
+  const status = String(value || 'active').trim().toLowerCase()
+  return STUDENT_STATUS_FILTERS.has(status) ? status : 'active'
 }
 
 function nextRecurringOccurrence(schedule, todayISO, nowHHMM) {
@@ -123,6 +130,7 @@ async function fetchNextOneTimeLessonsByStudentTeacherId(teacherUserId, todayISO
     FROM dbo.Tasks t
     INNER JOIN dbo.StudentTeachers st ON st.id = t.student_teacher_id
     WHERE st.teacher_user_id = @teacherUserId
+      AND st.is_active = 1
       AND t.task_type = 'ders-calisma' AND t.created_by = 'ogretmen'
       AND t.date >= @today
     ORDER BY t.date ASC, t.start_time ASC;
@@ -189,10 +197,18 @@ async function listTeacherStudentsHandler(request) {
     const { error, teacherUserId } = await requireTeacherSession(request)
     if (error) return error
 
-    const requestDb = await withRequest({ teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId } })
+    const status = normalizeStudentStatusFilter(request.query.get('status'))
+    const statusBindings =
+      status === 'all' ? {} : { isActive: { type: sql.Bit, value: status === 'active' } }
+    const statusWhere = status === 'all' ? '' : 'AND st.is_active = @isActive'
+    const requestDb = await withRequest({
+      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+      ...statusBindings,
+    })
     const result = await requestDb.query(`
       SELECT st.id AS student_teacher_id, st.student_id, u.full_name AS student_full_name, u.phone_number AS student_phone,
              st.subject_id, s.name AS subject_name, st.teacher_type, st.schedule_json, st.access_granted_at,
+             st.is_active,
              sp.grade AS student_grade, sp.photo_url AS student_photo_url, sch.name AS school_name,
              (SELECT COUNT(*) FROM dbo.StudentTeacherResourceBooks strb WHERE strb.teacher_id = st.id) AS resource_count
       FROM dbo.StudentTeachers st
@@ -201,6 +217,7 @@ async function listTeacherStudentsHandler(request) {
       LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = st.student_id
       LEFT JOIN dbo.Schools sch ON sch.id = sp.school_id
       WHERE st.teacher_user_id = @teacherUserId
+        ${statusWhere}
       ORDER BY u.full_name ASC, s.name ASC;
     `)
 
@@ -230,6 +247,7 @@ async function listTeacherStudentsHandler(request) {
         subjectName: record.subject_name || null,
         teacherType: record.teacher_type,
         typeLabel: TEACHER_TYPE_LABELS[record.teacher_type] || record.teacher_type,
+        isActive: Boolean(record.is_active),
         schedule,
         nextLesson,
         resourceCount: Number(record.resource_count) || 0,
@@ -260,6 +278,7 @@ async function getTeacherStudentHandler(request) {
     const result = await requestDb.query(`
       SELECT st.id AS student_teacher_id, st.student_id, u.full_name AS student_full_name, u.phone_number AS student_phone,
              st.subject_id, s.name AS subject_name, st.teacher_type, st.schedule_json, st.access_granted_at,
+             st.is_active,
              sp.grade AS student_grade, sp.photo_url AS student_photo_url, sch.name AS school_name,
              (SELECT COUNT(*) FROM dbo.StudentTeacherResourceBooks strb WHERE strb.teacher_id = st.id) AS resource_count
       FROM dbo.StudentTeachers st
@@ -267,7 +286,7 @@ async function getTeacherStudentHandler(request) {
       LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
       LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = st.student_id
       LEFT JOIN dbo.Schools sch ON sch.id = sp.school_id
-      WHERE st.id = @studentTeacherId AND st.teacher_user_id = @teacherUserId;
+      WHERE st.id = @studentTeacherId AND st.teacher_user_id = @teacherUserId AND st.is_active = 1;
     `)
 
     const record = result.recordset[0]
@@ -288,6 +307,7 @@ async function getTeacherStudentHandler(request) {
         subjectName: record.subject_name || null,
         teacherType: record.teacher_type,
         typeLabel: TEACHER_TYPE_LABELS[record.teacher_type] || record.teacher_type,
+        isActive: Boolean(record.is_active),
         schedule: parseScheduleJson(record.schedule_json),
         resourceCount: Number(record.resource_count) || 0,
         accessGrantedAt: record.access_granted_at || null,
@@ -295,6 +315,149 @@ async function getTeacherStudentHandler(request) {
     })
   } catch (error) {
     return handleError(error, 'getTeacherStudentHandler', 'Öğrenci yüklenemedi.')
+  }
+}
+
+async function updateTeacherStudentStatusHandler(request) {
+  try {
+    const { error, studentTeacherId, actorId: teacherUserId } = await requireTeacherStudentContext(request, {
+      includeInactive: true,
+    })
+    if (error) return error
+
+    const payload = await request.json().catch(() => null)
+    if (typeof payload?.isActive !== 'boolean') {
+      return json(400, { error: 'Geçerli bir durum seçilmeli.' })
+    }
+
+    const updateDb = await withRequest({
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+      isActive: { type: sql.Bit, value: payload.isActive },
+    })
+    const result = await updateDb.query(`
+      UPDATE dbo.StudentTeachers
+      SET is_active = @isActive
+      OUTPUT inserted.id, inserted.is_active
+      WHERE id = @studentTeacherId AND teacher_user_id = @teacherUserId;
+    `)
+
+    const updated = result.recordset[0]
+    if (!updated) {
+      return json(404, { error: 'Öğrenci bulunamadı.' })
+    }
+
+    return json(200, {
+      student: {
+        studentTeacherId: updated.id,
+        isActive: Boolean(updated.is_active),
+      },
+    })
+  } catch (error) {
+    return handleError(error, 'updateTeacherStudentStatusHandler', 'Öğrenci durumu güncellenemedi.')
+  }
+}
+
+async function deleteTeacherStudentRelationData(requestInTransaction, bindings) {
+  await requestInTransaction(bindings).query(`
+    DELETE FROM dbo.TaskActivityLogs
+    WHERE task_id IN (SELECT id FROM dbo.Tasks WHERE student_teacher_id = @studentTeacherId);
+
+    UPDATE dbo.WrongQuestions
+    SET task_id = NULL
+    WHERE task_id IN (SELECT id FROM dbo.Tasks WHERE student_teacher_id = @studentTeacherId);
+
+    UPDATE dbo.StudySessions
+    SET task_id = NULL
+    WHERE task_id IN (SELECT id FROM dbo.Tasks WHERE student_teacher_id = @studentTeacherId);
+
+    UPDATE dbo.ParentMotivationMessages
+    SET linked_task_id = NULL
+    WHERE linked_task_id IN (SELECT id FROM dbo.Tasks WHERE student_teacher_id = @studentTeacherId);
+
+    DELETE FROM dbo.Tasks
+    WHERE student_teacher_id = @studentTeacherId;
+
+    DELETE FROM dbo.StudentTeachers
+    WHERE id = @studentTeacherId AND teacher_user_id = @teacherUserId;
+  `)
+}
+
+async function hardDeleteFundedStudent(requestInTransaction, bindings) {
+  await requestInTransaction(bindings).query(`
+    DELETE FROM dbo.TaskActivityLogs
+    WHERE student_id = @studentId
+       OR actor_user_id = @studentId
+       OR task_id IN (SELECT id FROM dbo.Tasks WHERE student_id = @studentId);
+
+    DELETE FROM dbo.StudentManualTestCompletions
+    WHERE student_id = @studentId OR marked_by_user_id = @studentId;
+
+    DELETE FROM dbo.WrongQuestions WHERE student_id = @studentId;
+    DELETE FROM dbo.StudySessions WHERE student_id = @studentId;
+    DELETE FROM dbo.ParentMotivationMessages WHERE student_id = @studentId;
+    DELETE FROM dbo.MotivationFeedback WHERE student_id = @studentId;
+    DELETE FROM dbo.MotivationDailySelections WHERE student_id = @studentId;
+    DELETE FROM dbo.CheckIns WHERE student_id = @studentId;
+    DELETE FROM dbo.StudentRequests WHERE student_id = @studentId;
+    DELETE FROM dbo.CoachNotes WHERE student_id = @studentId;
+    DELETE FROM dbo.Messages WHERE student_id = @studentId;
+    DELETE FROM dbo.WeeklyPlanStatuses WHERE student_id = @studentId;
+    DELETE FROM dbo.Tasks WHERE student_id = @studentId;
+    DELETE FROM dbo.Homeworks WHERE student_id = @studentId;
+    DELETE FROM dbo.StudentTeachers WHERE student_id = @studentId;
+    DELETE FROM dbo.StudentResourceBooks WHERE student_id = @studentId;
+    DELETE FROM dbo.StudentProfiles WHERE student_id = @studentId;
+
+    DELETE FROM dbo.Users
+    WHERE id = @studentId AND funded_by_teacher_id = @teacherUserId AND role = 'ogrenci';
+  `)
+}
+
+async function deleteTeacherStudentHandler(request) {
+  try {
+    const { error, studentTeacherId, studentId, actorId: teacherUserId } = await requireTeacherStudentContext(request, {
+      includeInactive: true,
+    })
+    if (error) return error
+
+    const deleteResult = await withTransaction(async (requestInTransaction) => {
+      const bindings = {
+        studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+      }
+      const ownershipResult = await requestInTransaction(bindings).query(`
+        SELECT TOP 1 funded_by_teacher_id
+        FROM dbo.Users
+        WHERE id = @studentId AND role = 'ogrenci';
+      `)
+      const student = ownershipResult.recordset[0]
+      if (!student) return { rowsAffected: 0, hardDeletedStudent: false }
+
+      const hardDeletedStudent =
+        student.funded_by_teacher_id &&
+        String(student.funded_by_teacher_id).toLowerCase() === String(teacherUserId).toLowerCase()
+
+      if (hardDeletedStudent) {
+        await hardDeleteFundedStudent(requestInTransaction, bindings)
+        return { rowsAffected: 1, hardDeletedStudent: true }
+      }
+
+      await deleteTeacherStudentRelationData(requestInTransaction, bindings)
+      return { rowsAffected: 1, hardDeletedStudent: false }
+    })
+
+    if (!deleteResult.rowsAffected) {
+      return json(404, { error: 'Öğrenci bulunamadı.' })
+    }
+
+    return json(200, { success: true, hardDeletedStudent: deleteResult.hardDeletedStudent })
+  } catch (error) {
+    if (error.number === 547) {
+      return json(409, { error: 'İlişkili kayıtlar nedeniyle öğrenci silinemedi.' })
+    }
+    return handleError(error, 'deleteTeacherStudentHandler', 'Öğrenci silinemedi.')
   }
 }
 
@@ -312,6 +475,7 @@ async function listTeacherParentsHandler(request) {
       INNER JOIN dbo.Users u ON u.id = st.student_id
       INNER JOIN dbo.Users p ON p.id = u.parent_id
       WHERE st.teacher_user_id = @teacherUserId
+        AND st.is_active = 1
       ORDER BY p.full_name ASC, u.full_name ASC;
     `)
 
@@ -420,7 +584,7 @@ async function fetchTeacherLibraryGrades(teacherUserId) {
   const result = await requestDb.query(`
     SELECT sp.grade FROM dbo.StudentTeachers st
     INNER JOIN dbo.StudentProfiles sp ON sp.student_id = st.student_id
-    WHERE st.teacher_user_id = @teacherUserId AND sp.grade IS NOT NULL;
+    WHERE st.teacher_user_id = @teacherUserId AND st.is_active = 1 AND sp.grade IS NOT NULL;
 
     SELECT grade FROM dbo.TeacherLibraryGrades WHERE teacher_user_id = @teacherUserId;
   `)
@@ -523,10 +687,7 @@ async function createTeacherStudentHandler(request) {
       return json(400, { error: 'Veli adı 3 ile 120 karakter arasında olmalı.' })
     }
 
-    const teacherType = payload.teacherType
-    if (teacherType !== 'ozel_ogretmen' && teacherType !== 'okul_ogretmeni') {
-      return json(400, { error: 'Geçerli bir öğretmen tipi seçilmeli.' })
-    }
+    const teacherType = 'ozel_ogretmen'
 
     const subjectId = payload.subjectId
     if (!subjectId || !(await verifySubjectExists(subjectId))) {
@@ -654,6 +815,7 @@ async function fetchRecurringLessonEntries(teacherUserId) {
     INNER JOIN dbo.Users u ON u.id = st.student_id
     LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
     WHERE st.teacher_user_id = @teacherUserId
+      AND st.is_active = 1
       AND st.teacher_type = 'ozel_ogretmen'
       AND st.schedule_json IS NOT NULL;
   `)
@@ -685,6 +847,7 @@ async function fetchOneTimeLessonEntries(teacherUserId, weekStart) {
     INNER JOIN dbo.Users u ON u.id = t.student_id
     LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
     WHERE st.teacher_user_id = @teacherUserId
+      AND st.is_active = 1
       AND t.task_type = 'ders-calisma' AND t.created_by = 'ogretmen'
       AND t.date BETWEEN @weekStart AND @weekEnd;
   `)
@@ -1535,7 +1698,7 @@ async function listAssignableStudentsForLibraryResourceHandler(request) {
       INNER JOIN dbo.Users u ON u.id = st.student_id
       INNER JOIN dbo.StudentProfiles sp ON sp.student_id = st.student_id
       LEFT JOIN dbo.StudentResourceBooks srb ON srb.student_id = st.student_id AND srb.resource_book_id = @resourceBookId
-      WHERE st.teacher_user_id = @teacherUserId AND st.subject_id = @subjectId AND sp.grade = @grade
+      WHERE st.teacher_user_id = @teacherUserId AND st.is_active = 1 AND st.subject_id = @subjectId AND sp.grade = @grade
       ORDER BY u.full_name ASC;
     `)
 
@@ -2246,6 +2409,8 @@ async function updateTeacherStudentWrongQuestionHandler(request) {
 module.exports = {
   listTeacherStudentsHandler,
   getTeacherStudentHandler,
+  updateTeacherStudentStatusHandler,
+  deleteTeacherStudentHandler,
   listTeacherParentsHandler,
   getTeacherLessonPlanHandler,
   addTeacherRecurringLessonSlotHandler,

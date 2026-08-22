@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../../context/useAuth'
-import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Clock3, Coffee, Copy, Info, Star } from 'lucide-react'
+import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Clock3, Coffee, Info, Star } from 'lucide-react'
 import {
   getWeekDates,
   getDraftTasksForDate,
@@ -10,7 +10,6 @@ import {
   cleanupUnlinkedHomeworkTasksForWeek,
   saveTaskForDay,
   publishDay,
-  copyPreviousWeek,
   totalAcademicMinutes,
 } from '../../../services/weeklyPlanService'
 import { addHomework } from '../../../services/homeworkService'
@@ -69,13 +68,13 @@ function SummaryItem({ type, value }) {
   const Icon = item.icon
 
   return (
-    <div className="flex min-w-0 items-center gap-4">
-      <span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${item.iconClassName}`}>
-        <Icon size={28} strokeWidth={2.1} aria-hidden="true" />
+    <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+      <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full sm:h-14 sm:w-14 ${item.iconClassName}`}>
+        <Icon size={26} strokeWidth={2.1} aria-hidden="true" />
       </span>
       <span className="min-w-0">
-        <span className="block text-sm font-semibold text-panel-blue">{item.label}</span>
-        <span className="mt-1 block break-words text-2xl font-bold text-panel-text">{value}</span>
+        <span className="block text-xs font-semibold text-panel-blue sm:text-sm">{item.label}</span>
+        <span className="mt-1 block break-words text-xl font-bold text-panel-text sm:text-2xl">{value}</span>
       </span>
     </div>
   )
@@ -223,15 +222,15 @@ export default function WeeklyPlanPage() {
 
   return (
     <div className="flex w-full flex-col gap-5">
-      <div className="flex min-w-0 items-start gap-4">
-        <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-panel-blue-soft text-panel-blue shadow-sm">
-          <CalendarCheck size={34} strokeWidth={2.1} aria-hidden="true" />
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-panel-blue-soft text-panel-blue shadow-sm sm:h-16 sm:w-16">
+          <CalendarCheck size={32} strokeWidth={2.1} aria-hidden="true" />
         </span>
         <div className="min-w-0">
-          <h1 className="break-words text-3xl font-bold leading-tight text-panel-text">
+          <h1 className="break-words text-2xl font-bold leading-tight text-panel-text sm:text-3xl">
             Aylin'in Haftasını Planla
           </h1>
-          <p className="mt-1 text-base font-medium text-panel-blue">
+          <p className="mt-1 text-sm font-medium leading-relaxed text-panel-blue sm:text-base">
             Dersleri, ödevleri, molaları ve serbest zamanı dengeli şekilde planla.
           </p>
         </div>
@@ -243,12 +242,12 @@ export default function WeeklyPlanPage() {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
         <Button
           type="button"
           variant="secondary"
           onClick={() => setWeekOffset((current) => current - 1)}
-          className="h-11 border-panel-blue-soft px-4 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50"
+          className="h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4"
         >
           <ChevronLeft size={18} aria-hidden="true" />
           Önceki Hafta
@@ -257,7 +256,7 @@ export default function WeeklyPlanPage() {
           type="button"
           variant="secondary"
           onClick={() => setWeekOffset(0)}
-          className="h-11 border-panel-blue-soft px-4 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50"
+          className="h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4"
         >
           <CalendarDays size={18} aria-hidden="true" />
           Bu Hafta
@@ -266,31 +265,11 @@ export default function WeeklyPlanPage() {
           type="button"
           variant="secondary"
           onClick={() => setWeekOffset((current) => current + 1)}
-          className="h-11 border-panel-blue-soft px-4 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50"
+          className="h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4"
         >
           Sonraki Hafta
           <ChevronRight size={18} aria-hidden="true" />
         </Button>
-
-        {restricted ? null : (
-          <span className="mx-1 hidden h-9 w-px bg-panel-border sm:block" aria-hidden="true" />
-        )}
-
-        {restricted ? null : (
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={async () => {
-            await copyPreviousWeek(weekStart)
-            await refresh()
-            showBanner('Geçen hafta bu haftanın taslağına kopyalandı.')
-          }}
-          className="h-11 border-panel-blue-soft px-4 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50"
-        >
-          <Copy size={18} aria-hidden="true" />
-          Geçen Haftayı Kopyala
-        </Button>
-        )}
       </div>
 
       {loadError ? (
@@ -301,7 +280,7 @@ export default function WeeklyPlanPage() {
         <LoadingState label="Haftalık plan yükleniyor..." />
       ) : (
         <>
-          <div className="grid gap-5 rounded-2xl border border-panel-border bg-panel-surface px-5 py-4 shadow-sm sm:grid-cols-3 lg:px-10">
+          <div className="grid gap-4 rounded-2xl border border-panel-border bg-panel-surface px-4 py-4 shadow-sm sm:grid-cols-3 lg:px-8">
             <SummaryItem type="study" value={weekSummary.studyDuration} />
             <SummaryItem type="break" value={weekSummary.breakCount} />
             <SummaryItem type="free" value={weekSummary.freeDuration} />

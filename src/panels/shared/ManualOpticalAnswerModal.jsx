@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { X, CheckCircle2, XCircle, MinusCircle, Camera, Check } from 'lucide-react'
 import Badge from '../ui/Badge'
+import ConfirmationDialog from './ConfirmationDialog'
 import MistakePhotoCaptureModal from '../student/components/MistakePhotoCaptureModal'
 
 const OPTIONS = ['A', 'B', 'C', 'D']
@@ -50,6 +51,7 @@ export default function ManualOpticalAnswerModal({
   const [correctLabels, setCorrectLabels] = useState(null)
   const [photosByQuestion, setPhotosByQuestion] = useState(() => ({ ...(initialPhotos || {}) }))
   const [capturingOrderNo, setCapturingOrderNo] = useState(null)
+  const [photoReminderOpen, setPhotoReminderOpen] = useState(false)
   const submitSeqRef = useRef(0)
 
   const questionNumbers = Array.from({ length: test.questionCount }, (_, index) => index + 1)
@@ -75,7 +77,7 @@ export default function ManualOpticalAnswerModal({
         blankCount: data.blankCount,
         manualAnswers: data.answers,
       })
-      return true
+      return data
     } catch (err) {
       if (seq !== submitSeqRef.current) return false
       setError(err.message || 'Cevaplar kaydedilemedi.')
@@ -106,9 +108,25 @@ export default function ManualOpticalAnswerModal({
 
   const handleSave = () => submit(answers)
 
+  const hasMissingMistakePhotos = (savedData) => {
+    if (!savedData || (Number(savedData.wrongCount) <= 0 && Number(savedData.blankCount) <= 0)) return false
+
+    return Object.entries(savedData.correctLabels || {}).some(([key, correctLabel]) => {
+      const selected = savedData.answers?.[key] ?? answers[key]
+      return Boolean(correctLabel) && Boolean(selected) && selected !== correctLabel && !photosByQuestion[key]
+    })
+  }
+
   const handleSaveAndClose = async () => {
-    const saved = await submit(answers)
-    if (saved) onClose()
+    const savedData = await submit(answers)
+    if (!savedData) return
+
+    if (hasMissingMistakePhotos(savedData)) {
+      setPhotoReminderOpen(true)
+      return
+    }
+
+    onClose()
   }
 
   const handleSavePhoto = async (dataUrl) => {
@@ -287,6 +305,20 @@ export default function ManualOpticalAnswerModal({
           existingPhotoUrl={photosByQuestion[String(capturingOrderNo)]}
           onClose={() => setCapturingOrderNo(null)}
           onSave={handleSavePhoto}
+        />
+      ) : null}
+
+      {photoReminderOpen ? (
+        <ConfirmationDialog
+          title="Fotoğraf eklemek ister misiniz?"
+          description="Yanlış / boş sorularınız için fotoğraf eklemek ister misiniz?"
+          confirmLabel="Evet"
+          cancelLabel="Hayır, kapat"
+          onConfirm={() => setPhotoReminderOpen(false)}
+          onCancel={() => {
+            setPhotoReminderOpen(false)
+            onClose()
+          }}
         />
       ) : null}
     </div>

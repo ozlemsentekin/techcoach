@@ -33,7 +33,7 @@ export default function LessonScheduleGrid({ recurringEntries, oneTimeEntries, w
   entriesByDay.forEach((list) => list.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || '')))
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
       {WEEKDAYS.map((day, index) => {
         const dayEntries = entriesByDay.get(day.id) || []
         return (
