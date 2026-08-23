@@ -2411,7 +2411,7 @@ async function listTeacherStudentWrongQuestionsHandler(request) {
       SELECT wq.id, wq.student_id, wq.task_id, wq.test_id, wq.subject, wq.test_name,
              wq.question_number, wq.error_type, wq.student_note, wq.mistake_reason,
              wq.review_status, wq.resolved_at,
-             CASE WHEN wq.photo_url IS NOT NULL THEN 1 ELSE 0 END AS has_photo, wq.created_at,
+             CAST(1 AS bit) AS has_photo, wq.created_at,
              COALESCE(tp.name, wq.topic) AS topic,
              COALESCE(rb.name, wq.book_name) AS book_name,
              COALESCE(pub.name, wq.publisher_name) AS publisher_name,
@@ -2421,7 +2421,7 @@ async function listTeacherStudentWrongQuestionsHandler(request) {
       LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
       LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
       LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
-      WHERE wq.student_id = @studentId AND wq.subject = @subject
+      WHERE wq.student_id = @studentId AND wq.subject = @subject AND wq.test_id IS NOT NULL
       ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''}
       ORDER BY wq.created_at DESC;
     `)
@@ -2480,7 +2480,7 @@ async function getTeacherStudentWrongQuestionTopicStatsHandler(request) {
       FROM dbo.WrongQuestions wq
       LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
       LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
-      WHERE wq.student_id = @studentId AND wq.subject = @subject AND wq.photo_url IS NOT NULL;
+      WHERE wq.student_id = @studentId AND wq.subject = @subject AND wq.test_id IS NOT NULL;
     `)
 
     const { topicStats, sourceTopicStats } = await computeWrongQuestionTopicStats(studentId, result.recordset, {

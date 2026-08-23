@@ -23,6 +23,28 @@ BEGIN
 END
 GO
 
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_WrongQuestions_StudentPhotoCreatedAt' AND object_id = OBJECT_ID('dbo.WrongQuestions'))
+BEGIN
+  CREATE INDEX IX_WrongQuestions_StudentPhotoCreatedAt
+    ON dbo.WrongQuestions (student_id, created_at DESC)
+    INCLUDE (task_id, test_id, subject, topic, test_name, book_name, publisher_name, question_number,
+             error_type, mistake_reason, review_status, resolved_at)
+    WHERE test_id IS NOT NULL
+    WITH (ONLINE = ON);
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_WrongQuestions_StudentSubjectPhotoCreatedAt' AND object_id = OBJECT_ID('dbo.WrongQuestions'))
+BEGIN
+  CREATE INDEX IX_WrongQuestions_StudentSubjectPhotoCreatedAt
+    ON dbo.WrongQuestions (student_id, subject, created_at DESC)
+    INCLUDE (task_id, test_id, topic, test_name, book_name, publisher_name, question_number,
+             error_type, mistake_reason, review_status, resolved_at)
+    WHERE test_id IS NOT NULL
+    WITH (ONLINE = ON);
+END
+GO
+
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Tasks_StudentDateDraftStart' AND object_id = OBJECT_ID('dbo.Tasks'))
 BEGIN
   CREATE INDEX IX_Tasks_StudentDateDraftStart

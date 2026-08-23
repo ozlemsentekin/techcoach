@@ -311,7 +311,7 @@ async function listWrongQuestionsHandler(request) {
       SELECT wq.id, wq.student_id, wq.task_id, wq.test_id, wq.subject, wq.test_name,
              wq.question_number, wq.error_type, wq.student_note, wq.mistake_reason,
              wq.review_status, wq.resolved_at,
-             CASE WHEN wq.photo_url IS NOT NULL THEN 1 ELSE 0 END AS has_photo, wq.created_at,
+             CAST(1 AS bit) AS has_photo, wq.created_at,
              COALESCE(tp.name, wq.topic) AS topic,
              COALESCE(rb.name, wq.book_name) AS book_name,
              COALESCE(pub.name, wq.publisher_name) AS publisher_name,
@@ -321,7 +321,7 @@ async function listWrongQuestionsHandler(request) {
       LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
       LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
       LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
-      WHERE wq.student_id = @studentId
+      WHERE wq.student_id = @studentId AND wq.test_id IS NOT NULL
       ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''}
       ORDER BY wq.created_at DESC;
     `)
@@ -495,8 +495,22 @@ function topicStatsKey(subject, topic) {
   return `${(subject || '').trim()}::${(topic || '').trim()}`
 }
 
-function sourceStatsKey(subject, topic, bookName) {
-  return `${topicStatsKey(subject, topic)}::${(bookName || '').trim()}`
+function normalizeTopicStatKeys(topicKeys) {
+  const normalized = []
+  const seen = new Set()
+
+  topicKeys.forEach(({ subject, topic }) => {
+    const entry = {
+      subject: (subject || '').trim(),
+      topic: (topic || '').trim() || null,
+    }
+    const key = topicStatsKey(entry.subject, entry.topic)
+    if (seen.has(key)) return
+    seen.add(key)
+    normalized.push(entry)
+  })
+
+  return normalized
 }
 
 // Bir öğrencinin fotoğraflı yanlışlarını içerik (konu) bazında kart olarak göstermek için,
@@ -509,104 +523,125 @@ function sourceStatsKey(subject, topic, bookName) {
 // teacherId verildiğinde (öğretmen panelinden çağrıldığında) testler ayrıca o öğretmene atanmış
 // kaynaklarla sınırlanır (bkz. teacher.js'deki getTeacherStudentProgressOverviewHandler'daki aynı kısıtlama).
 async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId } = {}) {
-  if (!topicKeys.length) return { topicStats: [], sourceTopicStats: [] }
+  const normalizedTopicKeys = normalizeTopicStatKeys(topicKeys)
+  if (!normalizedTopicKeys.length) return { topicStats: [], sourceTopicStats: [] }
 
-  const emptyTopicStats = topicKeys.map(({ subject, topic }) => ({
-    subject,
-    topic,
-    totalAnswered: 0,
-    successRate: null,
-  }))
-
-  const wantedKeys = new Set(topicKeys.map(({ subject, topic }) => topicStatsKey(subject, topic)))
-
-  const testsDb = await withRequest({
+  const statsDb = await withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
+    topicKeysJson: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(normalizedTopicKeys) },
     ...(teacherId ? { teacherId: { type: sql.UniqueIdentifier, value: teacherId } } : {}),
   })
-  const testsResult = await testsDb.query(`
-    SELECT tt.id AS test_id, s.name AS subject_name, COALESCE(tt.topic_name, rbt.name) AS topic_name, rb.name AS book_name
-    FROM dbo.ResourceBookTopicTests tt
-    JOIN dbo.ResourceBookTopics rbt ON rbt.id = tt.topic_id
-    JOIN dbo.ResourceBooks rb ON rb.id = rbt.resource_book_id
-    JOIN dbo.StudentResourceBooks srb ON srb.resource_book_id = rb.id AND srb.student_id = @studentId
-    LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
-    ${teacherId ? 'JOIN dbo.StudentTeacherResourceBooks strb ON strb.teacher_id = @teacherId AND strb.resource_book_id = rb.id' : ''}
-    WHERE rb.is_active = 1;
+  const statsResult = await statsDb.query(`
+    WITH WantedTopics AS (
+      SELECT DISTINCT
+             LTRIM(RTRIM(COALESCE(JSON_VALUE([value], '$.subject'), N''))) AS subject_name,
+             LTRIM(RTRIM(COALESCE(JSON_VALUE([value], '$.topic'), N''))) AS topic_name
+      FROM OPENJSON(@topicKeysJson)
+    ),
+    WantedTests AS (
+      SELECT DISTINCT tt.id AS test_id,
+             LTRIM(RTRIM(COALESCE(s.name, N''))) AS subject_name,
+             LTRIM(RTRIM(COALESCE(tt.topic_name, rbt.name, N''))) AS topic_name,
+             rb.name AS book_name
+      FROM dbo.ResourceBookTopicTests tt
+      INNER JOIN dbo.ResourceBookTopics rbt ON rbt.id = tt.topic_id
+      INNER JOIN dbo.ResourceBooks rb ON rb.id = rbt.resource_book_id
+      INNER JOIN dbo.StudentResourceBooks srb ON srb.resource_book_id = rb.id AND srb.student_id = @studentId
+      LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
+      ${teacherId ? 'INNER JOIN dbo.StudentTeacherResourceBooks strb ON strb.teacher_id = @teacherId AND strb.resource_book_id = rb.id' : ''}
+      INNER JOIN WantedTopics wt
+        ON wt.subject_name = LTRIM(RTRIM(COALESCE(s.name, N'')))
+       AND wt.topic_name = LTRIM(RTRIM(COALESCE(tt.topic_name, rbt.name, N'')))
+      WHERE rb.is_active = 1
+    ),
+    DigitalCandidates AS (
+      SELECT wt.test_id, wt.subject_name, wt.topic_name, wt.book_name,
+             parsed.correct_count, parsed.wrong_count, parsed.blank_count, parsed.graded_at,
+             ROW_NUMBER() OVER (
+               PARTITION BY wt.test_id
+               ORDER BY
+                 CASE WHEN parsed.graded_at IS NULL THEN 1 ELSE 0 END,
+                 parsed.graded_at DESC,
+                 t.updated_at DESC,
+                 t.created_at DESC
+             ) AS result_rank
+      FROM dbo.Tasks t
+      CROSS APPLY OPENJSON(CASE WHEN ISJSON(t.test_results_json) = 1 THEN t.test_results_json ELSE N'{}' END) AS result_json
+      INNER JOIN WantedTests wt ON CONVERT(NVARCHAR(36), wt.test_id) = result_json.[key]
+      CROSS APPLY (
+        SELECT TRY_CONVERT(INT, JSON_VALUE(result_json.[value], '$.correct')) AS correct_count,
+               TRY_CONVERT(INT, JSON_VALUE(result_json.[value], '$.wrong')) AS wrong_count,
+               TRY_CONVERT(INT, JSON_VALUE(result_json.[value], '$.blank')) AS blank_count,
+               JSON_VALUE(result_json.[value], '$.gradedAt') AS graded_at
+      ) parsed
+      WHERE t.student_id = @studentId AND t.test_results_json IS NOT NULL
+    ),
+    DigitalResults AS (
+      SELECT test_id, subject_name, topic_name, book_name, correct_count, wrong_count, blank_count
+      FROM DigitalCandidates
+      WHERE result_rank = 1
+    ),
+    ManualResults AS (
+      SELECT wt.test_id, wt.subject_name, wt.topic_name, wt.book_name,
+             smtc.correct_count, smtc.wrong_count, smtc.blank_count
+      FROM dbo.StudentManualTestCompletions smtc
+      INNER JOIN WantedTests wt ON wt.test_id = smtc.test_id
+      WHERE smtc.student_id = @studentId
+        AND (smtc.correct_count IS NOT NULL OR smtc.wrong_count IS NOT NULL OR smtc.blank_count IS NOT NULL)
+    ),
+    RankedResults AS (
+      SELECT test_id, subject_name, topic_name, book_name, correct_count, wrong_count, blank_count,
+             ROW_NUMBER() OVER (PARTITION BY test_id ORDER BY source_priority DESC) AS source_rank
+      FROM (
+        SELECT test_id, subject_name, topic_name, book_name, correct_count, wrong_count, blank_count, 0 AS source_priority
+        FROM DigitalResults
+        UNION ALL
+        SELECT test_id, subject_name, topic_name, book_name, correct_count, wrong_count, blank_count, 1 AS source_priority
+        FROM ManualResults
+      ) all_results
+    ),
+    ChosenResults AS (
+      SELECT subject_name, topic_name, book_name,
+             COALESCE(correct_count, 0) AS correct_count,
+             COALESCE(wrong_count, 0) AS wrong_count,
+             COALESCE(blank_count, 0) AS blank_count
+      FROM RankedResults
+      WHERE source_rank = 1
+    )
+    SELECT subject_name, topic_name, book_name,
+           SUM(correct_count) AS correct_count,
+           SUM(wrong_count) AS wrong_count,
+           SUM(blank_count) AS blank_count
+    FROM ChosenResults
+    GROUP BY subject_name, topic_name, book_name;
   `)
-
-  const testMeta = new Map()
-  testsResult.recordset.forEach((row) => {
-    const topicKey = topicStatsKey(row.subject_name, row.topic_name)
-    if (!wantedKeys.has(topicKey)) return
-    testMeta.set(row.test_id, {
-      topicKey,
-      sourceKey: sourceStatsKey(row.subject_name, row.topic_name, row.book_name),
-      subject: row.subject_name,
-      topic: row.topic_name,
-      bookName: row.book_name,
-    })
-  })
-  if (!testMeta.size) return { topicStats: emptyTopicStats, sourceTopicStats: [] }
-
-  const testResultCounts = new Map()
-
-  const tasksDb = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
-  const tasksResult = await tasksDb.query(`
-    SELECT test_results_json FROM dbo.Tasks WHERE student_id = @studentId AND test_results_json IS NOT NULL;
-  `)
-  tasksResult.recordset.forEach((row) => {
-    let results
-    try {
-      results = JSON.parse(row.test_results_json)
-    } catch {
-      return
-    }
-    Object.entries(results || {}).forEach(([testId, result]) => {
-      if (!testMeta.has(testId)) return
-      const existing = testResultCounts.get(testId)
-      if (!existing || (result?.gradedAt && (!existing.gradedAt || result.gradedAt > existing.gradedAt))) {
-        testResultCounts.set(testId, result)
-      }
-    })
-  })
-
-  const manualDb = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
-  const manualResult = await manualDb.query(`
-    SELECT test_id, correct_count, wrong_count, blank_count
-    FROM dbo.StudentManualTestCompletions
-    WHERE student_id = @studentId;
-  `)
-  manualResult.recordset.forEach((row) => {
-    if (!testMeta.has(row.test_id)) return
-    if (row.correct_count === null && row.wrong_count === null && row.blank_count === null) return
-    testResultCounts.set(row.test_id, { correct: row.correct_count, wrong: row.wrong_count, blank: row.blank_count })
-  })
 
   const totals = new Map()
-  const sourceTotals = new Map()
-  const sourceMeta = new Map()
-  testMeta.forEach((meta, testId) => {
-    const result = testResultCounts.get(testId)
-    if (!result) return
+  const sourceTopicStats = statsResult.recordset.map((row) => {
+    const correct = Number(row.correct_count) || 0
+    const wrong = Number(row.wrong_count) || 0
+    const blank = Number(row.blank_count) || 0
+    const topicKey = topicStatsKey(row.subject_name, row.topic_name)
 
-    if (!totals.has(meta.topicKey)) totals.set(meta.topicKey, { correct: 0, wrong: 0, blank: 0 })
-    const topicEntry = totals.get(meta.topicKey)
-    topicEntry.correct += Number(result.correct) || 0
-    topicEntry.wrong += Number(result.wrong) || 0
-    topicEntry.blank += Number(result.blank) || 0
-
-    if (!sourceTotals.has(meta.sourceKey)) {
-      sourceTotals.set(meta.sourceKey, { correct: 0, wrong: 0, blank: 0 })
-      sourceMeta.set(meta.sourceKey, { subject: meta.subject, topic: meta.topic, bookName: meta.bookName })
+    if (!totals.has(topicKey)) {
+      totals.set(topicKey, { correct: 0, wrong: 0, blank: 0 })
     }
-    const sourceEntry = sourceTotals.get(meta.sourceKey)
-    sourceEntry.correct += Number(result.correct) || 0
-    sourceEntry.wrong += Number(result.wrong) || 0
-    sourceEntry.blank += Number(result.blank) || 0
+    const topicEntry = totals.get(topicKey)
+    topicEntry.correct += correct
+    topicEntry.wrong += wrong
+    topicEntry.blank += blank
+
+    const totalAnswered = correct + wrong + blank
+    return {
+      subject: row.subject_name,
+      topic: row.topic_name || null,
+      bookName: row.book_name || null,
+      totalAnswered,
+      successRate: totalAnswered > 0 ? correct / totalAnswered : null,
+    }
   })
 
-  const topicStats = topicKeys.map(({ subject, topic }) => {
+  const topicStats = normalizedTopicKeys.map(({ subject, topic }) => {
     const entry = totals.get(topicStatsKey(subject, topic))
     const totalAnswered = entry ? entry.correct + entry.wrong + entry.blank : 0
     return {
@@ -614,18 +649,6 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
       topic,
       totalAnswered,
       successRate: entry && totalAnswered > 0 ? entry.correct / totalAnswered : null,
-    }
-  })
-
-  const sourceTopicStats = Array.from(sourceTotals.entries()).map(([key, entry]) => {
-    const meta = sourceMeta.get(key)
-    const totalAnswered = entry.correct + entry.wrong + entry.blank
-    return {
-      subject: meta.subject,
-      topic: meta.topic,
-      bookName: meta.bookName,
-      totalAnswered,
-      successRate: totalAnswered > 0 ? entry.correct / totalAnswered : null,
     }
   })
 
@@ -649,7 +672,7 @@ async function getWrongQuestionTopicStatsHandler(request) {
       FROM dbo.WrongQuestions wq
       LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
       LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
-      WHERE wq.student_id = @studentId AND wq.photo_url IS NOT NULL;
+      WHERE wq.student_id = @studentId AND wq.test_id IS NOT NULL;
     `)
 
     const { topicStats, sourceTopicStats } = await computeWrongQuestionTopicStats(studentId, result.recordset)

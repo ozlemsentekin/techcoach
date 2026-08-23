@@ -22,7 +22,7 @@ const SHELF_TONES = [
 ]
 
 function topicStatsKey(subject, topic) {
-  return `${subject || ''}::${topic || ''}`
+  return `${(subject || '').trim()}::${(topic || '').trim()}`
 }
 
 function sourceStatsKey(subject, topic, bookName) {
@@ -32,7 +32,6 @@ function sourceStatsKey(subject, topic, bookName) {
 function groupBySubjectAndTopic(wrongQuestions) {
   const bySubject = new Map()
   wrongQuestions.forEach((item) => {
-    if (!item.hasPhoto) return
     if (!bySubject.has(item.subject)) {
       bySubject.set(item.subject, { subject: item.subject, items: [], topicsByKey: new Map() })
     }
@@ -67,7 +66,6 @@ function groupBySubjectAndTopic(wrongQuestions) {
 function groupBySubjectAndSource(wrongQuestions) {
   const bySubject = new Map()
   wrongQuestions.forEach((item) => {
-    if (!item.hasPhoto) return
     if (!bySubject.has(item.subject)) {
       bySubject.set(item.subject, { subject: item.subject, items: [], sourcesByKey: new Map() })
     }
@@ -255,23 +253,53 @@ export default function WrongQuestionsView({
 
   useEffect(() => {
     let ignore = false
-    Promise.all([fetchWrongQuestions(), fetchTopicStats().catch(() => ({ topicStats: [], sourceTopicStats: [] }))])
-      .then(([wrongQuestionsData, statsData]) => {
+
+    fetchWrongQuestions()
+      .then((wrongQuestionsData) => {
         if (ignore) return
+        setError('')
+        setTopicStats([])
+        setSourceTopicStats([])
         setWrongQuestions(wrongQuestionsData)
-        setTopicStats(statsData?.topicStats || [])
-        setSourceTopicStats(statsData?.sourceTopicStats || [])
       })
       .catch((err) => {
         if (!ignore) setError(err.message)
       })
+
     return () => {
       ignore = true
     }
-  }, [fetchWrongQuestions, fetchTopicStats])
+  }, [fetchWrongQuestions])
 
-  const contentGroups = useMemo(() => (wrongQuestions ? groupBySubjectAndTopic(wrongQuestions) : []), [wrongQuestions])
-  const sourceGroups = useMemo(() => (wrongQuestions ? groupBySubjectAndSource(wrongQuestions) : []), [wrongQuestions])
+  const photoQuestions = useMemo(
+    () => (wrongQuestions ? wrongQuestions.filter((item) => item.hasPhoto) : []),
+    [wrongQuestions],
+  )
+  const photoQuestionCount = photoQuestions.length
+
+  useEffect(() => {
+    if (!photoQuestionCount) return undefined
+
+    let ignore = false
+    fetchTopicStats()
+      .then((statsData) => {
+        if (ignore) return
+        setTopicStats(statsData?.topicStats || [])
+        setSourceTopicStats(statsData?.sourceTopicStats || [])
+      })
+      .catch(() => {
+        if (ignore) return
+        setTopicStats([])
+        setSourceTopicStats([])
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [fetchTopicStats, photoQuestionCount])
+
+  const contentGroups = useMemo(() => groupBySubjectAndTopic(photoQuestions), [photoQuestions])
+  const sourceGroups = useMemo(() => groupBySubjectAndSource(photoQuestions), [photoQuestions])
   const hasSingleSubject = contentGroups.length === 1
 
   // Tek ders varsa (ör. öğretmen-öğrenci ilişkisi zaten tek derse özgü), ders seçim
@@ -320,7 +348,7 @@ export default function WrongQuestionsView({
   const handleUpdateMistakeReason = async (wrongQuestionId, mistakeReason) => {
     const updated = await updateMistakeReason(wrongQuestionId, mistakeReason)
     setWrongQuestions((prev) =>
-      prev.map((item) => (item.id === wrongQuestionId ? { ...item, mistakeReason: updated.mistakeReason } : item)),
+      prev ? prev.map((item) => (item.id === wrongQuestionId ? { ...item, mistakeReason: updated.mistakeReason } : item)) : prev,
     )
   }
 
