@@ -6,9 +6,9 @@ const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_UPLOAD_MB = 8
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 const MAX_OUTPUT_DIMENSION = 1400
-const VERIFICATION_OUTPUT_DIMENSION = 900
+const VERIFICATION_OUTPUT_DIMENSION = 1200
 const OUTPUT_QUALITY = 0.82
-const VERIFICATION_OUTPUT_QUALITY = 0.7
+const VERIFICATION_OUTPUT_QUALITY = 0.82
 const EDITOR_QUALITY = 0.92
 const FULL_CROP = { x: 0, y: 0, width: 1, height: 1 }
 const MIN_CROP_SIZE = 0.16
@@ -139,6 +139,10 @@ function createUnknownQuestionNumberVerification(questionLabel) {
     expectedQuestionNumber: Number(questionLabel) || null,
     detectedQuestionNumber: null,
   }
+}
+
+function createUnavailableQuestionNumberVerification() {
+  return null
 }
 
 function waitForVerification(promise, timeoutMs) {
@@ -322,7 +326,7 @@ export default function MistakePhotoCaptureModal({
     })
       .then(({ dataUrl }) => onVerifyQuestionNumber(dataUrl))
       .then((verification) => verification || createUnknownQuestionNumberVerification(questionLabel))
-      .catch(() => createUnknownQuestionNumberVerification(questionLabel))
+      .catch(() => createUnavailableQuestionNumberVerification())
       .then((verification) => {
         if (seq === verificationSeqRef.current) {
           verificationRef.current = { key, status: 'done', promise: null, result: verification }
@@ -339,7 +343,7 @@ export default function MistakePhotoCaptureModal({
     if (!verificationPromise) return null
 
     const verification = await waitForVerification(verificationPromise, SAVE_VERIFICATION_WAIT_MS)
-    return verification || createUnknownQuestionNumberVerification(questionLabel)
+    return verification || createUnavailableQuestionNumberVerification()
   }
 
   const handleFile = async (file) => {

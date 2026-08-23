@@ -161,7 +161,7 @@ async function verifyMistakePhotoQuestionNumberHandler(request) {
       return json(422, { error: result.error })
     }
 
-    const detectedQuestionNumber = result.confidence === 'low' ? null : result.questionNumber
+    const detectedQuestionNumber = result.questionNumber
     const status =
       detectedQuestionNumber === null
         ? 'unknown'
