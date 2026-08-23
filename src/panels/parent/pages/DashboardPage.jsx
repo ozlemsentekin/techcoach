@@ -8,6 +8,7 @@ import { getRequests, updateRequestStatus } from '../../../services/studentReque
 import { evaluateDayBalance } from '../../../utils/planInsights'
 import { getSortedTasks } from '../../../utils/taskSelectors'
 import { formatDateLong, todayISODate } from '../../../utils/time'
+import useVisiblePolling from '../../../hooks/useVisiblePolling'
 import LoadingState from '../../shared/LoadingState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import DailyPlanTable from '../components/DailyPlanTable'
@@ -198,14 +199,11 @@ export default function DashboardPage() {
   // Mola süresi dolduğunda backend'i sistem olarak otomatik tamamlar (bkz. tasks.js
   // autoCompleteExpiredBreaks); burada periyodik yenileme yalnızca gün özeti ve
   // akışın taze kalmasını sağlar.
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      getTasksForDate(date)
-        .then((tasksData) => setTasks(tasksData))
-        .catch(() => {})
-    }, 30000)
-    return () => window.clearInterval(interval)
-  }, [])
+  useVisiblePolling(() => {
+    getTasksForDate(date)
+      .then((tasksData) => setTasks(tasksData))
+      .catch(() => {})
+  }, 30000)
 
   useEffect(() => {
     getSchoolSchedule()

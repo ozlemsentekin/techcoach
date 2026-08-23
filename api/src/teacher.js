@@ -47,7 +47,6 @@ const {
   addLibraryResourceBookTopicsSubmission,
   fetchResourceBookById,
   fetchLibraryResourceBookDetail,
-  fetchResourceBookStatsForStudent,
 } = require('./catalog')
 const {
   sanitizeProgressResourceBook,
@@ -148,16 +147,37 @@ async function fetchNextOneTimeLessonsByStudentTeacherId(teacherUserId, todayISO
   return byStudentTeacherId
 }
 
+function studentBookKey(studentId, resourceBookId) {
+  return `${studentId}:${resourceBookId}`
+}
+
+function teacherTestKey(studentTeacherId, testId) {
+  return `${studentTeacherId}:${testId}`
+}
+
+function shouldReplaceTaskResult(existing, next) {
+  if (!existing) return true
+  if (!next?.gradedAt) return false
+  return !existing.gradedAt || next.gradedAt > existing.gradedAt
+}
+
 // Bir öğretmenin, birlikte çalıştığı her öğrenci ilişkisi (student_teacher_id) için o derse ait
 // kaynak kitaplardaki tüm testlerin doğru/cevaplanan toplamından tek bir başarı oranı hesaplar.
+// Önceki sürüm her öğrenci için fetchResourceBookStatsForStudent çağırıp 3 ayrı SQL sorgusu
+// çalıştırıyordu. Bu toplu sürüm roster boyutu arttıkça sorgu sayısını sabit tutar.
 async function fetchStudentTeacherSuccessRates(rows) {
   const rates = new Map()
   if (!rows.length) return rates
 
+  const normalizedRows = rows.map((row) => ({
+    studentTeacherId: String(row.studentTeacherId),
+    studentId: String(row.studentId),
+  }))
+  const rowByStudentTeacherId = new Map(normalizedRows.map((row) => [row.studentTeacherId, row]))
   const idBindings = Object.fromEntries(
-    rows.map((row, index) => [`stId${index}`, { type: sql.UniqueIdentifier, value: row.studentTeacherId }]),
+    normalizedRows.map((row, index) => [`stId${index}`, { type: sql.UniqueIdentifier, value: row.studentTeacherId }]),
   )
-  const idPlaceholders = rows.map((_, index) => `@stId${index}`).join(', ')
+  const idPlaceholders = normalizedRows.map((_, index) => `@stId${index}`).join(', ')
 
   const booksDb = await withRequest(idBindings)
   const booksResult = await booksDb.query(`
@@ -166,28 +186,136 @@ async function fetchStudentTeacherSuccessRates(rows) {
     WHERE teacher_id IN (${idPlaceholders});
   `)
 
-  const bookIdsByStudentTeacherId = new Map()
+  const teacherIdsByStudentBook = new Map()
+  const resourceBookIds = new Set()
   booksResult.recordset.forEach((record) => {
-    if (!bookIdsByStudentTeacherId.has(record.student_teacher_id)) {
-      bookIdsByStudentTeacherId.set(record.student_teacher_id, [])
+    const studentTeacherId = String(record.student_teacher_id)
+    const row = rowByStudentTeacherId.get(studentTeacherId)
+    const resourceBookId = String(record.resource_book_id)
+    if (!row || !resourceBookId) return
+
+    resourceBookIds.add(resourceBookId)
+    const key = studentBookKey(row.studentId, resourceBookId)
+    if (!teacherIdsByStudentBook.has(key)) {
+      teacherIdsByStudentBook.set(key, [])
     }
-    bookIdsByStudentTeacherId.get(record.student_teacher_id).push(record.resource_book_id)
+    teacherIdsByStudentBook.get(key).push(studentTeacherId)
   })
 
-  const studentIdByStudentTeacherId = new Map(rows.map((row) => [row.studentTeacherId, row.studentId]))
+  if (!resourceBookIds.size) return rates
 
-  await Promise.all(
-    Array.from(bookIdsByStudentTeacherId.entries()).map(async ([studentTeacherId, bookIds]) => {
-      const stats = await fetchResourceBookStatsForStudent(studentIdByStudentTeacherId.get(studentTeacherId), bookIds)
-      let correct = 0
-      let answered = 0
-      stats.forEach((entry) => {
-        correct += entry.correct
-        answered += entry.answered
-      })
-      rates.set(studentTeacherId, answered > 0 ? correct / answered : null)
-    }),
+  const bookIdList = Array.from(resourceBookIds)
+  const bookBindings = Object.fromEntries(
+    bookIdList.map((id, index) => [`resourceBookId${index}`, { type: sql.UniqueIdentifier, value: id }]),
   )
+  const bookPlaceholders = bookIdList.map((_, index) => `@resourceBookId${index}`).join(', ')
+
+  const testsDb = await withRequest(bookBindings)
+  const testsResult = await testsDb.query(`
+    SELECT tt.id AS test_id, t.resource_book_id
+    FROM dbo.ResourceBookTopicTests tt
+    INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
+    WHERE t.resource_book_id IN (${bookPlaceholders});
+  `)
+
+  const resourceBookIdByTestId = new Map(
+    testsResult.recordset.map((record) => [String(record.test_id), String(record.resource_book_id)]),
+  )
+  if (!resourceBookIdByTestId.size) return rates
+
+  const studentIds = Array.from(new Set(normalizedRows.map((row) => row.studentId)))
+  const studentBindings = Object.fromEntries(
+    studentIds.map((id, index) => [`studentId${index}`, { type: sql.UniqueIdentifier, value: id }]),
+  )
+  const studentPlaceholders = studentIds.map((_, index) => `@studentId${index}`).join(', ')
+  const resultsByTeacherTest = new Map()
+
+  const applyResult = (studentId, testId, result, { force = false } = {}) => {
+    const resourceBookId = resourceBookIdByTestId.get(String(testId))
+    if (!resourceBookId) return
+
+    const studentTeacherIds = teacherIdsByStudentBook.get(studentBookKey(String(studentId), resourceBookId))
+    if (!studentTeacherIds?.length) return
+
+    studentTeacherIds.forEach((studentTeacherId) => {
+      const key = teacherTestKey(studentTeacherId, testId)
+      const existing = resultsByTeacherTest.get(key)
+      if (force || shouldReplaceTaskResult(existing?.result, result)) {
+        resultsByTeacherTest.set(key, { studentTeacherId, result })
+      }
+    })
+  }
+
+  const tasksDb = await withRequest({
+    ...studentBindings,
+    ...bookBindings,
+  })
+  const tasksResult = await tasksDb.query(`
+    SELECT student_id, test_results_json
+    FROM dbo.Tasks
+    WHERE student_id IN (${studentPlaceholders})
+      AND resource_book_id IN (${bookPlaceholders})
+      AND test_results_json IS NOT NULL;
+  `)
+
+  tasksResult.recordset.forEach((row) => {
+    let results
+    try {
+      results = JSON.parse(row.test_results_json)
+    } catch {
+      return
+    }
+
+    Object.entries(results || {}).forEach(([testId, result]) => {
+      applyResult(row.student_id, testId, result)
+    })
+  })
+
+  const manualDb = await withRequest({
+    ...studentBindings,
+    ...bookBindings,
+  })
+  const manualResult = await manualDb.query(`
+    SELECT smtc.student_id, smtc.test_id, t.resource_book_id,
+           smtc.correct_count, smtc.wrong_count, smtc.blank_count
+    FROM dbo.StudentManualTestCompletions smtc
+    INNER JOIN dbo.ResourceBookTopicTests tt ON tt.id = smtc.test_id
+    INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
+    WHERE smtc.student_id IN (${studentPlaceholders})
+      AND t.resource_book_id IN (${bookPlaceholders});
+  `)
+
+  manualResult.recordset.forEach((row) => {
+    if (row.correct_count === null && row.wrong_count === null && row.blank_count === null) return
+    applyResult(
+      row.student_id,
+      row.test_id,
+      {
+        correct: row.correct_count,
+        wrong: row.wrong_count,
+        blank: row.blank_count,
+      },
+      { force: true },
+    )
+  })
+
+  const countsByStudentTeacherId = new Map()
+  resultsByTeacherTest.forEach(({ studentTeacherId, result }) => {
+    const correct = Number(result?.correct) || 0
+    const wrong = Number(result?.wrong) || 0
+    const blank = Number(result?.blank) || 0
+    const answered = correct + wrong + blank
+    if (answered <= 0) return
+
+    const counts = countsByStudentTeacherId.get(studentTeacherId) || { correct: 0, answered: 0 }
+    counts.correct += correct
+    counts.answered += answered
+    countsByStudentTeacherId.set(studentTeacherId, counts)
+  })
+
+  countsByStudentTeacherId.forEach((counts, studentTeacherId) => {
+    rates.set(studentTeacherId, counts.answered > 0 ? counts.correct / counts.answered : null)
+  })
 
   return rates
 }

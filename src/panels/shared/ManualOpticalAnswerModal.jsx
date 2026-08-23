@@ -35,6 +35,7 @@ export default function ManualOpticalAnswerModal({
   onSaved,
   submitAnswers,
   submitPhoto,
+  verifyQuestionNumber,
   initialPhotos,
 }) {
   const initialAnswers = test.manualAnswers || {}
@@ -303,6 +304,11 @@ export default function ManualOpticalAnswerModal({
         <MistakePhotoCaptureModal
           questionLabel={capturingOrderNo}
           existingPhotoUrl={photosByQuestion[String(capturingOrderNo)]}
+          onVerifyQuestionNumber={
+            verifyQuestionNumber
+              ? (dataUrl) => verifyQuestionNumber(String(capturingOrderNo), dataUrl)
+              : undefined
+          }
           onClose={() => setCapturingOrderNo(null)}
           onSave={handleSavePhoto}
         />

@@ -139,6 +139,7 @@ const {
   getWeeklyPlanStatusHandler,
   setWeeklyPlanStatusHandler,
 } = require('./tasks')
+const { verifyMistakePhotoQuestionNumberHandler } = require('./mistakePhoto')
 const { listTaskActivityLogsHandler } = require('./taskActivity')
 const {
   listMessagesHandler,
@@ -1170,6 +1171,13 @@ app.http('panel-tasks-mistake-photo-save', {
   methods: ['PUT'],
   route: 'panel/tasks/{taskId}/mistakes/{testId}/{orderNo}',
   handler: saveWrongQuestionPhotoHandler,
+})
+
+app.http('panel-mistake-photo-question-number-check', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel/mistake-photo/question-number-check',
+  handler: verifyMistakePhotoQuestionNumberHandler,
 })
 
 app.http('panel-tasks-test-remove', {

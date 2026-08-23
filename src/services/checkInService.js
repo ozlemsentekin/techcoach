@@ -1,4 +1,4 @@
-import { authRequest } from './authClient'
+import { authRequest, cachedGet, invalidateCache } from './authClient'
 
 /**
  * @typedef {Object} DailyCheckIn
@@ -9,7 +9,7 @@ import { authRequest } from './authClient'
 
 /** @returns {Promise<DailyCheckIn|null>} */
 export async function getCheckIn(date) {
-  const data = await authRequest(`/api/panel/check-in?date=${date}`, { method: 'GET' })
+  const data = await cachedGet(`/api/panel/check-in?date=${date}`)
   return data.checkIn
 }
 
@@ -19,5 +19,6 @@ export async function saveCheckIn(date, { energyLevel, note }) {
     method: 'PUT',
     body: JSON.stringify({ date, energyLevel, note: note || '' }),
   })
+  invalidateCache(`/api/panel/check-in?date=${date}`)
   return data.checkIn
 }

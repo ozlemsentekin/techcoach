@@ -20,7 +20,7 @@ function getActionMenuPosition(buttonRect, menuHeight = ACTION_MENU_ESTIMATED_HE
   return { left, top }
 }
 
-export default function ActionsMenu({ items, isOpen, onToggle, onClose, triggerLabel = 'İşlemler' }) {
+export default function ActionsMenu({ items, isOpen, onToggle, onClose, triggerLabel = 'İşlemler', disabled = false }) {
   const buttonRef = useRef(null)
   const menuRef = useRef(null)
   const [menuPosition, setMenuPosition] = useState(null)
@@ -71,8 +71,10 @@ export default function ActionsMenu({ items, isOpen, onToggle, onClose, triggerL
       <button
         ref={buttonRef}
         type="button"
+        disabled={disabled}
         onClick={(event) => {
           event.stopPropagation()
+          if (disabled) return
           if (isOpen) {
             setMenuPosition(null)
           } else if (buttonRef.current) {
@@ -84,7 +86,7 @@ export default function ActionsMenu({ items, isOpen, onToggle, onClose, triggerL
         aria-haspopup="menu"
         aria-expanded={isOpen}
         title={triggerLabel}
-        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-panel-border bg-panel-surface text-panel-text-muted transition-colors hover:bg-panel-surface-soft hover:text-panel-text"
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-panel-border bg-panel-surface text-panel-text-muted transition-colors hover:bg-panel-surface-soft hover:text-panel-text disabled:pointer-events-none disabled:opacity-50"
       >
         <MoreHorizontal size={18} aria-hidden="true" />
       </button>

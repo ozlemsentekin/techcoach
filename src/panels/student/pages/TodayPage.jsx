@@ -9,6 +9,7 @@ import { todayISODate, getMonthDates } from '../../../utils/time'
 import { getNextTask } from '../../../utils/taskSelectors'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { FOCUS_TASK_TYPES } from '../../../data/taskTypes'
+import useVisiblePolling from '../../../hooks/useVisiblePolling'
 import StudentWelcomeBanner from '../components/StudentWelcomeBanner'
 import StudentStatsCards from '../components/StudentStatsCards'
 import TaskListSection from '../components/TaskListSection'
@@ -94,12 +95,9 @@ export default function TodayPage() {
 
   // Mola süresi dolduğunda backend'i sistem olarak otomatik tamamlar (bkz. autoCompleteExpiredBreaks);
   // burada periyodik yenileme yalnızca bu değişikliğin ekrana yansımasını sağlar.
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      getTasksForDate(date).then(setTasks).catch(() => {})
-    }, 30000)
-    return () => window.clearInterval(interval)
-  }, [])
+  useVisiblePolling(() => {
+    getTasksForDate(date).then(setTasks).catch(() => {})
+  }, 30000)
 
   useEffect(() => {
     if (historyDays.length === 0) return undefined

@@ -6,6 +6,7 @@ import LoadingState from '../../shared/LoadingState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import { ResourceBookAvatar, ResourceBookRates } from '../../shared/ResourceBookCard'
 import { authRequest } from '../../../services/authClient'
+import { verifyMistakePhotoQuestionNumber } from '../../../services/mistakePhotoService'
 import StudentResourceAssignModal from './StudentResourceAssignModal'
 import ManualOpticalAnswerModal from '../../shared/ManualOpticalAnswerModal'
 import { filterTopicsBySearch } from '../../shared/homework/topicSearch'
@@ -365,6 +366,9 @@ function BookTopics({ student, book }) {
               applyWrongQuestionPhoto(data.wrongQuestion)
               return data
             })
+          }
+          verifyQuestionNumber={(orderNo, dataUrl) =>
+            verifyMistakePhotoQuestionNumber(dataUrl, Number(orderNo))
           }
           // Hangi sorulara zaten fotoğraf eklenmiş bilgisi BookTopics'te tek seferde çekilen
           // wrongQuestions listesinden geliyor; modal her açıldığında ayrıca istek atmıyoruz.

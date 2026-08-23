@@ -7,6 +7,7 @@ import {
   removeTaskTest,
   saveWrongQuestionPhoto,
 } from '../../../services/taskService'
+import { verifyMistakePhotoQuestionNumber } from '../../../services/mistakePhotoService'
 import { getWrongQuestionPhoto } from '../../../services/wrongQuestionService'
 import LoadingState from '../../shared/LoadingState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
@@ -434,6 +435,9 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
         <MistakePhotoCaptureModal
           questionLabel={capturingQuestion.orderNo}
           existingPhotoUrl={getPhotoUrl(photosByTest[capturingQuestion.testId]?.[String(capturingQuestion.orderNo)])}
+          onVerifyQuestionNumber={(dataUrl) =>
+            verifyMistakePhotoQuestionNumber(dataUrl, capturingQuestion.orderNo)
+          }
           onClose={() => setCapturingQuestion(null)}
           onSave={handleSavePhoto}
         />

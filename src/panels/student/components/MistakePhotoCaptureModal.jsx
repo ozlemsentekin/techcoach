@@ -1,14 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
 import { Camera, Check, Crop, ImagePlus, RotateCcw, RotateCw, X } from 'lucide-react'
+import ConfirmationDialog from '../../shared/ConfirmationDialog'
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_UPLOAD_MB = 8
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 const MAX_OUTPUT_DIMENSION = 1400
+const VERIFICATION_OUTPUT_DIMENSION = 900
 const OUTPUT_QUALITY = 0.82
+const VERIFICATION_OUTPUT_QUALITY = 0.7
 const EDITOR_QUALITY = 0.92
 const FULL_CROP = { x: 0, y: 0, width: 1, height: 1 }
 const MIN_CROP_SIZE = 0.16
+const SAVE_VERIFICATION_WAIT_MS = 800
+const CROP_HANDLES = [
+  { action: 'nw', className: '-left-2.5 -top-2.5 h-5 w-5 cursor-nwse-resize rounded-full' },
+  { action: 'n', className: 'left-1/2 -top-2.5 h-5 w-12 -translate-x-1/2 cursor-ns-resize rounded-full' },
+  { action: 'ne', className: '-right-2.5 -top-2.5 h-5 w-5 cursor-nesw-resize rounded-full' },
+  { action: 'e', className: '-right-2.5 top-1/2 h-12 w-5 -translate-y-1/2 cursor-ew-resize rounded-full' },
+  { action: 'se', className: '-bottom-2.5 -right-2.5 h-5 w-5 cursor-nwse-resize rounded-full' },
+  { action: 's', className: '-bottom-2.5 left-1/2 h-5 w-12 -translate-x-1/2 cursor-ns-resize rounded-full' },
+  { action: 'sw', className: '-bottom-2.5 -left-2.5 h-5 w-5 cursor-nesw-resize rounded-full' },
+  { action: 'w', className: '-left-2.5 top-1/2 h-12 w-5 -translate-y-1/2 cursor-ew-resize rounded-full' },
+]
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -92,6 +106,48 @@ function validateQuestionPhoto(file) {
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new Error(`Görsel en fazla ${MAX_UPLOAD_MB} MB olabilir.`)
   }
+}
+
+function getQuestionNumberWarningDescription(questionLabel, verification) {
+  const target = questionLabel ? `${questionLabel}. soruya` : 'Bu soruya'
+  if (verification?.status === 'mismatch' && verification.detectedQuestionNumber) {
+    return `${target} görsel yüklüyorsunuz ama gönderdiğiniz fotoğrafta ${verification.detectedQuestionNumber}. soru görünüyor. Yine de devam edilsin mi?`
+  }
+
+  return `${target} görsel yüklüyorsunuz ama gönderdiğiniz fotoğrafta soru numarasını doğrulayamadım. Yine de devam edilsin mi?`
+}
+
+function getDraftVerificationKey(draft) {
+  if (!draft?.sourceUrl) return ''
+  const crop = normalizeCrop(draft.crop || FULL_CROP)
+  return [
+    draft.sourceUrl.length,
+    draft.sourceUrl.slice(0, 48),
+    draft.sourceUrl.slice(-48),
+    draft.width,
+    draft.height,
+    crop.x.toFixed(4),
+    crop.y.toFixed(4),
+    crop.width.toFixed(4),
+    crop.height.toFixed(4),
+  ].join(':')
+}
+
+function createUnknownQuestionNumberVerification(questionLabel) {
+  return {
+    status: 'unknown',
+    expectedQuestionNumber: Number(questionLabel) || null,
+    detectedQuestionNumber: null,
+  }
+}
+
+function waitForVerification(promise, timeoutMs) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => {
+      window.setTimeout(() => resolve(null), timeoutMs)
+    }),
+  ])
 }
 
 async function createEditablePhoto(file) {
@@ -180,14 +236,24 @@ function FilePickerControl({ accept, capture, disabled, onChange, className, chi
   )
 }
 
-export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoUrl, onClose, onSave }) {
+export default function MistakePhotoCaptureModal({
+  questionLabel,
+  existingPhotoUrl,
+  onClose,
+  onSave,
+  onVerifyQuestionNumber,
+}) {
   const cropFrameRef = useRef(null)
+  const verificationSeqRef = useRef(0)
+  const verificationRef = useRef({ key: '', status: 'idle', promise: null, result: null })
   const [preview, setPreview] = useState(existingPhotoUrl || '')
   const [draft, setDraft] = useState(null)
   const [cropMode, setCropMode] = useState(false)
   const [cropDrag, setCropDrag] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [pendingSaveDataUrl, setPendingSaveDataUrl] = useState('')
+  const [questionNumberWarning, setQuestionNumberWarning] = useState(null)
 
   useEffect(() => {
     if (!cropDrag) return undefined
@@ -236,14 +302,58 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
     })
   }
 
+  const resetQuestionNumberVerification = () => {
+    verificationSeqRef.current += 1
+    verificationRef.current = { key: '', status: 'idle', promise: null, result: null }
+  }
+
+  const startQuestionNumberVerification = (photoDraft) => {
+    if (!photoDraft || !questionLabel || !onVerifyQuestionNumber) return null
+
+    const key = getDraftVerificationKey(photoDraft)
+    const cached = verificationRef.current
+    if (cached.key === key && cached.status === 'done') return Promise.resolve(cached.result)
+    if (cached.key === key && cached.promise) return cached.promise
+
+    const seq = ++verificationSeqRef.current
+    const promise = renderEditedQuestionPhoto(photoDraft, {
+      maxDimension: VERIFICATION_OUTPUT_DIMENSION,
+      quality: VERIFICATION_OUTPUT_QUALITY,
+    })
+      .then(({ dataUrl }) => onVerifyQuestionNumber(dataUrl))
+      .then((verification) => verification || createUnknownQuestionNumberVerification(questionLabel))
+      .catch(() => createUnknownQuestionNumberVerification(questionLabel))
+      .then((verification) => {
+        if (seq === verificationSeqRef.current) {
+          verificationRef.current = { key, status: 'done', promise: null, result: verification }
+        }
+        return verification
+      })
+
+    verificationRef.current = { key, status: 'pending', promise, result: null }
+    return promise
+  }
+
+  const getQuestionNumberVerificationForSave = async (photoDraft) => {
+    const verificationPromise = startQuestionNumberVerification(photoDraft)
+    if (!verificationPromise) return null
+
+    const verification = await waitForVerification(verificationPromise, SAVE_VERIFICATION_WAIT_MS)
+    return verification || createUnknownQuestionNumberVerification(questionLabel)
+  }
+
   const handleFile = async (file) => {
     if (!file) return
     setBusy(true)
     setError('')
+    setPendingSaveDataUrl('')
+    setQuestionNumberWarning(null)
+    resetQuestionNumberVerification()
     try {
       const editablePhoto = await createEditablePhoto(file)
       setDraft(editablePhoto)
       setCropMode(false)
+      startQuestionNumberVerification(editablePhoto)
     } catch (err) {
       setError(err.message || 'Fotoğraf yüklenemedi.')
     } finally {
@@ -260,10 +370,14 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
     if (!draft) return
     setBusy(true)
     setError('')
+    setPendingSaveDataUrl('')
+    setQuestionNumberWarning(null)
+    resetQuestionNumberVerification()
     try {
       const rotatedPhoto = await rotateEditablePhoto(draft, direction)
       setDraft(rotatedPhoto)
       setCropMode(false)
+      startQuestionNumberVerification(rotatedPhoto)
     } catch (err) {
       setError(err.message || 'Fotoğraf döndürülemedi.')
     } finally {
@@ -291,19 +405,24 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
 
     setBusy(true)
     setError('')
+    setPendingSaveDataUrl('')
+    setQuestionNumberWarning(null)
+    resetQuestionNumberVerification()
     try {
       const croppedPhoto = await renderEditedQuestionPhoto(draft, {
         maxDimension: MAX_OUTPUT_DIMENSION,
         quality: EDITOR_QUALITY,
       })
-      setDraft({
+      const nextDraft = {
         sourceUrl: croppedPhoto.dataUrl,
         width: croppedPhoto.width,
         height: croppedPhoto.height,
         crop: { ...FULL_CROP },
-      })
+      }
+      setDraft(nextDraft)
       setCropMode(false)
       setCropDrag(null)
+      startQuestionNumberVerification(nextDraft)
     } catch (err) {
       setError(err.message || 'Fotoğraf kırpılamadı.')
     } finally {
@@ -312,19 +431,39 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
   }
 
   const handleResetCrop = () => {
-    setDraft((current) => (current ? { ...current, crop: { ...FULL_CROP } } : current))
+    const nextDraft = draft ? { ...draft, crop: { ...FULL_CROP } } : null
+    setDraft(nextDraft)
     setCropMode(false)
+    setPendingSaveDataUrl('')
+    setQuestionNumberWarning(null)
+    resetQuestionNumberVerification()
+    startQuestionNumberVerification(nextDraft)
+  }
+
+  const saveRenderedPhoto = async (dataUrl) => {
+    setPreview(dataUrl)
+    await onSave(dataUrl)
+    onClose()
   }
 
   const handleSaveEditedPhoto = async () => {
     if (!draft) return
     setBusy(true)
     setError('')
+    setPendingSaveDataUrl('')
+    setQuestionNumberWarning(null)
     try {
-      const { dataUrl } = await renderEditedQuestionPhoto(draft)
-      setPreview(dataUrl)
-      await onSave(dataUrl)
-      onClose()
+      const [renderedPhoto, verification] = await Promise.all([
+        renderEditedQuestionPhoto(draft),
+        getQuestionNumberVerificationForSave(draft),
+      ])
+      if (verification && verification.status !== 'matched') {
+        setPendingSaveDataUrl(renderedPhoto.dataUrl)
+        setQuestionNumberWarning(verification)
+        return
+      }
+
+      await saveRenderedPhoto(renderedPhoto.dataUrl)
     } catch (err) {
       setError(err.message || 'Fotoğraf kaydedilemedi.')
     } finally {
@@ -337,6 +476,30 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
     setCropMode(false)
     setCropDrag(null)
     setError('')
+    setPendingSaveDataUrl('')
+    setQuestionNumberWarning(null)
+    resetQuestionNumberVerification()
+  }
+
+  const handleContinueAfterQuestionWarning = async () => {
+    if (!pendingSaveDataUrl || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      await saveRenderedPhoto(pendingSaveDataUrl)
+    } catch (err) {
+      setError(err.message || 'Fotoğraf kaydedilemedi.')
+      setQuestionNumberWarning(null)
+      setPendingSaveDataUrl('')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleCancelQuestionWarning = () => {
+    if (busy) return
+    setQuestionNumberWarning(null)
+    setPendingSaveDataUrl('')
   }
 
   const crop = normalizeCrop(draft?.crop || FULL_CROP)
@@ -400,14 +563,12 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
                           }}
                           onPointerDown={(event) => startCropInteraction(event, 'move')}
                         >
-                          {['nw', 'ne', 'sw', 'se'].map((handle) => (
+                          {CROP_HANDLES.map((handle) => (
                             <span
-                              key={handle}
+                              key={handle.action}
                               aria-hidden="true"
-                              onPointerDown={(event) => startCropInteraction(event, handle)}
-                              className={`absolute h-5 w-5 rounded-full border-2 border-white bg-panel-blue shadow ${
-                                handle.includes('n') ? '-top-2.5' : '-bottom-2.5'
-                              } ${handle.includes('w') ? '-left-2.5' : '-right-2.5'}`}
+                              onPointerDown={(event) => startCropInteraction(event, handle.action)}
+                              className={`absolute border-2 border-white bg-panel-blue shadow ${handle.className}`}
                             />
                           ))}
                         </div>
@@ -453,7 +614,7 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
 
               {cropMode ? (
                 <p className="mt-2 text-xs text-panel-text-muted">
-                  Kırpma alanını sürükleyebilir, köşelerden boyutlandırabilirsin.
+                  Kırpma alanını sürükleyebilir, kenar veya köşelerden boyutlandırabilirsin.
                 </p>
               ) : null}
 
@@ -553,6 +714,17 @@ export default function MistakePhotoCaptureModal({ questionLabel, existingPhotoU
           </div>
         ) : null}
       </div>
+
+      {questionNumberWarning ? (
+        <ConfirmationDialog
+          title="Soru numarası kontrolü"
+          description={getQuestionNumberWarningDescription(questionLabel, questionNumberWarning)}
+          confirmLabel={busy ? 'Kaydediliyor...' : 'Devam et'}
+          cancelLabel="Vazgeç"
+          onConfirm={handleContinueAfterQuestionWarning}
+          onCancel={handleCancelQuestionWarning}
+        />
+      ) : null}
     </div>
   )
 }

@@ -19,6 +19,7 @@ import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import EmptyState from '../../shared/EmptyState'
 import LoadingState from '../../shared/LoadingState'
 import { SuccessRateBadge } from '../../shared/ResourceBookCard'
+import ActionsMenu from '../../ui/ActionsMenu'
 import Button from '../../ui/Button'
 import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
 import AddTeacherStudentModal from '../components/AddTeacherStudentModal'
@@ -69,6 +70,7 @@ export default function StudentsPage() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [deleteStudent, setDeleteStudent] = useState(null)
   const [actionStudentId, setActionStudentId] = useState(null)
+  const [openActionsStudentId, setOpenActionsStudentId] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -184,6 +186,19 @@ export default function StudentsPage() {
             const lesson = nextLessonText(student)
             const school = schoolText(student)
             const isBusy = actionStudentId === student.studentTeacherId
+            const actionItems = [
+              {
+                label: student.isActive ? 'Pasifle' : 'Aktifle',
+                icon: Power,
+                onClick: () => handleStatusChange(student, !student.isActive),
+              },
+              {
+                label: 'Sil',
+                icon: Trash2,
+                danger: true,
+                onClick: () => setDeleteStudent(student),
+              },
+            ]
             return (
               <div
                 key={student.studentTeacherId}
@@ -191,22 +206,37 @@ export default function StudentsPage() {
                   student.isActive ? 'bg-panel-surface' : 'bg-panel-surface-soft'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <StudentAvatar student={student} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <p className="truncate text-base font-bold text-panel-text">{student.studentFullName}</p>
-                      {student.isActive ? null : (
-                        <span className="shrink-0 rounded-full bg-panel-border px-2 py-0.5 text-xs font-semibold text-panel-text-muted">
-                          Pasif
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-0.5 flex items-center gap-1.5">
-                      <p className="truncate text-sm text-panel-text-muted">{student.subjectName || 'Ders seçilmedi'}</p>
-                      {student.subjectName ? <SuccessRateBadge value={student.successRate} /> : null}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <StudentAvatar student={student} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <p className="truncate text-base font-bold text-panel-text">{student.studentFullName}</p>
+                        {student.isActive ? null : (
+                          <span className="shrink-0 rounded-full bg-panel-border px-2 py-0.5 text-xs font-semibold text-panel-text-muted">
+                            Pasif
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-1.5">
+                        <p className="truncate text-sm text-panel-text-muted">{student.subjectName || 'Ders seçilmedi'}</p>
+                        {student.subjectName ? <SuccessRateBadge value={student.successRate} /> : null}
+                      </div>
                     </div>
                   </div>
+
+                  <ActionsMenu
+                    isOpen={openActionsStudentId === student.studentTeacherId}
+                    onToggle={() =>
+                      setOpenActionsStudentId((current) =>
+                        current === student.studentTeacherId ? null : student.studentTeacherId,
+                      )
+                    }
+                    onClose={() => setOpenActionsStudentId(null)}
+                    triggerLabel={`${student.studentFullName} işlemleri`}
+                    disabled={isBusy}
+                    items={actionItems}
+                  />
                 </div>
 
                 <div className="flex flex-col gap-1.5 text-sm text-panel-text-muted">
@@ -279,30 +309,6 @@ export default function StudentsPage() {
                     <TrendingUp size={16} className="shrink-0" aria-hidden="true" />
                     Gelişim Analizi
                   </Button>
-                  <div className="grid grid-cols-2 gap-1.5 pt-1">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled={isBusy}
-                      onClick={() => handleStatusChange(student, !student.isActive)}
-                      className="h-auto justify-start gap-2 px-3 py-2"
-                    >
-                      <Power size={15} className="shrink-0" aria-hidden="true" />
-                      {student.isActive ? 'Pasifle' : 'Aktifle'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled={isBusy}
-                      onClick={() => setDeleteStudent(student)}
-                      className="h-auto justify-start gap-2 border-red-200 px-3 py-2 text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 size={15} className="shrink-0" aria-hidden="true" />
-                      Sil
-                    </Button>
-                  </div>
                 </div>
               </div>
             )

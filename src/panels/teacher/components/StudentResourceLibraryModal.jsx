@@ -15,6 +15,7 @@ import {
   saveTeacherManualWrongQuestionPhoto,
   getTeacherStudentWrongQuestions,
 } from '../../../services/teacherService'
+import { verifyMistakePhotoQuestionNumber } from '../../../services/mistakePhotoService'
 
 function ManualResultForm({ test, onCancel, onSave, onSaveWithoutResults, saving, error }) {
   const [correctCount, setCorrectCount] = useState(test.correctCount ?? '')
@@ -278,6 +279,9 @@ function BookTopics({ studentTeacherId, book }) {
               return data
             })
           }
+          verifyQuestionNumber={(orderNo, dataUrl) =>
+            verifyMistakePhotoQuestionNumber(dataUrl, Number(orderNo))
+          }
           // Hangi sorulara zaten fotoğraf eklenmiş bilgisi BookTopics'te tek seferde çekilen
           // wrongQuestions listesinden geliyor; modal her açıldığında ayrıca istek atmıyoruz.
           initialPhotos={wrongQuestions
@@ -461,6 +465,37 @@ function BookTopics({ studentTeacherId, book }) {
   )
 }
 
+const NO_PUBLISHER_GROUP_NAME = 'Yayın evi belirtilmemiş'
+
+function groupResourceBooksByPublisher(resourceBooks) {
+  const groups = new Map()
+
+  resourceBooks.forEach((book) => {
+    const publisherName = book.publisherName?.trim() || NO_PUBLISHER_GROUP_NAME
+    const key = book.publisherId || publisherName.toLocaleLowerCase('tr')
+    if (!groups.has(key)) {
+      groups.set(key, {
+        id: key,
+        name: publisherName,
+        books: [],
+      })
+    }
+    groups.get(key).books.push(book)
+  })
+
+  return Array.from(groups.values())
+    .sort((a, b) => {
+      const aHasNoPublisher = a.name === NO_PUBLISHER_GROUP_NAME
+      const bHasNoPublisher = b.name === NO_PUBLISHER_GROUP_NAME
+      if (aHasNoPublisher !== bHasNoPublisher) return aHasNoPublisher ? 1 : -1
+      return a.name.localeCompare(b.name, 'tr')
+    })
+    .map((group) => ({
+      ...group,
+      books: [...group.books].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'tr')),
+    }))
+}
+
 export default function StudentResourceLibraryModal({ student, onClose }) {
   const [resourceBooks, setResourceBooks] = useState(null)
   const [error, setError] = useState('')
@@ -481,6 +516,8 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
       ignore = true
     }
   }, [student.studentTeacherId])
+
+  const publisherGroups = useMemo(() => (resourceBooks ? groupResourceBooksByPublisher(resourceBooks) : []), [resourceBooks])
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center overflow-hidden bg-black/40 sm:items-center sm:p-4">
@@ -526,33 +563,42 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
           ) : resourceBooks.length === 0 ? (
             <p className="p-2 text-sm text-panel-text-muted">Bu öğrenci için takip edilen kaynak yok.</p>
           ) : (
-            <div className="grid grid-cols-1 gap-2.5 min-[520px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {resourceBooks.map((book) => (
-                <button
-                  key={book.id}
-                  type="button"
-                  onClick={() => setSelectedBook(book)}
-                  className="grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-3 rounded-xl border border-panel-border p-2 text-left transition-colors hover:border-panel-blue hover:bg-panel-blue-soft/40 sm:flex sm:flex-col sm:items-stretch sm:gap-1.5"
-                >
-                  <ResourceBookCover book={book} />
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <div className="flex flex-wrap items-center gap-1">
-                      {book.publisherName ? (
-                        <Badge tone="lilac" className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
-                          {book.publisherName}
-                        </Badge>
-                      ) : null}
-                      <ResourceSourceBadge source={book.resourceSource} />
-                    </div>
-                    <p className="line-clamp-2 text-sm font-semibold leading-snug text-panel-text">{book.name}</p>
-                    {book.subjectName ? <p className="truncate text-xs text-panel-text-muted">{book.subjectName}</p> : null}
+            <div className="flex min-w-0 flex-col gap-5">
+              {publisherGroups.map((publisherGroup) => (
+                <section key={publisherGroup.id} className="min-w-0">
+                  <div className="mb-2 flex min-w-0 items-center gap-2">
+                    <h3 className="truncate text-sm font-bold text-panel-text">{publisherGroup.name}</h3>
+                    <span className="shrink-0 rounded-full bg-panel-surface-soft px-2 py-0.5 text-[11px] font-semibold text-panel-text-muted">
+                      {publisherGroup.books.length} kaynak
+                    </span>
                   </div>
-                  <ResourceBookRates
-                    completionRate={book.completionRate}
-                    successRate={book.successRate}
-                    className="col-start-2 mt-0 grid-cols-2 sm:col-start-auto sm:grid-cols-1"
-                  />
-                </button>
+                  <div className="grid grid-cols-1 gap-2 min-[520px]:grid-cols-2 sm:grid-cols-[repeat(auto-fill,9.25rem)] sm:gap-2.5">
+                    {publisherGroup.books.map((book) => (
+                      <button
+                        key={book.id}
+                        type="button"
+                        onClick={() => setSelectedBook(book)}
+                        className="grid min-w-0 grid-cols-[4.05rem_minmax(0,1fr)] items-start gap-2.5 rounded-xl border border-panel-border p-1.5 text-left transition-colors hover:border-panel-blue hover:bg-panel-blue-soft/40 sm:flex sm:w-[9.25rem] sm:flex-col sm:items-stretch sm:gap-1.5"
+                      >
+                        <ResourceBookCover book={book} />
+                        <div className="flex min-w-0 flex-col gap-0.5">
+                          <div className="flex flex-wrap items-center gap-1">
+                            <ResourceSourceBadge source={book.resourceSource} />
+                          </div>
+                          <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-panel-text">{book.name}</p>
+                          {book.subjectName ? (
+                            <p className="truncate text-[11px] text-panel-text-muted">{book.subjectName}</p>
+                          ) : null}
+                        </div>
+                        <ResourceBookRates
+                          completionRate={book.completionRate}
+                          successRate={book.successRate}
+                          className="col-start-2 mt-0 grid-cols-2 sm:col-start-auto sm:grid-cols-1"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           )}

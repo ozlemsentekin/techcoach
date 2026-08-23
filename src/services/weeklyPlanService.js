@@ -1,6 +1,6 @@
 import { getTasksForDate, getTasksForDateRange, postTask, patchTask, removeTask } from './taskService'
 import { getHomeworks } from './homeworkService'
-import { authRequest } from './authClient'
+import { authRequest, cachedGet } from './authClient'
 import { HOMEWORK_TASK_TYPES } from '../data/taskTypes'
 import { addDaysISO, getMondayOfWeek, getWeekdayKey, parseTimeToMinutes } from '../utils/time'
 
@@ -306,7 +306,7 @@ export function hasOverlap(tasks, startTime, endTime, excludeTaskId) {
 
 /** Öğrencinin okul ders programını döner (bkz. StudentProfiles.school_schedule_json). */
 export async function getSchoolSchedule() {
-  const data = await authRequest('/api/panel/school-schedule', { method: 'GET' })
+  const data = await cachedGet('/api/panel/school-schedule')
   return data.entries
 }
 
