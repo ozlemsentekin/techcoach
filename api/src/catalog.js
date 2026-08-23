@@ -84,6 +84,10 @@ function sanitizeResourceBook(record) {
   }
 }
 
+function isDisabledQueryParam(value) {
+  return value === '0' || value?.toLowerCase() === 'false'
+}
+
 function sanitizeResourceBookPublishMonthYear(value) {
   const publishMonthYear = value?.trim() || null
   if (!publishMonthYear) return { value: null }
@@ -445,6 +449,9 @@ async function listResourceBooksForPanelHandler(request) {
     }
 
     const subjectId = request.query.get('subjectId')
+    const includeStats = !isDisabledQueryParam(request.query.get('includeStats'))
+    const includeImages = !isDisabledQueryParam(request.query.get('includeImages'))
+    const imageColumn = includeImages ? 'rb.image_url' : 'CAST(NULL AS NVARCHAR(MAX)) AS image_url'
 
     const requestDb = await withRequest(
       {
@@ -454,7 +461,7 @@ async function listResourceBooksForPanelHandler(request) {
     )
     const result = await requestDb.query(`
       SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url,
+             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, ${imageColumn},
              rb.publish_month_year, rb.grade, rb.resource_source, rb.created_at
       FROM dbo.StudentResourceBooks srb
       INNER JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id
@@ -465,6 +472,10 @@ async function listResourceBooksForPanelHandler(request) {
     `)
 
     const resourceBooks = result.recordset.map(sanitizeResourceBook)
+    if (!includeStats) {
+      return json(200, { resourceBooks })
+    }
+
     const stats = await fetchResourceBookStatsForStudent(
       studentId,
       resourceBooks.map((book) => book.id),

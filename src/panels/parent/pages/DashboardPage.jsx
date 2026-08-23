@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../../context/useAuth'
 import { AlertTriangle, CalendarDays, Plus, Sparkles } from 'lucide-react'
 import { getTasksForDate, patchTask, createTask, removeTask } from '../../../services/taskService'
-import { getSchoolSchedule } from '../../../services/weeklyPlanService'
+import { getSchoolSchedule, getBacklogTasks } from '../../../services/weeklyPlanService'
 import { sendMessage } from '../../../services/messageService'
 import { getRequests, updateRequestStatus } from '../../../services/studentRequestService'
 import { evaluateDayBalance } from '../../../utils/planInsights'
@@ -162,6 +162,7 @@ export default function DashboardPage() {
   const { authUser } = useAuth()
   const restricted = Boolean(authUser?.restricted)
   const [tasks, setTasks] = useState([])
+  const [backlogTasks, setBacklogTasks] = useState([])
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -177,11 +178,13 @@ export default function DashboardPage() {
 
     Promise.all([
       getTasksForDate(date),
+      getBacklogTasks(date),
       getRequests(),
     ])
-      .then(([tasksData, requestsData]) => {
+      .then(([tasksData, backlogTasksData, requestsData]) => {
         if (ignore) return
         setTasks(tasksData)
+        setBacklogTasks(backlogTasksData)
         setRequests(requestsData)
       })
       .catch((err) => {
@@ -202,6 +205,9 @@ export default function DashboardPage() {
   useVisiblePolling(() => {
     getTasksForDate(date)
       .then((tasksData) => setTasks(tasksData))
+      .catch(() => {})
+    getBacklogTasks(date)
+      .then((backlogTasksData) => setBacklogTasks(backlogTasksData))
       .catch(() => {})
   }, 30000)
 
@@ -315,6 +321,7 @@ export default function DashboardPage() {
       >
         <DailyPlanTable
           tasks={tasks}
+          backlogTasks={backlogTasks}
           onAddTask={restricted ? null : () => setDrawerState({ defaultDate: date })}
           onEdit={(task) => setDrawerState({ initialTask: task })}
           onDelete={(task) => setDeletingTask(task)}

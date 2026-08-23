@@ -7,12 +7,14 @@ import {
   getDraftTasksForDate,
   getWeekPlans,
   getSchoolSchedule,
+  getTeacherLessonSchedule,
   cleanupUnlinkedHomeworkTasksForWeek,
   saveTaskForDay,
   publishDay,
   totalAcademicMinutes,
 } from '../../../services/weeklyPlanService'
 import { addHomework } from '../../../services/homeworkService'
+import { preloadPanelHomeworkResourceBooks } from '../../../services/resourceBookService'
 import { patchTask, removeTask } from '../../../services/taskService'
 import { addDaysISO, addMinutesToTime, getMondayOfWeek, todayISODate } from '../../../utils/time'
 import Button from '../../ui/Button'
@@ -90,6 +92,7 @@ export default function WeeklyPlanPage() {
 
   const [tasksByDate, setTasksByDate] = useState({})
   const [dayStatusByDate, setDayStatusByDate] = useState({})
+  const [lessonSchedule, setLessonSchedule] = useState([])
   const [schoolSchedule, setSchoolSchedule] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -130,10 +133,18 @@ export default function WeeklyPlanPage() {
   }, [applyWeekPlans, loadWeekPlans, weekStart])
 
   useEffect(() => {
-    getSchoolSchedule()
-      .then(setSchoolSchedule)
-      .catch(() => setSchoolSchedule([]))
+    Promise.all([
+      getTeacherLessonSchedule().catch(() => []),
+      getSchoolSchedule().catch(() => []),
+    ]).then(([teacherLessons, schoolLessons]) => {
+      setLessonSchedule(teacherLessons)
+      setSchoolSchedule(schoolLessons)
+    })
   }, [])
+
+  useEffect(() => {
+    if (!restricted) preloadPanelHomeworkResourceBooks()
+  }, [restricted])
 
   useEffect(() => {
     if (searchParams.get('openDrawer') === '1') {
@@ -290,6 +301,7 @@ export default function WeeklyPlanPage() {
             weekDates={weekDates}
             tasksByDate={tasksByDate}
             dayStatusByDate={dayStatusByDate}
+            lessonSchedule={lessonSchedule}
             schoolSchedule={schoolSchedule}
             onAddHomework={restricted ? undefined : (date) => setHomeworkModalDate(date)}
             onAddTask={restricted ? undefined : (date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}

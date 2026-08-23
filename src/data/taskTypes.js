@@ -10,6 +10,7 @@ export const TASK_TYPES = {
   odev: { label: 'Ödev', icon: 'NotebookPen', color: 'blue' },
   'soru-bankasi-odevi': { label: 'Soru Bankası Ödevi', icon: 'NotebookPen', color: 'blue' },
   'okul-odevi': { label: 'Okul Ödevi', icon: 'School', color: 'blue' },
+  'etkinlik-odevi': { label: 'Etkinlik Ödevi', icon: 'Sparkles', color: 'lilac' },
   'odev-kontrolu': { label: 'Ödev Kontrolü', icon: 'CheckSquare', color: 'blue' },
   'kisa-akademik': { label: 'Kısa Akademik Çalışma', icon: 'PenLine', color: 'blue' },
   'deneme-sinavi': { label: 'Deneme Sınavı', icon: 'FileCheck2', color: 'blue' },
@@ -31,7 +32,7 @@ export const TASK_TYPES = {
 export const BREAK_TASK_TYPES = new Set(['mola', 'dinlenme', 'yemek', 'yemek-dinlenme'])
 
 /** Ödev davranışı gösteren görev türleri; `odev` Homeworks bağlantılı eski/genel türdür. */
-export const HOMEWORK_TASK_TYPES = new Set(['odev', 'soru-bankasi-odevi', 'okul-odevi'])
+export const HOMEWORK_TASK_TYPES = new Set(['odev', 'soru-bankasi-odevi', 'okul-odevi', 'etkinlik-odevi'])
 
 /** Bu türlerde "Başlat" odak ekranını (zamanlayıcı + soru sayacı / alt hedefler) açar. */
 export const FOCUS_TASK_TYPES = new Set([
@@ -41,6 +42,7 @@ export const FOCUS_TASK_TYPES = new Set([
   'odev',
   'soru-bankasi-odevi',
   'okul-odevi',
+  'etkinlik-odevi',
   'odev-kontrolu',
   'kisa-akademik',
   'deneme-sinavi',

@@ -1,5 +1,6 @@
 export const STUDENT_PRIMARY_NAV = [
   { to: '/student/today', label: 'Bugün', icon: 'Home' },
+  { to: '/student/weekly-plan', label: 'Haftalık Planım', icon: 'CalendarRange' },
   { to: '/student/progress', label: 'Gelişimim', icon: 'TrendingUp' },
   { to: '/student/courses', label: 'Derslerim', icon: 'BookOpen' },
 ]

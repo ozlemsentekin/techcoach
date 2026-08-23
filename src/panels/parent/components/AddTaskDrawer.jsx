@@ -11,7 +11,9 @@ import { filterTopicsBySearch } from '../../shared/homework/topicSearch'
 
 const QUESTION_BANK_HOMEWORK_TASK_TYPE = 'soru-bankasi-odevi'
 const SCHOOL_HOMEWORK_TASK_TYPE = 'okul-odevi'
-const RESOURCE_TASK_TYPES = new Set([QUESTION_BANK_HOMEWORK_TASK_TYPE, SCHOOL_HOMEWORK_TASK_TYPE])
+const ACTIVITY_HOMEWORK_TASK_TYPE = 'etkinlik-odevi'
+const RESOURCE_TASK_TYPES = new Set([QUESTION_BANK_HOMEWORK_TASK_TYPE, SCHOOL_HOMEWORK_TASK_TYPE, ACTIVITY_HOMEWORK_TASK_TYPE])
+const REQUIRED_RESOURCE_TASK_TYPES = new Set([QUESTION_BANK_HOMEWORK_TASK_TYPE, SCHOOL_HOMEWORK_TASK_TYPE])
 const TASK_TYPE_OPTIONS = [
   { id: 'mola', label: TASK_TYPES.mola.label },
   { id: 'serbest-zaman', label: TASK_TYPES['serbest-zaman'].label },
@@ -19,6 +21,7 @@ const TASK_TYPE_OPTIONS = [
   { id: 'yemek', label: TASK_TYPES.yemek.label },
   { id: QUESTION_BANK_HOMEWORK_TASK_TYPE, label: TASK_TYPES[QUESTION_BANK_HOMEWORK_TASK_TYPE].label },
   { id: SCHOOL_HOMEWORK_TASK_TYPE, label: TASK_TYPES[SCHOOL_HOMEWORK_TASK_TYPE].label },
+  { id: ACTIVITY_HOMEWORK_TASK_TYPE, label: TASK_TYPES[ACTIVITY_HOMEWORK_TASK_TYPE].label },
 ]
 const TASK_TYPE_OPTION_IDS = new Set(TASK_TYPE_OPTIONS.map((option) => option.id))
 const DURATION_OPTIONS = [10, 20, 30, 45, 60, 90]
@@ -176,6 +179,7 @@ export default function AddTaskDrawer({
     description: seed.description || '',
   }))
   const [resourceBookId, setResourceBookId] = useState(seed.resourceBookId || '')
+  const [subjectId, setSubjectId] = useState('')
   const [resourceBooks, setResourceBooks] = useState(null)
   const [resourceBooksError, setResourceBooksError] = useState('')
   const [topics, setTopics] = useState(null)
@@ -195,7 +199,9 @@ export default function AddTaskDrawer({
   const schoolConflict = endTime ? getSchoolScheduleConflict(schoolSchedule, form.date, form.startTime, endTime) : null
   const isQuestionBankHomework = form.taskType === QUESTION_BANK_HOMEWORK_TASK_TYPE
   const isSchoolHomework = form.taskType === SCHOOL_HOMEWORK_TASK_TYPE
+  const isActivityHomework = form.taskType === ACTIVITY_HOMEWORK_TASK_TYPE
   const needsResource = RESOURCE_TASK_TYPES.has(form.taskType)
+  const resourceRequired = REQUIRED_RESOURCE_TASK_TYPES.has(form.taskType)
   const modalMaxWidth = needsResource ? '48rem' : '38rem'
 
   const [conflict, setConflict] = useState(false)
@@ -273,14 +279,26 @@ export default function AddTaskDrawer({
     }
   }, [isQuestionBankHomework, resourceBookId])
 
+  // Etkinlik ödevi düzenlenirken kaydedilmiş kaynaktan dersi geri türet (ayrıca saklanmıyor).
+  const effectiveSubjectId = useMemo(() => {
+    if (subjectId || !isActivityHomework || !resourceBookId || !resourceBooks) return subjectId
+    const book = resourceBooks.find((candidate) => candidate.id === resourceBookId)
+    return book ? book.subjectId || 'no-subject' : subjectId
+  }, [subjectId, isActivityHomework, resourceBookId, resourceBooks])
+
   const filteredResourceBooks = useMemo(() => {
     if (!resourceBooks) return []
     if (isQuestionBankHomework) return resourceBooks.filter((book) => book.type === 'soru_bankasi')
     if (isSchoolHomework) return resourceBooks.filter((book) => book.resourceSource === 'okul')
+    if (isActivityHomework) {
+      if (!effectiveSubjectId) return []
+      return resourceBooks.filter((book) => (book.subjectId || 'no-subject') === effectiveSubjectId)
+    }
     return []
-  }, [isQuestionBankHomework, isSchoolHomework, resourceBooks])
+  }, [isQuestionBankHomework, isSchoolHomework, isActivityHomework, resourceBooks, effectiveSubjectId])
 
   const resourceGroups = useMemo(() => groupBooksBySubject(filteredResourceBooks), [filteredResourceBooks])
+  const subjectGroups = useMemo(() => groupBooksBySubject(resourceBooks || []), [resourceBooks])
   const isOriginalResourceSelection = Boolean(
     initialTask && needsResource && form.taskType === seedTaskType && resourceBookId && resourceBookId === seed.resourceBookId,
   )
@@ -332,6 +350,12 @@ export default function AddTaskDrawer({
         description: nextTaskType === QUESTION_BANK_HOMEWORK_TASK_TYPE ? '' : current.description,
       }
     })
+    setSubjectId('')
+    resetResourceSelection()
+  }
+
+  const handleSubjectChange = (event) => {
+    setSubjectId(event.target.value)
     resetResourceSelection()
   }
 
@@ -387,6 +411,8 @@ export default function AddTaskDrawer({
     }
   }
 
+  const selectedSubjectName = selectedBook?.subjectName || subjectGroups.find((group) => group.id === effectiveSubjectId)?.name || null
+
   const buildPayload = () => {
     const title =
       form.title.trim() ||
@@ -394,7 +420,9 @@ export default function AddTaskDrawer({
         ? `${selectedBook.subjectName} Soru Bankası Ödevi`
         : selectedBook?.subjectName && isSchoolHomework
           ? `${selectedBook.subjectName} Okul Ödevi`
-          : getDefaultTitle(form.taskType))
+          : selectedSubjectName && isActivityHomework
+            ? `${selectedSubjectName} Etkinlik Ödevi`
+            : getDefaultTitle(form.taskType))
     const payload = {
       title,
       taskType: form.taskType,
@@ -425,6 +453,20 @@ export default function AddTaskDrawer({
         title,
         subject: selectedBook?.subjectName || null,
         resourceBookId,
+        selectedTestIds: [],
+        targetQuestionCount: null,
+        completedQuestionCount: null,
+        targetPageCount: null,
+        completedPageCount: null,
+      }
+    }
+
+    if (isActivityHomework) {
+      return {
+        ...payload,
+        title,
+        subject: selectedSubjectName,
+        resourceBookId: resourceBookId || null,
         selectedTestIds: [],
         targetQuestionCount: null,
         completedQuestionCount: null,
@@ -483,7 +525,11 @@ export default function AddTaskDrawer({
       setError('Görev konusu boş bırakılamaz.')
       return
     }
-    if (needsResource && (!selectedBook || !hasValidResourceSelection)) {
+    if (isActivityHomework && !effectiveSubjectId) {
+      setError('Etkinlik ödevi için ders seçin.')
+      return
+    }
+    if (resourceRequired && (!selectedBook || !hasValidResourceSelection)) {
       setError(isQuestionBankHomework ? 'Soru bankası ödevi için kaynak seçin.' : 'Okul ödevi için okul kaynağı seçin.')
       return
     }
@@ -660,22 +706,61 @@ export default function AddTaskDrawer({
               <div className="flex flex-col gap-2 rounded-2xl border border-panel-border bg-panel-surface-soft/60 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-panel-text">
-                    {isQuestionBankHomework ? 'Soru bankası kaynağı' : 'Okul dersleri kaynakları'}
+                    {isQuestionBankHomework
+                      ? 'Soru bankası kaynağı'
+                      : isSchoolHomework
+                        ? 'Okul dersleri kaynakları'
+                        : 'Etkinlik kaynağı (isteğe bağlı)'}
                   </span>
                   {selectedBook ? (
-                    <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-panel-text-muted">
-                      {selectedBook.subjectName || 'Kaynak seçildi'}
+                    <span className="flex items-center gap-1.5">
+                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-panel-text-muted">
+                        {selectedBook.subjectName || 'Kaynak seçildi'}
+                      </span>
+                      {isActivityHomework ? (
+                        <button
+                          type="button"
+                          onClick={resetResourceSelection}
+                          className="text-xs font-semibold text-panel-blue hover:underline"
+                        >
+                          Seçimi kaldır
+                        </button>
+                      ) : null}
                     </span>
                   ) : null}
                 </div>
+
+                {isActivityHomework ? (
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-xs font-medium text-panel-text-muted">Ders</span>
+                    <select
+                      value={effectiveSubjectId}
+                      onChange={handleSubjectChange}
+                      className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                    >
+                      <option value="">Ders seçin</option>
+                      {subjectGroups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
 
                 {resourceBooksError ? (
                   <p className="rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{resourceBooksError}</p>
                 ) : resourceBooks === null ? (
                   <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">Kaynaklar yükleniyor...</p>
+                ) : isActivityHomework && !effectiveSubjectId ? (
+                  <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">Kaynakları görmek için ders seçin.</p>
                 ) : filteredResourceBooks.length === 0 ? (
                   <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">
-                    {isQuestionBankHomework ? 'Öğrenciye atanmış soru bankası kaynağı yok.' : 'Öğrenciye atanmış okul kaynağı yok.'}
+                    {isQuestionBankHomework
+                      ? 'Öğrenciye atanmış soru bankası kaynağı yok.'
+                      : isSchoolHomework
+                        ? 'Öğrenciye atanmış okul kaynağı yok.'
+                        : 'Bu derse ait kaynak yok.'}
                   </p>
                 ) : isSchoolHomework ? (
                   <div className="max-h-80 overflow-y-auto pr-1">

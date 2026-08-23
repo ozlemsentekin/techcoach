@@ -22,7 +22,7 @@ import { daysLate, formatDateShort, formatSecondsAsTimer, taskTimeState, todayIS
 import { BREAK_TASK_TYPES, HOMEWORK_TASK_TYPES } from '../../../data/taskTypes'
 import { SUBJECT_STYLES, DEFAULT_SUBJECT_STYLE } from './subjectStyles'
 
-const STATUS_ICONS = { Circle, Timer, CheckCircle2, Eye, HelpCircle, RotateCcw, AlertTriangle }
+const STATUS_ICONS = { Circle, Timer, CheckCircle2, Eye, HelpCircle, RotateCcw, AlertTriangle, BookOpen }
 
 const STATUS_TONE_CLASSES = {
   theme: 'bg-student-theme-soft text-student-theme-text',
@@ -38,6 +38,7 @@ const STATUS_TONE_CLASSES = {
 const ACTIVITY_TASK_TYPES = new Set(['serbest-zaman', 'sosyal-aktivite', 'spor'])
 const BREAK_STYLE = { text: 'text-panel-warm', soft: 'bg-panel-accent-soft', border: 'border-l-panel-sage', dot: 'bg-panel-sage' }
 const FREE_TIME_STYLE = { text: 'text-panel-warm', soft: 'bg-panel-accent-soft', border: 'border-l-panel-sage', dot: 'bg-panel-sage' }
+const TEACHER_LESSON_STYLE = { text: 'text-panel-warm', soft: 'bg-panel-accent-soft', border: 'border-l-panel-warm', dot: 'bg-panel-warm' }
 const SOFT_TIME_BADGE_CLASS = 'border border-panel-border bg-panel-surface text-panel-text-muted'
 
 function BreakTypeIcon({ taskType, size = 16 }) {
@@ -181,19 +182,22 @@ export default function TaskListCard({
   highlight = false,
   showDateBadge = false,
 }) {
+  const isTeacherLessonSlot = Boolean(task.isTeacherLessonSlot)
   const isBreakTask = BREAK_TASK_TYPES.has(task.taskType)
   const isFreeTimeTask = task.taskType === 'serbest-zaman'
   const isActivityTask = ACTIVITY_TASK_TYPES.has(task.taskType)
-  const isOpenableRow = isFreeTimeTask || shouldOpenCompletionFlow(task)
+  const isOpenableRow = !isTeacherLessonSlot && (isFreeTimeTask || shouldOpenCompletionFlow(task))
   const subjectStyle = isBreakTask
     ? BREAK_STYLE
+    : isTeacherLessonSlot
+      ? TEACHER_LESSON_STYLE
     : isActivityTask
       ? FREE_TIME_STYLE
       : SUBJECT_STYLES[task.subject] || DEFAULT_SUBJECT_STYLE
   const details = parseAssignmentDetails(task)
   const overdueDays = daysLate(task.date)
   const isActive = task.status === 'bekliyor' || task.status === 'devam-ediyor' || task.status === 'yardim-bekliyor'
-  const isOverdueIncomplete = overdueDays > 0 && !['tamamlandi', 'yeniden-planlandi'].includes(task.status)
+  const isOverdueIncomplete = !isTeacherLessonSlot && overdueDays > 0 && !['tamamlandi', 'yeniden-planlandi'].includes(task.status)
 
   // Bugüne ait, henüz başlanmamış ve saat aralığı olan görevlerde anlık saatle görevin
   // start-end aralığı karşılaştırılır: aralık şu anı kapsıyorsa "Şimdi", aralık geçtiyse
@@ -204,12 +208,14 @@ export default function TaskListCard({
   const isNowTask = timeState?.phase === 'active'
   const isBehindToday = timeState?.phase === 'past'
 
-  let status = getAssignmentStatus(task)
+  let status = isTeacherLessonSlot
+    ? { filterKey: 'pending', label: 'Planlı Ders', tone: 'accent', icon: 'BookOpen' }
+    : getAssignmentStatus(task)
   if (isOverdueIncomplete) {
     status = { ...status, label: 'Gecikti', tone: 'red', icon: 'AlertTriangle' }
   } else if (isNowTask) {
     status = { ...status, label: `Şimdi · ${timeState.minutesUntilEnd} dk kaldı`, tone: 'now', icon: 'Timer' }
-  } else if (isBehindToday) {
+  } else if (!isTeacherLessonSlot && isBehindToday) {
     status = { ...status, label: `Saati geçti · ${timeState.minutesPast} dk`, tone: 'late', icon: 'AlertTriangle' }
   }
   const StatusIcon = STATUS_ICONS[status.icon]
@@ -226,7 +232,7 @@ export default function TaskListCard({
   const showStatusBadge = !isBreakTask && !isActivityTask
   const showUndoButton = isCompletedStatus && Boolean(onUndoComplete)
   const showQuickFinishButton = (isBreakTask || isActivityTask) && isActive && !isCompletedStatus && Boolean(onCompleteTask)
-  const showActionButton = !isActivityTask && !isBreakTask
+  const showActionButton = !isTeacherLessonSlot && !isActivityTask && !isBreakTask
   const showActionColumn = showActionButton || showUndoButton
   const showTimerControl =
     showActionButton &&
@@ -289,6 +295,8 @@ export default function TaskListCard({
 
   const cardSurfaceClass = isActivityTask
     ? 'bg-panel-sage-soft/15 hover:bg-panel-sage-soft/25'
+    : isTeacherLessonSlot
+      ? 'bg-panel-accent-soft/25 hover:bg-panel-accent-soft/35'
     : isBreakTask
       ? 'bg-panel-accent-soft/45 hover:bg-panel-accent-soft/60'
       : 'bg-panel-surface hover:bg-panel-surface-soft/55'

@@ -1,6 +1,7 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  AlertTriangle,
   ArrowRightLeft,
   BookOpen,
   Calculator,
@@ -25,8 +26,9 @@ import {
 } from 'lucide-react'
 import { calculateNet } from '../../../utils/netCalculator'
 import { getSortedTasks } from '../../../utils/taskSelectors'
-import { parseTimeToMinutes } from '../../../utils/time'
+import { formatDateShort, parseTimeToMinutes } from '../../../utils/time'
 import { HOMEWORK_TASK_TYPES, STATUS_LABELS, TASK_TYPES } from '../../../data/taskTypes'
+import Badge from '../../ui/Badge'
 
 const SUBJECT_BADGES = {
   Türkçe: { icon: BookOpen, text: 'text-panel-slate', soft: 'bg-panel-slate-soft', border: 'border-panel-slate/25' },
@@ -637,7 +639,35 @@ function TaskAgendaItem({
   )
 }
 
-export default function DailyPlanTable({ tasks, onEdit, onDelete, onAddTask, onOpenAnswerSheet }) {
+function BacklogTaskRow({ task }) {
+  const visual = getTaskKindStyle(task)
+  const subjectLabel = getSubjectLabel(task)
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-5">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-panel-red">
+        <AlertTriangle size={16} aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone="red" className="text-[10px] font-extrabold">
+            Biriken Görev
+          </Badge>
+          <span className="text-xs font-semibold text-panel-text-muted">
+            {formatDateShort(task.date)} tarihinde zamanında yapılmadı
+          </span>
+        </div>
+        <p className="mt-1 truncate text-sm font-bold text-panel-text">{task.title}</p>
+        {subjectLabel ? <p className="mt-0.5 text-xs font-medium text-panel-text-muted">{subjectLabel}</p> : null}
+      </div>
+      <span className={`inline-flex h-7 shrink-0 items-center rounded-lg border px-2.5 text-xs font-bold ${visual.typeBadge}`}>
+        {TASK_TYPES[task.taskType]?.label || visual.label}
+      </span>
+    </div>
+  )
+}
+
+export default function DailyPlanTable({ tasks, backlogTasks = [], onEdit, onDelete, onAddTask, onOpenAnswerSheet }) {
   const [openMenuId, setOpenMenuId] = useState(null)
   const [agendaFilter, setAgendaFilter] = useState('all')
 
@@ -671,7 +701,29 @@ export default function DailyPlanTable({ tasks, onEdit, onDelete, onAddTask, onO
   }
 
   return (
-    <section className="panel-card overflow-hidden">
+    <Fragment>
+      {backlogTasks.length > 0 ? (
+        <section className="panel-card mb-4 overflow-hidden border-panel-red/30">
+          <div className="flex items-center gap-3 border-b border-panel-red/20 bg-panel-red-soft/40 p-4 sm:p-5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-panel-red">
+              <AlertTriangle size={17} aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-lg font-bold text-panel-text sm:text-xl">Biriken Görevler</h2>
+              <p className="mt-0.5 text-sm text-panel-text-muted">
+                {backlogTasks.length} görev zamanında yapılmadı
+              </p>
+            </div>
+          </div>
+          <div className="divide-y divide-panel-border">
+            {backlogTasks.map((task) => (
+              <BacklogTaskRow key={task.id} task={task} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="panel-card overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-panel-border bg-panel-surface-soft/35 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-panel-accent-soft text-panel-blue">
@@ -736,6 +788,7 @@ export default function DailyPlanTable({ tasks, onEdit, onDelete, onAddTask, onO
           ))}
         </div>
       )}
-    </section>
+      </section>
+    </Fragment>
   )
 }

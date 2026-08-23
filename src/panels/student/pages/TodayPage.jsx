@@ -4,6 +4,7 @@ import { getTasksForDate, getTasksForDateRange, updateTask, patchTask, toggleSub
 import { getCheckIn } from '../../../services/checkInService'
 import { addSession } from '../../../services/studySessionService'
 import { addHomework } from '../../../services/homeworkService'
+import { buildTeacherLessonTasksForDate, getTeacherLessonSchedule } from '../../../services/weeklyPlanService'
 import { sendMessage, addCoachNote } from '../../../services/messageService'
 import { todayISODate, getMonthDates } from '../../../utils/time'
 import { getNextTask } from '../../../utils/taskSelectors'
@@ -71,16 +72,22 @@ export default function TodayPage() {
   const [showBreathing, setShowBreathing] = useState(false)
   const [banner, setBanner] = useState('')
   const [historyTasks, setHistoryTasks] = useState({})
+  const [teacherLessonSchedule, setTeacherLessonSchedule] = useState([])
 
   const historyDays = useMemo(() => getMonthDates(date).filter((day) => day < date), [])
 
   useEffect(() => {
     let ignore = false
-    Promise.all([getTasksForDate(date), getCheckIn(date)])
-      .then(([tasksData, checkInData]) => {
+    Promise.all([
+      getTasksForDate(date),
+      getCheckIn(date),
+      getTeacherLessonSchedule().catch(() => []),
+    ])
+      .then(([tasksData, checkInData, teacherLessons]) => {
         if (ignore) return
         setTasks(tasksData)
         setCheckIn(checkInData)
+        setTeacherLessonSchedule(teacherLessons)
       })
       .catch((err) => {
         if (!ignore) setLoadError(err.message)
@@ -161,9 +168,10 @@ export default function TodayPage() {
   const listTasks = useMemo(
     () => [
       ...historyDays.flatMap((day) => (historyTasks[day] || []).filter(isUnfinishedFlowTask)),
+      ...buildTeacherLessonTasksForDate(teacherLessonSchedule, date),
       ...tasks,
     ],
-    [historyDays, historyTasks, tasks],
+    [historyDays, historyTasks, teacherLessonSchedule, tasks],
   )
 
   useEffect(() => {

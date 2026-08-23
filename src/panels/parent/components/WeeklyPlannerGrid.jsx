@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  AlertTriangle,
   BookOpen,
   Calculator,
   CalendarDays,
@@ -22,6 +23,8 @@ import {
 } from 'lucide-react'
 import { HOMEWORK_TASK_TYPES } from '../../../data/taskTypes'
 import { todayISODate, WEEKDAY_KEYS as DAY_KEYS } from '../../../utils/time'
+import { isBacklogTask } from '../../../utils/backlogTasks'
+import Badge from '../../ui/Badge'
 
 const BREAK_DURATION_OPTIONS = [15, 30, 45, 60]
 
@@ -353,6 +356,8 @@ function QuickBreakMenu({ task, onPick, onClose }) {
 // zaman dilimini temsil eden salt okunur, sahte "görev" kartı. Gerçek bir Tasks satırı değildir;
 // sadece o saatin dolu olduğunu haftalık takvimde ayrı bir renkle göstermek için render edilir.
 function ScheduleSlotCard({ task, muted = false }) {
+  const title = task.subjectName ? `${task.subjectName} Dersi` : 'Planlı Ders'
+
   return (
     <div
       className={`flex flex-col gap-1 rounded-xl border px-3 py-2.5 ${
@@ -365,7 +370,10 @@ function ScheduleSlotCard({ task, muted = false }) {
         <CalendarDays size={12} aria-hidden="true" />
         {task.startTime}-{task.endTime}
       </span>
-      <span className="truncate text-sm font-bold">Planlı Ders</span>
+      <span className="truncate text-sm font-bold">{title}</span>
+      {task.teacherFullName ? (
+        <span className="truncate text-xs font-semibold text-panel-text-muted">{task.teacherFullName}</span>
+      ) : null}
     </div>
   )
 }
@@ -398,9 +406,10 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, muted 
 
   const style = getTaskStyle(task)
   const isHomework = HOMEWORK_TASK_TYPES.has(task.taskType)
+  const backlog = isBacklogTask(task)
   const homeworkStatus = getHomeworkStatusIcon(task)
-  const Icon = homeworkStatus?.Icon || style.icon
-  const iconClassName = homeworkStatus?.iconClassName || style.iconClassName
+  const Icon = backlog ? AlertTriangle : homeworkStatus?.Icon || style.icon
+  const iconClassName = backlog ? 'bg-panel-red-soft text-panel-red' : homeworkStatus?.iconClassName || style.iconClassName
   const canAddBreak = typeof onQuickAddBreak === 'function' && !['mola', 'dinlenme'].includes(task.taskType) && Boolean(task.endTime)
   const tag = isHomework ? getTaskTag(task) : null
   const testRows = isHomework ? getTaskTestRows(task) : []
@@ -410,57 +419,81 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, muted 
   const pageProgress = getPageProgress(task)
   const graded = isTaskGraded(task)
   const completionTimerInfo = isHomework ? getCompletionTimerInfo(task) : null
+  const canOpenTask = typeof onEditTask === 'function'
 
   const handlePick = (minutes) => {
     setShowBreakMenu(false)
     onQuickAddBreak(task, minutes)
   }
 
+  const cardToneClassName = backlog
+    ? 'border-panel-red/50 bg-panel-red-soft/30 text-panel-text shadow-[0_1px_4px_rgba(220,38,38,0.15)]'
+    : muted
+      ? 'border-slate-200 bg-white/80 text-slate-500 opacity-80 grayscale'
+      : `shadow-[0_1px_4px_rgba(49,42,92,0.06)] hover:-translate-y-0.5 hover:shadow-sm ${style.card}`
+  const summaryContent = (
+    <>
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}>
+        <Icon size={21} strokeWidth={2.2} aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-nowrap items-center justify-between gap-1">
+          <span className={`block whitespace-nowrap text-[11px] font-bold leading-tight ${style.timeClassName}`}>
+            {formatTaskTime(task)}
+          </span>
+          {task.durationMinutes ? (
+            <span className="shrink-0 whitespace-nowrap text-[10px] font-semibold text-panel-text-muted">
+              {task.durationMinutes} dk
+            </span>
+          ) : null}
+        </span>
+        {tag ? (
+          <span
+            title={tag}
+            className={`mt-1 inline-flex max-w-full items-center truncate rounded-full px-2 py-0.5 text-[10px] font-extrabold ${style.tagClassName}`}
+          >
+            {tag}
+          </span>
+        ) : (
+          <span
+            title={task.title}
+            className={`mt-1 block truncate text-xs font-bold leading-snug ${style.titleClassName}`}
+          >
+            {task.title}
+          </span>
+        )}
+      </span>
+    </>
+  )
+
   return (
     <div
-      className={`group relative flex min-h-[68px] w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 transition duration-150 ${
-        muted
-          ? 'border-slate-200 bg-white/80 text-slate-500 opacity-80 grayscale'
-          : `shadow-[0_1px_4px_rgba(49,42,92,0.06)] hover:-translate-y-0.5 hover:shadow-sm ${style.card}`
-      } ${showBreakMenu ? 'z-30' : ''}`}
+      className={`group relative flex min-h-[68px] w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 transition duration-150 ${cardToneClassName} ${showBreakMenu ? 'z-30' : ''}`}
     >
+      {backlog ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center gap-1 rounded-full border border-panel-red/30 bg-panel-red-soft px-2 py-0.5 text-[10px] font-extrabold text-panel-red">
+            <AlertTriangle size={11} aria-hidden="true" />
+            Zamanında yapılmadı
+          </span>
+          <Badge tone="red" className="px-2 py-0.5 text-[10px] font-extrabold">
+            Biriken Görev
+          </Badge>
+        </div>
+      ) : null}
+
       <div className="flex items-stretch gap-1">
-        <button
-          type="button"
-          onClick={() => onEditTask(task)}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
-        >
-          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}>
-            <Icon size={21} strokeWidth={2.2} aria-hidden="true" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="flex flex-nowrap items-center justify-between gap-1">
-              <span className={`block whitespace-nowrap text-[11px] font-bold leading-tight ${style.timeClassName}`}>
-                {formatTaskTime(task)}
-              </span>
-              {task.durationMinutes ? (
-                <span className="shrink-0 whitespace-nowrap text-[10px] font-semibold text-panel-text-muted">
-                  {task.durationMinutes} dk
-                </span>
-              ) : null}
-            </span>
-            {tag ? (
-              <span
-                title={tag}
-                className={`mt-1 inline-flex max-w-full items-center truncate rounded-full px-2 py-0.5 text-[10px] font-extrabold ${style.tagClassName}`}
-              >
-                {tag}
-              </span>
-            ) : (
-              <span
-                title={task.title}
-                className={`mt-1 block truncate text-xs font-bold leading-snug ${style.titleClassName}`}
-              >
-                {task.title}
-              </span>
-            )}
-          </span>
-        </button>
+        {canOpenTask ? (
+          <button
+            type="button"
+            onClick={() => onEditTask(task)}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          >
+            {summaryContent}
+          </button>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-2 text-left">{summaryContent}</div>
+        )}
 
         {canAddBreak ? (
           <button
@@ -639,6 +672,7 @@ export default function WeeklyPlannerGrid({
     const scheduleSlots = (lessonSchedule || [])
       .filter((slot) => slot.dayOfWeek === DAY_KEYS[index] && slot.startTime)
       .map((slot, slotIndex) => ({
+        ...slot,
         id: `schedule-${date}-${slotIndex}`,
         isScheduleSlot: true,
         startTime: slot.startTime,

@@ -14,6 +14,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
+import { getPanelHomeworkResourceBooks } from '../../../services/resourceBookService'
 import { getSchoolScheduleConflict } from '../../../services/weeklyPlanService'
 import { addMinutesToTime, todayISODate } from '../../../utils/time'
 import Badge from '../../ui/Badge'
@@ -73,6 +74,28 @@ function ResourceBookCover({ book }) {
   )
 }
 
+function groupResourceBooksBySubject(resourceBooks) {
+  const groups = new Map()
+
+  resourceBooks.forEach((book) => {
+    const key = book.subjectId || 'no-subject'
+    if (!groups.has(key)) {
+      groups.set(key, {
+        id: key,
+        name: book.subjectName || 'Derssiz Kaynaklar',
+        books: [],
+      })
+    }
+    groups.get(key).books.push(book)
+  })
+
+  return Array.from(groups.values())
+}
+
+function hasResourceBookRates(book) {
+  return book.completionRate !== undefined || book.successRate !== undefined
+}
+
 export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, onSave, onClose }) {
   const [step, setStep] = useState('source')
   const [resourceBookId, setResourceBookId] = useState('')
@@ -84,6 +107,7 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
   const [customDuration, setCustomDuration] = useState(30)
   const [resourceBooks, setResourceBooks] = useState(null)
   const [resourceBooksError, setResourceBooksError] = useState('')
+  const [activeSubjectId, setActiveSubjectId] = useState(null)
   const [topics, setTopics] = useState(null)
   const [topicsError, setTopicsError] = useState('')
   const [selectedTestIds, setSelectedTestIds] = useState(new Set())
@@ -95,9 +119,9 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
   useEffect(() => {
     let ignore = false
 
-    authRequest('/api/panel/resource-books', { method: 'GET' })
-      .then((data) => {
-        if (!ignore) setResourceBooks(data.resourceBooks)
+    getPanelHomeworkResourceBooks()
+      .then((books) => {
+        if (!ignore) setResourceBooks(books)
       })
       .catch((err) => {
         if (!ignore) setResourceBooksError(err.message)
@@ -107,6 +131,14 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
       ignore = true
     }
   }, [])
+
+  const subjectGroups = useMemo(() => (resourceBooks ? groupResourceBooksBySubject(resourceBooks) : []), [resourceBooks])
+
+  useEffect(() => {
+    if (!resourceBooks) return
+    if (activeSubjectId && subjectGroups.some((group) => group.id === activeSubjectId)) return
+    setActiveSubjectId(subjectGroups[0]?.id || null)
+  }, [activeSubjectId, resourceBooks, subjectGroups])
 
   useEffect(() => {
     if (!resourceBookId) return undefined
@@ -130,6 +162,7 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
   }, [resourceBookId])
 
   const selectedBook = resourceBooks?.find((book) => book.id === resourceBookId) || null
+  const activeSubject = subjectGroups.find((group) => group.id === activeSubjectId) || subjectGroups[0] || null
   const isReadingBook = selectedBook?.type === 'okuma_kitabi'
 
   useEffect(() => {
@@ -299,31 +332,56 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
               ) : resourceBooks.length === 0 ? (
                 <p className="p-2 text-sm text-panel-text-muted">Takip edilen kaynak yok.</p>
               ) : (
-                <div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-                  {resourceBooks.map((book) => (
-                    <button
-                      key={book.id}
-                      type="button"
-                      onClick={() => handleSelectResourceBook(book)}
-                      className="grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-3 rounded-xl border border-panel-border p-2.5 text-left transition-colors hover:border-panel-warm hover:bg-panel-warm-soft/50 sm:flex sm:flex-col sm:items-stretch sm:gap-2"
-                    >
-                      <ResourceBookCover book={book} />
-                      <div className="flex min-w-0 flex-col gap-1">
-                        {book.publisherName ? (
-                          <Badge tone="lilac" className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
-                            {book.publisherName}
-                          </Badge>
+                <div className="flex min-w-0 flex-col gap-3">
+                  {subjectGroups.length > 1 ? (
+                    <div className="flex gap-1 overflow-x-auto border-b border-panel-border">
+                      {subjectGroups.map((subject) => (
+                        <button
+                          key={subject.id}
+                          type="button"
+                          onClick={() => setActiveSubjectId(subject.id)}
+                          className={cn(
+                            'shrink-0 whitespace-nowrap border-b-2 px-3 pb-2.5 text-sm font-semibold transition-colors',
+                            activeSubject?.id === subject.id
+                              ? 'border-panel-blue text-panel-blue'
+                              : 'border-transparent text-panel-text-muted hover:text-panel-text',
+                          )}
+                        >
+                          {subject.name}
+                          <span className="ml-1.5 text-xs font-medium text-panel-text-muted">({subject.books.length})</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+                    {(activeSubject?.books || []).map((book) => (
+                      <button
+                        key={book.id}
+                        type="button"
+                        onClick={() => handleSelectResourceBook(book)}
+                        className="grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-3 rounded-xl border border-panel-border p-2.5 text-left transition-colors hover:border-panel-warm hover:bg-panel-warm-soft/50 sm:flex sm:flex-col sm:items-stretch sm:gap-2"
+                      >
+                        <ResourceBookCover book={book} />
+                        <div className="flex min-w-0 flex-col gap-1">
+                          {book.publisherName ? (
+                            <Badge tone="lilac" className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                              {book.publisherName}
+                            </Badge>
+                          ) : null}
+                          <p className="line-clamp-2 text-sm font-semibold leading-snug text-panel-text">{book.name}</p>
+                          {book.subjectName ? <p className="text-xs text-panel-text-muted">{book.subjectName}</p> : null}
+                        </div>
+                        {hasResourceBookRates(book) ? (
+                          <ResourceBookRates
+                            completionRate={book.completionRate}
+                            successRate={book.successRate}
+                            className="col-start-2 mt-0 grid-cols-2 sm:col-start-auto sm:grid-cols-1"
+                          />
                         ) : null}
-                        <p className="line-clamp-2 text-sm font-semibold leading-snug text-panel-text">{book.name}</p>
-                        {book.subjectName ? <p className="text-xs text-panel-text-muted">{book.subjectName}</p> : null}
-                      </div>
-                      <ResourceBookRates
-                        completionRate={book.completionRate}
-                        successRate={book.successRate}
-                        className="col-start-2 mt-0 grid-cols-2 sm:col-start-auto sm:grid-cols-1"
-                      />
-                    </button>
-                  ))}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

@@ -3,6 +3,7 @@ import { getHomeworks } from './homeworkService'
 import { authRequest, cachedGet } from './authClient'
 import { HOMEWORK_TASK_TYPES } from '../data/taskTypes'
 import { addDaysISO, getMondayOfWeek, getWeekdayKey, parseTimeToMinutes } from '../utils/time'
+import { isBacklogTask } from '../utils/backlogTasks'
 
 /**
  * @typedef {'taslak'|'yayinlandi'|'guncellendi'|'arsivlendi'} PlanStatus
@@ -18,6 +19,31 @@ const STUDY_TASK_TYPES = new Set([
   'deneme-sinavi',
   'yanlis-tekrari',
 ])
+
+function durationBetween(startTime, endTime) {
+  if (!startTime || !endTime) return 0
+  const start = parseTimeToMinutes(startTime)
+  const end = parseTimeToMinutes(endTime)
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0
+  return Math.max(0, end - start)
+}
+
+function normalizeTeacherLessonSchedule(teachers = []) {
+  return teachers
+    .filter((teacher) => teacher.type === 'ozel_ogretmen' && teacher.isActive !== false)
+    .flatMap((teacher) =>
+      (teacher.schedule || []).map((slot, index) => ({
+        id: `teacher-lesson-${teacher.id}-${index}`,
+        studentTeacherId: teacher.id,
+        teacherFullName: teacher.fullName,
+        subjectName: teacher.subjectName || null,
+        dayOfWeek: slot.dayOfWeek,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        durationMinutes: durationBetween(slot.startTime, slot.endTime),
+      })),
+    )
+}
 
 /** Pazartesi başlangıçlı 7 günlük tarih dizisi döner. */
 export function getWeekDates(weekStartDateISO) {
@@ -83,6 +109,17 @@ export async function getWeekPlans(weekStartDateISO) {
   })
 
   return { tasksByDate, dayStatusByDate }
+}
+
+/**
+ * Bugünden önceki (son `lookbackDays` gün içindeki) atandığı tarihte tamamlanmamış görevleri
+ * döner — veli panelinin "Günün Akışı"nda "Biriken Görev" etiketiyle gösterilir.
+ */
+export async function getBacklogTasks(beforeDateISO, lookbackDays = 30) {
+  const fromDate = addDaysISO(beforeDateISO, -lookbackDays)
+  const toDate = addDaysISO(beforeDateISO, -1)
+  const tasks = await getTasksForDateRange(fromDate, toDate)
+  return tasks.filter(isBacklogTask)
 }
 
 /** Bir günün canlı görevlerini, varsa bekleyen taslak eklemeleriyle birlikte döner (taslak canlıyı gizlemez). */
@@ -308,6 +345,36 @@ export function hasOverlap(tasks, startTime, endTime, excludeTaskId) {
 export async function getSchoolSchedule() {
   const data = await cachedGet('/api/panel/school-schedule')
   return data.entries
+}
+
+/** Öğrencinin özel öğretmenlerden gelen düzenli ders saatlerini döner (bkz. StudentTeachers.schedule_json). */
+export async function getTeacherLessonSchedule() {
+  const data = await cachedGet('/api/panel/teachers')
+  return normalizeTeacherLessonSchedule(data.teachers || [])
+}
+
+/** Düzenli öğretmen derslerini öğrenci akışında gösterilecek salt okunur plan öğelerine çevirir. */
+export function buildTeacherLessonTasksForDate(lessonSchedule, dateISO) {
+  const dayOfWeek = getWeekdayKey(dateISO)
+
+  return (lessonSchedule || [])
+    .filter((slot) => slot.dayOfWeek === dayOfWeek && slot.startTime)
+    .map((slot, index) => ({
+      id: `${slot.id || 'teacher-lesson'}-${dateISO}-${index}`,
+      date: dateISO,
+      title: slot.subjectName ? `${slot.subjectName} Özel Ders` : 'Özel Ders',
+      taskType: 'ders-calisma',
+      subject: slot.subjectName || undefined,
+      topic: slot.teacherFullName || undefined,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      durationMinutes: slot.durationMinutes || durationBetween(slot.startTime, slot.endTime),
+      priority: 'orta',
+      status: 'bekliyor',
+      createdBy: 'ogretmen',
+      isDraft: false,
+      isTeacherLessonSlot: true,
+    }))
 }
 
 /**
