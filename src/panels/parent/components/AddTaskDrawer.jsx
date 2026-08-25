@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { BookOpen, Check, ChevronDown, ChevronRight, Loader2, Search, Trash2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { TASK_TYPES } from '../../../data/taskTypes'
-import { getSchoolScheduleConflict, hasOverlap } from '../../../services/weeklyPlanService'
+import { getPrivateLessonTeachers, getSchoolScheduleConflict, hasOverlap } from '../../../services/weeklyPlanService'
 import { todayISODate } from '../../../utils/time'
 import Badge from '../../ui/Badge'
 import { cn } from '../../ui/utils'
@@ -12,6 +12,7 @@ import { filterTopicsBySearch } from '../../shared/homework/topicSearch'
 const QUESTION_BANK_HOMEWORK_TASK_TYPE = 'soru-bankasi-odevi'
 const SCHOOL_HOMEWORK_TASK_TYPE = 'okul-odevi'
 const ACTIVITY_HOMEWORK_TASK_TYPE = 'etkinlik-odevi'
+const PRIVATE_LESSON_TASK_TYPE = 'ozel-ders'
 const RESOURCE_TASK_TYPES = new Set([QUESTION_BANK_HOMEWORK_TASK_TYPE, SCHOOL_HOMEWORK_TASK_TYPE, ACTIVITY_HOMEWORK_TASK_TYPE])
 const REQUIRED_RESOURCE_TASK_TYPES = new Set([QUESTION_BANK_HOMEWORK_TASK_TYPE, SCHOOL_HOMEWORK_TASK_TYPE])
 const TASK_TYPE_OPTIONS = [
@@ -22,6 +23,7 @@ const TASK_TYPE_OPTIONS = [
   { id: QUESTION_BANK_HOMEWORK_TASK_TYPE, label: TASK_TYPES[QUESTION_BANK_HOMEWORK_TASK_TYPE].label },
   { id: SCHOOL_HOMEWORK_TASK_TYPE, label: TASK_TYPES[SCHOOL_HOMEWORK_TASK_TYPE].label },
   { id: ACTIVITY_HOMEWORK_TASK_TYPE, label: TASK_TYPES[ACTIVITY_HOMEWORK_TASK_TYPE].label },
+  { id: PRIVATE_LESSON_TASK_TYPE, label: TASK_TYPES[PRIVATE_LESSON_TASK_TYPE].label },
 ]
 const TASK_TYPE_OPTION_IDS = new Set(TASK_TYPE_OPTIONS.map((option) => option.id))
 const DURATION_OPTIONS = [10, 20, 30, 45, 60, 90]
@@ -166,9 +168,11 @@ export default function AddTaskDrawer({
 }) {
   const seed = { ...initialTemplate?.task, ...initialTask }
   const seedTaskType = normalizeTaskType(seed)
-  const seedStartTime = seed.startTime || '16:00'
-  const seedEndTime = seed.endTime || (seed.durationMinutes ? addMinutesToTime(seedStartTime, seed.durationMinutes) : '16:45')
-  const seedDurationMinutes = Number(seed.durationMinutes) || computeDurationMinutes(seedStartTime, seedEndTime) || 45
+  const seedStartTime = seed.startTime || ''
+  const seedEndTime =
+    seed.endTime || (seedStartTime && seed.durationMinutes ? addMinutesToTime(seedStartTime, seed.durationMinutes) : '')
+  const seedDurationMinutes =
+    Number(seed.durationMinutes) || (seedStartTime ? computeDurationMinutes(seedStartTime, seedEndTime) : 0) || 45
 
   const [form, setForm] = useState(() => ({
     title: seed.title || getDefaultTitle(seedTaskType),
@@ -180,6 +184,10 @@ export default function AddTaskDrawer({
   }))
   const [resourceBookId, setResourceBookId] = useState(seed.resourceBookId || '')
   const [subjectId, setSubjectId] = useState('')
+  const [lessonSubjectId, setLessonSubjectId] = useState('')
+  const [studentTeacherId, setStudentTeacherId] = useState(seed.studentTeacherId || '')
+  const [privateTeachers, setPrivateTeachers] = useState(null)
+  const [privateTeachersError, setPrivateTeachersError] = useState('')
   const [resourceBooks, setResourceBooks] = useState(null)
   const [resourceBooksError, setResourceBooksError] = useState('')
   const [topics, setTopics] = useState(null)
@@ -200,6 +208,7 @@ export default function AddTaskDrawer({
   const isQuestionBankHomework = form.taskType === QUESTION_BANK_HOMEWORK_TASK_TYPE
   const isSchoolHomework = form.taskType === SCHOOL_HOMEWORK_TASK_TYPE
   const isActivityHomework = form.taskType === ACTIVITY_HOMEWORK_TASK_TYPE
+  const isPrivateLesson = form.taskType === PRIVATE_LESSON_TASK_TYPE
   const needsResource = RESOURCE_TASK_TYPES.has(form.taskType)
   const resourceRequired = REQUIRED_RESOURCE_TASK_TYPES.has(form.taskType)
   const modalMaxWidth = needsResource ? '48rem' : '38rem'
@@ -209,7 +218,7 @@ export default function AddTaskDrawer({
   useEffect(() => {
     let ignore = false
 
-    if (!getExistingTasksForDate || durationMinutes <= 0) {
+    if (!getExistingTasksForDate || durationMinutes <= 0 || !form.startTime) {
       Promise.resolve().then(() => {
         if (!ignore) setConflict(false)
       })
@@ -257,6 +266,23 @@ export default function AddTaskDrawer({
   }, [needsResource, resourceBooks, resourceBooksError])
 
   useEffect(() => {
+    if (!isPrivateLesson || privateTeachers !== null || privateTeachersError) return undefined
+
+    let ignore = false
+    getPrivateLessonTeachers()
+      .then((teachers) => {
+        if (!ignore) setPrivateTeachers(teachers)
+      })
+      .catch((err) => {
+        if (!ignore) setPrivateTeachersError(err.message || 'Öğretmenler yüklenemedi.')
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [isPrivateLesson, privateTeachers, privateTeachersError])
+
+  useEffect(() => {
     if (!isQuestionBankHomework || !resourceBookId) return undefined
 
     let ignore = false
@@ -299,6 +325,31 @@ export default function AddTaskDrawer({
 
   const resourceGroups = useMemo(() => groupBooksBySubject(filteredResourceBooks), [filteredResourceBooks])
   const subjectGroups = useMemo(() => groupBooksBySubject(resourceBooks || []), [resourceBooks])
+
+  const lessonSubjectGroups = useMemo(() => {
+    const groups = new Map()
+    ;(privateTeachers || []).forEach((teacher) => {
+      const key = teacher.subjectId || 'no-subject'
+      if (!groups.has(key)) groups.set(key, { id: key, name: teacher.subjectName || 'Derssiz', teachers: [] })
+      groups.get(key).teachers.push(teacher)
+    })
+    return Array.from(groups.values())
+  }, [privateTeachers])
+
+  // Özel ders görevi düzenlenirken kaydedilmiş öğretmenden dersi geri türet (ayrıca saklanmıyor).
+  const effectiveLessonSubjectId = useMemo(() => {
+    if (lessonSubjectId || !isPrivateLesson || !studentTeacherId || !privateTeachers) return lessonSubjectId
+    const teacher = privateTeachers.find((candidate) => candidate.id === studentTeacherId)
+    return teacher ? teacher.subjectId || 'no-subject' : lessonSubjectId
+  }, [lessonSubjectId, isPrivateLesson, studentTeacherId, privateTeachers])
+
+  const lessonTeachersForSubject = useMemo(() => {
+    if (!privateTeachers || !effectiveLessonSubjectId) return []
+    return privateTeachers.filter((teacher) => (teacher.subjectId || 'no-subject') === effectiveLessonSubjectId)
+  }, [privateTeachers, effectiveLessonSubjectId])
+
+  const selectedPrivateTeacher = privateTeachers?.find((teacher) => teacher.id === studentTeacherId) || null
+
   const isOriginalResourceSelection = Boolean(
     initialTask && needsResource && form.taskType === seedTaskType && resourceBookId && resourceBookId === seed.resourceBookId,
   )
@@ -351,12 +402,19 @@ export default function AddTaskDrawer({
       }
     })
     setSubjectId('')
+    setLessonSubjectId('')
+    setStudentTeacherId('')
     resetResourceSelection()
   }
 
   const handleSubjectChange = (event) => {
     setSubjectId(event.target.value)
     resetResourceSelection()
+  }
+
+  const handleLessonSubjectChange = (event) => {
+    setLessonSubjectId(event.target.value)
+    setStudentTeacherId('')
   }
 
   const handleSelectResourceBook = (book) => {
@@ -412,6 +470,8 @@ export default function AddTaskDrawer({
   }
 
   const selectedSubjectName = selectedBook?.subjectName || subjectGroups.find((group) => group.id === effectiveSubjectId)?.name || null
+  const selectedLessonSubjectName =
+    selectedPrivateTeacher?.subjectName || lessonSubjectGroups.find((group) => group.id === effectiveLessonSubjectId)?.name || null
 
   const buildPayload = () => {
     const title =
@@ -422,15 +482,32 @@ export default function AddTaskDrawer({
           ? `${selectedBook.subjectName} Okul Ödevi`
           : selectedSubjectName && isActivityHomework
             ? `${selectedSubjectName} Etkinlik Ödevi`
-            : getDefaultTitle(form.taskType))
+            : selectedLessonSubjectName && isPrivateLesson
+              ? `${selectedLessonSubjectName} Özel Ders`
+              : getDefaultTitle(form.taskType))
     const payload = {
       title,
       taskType: form.taskType,
       date: form.date,
-      startTime: form.startTime,
-      endTime,
+      startTime: form.startTime || null,
+      endTime: endTime || null,
       durationMinutes,
       description: form.description.trim() || null,
+    }
+
+    if (isPrivateLesson) {
+      return {
+        ...payload,
+        subject: selectedLessonSubjectName,
+        topic: null,
+        resourceBookId: null,
+        studentTeacherId: studentTeacherId || null,
+        selectedTestIds: [],
+        targetQuestionCount: null,
+        completedQuestionCount: null,
+        targetPageCount: null,
+        completedPageCount: null,
+      }
     }
 
     if (!needsResource) {
@@ -439,6 +516,7 @@ export default function AddTaskDrawer({
         subject: null,
         topic: null,
         resourceBookId: null,
+        studentTeacherId: null,
         selectedTestIds: [],
         targetQuestionCount: null,
         completedQuestionCount: null,
@@ -453,6 +531,7 @@ export default function AddTaskDrawer({
         title,
         subject: selectedBook?.subjectName || null,
         resourceBookId,
+        studentTeacherId: null,
         selectedTestIds: [],
         targetQuestionCount: null,
         completedQuestionCount: null,
@@ -467,6 +546,7 @@ export default function AddTaskDrawer({
         title,
         subject: selectedSubjectName,
         resourceBookId: resourceBookId || null,
+        studentTeacherId: null,
         selectedTestIds: [],
         targetQuestionCount: null,
         completedQuestionCount: null,
@@ -484,6 +564,7 @@ export default function AddTaskDrawer({
       ...payload,
       subject: selectedBook?.subjectName || null,
       resourceBookId,
+      studentTeacherId: null,
       selectedTestIds: nextSelectedTestIds,
     }
 
@@ -513,10 +594,6 @@ export default function AddTaskDrawer({
       setError('Gün zorunludur.')
       return
     }
-    if (!form.startTime) {
-      setError('Başlangıç saati zorunludur.')
-      return
-    }
     if (durationMinutes <= 0) {
       setError('Süre seçin.')
       return
@@ -527,6 +604,14 @@ export default function AddTaskDrawer({
     }
     if (isActivityHomework && !effectiveSubjectId) {
       setError('Etkinlik ödevi için ders seçin.')
+      return
+    }
+    if (isPrivateLesson && !effectiveLessonSubjectId) {
+      setError('Özel ders için ders seçin.')
+      return
+    }
+    if (isPrivateLesson && !studentTeacherId) {
+      setError('Özel ders için öğretmen seçin.')
       return
     }
     if (resourceRequired && (!selectedBook || !hasValidResourceSelection)) {
@@ -577,6 +662,10 @@ export default function AddTaskDrawer({
             {endTime ? (
               <p className="mt-1 text-sm font-medium text-panel-text-muted">
                 {form.startTime} - {endTime} · {durationMinutes} dk
+              </p>
+            ) : durationMinutes > 0 ? (
+              <p className="mt-1 text-sm font-medium text-panel-text-muted">
+                {durationMinutes} dk · saat belirtilmedi
               </p>
             ) : null}
           </div>
@@ -642,7 +731,7 @@ export default function AddTaskDrawer({
                 />
               </label>
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Başlangıç saati</span>
+                <span className="text-sm font-medium text-panel-text-muted">Başlangıç saati (isteğe bağlı)</span>
                 <input
                   type="time"
                   value={form.startTime}
@@ -793,6 +882,58 @@ export default function AddTaskDrawer({
                       />
                     ))}
                   </div>
+                )}
+              </div>
+            ) : null}
+
+            {isPrivateLesson ? (
+              <div className="flex flex-col gap-3 rounded-2xl border border-panel-border bg-panel-surface-soft/60 p-3">
+                <span className="text-sm font-semibold text-panel-text">Ders ve öğretmen</span>
+
+                {privateTeachersError ? (
+                  <p className="rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{privateTeachersError}</p>
+                ) : privateTeachers === null ? (
+                  <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">Öğretmenler yükleniyor...</p>
+                ) : lessonSubjectGroups.length === 0 ? (
+                  <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">
+                    Öğrenciye tanımlı aktif özel öğretmen yok.
+                  </p>
+                ) : (
+                  <>
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-xs font-medium text-panel-text-muted">Ders</span>
+                      <select
+                        value={effectiveLessonSubjectId}
+                        onChange={handleLessonSubjectChange}
+                        className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                      >
+                        <option value="">Ders seçin</option>
+                        {lessonSubjectGroups.map((group) => (
+                          <option key={group.id} value={group.id}>
+                            {group.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    {effectiveLessonSubjectId ? (
+                      <label className="flex flex-col gap-1.5">
+                        <span className="text-xs font-medium text-panel-text-muted">Öğretmen</span>
+                        <select
+                          value={studentTeacherId}
+                          onChange={(event) => setStudentTeacherId(event.target.value)}
+                          className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                        >
+                          <option value="">Öğretmen seçin</option>
+                          {lessonTeachersForSubject.map((teacher) => (
+                            <option key={teacher.id} value={teacher.id}>
+                              {teacher.fullName}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                  </>
                 )}
               </div>
             ) : null}

@@ -335,6 +335,7 @@ export function hasOverlap(tasks, startTime, endTime, excludeTaskId) {
   const end = parseTimeToMinutes(endTime)
   return tasks.some((task) => {
     if (task.id === excludeTaskId) return false
+    if (!task.startTime || !task.endTime) return false
     const taskStart = parseTimeToMinutes(task.startTime)
     const taskEnd = parseTimeToMinutes(task.endTime)
     return start < taskEnd && end > taskStart
@@ -351,6 +352,12 @@ export async function getSchoolSchedule() {
 export async function getTeacherLessonSchedule() {
   const data = await cachedGet('/api/panel/teachers')
   return normalizeTeacherLessonSchedule(data.teachers || [])
+}
+
+/** "Özel Ders" görev türü için Ders + Öğretmen seçimini besleyen, öğrencinin aktif özel öğretmenleri. */
+export async function getPrivateLessonTeachers() {
+  const data = await cachedGet('/api/panel/teachers')
+  return (data.teachers || []).filter((teacher) => teacher.type === 'ozel_ogretmen' && teacher.isActive !== false)
 }
 
 /** Düzenli öğretmen derslerini öğrenci akışında gösterilecek salt okunur plan öğelerine çevirir. */

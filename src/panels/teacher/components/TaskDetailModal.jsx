@@ -24,7 +24,8 @@ export default function TaskDetailModal({ task, onReschedule, onClose }) {
 
           <p className="inline-flex items-center gap-1.5 text-sm text-panel-text-muted">
             <CalendarClock size={14} aria-hidden="true" />
-            {formatDate(task.date)} · {task.startTime}–{task.endTime}
+            {formatDate(task.date)}
+            {task.startTime && task.endTime ? ` · ${task.startTime}–${task.endTime}` : ' · Saat eklenmedi'}
           </p>
 
           {task.resourceBookName ? (

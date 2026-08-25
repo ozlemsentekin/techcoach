@@ -49,6 +49,7 @@ const {
   addTeacherRecurringLessonSlotHandler,
   updateTeacherRecurringLessonSlotHandler,
   deleteTeacherRecurringLessonSlotHandler,
+  moveTeacherRecurringLessonOccurrenceHandler,
   addTeacherOneTimeLessonHandler,
   updateTeacherOneTimeLessonHandler,
   deleteTeacherOneTimeLessonHandler,
@@ -534,6 +535,13 @@ app.http('panel-teacher-lesson-plan-recurring-delete', {
   methods: ['DELETE'],
   route: 'panel-teacher/students/{studentTeacherId}/lesson-plan/recurring',
   handler: deleteTeacherRecurringLessonSlotHandler,
+})
+
+app.http('panel-teacher-lesson-plan-recurring-occurrence-update', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel-teacher/students/{studentTeacherId}/lesson-plan/recurring/occurrence',
+  handler: moveTeacherRecurringLessonOccurrenceHandler,
 })
 
 app.http('panel-teacher-lesson-plan-one-time-create', {

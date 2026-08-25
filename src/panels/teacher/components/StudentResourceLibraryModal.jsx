@@ -521,7 +521,7 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center overflow-hidden bg-black/40 sm:items-center sm:p-4">
-      <div className="flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden bg-panel-surface sm:h-auto sm:max-h-[94vh] sm:max-w-4xl sm:rounded-2xl sm:shadow-panel-2">
+      <div className="flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden bg-panel-surface sm:h-auto sm:max-h-[94vh] sm:max-w-5xl sm:rounded-2xl sm:shadow-panel-2">
         <div className="flex shrink-0 items-center justify-between gap-3 bg-panel-blue px-4 py-3 text-white">
           <div className="flex min-w-0 items-center gap-1.5">
             {selectedBook ? (
@@ -572,13 +572,13 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
                       {publisherGroup.books.length} kaynak
                     </span>
                   </div>
-                  <div className="grid grid-cols-1 gap-2 min-[520px]:grid-cols-2 sm:grid-cols-[repeat(auto-fill,9.25rem)] sm:gap-2.5">
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-3">
                     {publisherGroup.books.map((book) => (
                       <button
                         key={book.id}
                         type="button"
                         onClick={() => setSelectedBook(book)}
-                        className="grid min-w-0 grid-cols-[4.05rem_minmax(0,1fr)] items-start gap-2.5 rounded-xl border border-panel-border p-1.5 text-left transition-colors hover:border-panel-blue hover:bg-panel-blue-soft/40 sm:flex sm:w-[9.25rem] sm:flex-col sm:items-stretch sm:gap-1.5"
+                        className="flex min-w-0 flex-col items-stretch gap-1.5 rounded-xl border border-panel-border p-2 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-panel-blue hover:shadow-panel-2"
                       >
                         <ResourceBookCover book={book} />
                         <div className="flex min-w-0 flex-col gap-0.5">
@@ -590,11 +590,7 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
                             <p className="truncate text-[11px] text-panel-text-muted">{book.subjectName}</p>
                           ) : null}
                         </div>
-                        <ResourceBookRates
-                          completionRate={book.completionRate}
-                          successRate={book.successRate}
-                          className="col-start-2 mt-0 grid-cols-2 sm:col-start-auto sm:grid-cols-1"
-                        />
+                        <ResourceBookRates completionRate={book.completionRate} successRate={book.successRate} />
                       </button>
                     ))}
                   </div>

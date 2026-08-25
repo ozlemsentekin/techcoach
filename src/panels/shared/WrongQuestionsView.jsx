@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, ArrowLeft, BookOpen, ChevronRight, Layers, Tag } from 'lucide-react'
+import { AlertCircle, ArrowLeft, BookOpen, ChevronDown, ChevronRight, Layers, Loader2, Search, Tag } from 'lucide-react'
 import PageHeader from '../layout/PageHeader'
 import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
@@ -228,6 +228,178 @@ function SourceProfileCard({ bookName, publisherName, bookImageUrl, wrongCount, 
   )
 }
 
+function TopicAccordionHeader({ topic, wrongCount, stats, isOpen, onToggle }) {
+  const successPercent = stats?.successRate != null ? Math.round(stats.successRate * 100) : null
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={isOpen}
+      className="flex w-full items-center gap-3 rounded-2xl border border-panel-border bg-panel-surface px-4 py-3 text-left shadow-sm transition-colors hover:border-panel-blue"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
+        <Layers size={16} aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <h3 className="truncate text-sm font-semibold text-panel-text">{topic || 'Genel'}</h3>
+        {stats && stats.totalAnswered > 0 ? (
+          <p className="text-xs text-panel-text-muted">
+            %{successPercent ?? 0} başarı · {stats.totalAnswered} soru çözüldü
+          </p>
+        ) : null}
+      </div>
+      <Badge tone="warm" className="shrink-0">
+        {wrongCount} yanlış
+      </Badge>
+      <ChevronDown
+        size={18}
+        className={cn('shrink-0 text-panel-text-muted transition-transform', isOpen && 'rotate-180')}
+        aria-hidden="true"
+      />
+    </button>
+  )
+}
+
+// Kaynak içindeki tüm soruları küçük resimlerle ızgara halinde gösteren tekil kart. Fotoğraf,
+// bileşen mount olduğunda (yani içerik grubu açıldığında) tembel çekilir; kapalı gruplar hiç
+// mount edilmediği için fotoğraf istemez — WrongQuestionGalleryModal'daki tembel yükleme deseniyle
+// aynı fikir, tek farkı burada tüm grup için paralel çalışır.
+function WrongQuestionThumbnail({ item, fetchPhoto, onClick }) {
+  const [photoUrl, setPhotoUrl] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let ignore = false
+    fetchPhoto(item.id)
+      .then((url) => {
+        if (!ignore) setPhotoUrl(url)
+      })
+      .catch((err) => {
+        if (!ignore) setError(err.message || 'Fotoğraf yüklenemedi.')
+      })
+    return () => {
+      ignore = true
+    }
+  }, [item.id, fetchPhoto])
+
+  const caption = `${item.testName || 'Test'} - ${item.topic || 'Genel'} - ${
+    item.questionNumber != null && item.questionNumber !== '' ? item.questionNumber : '-'
+  }`
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex flex-col overflow-hidden rounded-xl border border-panel-border bg-panel-surface text-left shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-md"
+    >
+      <div className="flex aspect-square w-full items-center justify-center overflow-hidden bg-panel-surface-soft">
+        {photoUrl ? (
+          <img
+            loading="lazy"
+            decoding="async"
+            src={photoUrl}
+            alt={caption}
+            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+          />
+        ) : error ? (
+          <AlertCircle size={20} className="text-panel-text-muted" aria-hidden="true" />
+        ) : (
+          <Loader2 size={20} className="animate-spin text-panel-text-muted" aria-hidden="true" />
+        )}
+      </div>
+      <p className="line-clamp-2 px-2 py-1.5 text-[11px] font-medium leading-snug text-panel-text" title={caption}>
+        {caption}
+      </p>
+    </button>
+  )
+}
+
+// Bir kaynağa (kitaba) tıklandığında açılan ekran: içerik gruplarına (konulara) göre kapalı
+// gelen akordeonlar ve her grubun altında tüm sorulara ait fotoğrafların ızgara görünümü. Test
+// adı/konuya göre arama, eşleşen gruplardaki soruları otomatik açar.
+function SourceQuestionBoard({ subject, topics, statsForTopic, fetchPhoto, onSelectItem }) {
+  const [query, setQuery] = useState('')
+  const [expandedKeys, setExpandedKeys] = useState(() => new Set())
+
+  const normalizedQuery = query.trim().toLocaleLowerCase('tr')
+
+  const filteredTopics = useMemo(() => {
+    if (!normalizedQuery) return topics
+    return topics
+      .map((topicGroup) => ({
+        ...topicGroup,
+        items: topicGroup.items.filter(
+          (item) =>
+            (item.testName || '').toLocaleLowerCase('tr').includes(normalizedQuery) ||
+            (item.topic || '').toLocaleLowerCase('tr').includes(normalizedQuery),
+        ),
+      }))
+      .filter((topicGroup) => topicGroup.items.length > 0)
+  }, [topics, normalizedQuery])
+
+  const toggleTopic = (key) => {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  return (
+    <div className="fade-slide-in flex flex-col gap-3">
+      <div className="relative">
+        <Search
+          size={16}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-panel-text-muted"
+          aria-hidden="true"
+        />
+        <input
+          type="text"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Test adı veya konuya göre ara..."
+          className="w-full rounded-full border border-panel-border bg-panel-surface py-2 pl-9 pr-4 text-sm text-panel-text placeholder:text-panel-text-muted focus:border-panel-blue focus:outline-none"
+        />
+      </div>
+
+      {filteredTopics.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-panel-border px-4 py-6 text-center text-sm text-panel-text-muted">
+          Aramayla eşleşen soru bulunamadı.
+        </p>
+      ) : (
+        filteredTopics.map((topicGroup) => {
+          const key = topicStatsKey(subject, topicGroup.topic)
+          const isOpen = Boolean(normalizedQuery) || expandedKeys.has(key)
+          return (
+            <div key={key} className="flex flex-col gap-2">
+              <TopicAccordionHeader
+                topic={topicGroup.topic}
+                wrongCount={topicGroup.items.length}
+                stats={statsForTopic(topicGroup.topic)}
+                isOpen={isOpen}
+                onToggle={() => toggleTopic(key)}
+              />
+              {isOpen ? (
+                <div className="grid grid-cols-2 gap-2 px-1 min-[480px]:grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                  {topicGroup.items.map((item, itemIndex) => (
+                    <WrongQuestionThumbnail
+                      key={item.id}
+                      item={item}
+                      fetchPhoto={fetchPhoto}
+                      onClick={() => onSelectItem(topicGroup.items, itemIndex)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+}
+
 // Öğrenci/veli/öğretmen panellerinin ortak Hata Defteri görünümü: ders kartları -> içerik (konu)
 // kartları -> fotoğraf galerisi + Dikkat Hatası/Bilgi Eksikliği etiketleme. Kimin verisini
 // gösterdiği tamamen fetchWrongQuestions/fetchTopicStats/updateMistakeReason prop'larıyla
@@ -247,9 +419,10 @@ export default function WrongQuestionsView({
   const [sourceTopicStats, setSourceTopicStats] = useState([])
   const [error, setError] = useState('')
   const [selectedSubject, setSelectedSubject] = useState(null)
-  const [groupMode, setGroupMode] = useState('topic')
+  const [groupMode, setGroupMode] = useState('source')
   const [selectedSourceKey, setSelectedSourceKey] = useState(null)
   const [galleryTopicKey, setGalleryTopicKey] = useState(null)
+  const [sourceGallerySelection, setSourceGallerySelection] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -258,29 +431,12 @@ export default function WrongQuestionsView({
       .then((wrongQuestionsData) => {
         if (ignore) return
         setError('')
-        setTopicStats([])
-        setSourceTopicStats([])
         setWrongQuestions(wrongQuestionsData)
       })
       .catch((err) => {
         if (!ignore) setError(err.message)
       })
 
-    return () => {
-      ignore = true
-    }
-  }, [fetchWrongQuestions])
-
-  const photoQuestions = useMemo(
-    () => (wrongQuestions ? wrongQuestions.filter((item) => item.hasPhoto) : []),
-    [wrongQuestions],
-  )
-  const photoQuestionCount = photoQuestions.length
-
-  useEffect(() => {
-    if (!photoQuestionCount) return undefined
-
-    let ignore = false
     fetchTopicStats()
       .then((statsData) => {
         if (ignore) return
@@ -296,7 +452,12 @@ export default function WrongQuestionsView({
     return () => {
       ignore = true
     }
-  }, [fetchTopicStats, photoQuestionCount])
+  }, [fetchWrongQuestions, fetchTopicStats])
+
+  const photoQuestions = useMemo(
+    () => (wrongQuestions ? wrongQuestions.filter((item) => item.hasPhoto) : []),
+    [wrongQuestions],
+  )
 
   const contentGroups = useMemo(() => groupBySubjectAndTopic(photoQuestions), [photoQuestions])
   const sourceGroups = useMemo(() => groupBySubjectAndSource(photoQuestions), [photoQuestions])
@@ -325,7 +486,7 @@ export default function WrongQuestionsView({
     return map
   }, [sourceTopicStats])
 
-  const activeTopics = activeSource ? activeSource.topics : groupMode === 'topic' ? selectedContentGroup?.topics : null
+  const activeTopics = !activeSource && groupMode === 'topic' ? selectedContentGroup?.topics : null
   const galleryTopicGroup = activeTopics?.find(
     (topicGroup) => topicStatsKey(effectiveSelectedSubject, topicGroup.topic) === galleryTopicKey,
   )
@@ -401,21 +562,15 @@ export default function WrongQuestionsView({
           description="Cevap kağıdında yanlış işaretlenen bir soruya tıklayıp fotoğrafını eklediğinde burada görünecek."
         />
       ) : activeSource ? (
-        <div
-          className="fade-slide-in grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
-        >
-          {activeSource.topics.map((topicGroup) => (
-            <ContentTopicCard
-              key={topicStatsKey(effectiveSelectedSubject, topicGroup.topic)}
-              topic={topicGroup.topic}
-              wrongCount={topicGroup.items.length}
-              stats={sourceTopicStatsMap.get(
-                sourceStatsKey(effectiveSelectedSubject, topicGroup.topic, activeSource.bookName),
-              )}
-              onClick={() => setGalleryTopicKey(topicStatsKey(effectiveSelectedSubject, topicGroup.topic))}
-            />
-          ))}
-        </div>
+        <SourceQuestionBoard
+          subject={effectiveSelectedSubject}
+          topics={activeSource.topics}
+          statsForTopic={(topic) =>
+            sourceTopicStatsMap.get(sourceStatsKey(effectiveSelectedSubject, topic, activeSource.bookName))
+          }
+          fetchPhoto={fetchPhoto}
+          onSelectItem={(items, index) => setSourceGallerySelection({ items, index })}
+        />
       ) : effectiveSelectedSubject ? (
         <div className="flex flex-col gap-4">
           <GroupModeToggle mode={groupMode} onChange={handleChangeGroupMode} />
@@ -473,6 +628,17 @@ export default function WrongQuestionsView({
           items={galleryTopicGroup.items}
           fetchPhoto={fetchPhoto}
           onClose={() => setGalleryTopicKey(null)}
+          onUpdateMistakeReason={handleUpdateMistakeReason}
+        />
+      ) : null}
+
+      {sourceGallerySelection ? (
+        <WrongQuestionGalleryModal
+          title={activeSource?.bookName || 'Kaynak'}
+          items={sourceGallerySelection.items}
+          initialIndex={sourceGallerySelection.index}
+          fetchPhoto={fetchPhoto}
+          onClose={() => setSourceGallerySelection(null)}
           onUpdateMistakeReason={handleUpdateMistakeReason}
         />
       ) : null}

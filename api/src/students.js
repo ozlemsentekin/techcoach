@@ -1,4 +1,4 @@
-const { sql, withRequest } = require('./db')
+const { sql, withRequest, withTransaction } = require('./db')
 const { isConfigError } = require('./config')
 const { clearSessionHeaders, createSessionHeaders, json } = require('./http')
 const {
@@ -1344,11 +1344,89 @@ function normalizeTeacherNameForMatch(value) {
   return String(value || '').trim().toLocaleLowerCase('tr-TR')
 }
 
+function createPublicError(statusCode, message) {
+  const error = new Error(message)
+  error.statusCode = statusCode
+  error.publicMessage = message
+  return error
+}
+
+function isUniqueViolation(error) {
+  return error?.number === 2601 || error?.number === 2627
+}
+
+async function ensureTeacherPanelUser({ requestFactory = withRequest, fullName, normalizedPhone }) {
+  const existingDb = await requestFactory({
+    phone: { type: sql.NVarChar(20), value: normalizedPhone },
+  })
+  const existingResult = await existingDb.query(`
+    SELECT TOP 1 id, role FROM dbo.Users WHERE phone_number = @phone;
+  `)
+  const existingUser = existingResult.recordset[0]
+
+  if (existingUser) {
+    if (existingUser.role !== 'ogretmen') {
+      throw createPublicError(
+        409,
+        'Bu telefon numarası öğretmen olmayan bir üyelikte kullanılıyor. Öğretmen için farklı bir cep telefonu girin.',
+      )
+    }
+
+    return { teacherUserId: existingUser.id, isNewAccount: false, temporaryPassword: null }
+  }
+
+  const temporaryPassword = defaultPasswordForPhone(normalizedPhone)
+  const passwordHash = await hashPassword(temporaryPassword)
+  const now = new Date()
+  const insertDb = await requestFactory({
+    fullName: { type: sql.NVarChar(120), value: fullName },
+    phone: { type: sql.NVarChar(20), value: normalizedPhone },
+    passwordHash: { type: sql.NVarChar(255), value: passwordHash },
+    role: { type: sql.NVarChar(20), value: 'ogretmen' },
+    consentAt: { type: sql.DateTime2, value: now },
+  })
+
+  try {
+    const insertResult = await insertDb.query(`
+      INSERT INTO dbo.Users (full_name, phone_number, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
+      OUTPUT inserted.id
+      VALUES (@fullName, @phone, @passwordHash, @role, @consentAt, @consentAt);
+    `)
+
+    return {
+      teacherUserId: insertResult.recordset[0].id,
+      isNewAccount: true,
+      temporaryPassword,
+    }
+  } catch (insertError) {
+    if (!isUniqueViolation(insertError)) {
+      throw insertError
+    }
+
+    // Yarış durumu: aynı telefonla eşzamanlı ikinci otomatik üyelik/yetki isteği.
+    const retryDb = await requestFactory({
+      phone: { type: sql.NVarChar(20), value: normalizedPhone },
+    })
+    const retryResult = await retryDb.query(`
+      SELECT TOP 1 id, role FROM dbo.Users WHERE phone_number = @phone;
+    `)
+    const retryUser = retryResult.recordset[0]
+    if (retryUser?.role === 'ogretmen') {
+      return { teacherUserId: retryUser.id, isNewAccount: false, temporaryPassword: null }
+    }
+
+    throw createPublicError(
+      409,
+      'Bu telefon numarası öğretmen olmayan bir üyelikte kullanılıyor. Öğretmen için farklı bir cep telefonu girin.',
+    )
+  }
+}
+
 // Aynı veliye ait, aynı öğretmene (ad+telefon normalize edilerek eşleşen) bağlı
 // TÜM StudentTeachers satırlarının id'lerini döner — "Panele Yetki Ver" bunların
 // hepsini tek seferde aynı öğretmen hesabına bağlar.
-async function findMatchingTeacherRowIds(parentId, fullName, normalizedPhone) {
-  const requestDb = await withRequest({ parentId: { type: sql.UniqueIdentifier, value: parentId } })
+async function findMatchingTeacherRowIds(parentId, fullName, normalizedPhone, requestFactory = withRequest) {
+  const requestDb = await requestFactory({ parentId: { type: sql.UniqueIdentifier, value: parentId } })
   const result = await requestDb.query(`
     SELECT st.id, st.teacher_full_name, st.phone
     FROM dbo.StudentTeachers st
@@ -1362,6 +1440,30 @@ async function findMatchingTeacherRowIds(parentId, fullName, normalizedPhone) {
         normalizePhone(row.phone) === normalizedPhone,
     )
     .map((row) => row.id)
+}
+
+async function linkMatchingTeacherRowsToPanelUser({
+  requestFactory = withRequest,
+  parentId,
+  teacherId,
+  fullName,
+  normalizedPhone,
+  teacherUserId,
+}) {
+  const matchingIds = await findMatchingTeacherRowIds(parentId, fullName, normalizedPhone, requestFactory)
+  const idsToUpdate = matchingIds.length ? matchingIds : [teacherId]
+  const placeholders = idsToUpdate.map((_, index) => `@id${index}`)
+  const updateDb = await requestFactory({
+    teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+    ...Object.fromEntries(idsToUpdate.map((id, index) => [`id${index}`, { type: sql.UniqueIdentifier, value: id }])),
+  })
+  await updateDb.query(`
+    UPDATE dbo.StudentTeachers
+    SET teacher_user_id = @teacherUserId, access_granted_at = SYSUTCDATETIME()
+    WHERE id IN (${placeholders.join(', ')});
+  `)
+
+  return idsToUpdate
 }
 
 async function grantTeacherAccessHandler(request) {
@@ -1392,67 +1494,34 @@ async function grantTeacherAccessHandler(request) {
       return json(400, { error: 'Öğretmenin geçerli bir cep telefonu numarası olmalı ki panele giriş yapabilsin.' })
     }
 
-    let teacherUserId
-    let isNewAccount = false
-    const existingDb = await withRequest({ phone: { type: sql.NVarChar(20), value: teacherPhone } })
-    const existingResult = await existingDb.query(`
-      SELECT TOP 1 id FROM dbo.Users WHERE role = 'ogretmen' AND phone_number = @phone;
-    `)
-
-    if (existingResult.recordset[0]) {
-      teacherUserId = existingResult.recordset[0].id
-    } else {
-      isNewAccount = true
-      const now = new Date()
-      const passwordHash = await hashPassword(defaultPasswordForPhone(teacherPhone))
-      const insertDb = await withRequest({
-        fullName: { type: sql.NVarChar(120), value: row.teacher_full_name },
-        phone: { type: sql.NVarChar(20), value: teacherPhone },
-        passwordHash: { type: sql.NVarChar(255), value: passwordHash },
-        role: { type: sql.NVarChar(20), value: 'ogretmen' },
-        consentAt: { type: sql.DateTime2, value: now },
+    const accessResult = await withTransaction(async (requestInTransaction) => {
+      const panelUser = await ensureTeacherPanelUser({
+        requestFactory: requestInTransaction,
+        fullName: row.teacher_full_name,
+        normalizedPhone: teacherPhone,
       })
-      try {
-        const insertResult = await insertDb.query(`
-          INSERT INTO dbo.Users (full_name, phone_number, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
-          OUTPUT inserted.id
-          VALUES (@fullName, @phone, @passwordHash, @role, @consentAt, @consentAt);
-        `)
-        teacherUserId = insertResult.recordset[0].id
-      } catch (insertError) {
-        // Yarış durumu: aynı telefonla eşzamanlı ikinci "yetki ver" isteği.
-        if (insertError.number === 2601 || insertError.number === 2627) {
-          const retryDb = await withRequest({ phone: { type: sql.NVarChar(20), value: teacherPhone } })
-          const retryResult = await retryDb.query(`SELECT TOP 1 id FROM dbo.Users WHERE phone_number = @phone;`)
-          teacherUserId = retryResult.recordset[0]?.id
-          isNewAccount = false
-        } else {
-          throw insertError
-        }
-      }
-    }
-
-    const matchingIds = await findMatchingTeacherRowIds(parentId, row.teacher_full_name, teacherPhone)
-    const idsToUpdate = matchingIds.length ? matchingIds : [teacherId]
-    const placeholders = idsToUpdate.map((_, index) => `@id${index}`)
-    const updateDb = await withRequest({
-      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
-      ...Object.fromEntries(idsToUpdate.map((id, index) => [`id${index}`, { type: sql.UniqueIdentifier, value: id }])),
+      await linkMatchingTeacherRowsToPanelUser({
+        requestFactory: requestInTransaction,
+        parentId,
+        teacherId,
+        fullName: row.teacher_full_name,
+        normalizedPhone: teacherPhone,
+        teacherUserId: panelUser.teacherUserId,
+      })
+      return panelUser
     })
-    await updateDb.query(`
-      UPDATE dbo.StudentTeachers
-      SET teacher_user_id = @teacherUserId, access_granted_at = SYSUTCDATETIME()
-      WHERE id IN (${placeholders.join(', ')});
-    `)
 
     const teachers = await fetchParentTeachers(parentId)
     return json(200, {
       teacher: teachers.find((item) => item.id === teacherId) || null,
       teachers,
-      isNewAccount,
-      temporaryPassword: isNewAccount ? defaultPasswordForPhone(teacherPhone) : null,
+      isNewAccount: accessResult.isNewAccount,
+      temporaryPassword: accessResult.temporaryPassword,
     })
   } catch (error) {
+    if (error.statusCode && error.publicMessage) {
+      return json(error.statusCode, { error: error.publicMessage })
+    }
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
@@ -1489,34 +1558,72 @@ async function createStudentTeacherHandler(request) {
       return json(400, { error: 'Seçilen ders bulunamadı.' })
     }
 
-    const requestDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-      subjectId: { type: sql.UniqueIdentifier, value: teacher.subjectId },
-      createdByParentId: { type: sql.UniqueIdentifier, value: parentId },
-      fullName: { type: sql.NVarChar(120), value: teacher.fullName },
-      phone: { type: sql.NVarChar(30), value: teacher.phone },
-      teacherType: { type: sql.NVarChar(30), value: teacher.type },
-      scheduleJson: {
-        type: sql.NVarChar(sql.MAX),
-        value: teacher.type === 'ozel_ogretmen' && teacher.schedule.length ? JSON.stringify(teacher.schedule) : null,
-      },
+    const teacherPhone = normalizePhone(teacher.phone)
+    if (!teacherPhone) {
+      return json(400, { error: 'Öğretmenin panel hesabı için geçerli bir cep telefonu numarası girin.' })
+    }
+
+    const { createdTeacherId, accessResult } = await withTransaction(async (requestInTransaction) => {
+      const panelUser = await ensureTeacherPanelUser({
+        requestFactory: requestInTransaction,
+        fullName: teacher.fullName,
+        normalizedPhone: teacherPhone,
+      })
+
+      const requestDb = await requestInTransaction({
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        subjectId: { type: sql.UniqueIdentifier, value: teacher.subjectId },
+        createdByParentId: { type: sql.UniqueIdentifier, value: parentId },
+        fullName: { type: sql.NVarChar(120), value: teacher.fullName },
+        phone: { type: sql.NVarChar(30), value: teacher.phone },
+        teacherType: { type: sql.NVarChar(30), value: teacher.type },
+        scheduleJson: {
+          type: sql.NVarChar(sql.MAX),
+          value: teacher.type === 'ozel_ogretmen' && teacher.schedule.length ? JSON.stringify(teacher.schedule) : null,
+        },
+        teacherUserId: { type: sql.UniqueIdentifier, value: panelUser.teacherUserId },
+      })
+
+      const result = await requestDb.query(`
+        INSERT INTO dbo.StudentTeachers
+          (
+            student_id, subject_id, created_by_parent_id, teacher_full_name, phone,
+            teacher_type, schedule_json, teacher_user_id, access_granted_at
+          )
+        OUTPUT inserted.id
+        VALUES (
+          @studentId, @subjectId, @createdByParentId, @fullName, @phone,
+          @teacherType, @scheduleJson, @teacherUserId, SYSUTCDATETIME()
+        );
+      `)
+
+      const teacherId = result.recordset[0]?.id
+      await linkMatchingTeacherRowsToPanelUser({
+        requestFactory: requestInTransaction,
+        parentId,
+        teacherId,
+        fullName: teacher.fullName,
+        normalizedPhone: teacherPhone,
+        teacherUserId: panelUser.teacherUserId,
+      })
+
+      return { createdTeacherId: teacherId, accessResult: panelUser }
     })
 
-    const result = await requestDb.query(`
-      INSERT INTO dbo.StudentTeachers
-        (student_id, subject_id, created_by_parent_id, teacher_full_name, phone, teacher_type, schedule_json)
-      OUTPUT inserted.id
-      VALUES (@studentId, @subjectId, @createdByParentId, @fullName, @phone, @teacherType, @scheduleJson);
-    `)
-
     const teachers = await fetchStudentTeachers(studentId)
-    const createdTeacherId = result.recordset[0]?.id
     return json(201, {
       teacher: teachers.find((item) => item.id === createdTeacherId) || null,
       teachers,
       teacherCount: teachers.length,
+      teacherAccess: {
+        isNewAccount: accessResult.isNewAccount,
+        temporaryPassword: accessResult.temporaryPassword,
+      },
     })
   } catch (error) {
+    if (error.statusCode && error.publicMessage) {
+      return json(error.statusCode, { error: error.publicMessage })
+    }
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
     }
@@ -1764,5 +1871,7 @@ module.exports = {
   requireParentSession,
   verifyParentOwnsStudent,
   verifySubjectExists,
+  ensureTeacherPanelUser,
+  linkMatchingTeacherRowsToPanelUser,
   STUDENT_THEME_IDS,
 }

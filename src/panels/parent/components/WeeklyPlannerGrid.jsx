@@ -8,7 +8,9 @@ import {
   ChevronDown,
   Clock,
   Coffee,
+  Dumbbell,
   FlaskConical,
+  GraduationCap,
   Library,
   ListChecks,
   MinusCircle,
@@ -21,8 +23,8 @@ import {
   UploadCloud,
   XCircle,
 } from 'lucide-react'
-import { HOMEWORK_TASK_TYPES } from '../../../data/taskTypes'
-import { todayISODate, WEEKDAY_KEYS as DAY_KEYS } from '../../../utils/time'
+import { HOMEWORK_TASK_TYPES, TASK_TYPES } from '../../../data/taskTypes'
+import { parseTimeToMinutes, todayISODate, WEEKDAY_KEYS as DAY_KEYS } from '../../../utils/time'
 import { isBacklogTask } from '../../../utils/backlogTasks'
 import Badge from '../../ui/Badge'
 
@@ -108,6 +110,29 @@ const TASK_STYLES = {
     timeClassName: 'text-panel-blue',
     titleClassName: 'text-panel-text',
   },
+  // Özel ders: veli tarafından eklenen "ozel-ders" görevleri ile öğretmenin sabit ders
+  // programı slotları (bkz. ScheduleSlotCard) girenden bağımsız aynı tonu kullanır. barClassName
+  // ve chipClassName varlığı TaskCard'da sol renkli çizgi + üstte tip etiketi çizmeyi tetikler.
+  privateLesson: {
+    icon: GraduationCap,
+    card: 'border border-panel-accent/30 bg-panel-accent-soft/45 shadow-[0_8px_20px_-6px_rgba(232,162,61,0.3)]',
+    iconClassName: 'bg-white text-panel-warm',
+    tagClassName: 'bg-white text-panel-warm',
+    timeClassName: 'text-panel-blue',
+    titleClassName: 'text-panel-text',
+    barClassName: 'bg-panel-accent',
+    chipClassName: 'bg-panel-accent-soft text-panel-warm',
+  },
+  sport: {
+    icon: Dumbbell,
+    card: 'border border-panel-sage/35 bg-panel-sage-soft/45 shadow-[0_8px_20px_-6px_rgba(135,163,165,0.3)]',
+    iconClassName: 'bg-white text-panel-sage',
+    tagClassName: 'bg-white text-panel-sage',
+    timeClassName: 'text-panel-blue',
+    titleClassName: 'text-panel-text',
+    barClassName: 'bg-panel-sage',
+    chipClassName: 'bg-panel-sage-soft text-panel-sage',
+  },
   free: {
     icon: Star,
     card: 'border border-[#1e2c60]/35 bg-white shadow-[0_8px_20px_-6px_rgba(30,44,96,0.35)]',
@@ -141,6 +166,8 @@ function normalizeText(value) {
 function getTaskStyle(task) {
   if (['mola', 'dinlenme'].includes(task.taskType)) return TASK_STYLES.break
   if (task.taskType === 'serbest-zaman') return TASK_STYLES.free
+  if (task.taskType === 'ozel-ders') return TASK_STYLES.privateLesson
+  if (task.taskType === 'spor') return TASK_STYLES.sport
 
   const searchText = normalizeText(`${task.subject || ''} ${task.title || ''}`)
   if (searchText.includes('matematik')) return TASK_STYLES.math
@@ -230,6 +257,21 @@ function formatCompletionDuration(totalSeconds) {
   return `${totalMinutes} dk`
 }
 
+function formatCompletionTimestamp(isoString) {
+  if (!isoString) return null
+  const date = new Date(isoString)
+  if (Number.isNaN(date.getTime())) return null
+
+  const datePart = date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })
+  const timePart = date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+  return `${datePart} · ${timePart}`
+}
+
+function getCompletionTimestampLabel(task) {
+  if (task.status !== 'tamamlandi') return null
+  return formatCompletionTimestamp(task.completedAt)
+}
+
 function getCompletionTimerInfo(task) {
   if (task.status !== 'tamamlandi') return null
   if (!task.timerStartedAt) return { tone: 'muted', label: 'Sayaç tutulmadı' }
@@ -265,17 +307,27 @@ function isTaskGraded(task) {
   return HOMEWORK_TASK_TYPES.has(task.taskType) && task.status === 'tamamlandi' && task.correctCount != null
 }
 
-function CompletionTimerNote({ info }) {
-  if (!info) return null
+function CompletionTimerNote({ info, completedAtLabel }) {
+  if (!info && !completedAtLabel) return null
 
   return (
-    <span
-      className={`mt-0.5 flex items-center gap-1 px-1 text-[10px] font-semibold leading-snug ${
-        info.tone === 'tracked' ? 'text-panel-blue' : 'text-panel-text-muted'
-      }`}
-    >
-      <Timer size={11} className="shrink-0" aria-hidden="true" />
-      <span>{info.label}</span>
+    <span className="mt-0.5 flex flex-col gap-0.5 px-1">
+      {info ? (
+        <span
+          className={`flex items-center gap-1 text-[10px] font-semibold leading-snug ${
+            info.tone === 'tracked' ? 'text-panel-blue' : 'text-panel-text-muted'
+          }`}
+        >
+          <Timer size={11} className="shrink-0" aria-hidden="true" />
+          <span>{info.label}</span>
+        </span>
+      ) : null}
+      {completedAtLabel ? (
+        <span className="flex items-center gap-1 text-[10px] font-semibold leading-snug text-panel-text-muted">
+          <CalendarDays size={11} className="shrink-0" aria-hidden="true" />
+          <span>Tamamlandı: {completedAtLabel}</span>
+        </span>
+      ) : null}
     </span>
   )
 }
@@ -355,27 +407,82 @@ function QuickBreakMenu({ task, onPick, onClose }) {
 // Öğretmenin bu öğrenciyle sabit ders programındaki (bkz. StudentTeachers.schedule_json) bir
 // zaman dilimini temsil eden salt okunur, sahte "görev" kartı. Gerçek bir Tasks satırı değildir;
 // sadece o saatin dolu olduğunu haftalık takvimde ayrı bir renkle göstermek için render edilir.
-function ScheduleSlotCard({ task, muted = false }) {
+function ScheduleSlotCard({ task, muted = false, onManage }) {
   const title = task.subjectName ? `${task.subjectName} Dersi` : 'Planlı Ders'
+  const style = TASK_STYLES.privateLesson
+  const durationMinutes =
+    task.startTime && task.endTime
+      ? Math.max(0, parseTimeToMinutes(task.endTime) - parseTimeToMinutes(task.startTime))
+      : null
+  const toneClassName = muted ? 'border-slate-200 bg-white/80 text-slate-500 shadow-none' : style.card
+  const iconClassName = style.iconClassName
+  const timeClassName = style.timeClassName
+  const titleClassName = style.titleClassName
 
-  return (
-    <div
-      className={`flex flex-col gap-1 rounded-xl border px-3 py-2.5 ${
-        muted
-          ? 'border-slate-200 bg-white/80 text-slate-500 shadow-none'
-          : 'border-[#f07b31]/45 bg-white text-panel-blue shadow-[0_8px_20px_-6px_rgba(240,123,49,0.4)]'
-      }`}
-    >
-      <span className="inline-flex items-center gap-1.5 text-xs font-semibold">
-        <CalendarDays size={12} aria-hidden="true" />
-        {task.startTime}-{task.endTime}
+  // Öğretmenin sabit ders programı slotu, veli tarafından eklenen "ozel-ders" görevinin
+  // (bkz. TASK_STYLES.privateLesson / TaskCard summaryContent) birebir aynı düzenini kullanır:
+  // aynı ikon kutusu, sol renkli çizgi ve üstte tip etiketi — girenden bağımsız aynı stil.
+  const content = (
+    <>
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}>
+        <GraduationCap size={21} strokeWidth={2.2} aria-hidden="true" />
       </span>
-      <span className="truncate text-sm font-bold">{title}</span>
-      {task.teacherFullName ? (
-        <span className="truncate text-xs font-semibold text-panel-text-muted">{task.teacherFullName}</span>
-      ) : null}
-    </div>
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-nowrap items-center justify-between gap-1">
+          <span className={`block whitespace-nowrap text-[11px] font-bold leading-tight ${timeClassName}`}>
+            {task.startTime}-{task.endTime}
+          </span>
+          {durationMinutes ? (
+            <span className="shrink-0 whitespace-nowrap text-[10px] font-semibold text-panel-text-muted">
+              {durationMinutes} dk
+            </span>
+          ) : null}
+        </span>
+        <span title={title} className={`mt-1 block truncate text-xs font-bold leading-snug ${titleClassName}`}>
+          {title}
+        </span>
+        {task.teacherFullName ? (
+          <span className="mt-0.5 block truncate text-[11px] font-semibold text-panel-text-muted">
+            {task.teacherFullName}
+          </span>
+        ) : null}
+      </span>
+    </>
   )
+
+  const cardBody = (
+    <>
+      {!muted ? (
+        <span className={`absolute inset-y-2 left-1.5 w-1 rounded-full ${style.barClassName}`} aria-hidden="true" />
+      ) : null}
+      {!muted ? (
+        <span
+          className={`inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${style.chipClassName}`}
+        >
+          {TASK_TYPES['ozel-ders']?.label}
+        </span>
+      ) : null}
+      <div className="flex min-w-0 flex-1 items-center gap-2">{content}</div>
+    </>
+  )
+
+  const containerClassName = `group relative flex min-h-[68px] w-full flex-col gap-1.5 rounded-xl border py-2.5 pr-3 transition duration-150 ${muted ? 'pl-3' : 'pl-4'} ${toneClassName}`
+
+  if (typeof onManage === 'function') {
+    return (
+      <button
+        type="button"
+        onClick={() =>
+          onManage({ dayOfWeek: task.dayOfWeek, startTime: task.startTime, endTime: task.endTime, date: task.date })
+        }
+        className={`${containerClassName} text-left hover:-translate-y-0.5 hover:shadow-sm`}
+      >
+        {cardBody}
+      </button>
+    )
+  }
+
+  return <div className={containerClassName}>{cardBody}</div>
 }
 
 // Öğrencinin okul ders programındaki (bkz. StudentProfiles.school_schedule_json /
@@ -398,10 +505,10 @@ function SchoolSlotCard({ task, muted = false }) {
   )
 }
 
-function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, muted = false }) {
+function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onManageLessonSlot, muted = false }) {
   const [showBreakMenu, setShowBreakMenu] = useState(false)
 
-  if (task.isScheduleSlot) return <ScheduleSlotCard task={task} muted={muted} />
+  if (task.isScheduleSlot) return <ScheduleSlotCard task={task} muted={muted} onManage={muted ? undefined : onManageLessonSlot} />
   if (task.isSchoolSlot) return <SchoolSlotCard task={task} muted={muted} />
 
   const style = getTaskStyle(task)
@@ -419,7 +526,13 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, muted 
   const pageProgress = getPageProgress(task)
   const graded = isTaskGraded(task)
   const completionTimerInfo = isHomework ? getCompletionTimerInfo(task) : null
+  const completionTimestampLabel = isHomework ? getCompletionTimestampLabel(task) : null
   const canOpenTask = typeof onEditTask === 'function'
+  // Görev tipini konudan bağımsız her zaman ayırt edilebilir kılmak için (bkz. özel ders/spor
+  // gibi konu etiketiyle renklenmeyen türler) stil tanımına sol renkli çizgi + üstte tip
+  // etiketi ekliyoruz; barClassName tanımlı olmayan türlerde bu görsel hiç render edilmez.
+  const hasTypeAccent = Boolean(style.barClassName) && !backlog && !muted
+  const typeLabel = hasTypeAccent ? TASK_TYPES[task.taskType]?.label : null
 
   const handlePick = (minutes) => {
     setShowBreakMenu(false)
@@ -429,7 +542,7 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, muted 
   const cardToneClassName = backlog
     ? 'border-panel-red/50 bg-panel-red-soft/30 text-panel-text shadow-[0_1px_4px_rgba(220,38,38,0.15)]'
     : muted
-      ? 'border-slate-200 bg-white/80 text-slate-500 opacity-80 grayscale'
+      ? 'border-slate-200 bg-white/80 text-slate-500'
       : `shadow-[0_1px_4px_rgba(49,42,92,0.06)] hover:-translate-y-0.5 hover:shadow-sm ${style.card}`
   const summaryContent = (
     <>
@@ -468,8 +581,20 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, muted 
 
   return (
     <div
-      className={`group relative flex min-h-[68px] w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 transition duration-150 ${cardToneClassName} ${showBreakMenu ? 'z-30' : ''}`}
+      className={`group relative flex min-h-[68px] w-full flex-col gap-1.5 rounded-xl border py-2.5 pr-3 transition duration-150 ${hasTypeAccent ? 'pl-4' : 'pl-3'} ${cardToneClassName} ${showBreakMenu ? 'z-30' : ''}`}
     >
+      {hasTypeAccent ? (
+        <span className={`absolute inset-y-2 left-1.5 w-1 rounded-full ${style.barClassName}`} aria-hidden="true" />
+      ) : null}
+
+      {typeLabel ? (
+        <span
+          className={`inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${style.chipClassName}`}
+        >
+          {typeLabel}
+        </span>
+      ) : null}
+
       {backlog ? (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="inline-flex items-center gap-1 rounded-full border border-panel-red/30 bg-panel-red-soft px-2 py-0.5 text-[10px] font-extrabold text-panel-red">
@@ -562,7 +687,7 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, muted 
       ) : null}
 
       {graded ? <GradeSummaryBar task={task} onViewAnswerSheet={onViewAnswerSheet} /> : null}
-      <CompletionTimerNote info={completionTimerInfo} />
+      <CompletionTimerNote info={completionTimerInfo} completedAtLabel={completionTimestampLabel} />
     </div>
   )
 }
@@ -616,6 +741,7 @@ export default function WeeklyPlannerGrid({
   tasksByDate,
   dayStatusByDate,
   lessonSchedule,
+  lessonScheduleExceptions,
   schoolSchedule,
   onAddHomework,
   onAddTask,
@@ -623,17 +749,24 @@ export default function WeeklyPlannerGrid({
   onPublishDay,
   onQuickAddBreak,
   onViewAnswerSheet,
+  onManageLessonSlot,
 }) {
   const [expandedActionDate, setExpandedActionDate] = useState(null)
   const currentDate = todayISODate()
+  const isCurrentWeekView = weekDates.includes(currentDate)
   const weekKey = weekDates.join('|')
   const [pastDayExpansion, setPastDayExpansion] = useState({ weekKey: '', expandedDates: new Set() })
   const expandedPastDates = pastDayExpansion.weekKey === weekKey ? pastDayExpansion.expandedDates : new Set()
-  const hasCollapsedPastDay = weekDates.some((date) => date < currentDate && !expandedPastDates.has(date))
+  const hasCollapsedPastDay =
+    isCurrentWeekView && weekDates.some((date) => date < currentDate && !expandedPastDates.has(date))
   const compactPastGridStyle = hasCollapsedPastDay
     ? {
         '--weekly-plan-columns': weekDates
-          .map((date) => (date < currentDate && !expandedPastDates.has(date) ? '2.5rem' : 'minmax(18rem, 22rem)'))
+          .map((date) =>
+            isCurrentWeekView && date < currentDate && !expandedPastDates.has(date)
+              ? '2.5rem'
+              : 'minmax(18rem, 22rem)',
+          )
           .join(' '),
       }
     : undefined
@@ -671,12 +804,20 @@ export default function WeeklyPlannerGrid({
   const renderDayColumn = (date, index) => {
     const scheduleSlots = (lessonSchedule || [])
       .filter((slot) => slot.dayOfWeek === DAY_KEYS[index] && slot.startTime)
+      .filter(
+        (slot) =>
+          !(lessonScheduleExceptions || []).some(
+            (exception) =>
+              exception.dayOfWeek === slot.dayOfWeek && exception.startTime === slot.startTime && exception.date === date,
+          ),
+      )
       .map((slot, slotIndex) => ({
         ...slot,
         id: `schedule-${date}-${slotIndex}`,
         isScheduleSlot: true,
         startTime: slot.startTime,
         endTime: slot.endTime,
+        date,
       }))
     const schoolSlots = (schoolSchedule || [])
       .filter((slot) => slot.dayOfWeek === DAY_KEYS[index] && slot.startTime)
@@ -694,7 +835,7 @@ export default function WeeklyPlannerGrid({
     const isPastDay = date < currentDate
     const isToday = date === currentDate
     const isPastDayExpanded = expandedPastDates.has(date)
-    const isCollapsed = isPastDay && !isPastDayExpanded
+    const isCollapsed = isPastDay && isCurrentWeekView && !isPastDayExpanded
     const isActionsExpanded = expandedActionDate === date && !isPastDay
     const dayStatus = dayStatusByDate?.[date]
     const hasPendingDraft = dayStatus === 'taslak'
@@ -800,6 +941,7 @@ export default function WeeklyPlannerGrid({
                 task={task}
                 onEditTask={onEditTask}
                 onViewAnswerSheet={onViewAnswerSheet}
+                onManageLessonSlot={onManageLessonSlot}
                 muted={isPastDay}
                 onQuickAddBreak={
                   isPastDay || typeof onQuickAddBreak !== 'function' || task.isScheduleSlot || task.isSchoolSlot

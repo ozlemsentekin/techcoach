@@ -98,11 +98,14 @@ async function createTaskForHomework(studentId, homework, taskDate, resourceBook
     const durationMinutes = Number.isFinite(durationMinutesOverride) && durationMinutesOverride > 0
       ? durationMinutesOverride
       : Math.min(60, Math.max(20, homework.totalQuestionCount || 20))
-    const startTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(taskTime || '') ? taskTime : '00:00'
-    const [startHour, startMinute] = startTime.split(':').map(Number)
-    const startMinutes = startHour * 60 + startMinute
-    const endMinutes = (startMinutes + durationMinutes) % (24 * 60)
-    const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`
+    const startTime = isValidTime(taskTime) ? taskTime : null
+    let endTime = null
+    if (startTime) {
+      const [startHour, startMinute] = startTime.split(':').map(Number)
+      const startMinutes = startHour * 60 + startMinute
+      const endMinutes = (startMinutes + durationMinutes) % (24 * 60)
+      endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`
+    }
     const sanitizedTestIds = Array.isArray(testIds) ? testIds.filter((id) => typeof id === 'string' && id) : []
 
     const requestDb = await withRequest({
@@ -488,7 +491,7 @@ async function assignHomeworkTaskHandler(request) {
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return json(400, { error: 'Geçerli bir tarih seçilmeli.' })
     }
-    if (!isValidTime(startTime)) {
+    if (startTime && !isValidTime(startTime)) {
       return json(400, { error: 'Geçerli bir başlangıç saati seçilmeli.' })
     }
     if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
@@ -512,7 +515,7 @@ async function assignHomeworkTaskHandler(request) {
       return json(404, { error: 'Ödev bulunamadı.' })
     }
 
-    const endTime = computeEndTime(startTime, durationMinutes)
+    const endTime = startTime ? computeEndTime(startTime, durationMinutes) : null
 
     const existingDb = await withRequest({
       homeworkId: { type: sql.UniqueIdentifier, value: homeworkId },
@@ -527,8 +530,8 @@ async function assignHomeworkTaskHandler(request) {
         id: { type: sql.UniqueIdentifier, value: existingTaskId },
         studentId: { type: sql.UniqueIdentifier, value: studentId },
         date: { type: sql.Date, value: date },
-        startTime: { type: sql.Char(5), value: startTime },
-        endTime: { type: sql.Char(5), value: endTime },
+        startTime: { type: sql.Char(5), value: startTime || null },
+        endTime: { type: sql.Char(5), value: endTime || null },
         durationMinutes: { type: sql.Int, value: durationMinutes },
       })
       await updateDb.query(`
@@ -544,8 +547,8 @@ async function assignHomeworkTaskHandler(request) {
         description: { type: sql.NVarChar(1000), value: homework.title },
         subject: { type: sql.NVarChar(100), value: homework.subject_name },
         taskType: { type: sql.NVarChar(40), value: 'odev' },
-        startTime: { type: sql.Char(5), value: startTime },
-        endTime: { type: sql.Char(5), value: endTime },
+        startTime: { type: sql.Char(5), value: startTime || null },
+        endTime: { type: sql.Char(5), value: endTime || null },
         durationMinutes: { type: sql.Int, value: durationMinutes },
         targetQuestionCount: { type: sql.Int, value: homework.total_question_count || null },
         completedQuestionCount: { type: sql.Int, value: homework.completed_question_count || 0 },

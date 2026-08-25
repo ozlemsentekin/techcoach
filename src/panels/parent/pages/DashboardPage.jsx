@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../../context/useAuth'
 import { AlertTriangle, CalendarDays, Plus, Sparkles } from 'lucide-react'
 import { getTasksForDate, patchTask, createTask, removeTask } from '../../../services/taskService'
-import { getSchoolSchedule, getBacklogTasks } from '../../../services/weeklyPlanService'
+import { getSchoolSchedule, getBacklogTasks, getTeacherLessonSchedule, buildTeacherLessonTasksForDate } from '../../../services/weeklyPlanService'
 import { sendMessage } from '../../../services/messageService'
 import { getRequests, updateRequestStatus } from '../../../services/studentRequestService'
 import { evaluateDayBalance } from '../../../utils/planInsights'
@@ -170,6 +170,7 @@ export default function DashboardPage() {
   const [deletingTask, setDeletingTask] = useState(null)
   const [answerSheetTask, setAnswerSheetTask] = useState(null)
   const [schoolSchedule, setSchoolSchedule] = useState([])
+  const [teacherLessonSchedule, setTeacherLessonSchedule] = useState([])
   const [banner, setBanner] = useState('')
   const bannerTimeoutRef = useRef(null)
 
@@ -180,12 +181,14 @@ export default function DashboardPage() {
       getTasksForDate(date),
       getBacklogTasks(date),
       getRequests(),
+      getTeacherLessonSchedule().catch(() => []),
     ])
-      .then(([tasksData, backlogTasksData, requestsData]) => {
+      .then(([tasksData, backlogTasksData, requestsData, teacherLessonScheduleData]) => {
         if (ignore) return
         setTasks(tasksData)
         setBacklogTasks(backlogTasksData)
         setRequests(requestsData)
+        setTeacherLessonSchedule(teacherLessonScheduleData)
       })
       .catch((err) => {
         if (!ignore) setLoadError(err.message)
@@ -236,6 +239,11 @@ export default function DashboardPage() {
       balance: evaluateDayBalance(sortedTasks, { alreadySorted: true }),
     }
   }, [tasks])
+
+  const dailyFlowTasks = useMemo(
+    () => [...tasks, ...buildTeacherLessonTasksForDate(teacherLessonSchedule, date)],
+    [tasks, teacherLessonSchedule],
+  )
 
   const getExistingTasksForDrawer = useCallback(
     (targetDate) => (targetDate === date ? tasks : getTasksForDate(targetDate)),
@@ -320,7 +328,7 @@ export default function DashboardPage() {
         }`}
       >
         <DailyPlanTable
-          tasks={tasks}
+          tasks={dailyFlowTasks}
           backlogTasks={backlogTasks}
           onAddTask={restricted ? null : () => setDrawerState({ defaultDate: date })}
           onEdit={(task) => setDrawerState({ initialTask: task })}

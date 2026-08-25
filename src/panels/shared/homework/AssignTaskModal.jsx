@@ -16,7 +16,7 @@ function computeEndTime(startTime, durationMinutes) {
 export default function AssignTaskModal({ homework, onSave, onClose }) {
   const isEdit = Boolean(homework.hasTask)
   const [date, setDate] = useState(homework.taskDate || homework.assignedDate || todayISODate())
-  const [startTime, setStartTime] = useState(homework.taskStartTime || '16:00')
+  const [startTime, setStartTime] = useState(homework.taskStartTime || '')
   const [selectedPreset, setSelectedPreset] = useState(
     DURATION_PRESETS.includes(homework.taskDurationMinutes) ? homework.taskDurationMinutes : 'custom',
   )
@@ -32,15 +32,15 @@ export default function AssignTaskModal({ homework, onSave, onClose }) {
   const handleSubmit = async (event) => {
     event.preventDefault()
     if (saving) return
-    if (!date || !startTime || !durationMinutes || durationMinutes < 5) {
-      setError('Tarih, saat ve süre bilgilerini eksiksiz doldurun.')
+    if (!date || !durationMinutes || durationMinutes < 5) {
+      setError('Tarih ve süre bilgilerini eksiksiz doldurun.')
       return
     }
 
     setSaving(true)
     setError('')
     try {
-      await onSave({ date, startTime, durationMinutes })
+      await onSave({ date, startTime: startTime || null, durationMinutes })
     } catch (err) {
       setError(err.message || 'Bir hata oluştu, tekrar deneyin.')
     } finally {
@@ -78,10 +78,9 @@ export default function AssignTaskModal({ homework, onSave, onClose }) {
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-panel-text-muted">Başlangıç saati</span>
+            <span className="text-xs font-medium text-panel-text-muted">Başlangıç saati (isteğe bağlı)</span>
             <input
               type="time"
-              required
               value={startTime}
               onChange={(event) => setStartTime(event.target.value)}
               className="rounded-xl border border-panel-border p-3 text-sm text-panel-text"

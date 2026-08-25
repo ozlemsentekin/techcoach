@@ -63,7 +63,7 @@ export default function TaskFocusScreen({
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-panel-text-muted">
-              {task.subject || task.startTime + ' – ' + task.endTime}
+              {task.subject || (task.startTime && task.endTime ? `${task.startTime} – ${task.endTime}` : 'Saat belirtilmedi')}
             </p>
             <h2 className="text-xl font-semibold text-panel-text">{task.title}</h2>
           </div>

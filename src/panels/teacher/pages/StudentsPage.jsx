@@ -23,7 +23,12 @@ import ActionsMenu from '../../ui/ActionsMenu'
 import Button from '../../ui/Button'
 import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
 import AddTeacherStudentModal from '../components/AddTeacherStudentModal'
-import { deleteTeacherStudent, getTeacherStudents, updateTeacherStudentStatus } from '../../../services/teacherService'
+import {
+  deleteTeacherStudent,
+  getTeacherEntitlement,
+  getTeacherStudents,
+  updateTeacherStudentStatus,
+} from '../../../services/teacherService'
 import { formatDateShort } from '../../../utils/time'
 
 const STATUS_FILTERS = [
@@ -64,6 +69,7 @@ function schoolText(student) {
 
 export default function StudentsPage() {
   const [students, setStudents] = useState(null)
+  const [entitlement, setEntitlement] = useState(null)
   const [statusFilter, setStatusFilter] = useState('active')
   const [error, setError] = useState('')
   const [libraryStudent, setLibraryStudent] = useState(null)
@@ -88,6 +94,22 @@ export default function StudentsPage() {
       ignore = true
     }
   }, [statusFilter])
+
+  useEffect(() => {
+    let ignore = false
+
+    getTeacherEntitlement()
+      .then((data) => {
+        if (!ignore) setEntitlement(data)
+      })
+      .catch((err) => {
+        if (!ignore) setError(err.message)
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [])
 
   const handleStatusChange = async (student, isActive) => {
     setActionStudentId(student.studentTeacherId)
@@ -135,10 +157,12 @@ export default function StudentsPage() {
         title="Öğrencilerim"
         subtitle="Size panel erişimi verilen öğrenciler."
         actions={
-          <Button type="button" onClick={() => setShowAddModal(true)}>
-            <Plus size={16} aria-hidden="true" />
-            Öğrenci Ekle
-          </Button>
+          entitlement?.isActive ? (
+            <Button type="button" onClick={() => setShowAddModal(true)}>
+              <Plus size={16} aria-hidden="true" />
+              Öğrenci Ekle
+            </Button>
+          ) : null
         }
       />
 
@@ -199,11 +223,24 @@ export default function StudentsPage() {
                 onClick: () => setDeleteStudent(student),
               },
             ]
+            const goToDetail = () => {
+              if (!student.isActive || isBusy) return
+              navigate(`/teacher/students/${student.studentTeacherId}`)
+            }
             return (
               <div
                 key={student.studentTeacherId}
+                role={student.isActive ? 'button' : undefined}
+                tabIndex={student.isActive ? 0 : undefined}
+                onClick={goToDetail}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    goToDetail()
+                  }
+                }}
                 className={`flex flex-col gap-4 rounded-2xl border border-panel-border p-5 shadow-panel-1 ${
-                  student.isActive ? 'bg-panel-surface' : 'bg-panel-surface-soft'
+                  student.isActive ? 'bg-panel-surface cursor-pointer' : 'bg-panel-surface-soft'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -225,18 +262,20 @@ export default function StudentsPage() {
                     </div>
                   </div>
 
-                  <ActionsMenu
-                    isOpen={openActionsStudentId === student.studentTeacherId}
-                    onToggle={() =>
-                      setOpenActionsStudentId((current) =>
-                        current === student.studentTeacherId ? null : student.studentTeacherId,
-                      )
-                    }
-                    onClose={() => setOpenActionsStudentId(null)}
-                    triggerLabel={`${student.studentFullName} işlemleri`}
-                    disabled={isBusy}
-                    items={actionItems}
-                  />
+                  <div onClick={(event) => event.stopPropagation()}>
+                    <ActionsMenu
+                      isOpen={openActionsStudentId === student.studentTeacherId}
+                      onToggle={() =>
+                        setOpenActionsStudentId((current) =>
+                          current === student.studentTeacherId ? null : student.studentTeacherId,
+                        )
+                      }
+                      onClose={() => setOpenActionsStudentId(null)}
+                      triggerLabel={`${student.studentFullName} işlemleri`}
+                      disabled={isBusy}
+                      items={actionItems}
+                    />
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-1.5 text-sm text-panel-text-muted">
@@ -264,7 +303,7 @@ export default function StudentsPage() {
                   </p>
                 </div>
 
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1.5" onClick={(event) => event.stopPropagation()}>
                   <Button
                     type="button"
                     variant="secondary"

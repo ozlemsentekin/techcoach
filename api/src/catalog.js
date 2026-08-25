@@ -366,6 +366,7 @@ async function listResourceBooksHandler(request) {
       LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
       LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
       LEFT JOIN dbo.Users u ON u.id = rb.created_by_user_id
+      WHERE NOT (rb.status = 'pending' AND rb.is_active = 0)
       ORDER BY rb.created_at ASC;
     `)
 

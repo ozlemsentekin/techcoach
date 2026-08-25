@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
@@ -11,6 +11,7 @@ import {
   Coffee,
   Dumbbell,
   FlaskConical,
+  GraduationCap,
   MinusCircle,
   Moon,
   MoreHorizontal,
@@ -51,7 +52,7 @@ const TASK_KIND_STYLES = {
     label: 'Ödev',
     icon: NotebookPen,
     rowBorder: 'border-l-panel-warm',
-    rowBackground: 'bg-panel-warm-soft/20 hover:bg-panel-warm-soft/35',
+    rowBackground: 'bg-white hover:bg-panel-surface-soft/50',
     typeBadge: 'border-panel-warm/35 bg-panel-warm-soft text-panel-warm',
     typeIcon: 'bg-white text-panel-warm',
     timeBlock: 'bg-panel-warm-soft/45',
@@ -63,7 +64,7 @@ const TASK_KIND_STYLES = {
     label: 'Mola',
     icon: Coffee,
     rowBorder: 'border-l-panel-lilac',
-    rowBackground: 'bg-panel-lilac-soft/45 hover:bg-panel-lilac-soft/65',
+    rowBackground: 'bg-white hover:bg-panel-surface-soft/50',
     typeBadge: 'border-panel-lilac/35 bg-panel-lilac-soft text-panel-lilac',
     typeIcon: 'bg-white text-panel-lilac',
     timeBlock: 'bg-panel-lilac-soft/60',
@@ -75,7 +76,7 @@ const TASK_KIND_STYLES = {
     label: 'Aktivite',
     icon: Sun,
     rowBorder: 'border-l-panel-accent',
-    rowBackground: 'bg-panel-accent-soft/35 hover:bg-panel-accent-soft/55',
+    rowBackground: 'bg-white hover:bg-panel-surface-soft/50',
     typeBadge: 'border-panel-accent/35 bg-panel-accent-soft text-panel-warm',
     typeIcon: 'bg-white text-panel-accent',
     timeBlock: 'bg-panel-accent-soft/55',
@@ -87,13 +88,25 @@ const TASK_KIND_STYLES = {
     label: 'Ders',
     icon: BookOpen,
     rowBorder: 'border-l-panel-blue',
-    rowBackground: 'bg-panel-surface hover:bg-panel-surface-soft/60',
+    rowBackground: 'bg-white hover:bg-panel-surface-soft/50',
     typeBadge: 'border-panel-blue/25 bg-panel-blue-soft text-panel-blue',
     typeIcon: 'bg-white text-panel-blue',
     timeBlock: 'bg-panel-surface-soft',
     durationChip: 'bg-white text-panel-text-muted',
     questionChip: 'bg-panel-blue-soft text-panel-blue',
     dot: 'border-panel-blue-soft text-panel-blue',
+  },
+  lesson: {
+    label: 'Planlı Ders',
+    icon: GraduationCap,
+    rowBorder: 'border-l-panel-accent',
+    rowBackground: 'bg-panel-accent-soft/35 hover:bg-panel-accent-soft/50',
+    typeBadge: 'border-panel-accent/35 bg-panel-accent-soft text-panel-warm',
+    typeIcon: 'bg-white text-panel-accent',
+    timeBlock: 'bg-panel-accent-soft/45',
+    durationChip: 'bg-white text-panel-warm',
+    questionChip: 'bg-panel-accent-soft text-panel-warm',
+    dot: 'border-panel-accent text-panel-accent',
   },
 }
 
@@ -144,6 +157,7 @@ function normalizeText(value) {
 }
 
 function getTaskKind(task) {
+  if (task.isTeacherLessonSlot) return 'lesson'
   if (BREAK_TASK_TYPES.has(task.taskType)) return 'break'
   if (DAILY_HOMEWORK_TASK_TYPES.has(task.taskType)) return 'homework'
   if (ACTIVITY_TASK_TYPES.has(task.taskType)) return 'activity'
@@ -249,8 +263,16 @@ function TimeBlock({ task, visual }) {
   return (
     <div className={`flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 sm:block sm:bg-transparent sm:p-0 ${visual.timeBlock}`}>
       <div className="min-w-0">
-        <p className="whitespace-nowrap text-sm font-bold text-panel-text">{task.startTime}</p>
-        <p className="whitespace-nowrap text-xs font-medium text-panel-text-muted">{task.endTime}</p>
+        {task.isBacklog ? (
+          <BacklogTag task={task} />
+        ) : task.startTime ? (
+          <>
+            <p className="whitespace-nowrap text-sm font-bold text-panel-text">{task.startTime}</p>
+            <p className="whitespace-nowrap text-xs font-medium text-panel-text-muted">{task.endTime}</p>
+          </>
+        ) : (
+          <p className="whitespace-nowrap text-xs font-semibold text-panel-text-muted">Saat eklenmedi</p>
+        )}
       </div>
       {questionCount > 0 ? (
         <div className="flex flex-nowrap items-center gap-1.5 sm:mt-2">
@@ -277,7 +299,7 @@ function StatusPill({ status }) {
 function DailyFlowFilter({ activeFilter, counts, onChange }) {
   return (
     <div
-      className="flex w-full gap-1 overflow-x-auto rounded-xl border border-panel-border bg-panel-surface-soft/70 p-1 sm:w-auto sm:overflow-visible"
+      className="flex w-full gap-1 overflow-x-auto rounded-xl border border-white/15 bg-white/10 p-1 sm:w-auto sm:overflow-visible"
       aria-label="Günün akışı filtresi"
     >
       {DAILY_FLOW_FILTERS.map((filter) => {
@@ -289,16 +311,16 @@ function DailyFlowFilter({ activeFilter, counts, onChange }) {
             type="button"
             aria-pressed={selected}
             onClick={() => onChange(filter.key)}
-            className={`inline-flex h-9 min-w-max flex-1 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-blue sm:flex-none sm:px-3 ${
+            className={`inline-flex h-9 min-w-max flex-1 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:flex-none sm:px-3 ${
               selected
-                ? 'bg-panel-surface text-panel-text shadow-sm'
-                : 'text-panel-text-muted hover:bg-panel-surface/70 hover:text-panel-text'
+                ? 'bg-white text-panel-blue shadow-sm'
+                : 'text-white/70 hover:bg-white/10 hover:text-white'
             }`}
           >
             <span>{filter.label}</span>
             <span
               className={`rounded-full px-1.5 py-0.5 text-[11px] leading-none ${
-                selected ? 'bg-panel-surface-soft text-panel-text-muted' : 'bg-panel-surface/70 text-panel-text-muted'
+                selected ? 'bg-panel-blue-soft text-panel-blue' : 'bg-white/15 text-white/80'
               }`}
             >
               {counts[filter.key]}
@@ -368,8 +390,8 @@ function SubjectChip({ task }) {
 function TaskDetail({ task }) {
   const lines = getDescriptionLines(task)
   const primary = lines[0] || task.title || 'Görev detayı eklenmemiş.'
-  const secondary = lines.slice(1, 3)
-  const hasHiddenLines = lines.length > 3
+  const secondary = task.isTeacherLessonSlot && task.topic ? [task.topic] : lines.slice(1, 3)
+  const hasHiddenLines = !task.isTeacherLessonSlot && lines.length > 3
 
   return (
     <div className="min-w-0">
@@ -578,6 +600,54 @@ function TaskActionsMenu({ isOpen, onToggle, onClose, onEdit, onDelete }) {
   )
 }
 
+function formatBacklogTooltip(task) {
+  const dateLabel = formatDateShort(task.date)
+  const timeLabel = task.startTime && task.endTime ? `${task.startTime} - ${task.endTime}` : task.startTime || ''
+  const whenLabel = timeLabel ? `${dateLabel}, ${timeLabel}` : dateLabel
+  return `${whenLabel} için planlanmıştı, zamanında yapılmadı.`
+}
+
+function BacklogTag({ task }) {
+  const [open, setOpen] = useState(false)
+  const wrapperRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return undefined
+    function handlePointerDown(event) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [open])
+
+  return (
+    <span ref={wrapperRef} className="relative inline-flex">
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          setOpen((current) => !current)
+        }}
+        aria-expanded={open}
+        aria-label="Biriken görev detayı"
+      >
+        <Badge tone="red" className="cursor-pointer gap-1 text-[10px] font-extrabold">
+          <AlertTriangle size={11} aria-hidden="true" />
+          Biriken Görev
+        </Badge>
+      </button>
+      {open ? (
+        <span
+          role="tooltip"
+          className="absolute left-0 top-full z-20 mt-1.5 w-56 rounded-lg border border-panel-red/25 bg-white px-3 py-2 text-xs font-semibold leading-snug text-panel-text shadow-lg"
+        >
+          {formatBacklogTooltip(task)}
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
 function TaskAgendaItem({
   task,
   isFirst,
@@ -589,18 +659,14 @@ function TaskAgendaItem({
   onDelete,
   onOpenAnswerSheet,
 }) {
-  const completed = task.status === 'tamamlandi'
   const visual = getTaskKindStyle(task)
   const taskKind = getTaskKind(task)
-  const showStatus = taskKind !== 'break' && taskKind !== 'activity'
+  const isLessonSlot = taskKind === 'lesson'
+  const showStatus = taskKind !== 'break' && taskKind !== 'activity' && !isLessonSlot
 
   return (
     <article
-      className={`grid grid-cols-[minmax(0,1fr)_2.5rem] gap-3 border-l-4 px-4 py-4 transition-colors sm:grid-cols-[10rem_2rem_minmax(0,1fr)_2.5rem] sm:gap-4 sm:px-5 ${
-        visual.rowBorder
-      } ${
-        completed && showStatus ? 'bg-panel-sage-soft/30' : visual.rowBackground
-      }`}
+      className={`grid grid-cols-[minmax(0,1fr)_2.5rem] gap-3 border-l-4 px-4 py-4 transition-colors sm:grid-cols-[10rem_2rem_minmax(0,1fr)_2.5rem] sm:gap-4 sm:px-5 ${visual.rowBorder} ${visual.rowBackground}`}
     >
       <div className="col-start-1 row-start-1 min-w-0 sm:col-start-1 sm:row-start-1">
         <TimeBlock task={task} visual={visual} />
@@ -611,7 +677,7 @@ function TaskAgendaItem({
       <div className="col-span-2 col-start-1 row-start-2 min-w-0 sm:col-span-1 sm:col-start-3 sm:row-start-1">
         <div className="flex flex-wrap items-center gap-2">
           <TaskKindBadge task={task} visual={visual} />
-          <DurationBadge task={task} visual={visual} />
+          {task.isBacklog ? null : <DurationBadge task={task} visual={visual} />}
           <SubjectChip task={task} />
           {showStatus ? <StatusPill status={task.status} /> : null}
         </div>
@@ -621,13 +687,15 @@ function TaskAgendaItem({
       </div>
 
       <div className="col-start-2 row-start-1 justify-self-end sm:col-start-4 sm:row-start-1">
-        <TaskActionsMenu
-          isOpen={isMenuOpen}
-          onToggle={onToggleMenu}
-          onClose={onCloseMenu}
-          onEdit={onEdit}
-          onDelete={onDelete}
-        />
+        {isLessonSlot ? null : (
+          <TaskActionsMenu
+            isOpen={isMenuOpen}
+            onToggle={onToggleMenu}
+            onClose={onCloseMenu}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        )}
       </div>
 
       <OpticalResultSummary
@@ -639,39 +707,15 @@ function TaskAgendaItem({
   )
 }
 
-function BacklogTaskRow({ task }) {
-  const visual = getTaskKindStyle(task)
-  const subjectLabel = getSubjectLabel(task)
-
-  return (
-    <div className="flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-5">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-panel-red">
-        <AlertTriangle size={16} aria-hidden="true" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="red" className="text-[10px] font-extrabold">
-            Biriken Görev
-          </Badge>
-          <span className="text-xs font-semibold text-panel-text-muted">
-            {formatDateShort(task.date)} tarihinde zamanında yapılmadı
-          </span>
-        </div>
-        <p className="mt-1 truncate text-sm font-bold text-panel-text">{task.title}</p>
-        {subjectLabel ? <p className="mt-0.5 text-xs font-medium text-panel-text-muted">{subjectLabel}</p> : null}
-      </div>
-      <span className={`inline-flex h-7 shrink-0 items-center rounded-lg border px-2.5 text-xs font-bold ${visual.typeBadge}`}>
-        {TASK_TYPES[task.taskType]?.label || visual.label}
-      </span>
-    </div>
-  )
-}
-
 export default function DailyPlanTable({ tasks, backlogTasks = [], onEdit, onDelete, onAddTask, onOpenAnswerSheet }) {
   const [openMenuId, setOpenMenuId] = useState(null)
   const [agendaFilter, setAgendaFilter] = useState('all')
 
-  const sorted = useMemo(() => getSortedTasks(tasks), [tasks])
+  const combinedTasks = useMemo(
+    () => [...backlogTasks.map((task) => ({ ...task, isBacklog: true })), ...tasks],
+    [backlogTasks, tasks],
+  )
+  const sorted = useMemo(() => getSortedTasks(combinedTasks), [combinedTasks])
   const filterCounts = useMemo(
     () =>
       sorted.reduce(
@@ -701,37 +745,15 @@ export default function DailyPlanTable({ tasks, backlogTasks = [], onEdit, onDel
   }
 
   return (
-    <Fragment>
-      {backlogTasks.length > 0 ? (
-        <section className="panel-card mb-4 overflow-hidden border-panel-red/30">
-          <div className="flex items-center gap-3 border-b border-panel-red/20 bg-panel-red-soft/40 p-4 sm:p-5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-panel-red">
-              <AlertTriangle size={17} aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <h2 className="text-lg font-bold text-panel-text sm:text-xl">Biriken Görevler</h2>
-              <p className="mt-0.5 text-sm text-panel-text-muted">
-                {backlogTasks.length} görev zamanında yapılmadı
-              </p>
-            </div>
-          </div>
-          <div className="divide-y divide-panel-border">
-            {backlogTasks.map((task) => (
-              <BacklogTaskRow key={task.id} task={task} />
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      <section className="panel-card overflow-hidden">
-      <div className="flex flex-col gap-3 border-b border-panel-border bg-panel-surface-soft/35 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+    <section className="panel-card overflow-hidden">
+      <div className="flex flex-col gap-3 bg-panel-blue p-4 text-white sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-panel-accent-soft text-panel-blue">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15 text-white">
             <CalendarDays size={17} aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <h2 className="text-lg font-bold text-panel-text sm:text-xl">Günün Akışı</h2>
-            <p className="mt-0.5 text-sm text-panel-text-muted">{getDailyFlowSummary(agendaFilter, filterCounts)}</p>
+            <h2 className="text-lg font-bold text-white sm:text-xl">Günün Akışı</h2>
+            <p className="mt-0.5 text-sm text-white/70">{getDailyFlowSummary(agendaFilter, filterCounts)}</p>
           </div>
         </div>
 
@@ -788,7 +810,6 @@ export default function DailyPlanTable({ tasks, backlogTasks = [], onEdit, onDel
           ))}
         </div>
       )}
-      </section>
-    </Fragment>
+    </section>
   )
 }

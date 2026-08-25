@@ -23,7 +23,6 @@ import { ResourceBookRates } from '../../shared/ResourceBookCard'
 import { filterTopicsBySearch } from '../../shared/homework/topicSearch'
 import { cn } from '../../ui/utils'
 
-const DEFAULT_TASK_TIME = '18:00'
 const DEFAULT_TASK_DURATION_MINUTES = 45
 const DURATION_PRESETS = [30, 45, 60]
 
@@ -226,18 +225,18 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
 
     const trimmedNote = note.trim()
     const trimmedTime = taskTime.trim()
-    const usingDefaultTime = !trimmedTime
     const selectedDuration = durationPreset === 'custom' ? Number(customDuration) || 0 : durationPreset
-    const effectiveStartTime = trimmedTime || DEFAULT_TASK_TIME
-    const effectiveDuration = usingDefaultTime ? DEFAULT_TASK_DURATION_MINUTES : selectedDuration || DEFAULT_TASK_DURATION_MINUTES
-    const effectiveEndTime = addMinutesToTime(effectiveStartTime, effectiveDuration)
+    const effectiveDuration = selectedDuration || DEFAULT_TASK_DURATION_MINUTES
 
-    const schoolConflict = getSchoolScheduleConflict(schoolSchedule, defaultTaskDate, effectiveStartTime, effectiveEndTime)
-    if (schoolConflict) {
-      setSaveError(
-        `Bu saatte öğrenci okulda (${schoolConflict.startTime}-${schoolConflict.endTime}${schoolConflict.lessonName ? ` · ${schoolConflict.lessonName}` : ''}). Bu saate ödev eklenemez.`,
-      )
-      return
+    if (trimmedTime) {
+      const effectiveEndTime = addMinutesToTime(trimmedTime, effectiveDuration)
+      const schoolConflict = getSchoolScheduleConflict(schoolSchedule, defaultTaskDate, trimmedTime, effectiveEndTime)
+      if (schoolConflict) {
+        setSaveError(
+          `Bu saatte öğrenci okulda (${schoolConflict.startTime}-${schoolConflict.endTime}${schoolConflict.lessonName ? ` · ${schoolConflict.lessonName}` : ''}). Bu saate ödev eklenemez.`,
+        )
+        return
+      }
     }
 
     setSaving(true)
@@ -254,7 +253,7 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
         totalQuestionCount: Number(totalQuestionCount) || 0,
         totalPageCount: isReadingBook ? Number(totalPageCount) || 0 : undefined,
         taskDate: defaultTaskDate,
-        taskTime: effectiveStartTime,
+        taskTime: trimmedTime || null,
         taskDurationMinutes: effectiveDuration,
       })
     } catch (err) {
@@ -555,7 +554,7 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
                       ) : null}
                     </div>
                   ) : (
-                    <span className="text-xs text-panel-text-muted">Boş bırakılırsa 18:00 · 45 dk olarak kaydedilir.</span>
+                    <span className="text-xs text-panel-text-muted">Boş bırakılırsa görev saatsiz eklenir, süre 45 dk olarak kaydedilir.</span>
                   )}
                 </div>
               </div>

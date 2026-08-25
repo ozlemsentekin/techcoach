@@ -130,7 +130,7 @@ async function fetchNextOneTimeLessonsByStudentTeacherId(teacherUserId, todayISO
     INNER JOIN dbo.StudentTeachers st ON st.id = t.student_teacher_id
     WHERE st.teacher_user_id = @teacherUserId
       AND st.is_active = 1
-      AND t.task_type = 'ders-calisma' AND t.created_by = 'ogretmen'
+      AND ((t.task_type = 'ders-calisma' AND t.created_by = 'ogretmen') OR t.task_type = 'ozel-ders')
       AND t.date >= @today
     ORDER BY t.date ASC, t.start_time ASC;
   `)
@@ -405,8 +405,8 @@ async function getTeacherStudentHandler(request) {
     })
     const result = await requestDb.query(`
       SELECT st.id AS student_teacher_id, st.student_id, u.full_name AS student_full_name, u.phone_number AS student_phone,
-             st.subject_id, s.name AS subject_name, st.teacher_type, st.schedule_json, st.access_granted_at,
-             st.is_active,
+             st.subject_id, s.name AS subject_name, st.teacher_type, st.schedule_json, st.schedule_exceptions_json,
+             st.access_granted_at, st.is_active,
              sp.grade AS student_grade, sp.photo_url AS student_photo_url, sch.name AS school_name,
              (SELECT COUNT(*) FROM dbo.StudentTeacherResourceBooks strb WHERE strb.teacher_id = st.id) AS resource_count
       FROM dbo.StudentTeachers st
@@ -437,6 +437,7 @@ async function getTeacherStudentHandler(request) {
         typeLabel: TEACHER_TYPE_LABELS[record.teacher_type] || record.teacher_type,
         isActive: Boolean(record.is_active),
         schedule: parseScheduleJson(record.schedule_json),
+        scheduleExceptions: parseScheduleJson(record.schedule_exceptions_json),
         resourceCount: Number(record.resource_count) || 0,
         accessGrantedAt: record.access_granted_at || null,
       },
@@ -938,7 +939,8 @@ async function createTeacherStudentHandler(request) {
 async function fetchRecurringLessonEntries(teacherUserId) {
   const requestDb = await withRequest({ teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId } })
   const result = await requestDb.query(`
-    SELECT st.id AS student_teacher_id, u.full_name AS student_full_name, s.name AS subject_name, st.schedule_json
+    SELECT st.id AS student_teacher_id, u.full_name AS student_full_name, s.name AS subject_name,
+           st.schedule_json, st.schedule_exceptions_json
     FROM dbo.StudentTeachers st
     INNER JOIN dbo.Users u ON u.id = st.student_id
     LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
@@ -948,16 +950,20 @@ async function fetchRecurringLessonEntries(teacherUserId) {
       AND st.schedule_json IS NOT NULL;
   `)
 
-  return result.recordset.flatMap((record) =>
-    parseScheduleJson(record.schedule_json).map((slot) => ({
+  return result.recordset.flatMap((record) => {
+    const exceptions = parseScheduleJson(record.schedule_exceptions_json)
+    return parseScheduleJson(record.schedule_json).map((slot) => ({
       dayOfWeek: slot.dayOfWeek,
       startTime: slot.startTime,
       endTime: slot.endTime,
       studentTeacherId: record.student_teacher_id,
       studentFullName: record.student_full_name,
       subjectName: record.subject_name || null,
-    })),
-  )
+      skipDates: exceptions
+        .filter((exception) => exception.dayOfWeek === slot.dayOfWeek && exception.startTime === slot.startTime)
+        .map((exception) => exception.date),
+    }))
+  })
 }
 
 async function fetchOneTimeLessonEntries(teacherUserId, weekStart) {
@@ -976,7 +982,7 @@ async function fetchOneTimeLessonEntries(teacherUserId, weekStart) {
     LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
     WHERE st.teacher_user_id = @teacherUserId
       AND st.is_active = 1
-      AND t.task_type = 'ders-calisma' AND t.created_by = 'ogretmen'
+      AND ((t.task_type = 'ders-calisma' AND t.created_by = 'ogretmen') OR t.task_type = 'ozel-ders')
       AND t.date BETWEEN @weekStart AND @weekEnd;
   `)
 
@@ -1181,6 +1187,130 @@ async function deleteTeacherRecurringLessonSlotHandler(request) {
   }
 }
 
+// Tekrarlayan bir ders kuralının tek bir haftadaki oluşumunu, kuralın kendisini bozmadan
+// başka bir tarih/saate taşır: schedule_exceptions_json'a o oluşumu "atla" kaydı eklenir ve
+// yeni tarih/saatte gerçek bir Tasks satırı (tek seferlik ders) oluşturulur.
+async function moveTeacherRecurringLessonOccurrenceHandler(request) {
+  try {
+    const { error, studentId, studentTeacherId, teacherType, subjectId, actorId: teacherUserId } =
+      await requireTeacherStudentContext(request)
+    if (error) return error
+
+    if (teacherType !== 'ozel_ogretmen') {
+      return json(400, { error: 'Ders planı yalnızca özel ders öğrencileri için kullanılabilir.' })
+    }
+
+    const payload = await request.json().catch(() => null)
+    const dayOfWeek = payload?.dayOfWeek
+    const originalStartTime = payload?.originalStartTime
+    const originalDate = payload?.originalDate
+    const date = payload?.date
+    const startTime = payload?.startTime
+    const durationMinutes = Number(payload?.durationMinutes)
+
+    if (!WEEKDAY_IDS.includes(dayOfWeek) || !isValidTime(originalStartTime)) {
+      return json(400, { error: 'Taşınacak ders bulunamadı.' })
+    }
+    if (!originalDate || !/^\d{4}-\d{2}-\d{2}$/.test(originalDate) || weekdayIdForDate(originalDate) !== dayOfWeek) {
+      return json(400, { error: 'Taşınacak dersin tarihi geçersiz.' })
+    }
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return json(400, { error: 'Geçerli bir tarih seçilmeli.' })
+    }
+    const todayISO = new Date().toISOString().slice(0, 10)
+    if (date < todayISO) {
+      return json(400, { error: 'Geçmiş bir tarihe ders taşınamaz.' })
+    }
+    if (!isValidTime(startTime)) {
+      return json(400, { error: 'Geçerli bir başlangıç saati seçilmeli.' })
+    }
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
+      return json(400, { error: 'Süre 5 ile 480 dakika arasında olmalı.' })
+    }
+
+    const endTime = computeEndTime(startTime, durationMinutes)
+
+    const currentDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: studentTeacherId } })
+    const currentResult = await currentDb.query(`
+      SELECT schedule_json, schedule_exceptions_json FROM dbo.StudentTeachers WHERE id = @id;
+    `)
+    const currentRecord = currentResult.recordset[0]
+    const schedule = parseScheduleJson(currentRecord?.schedule_json)
+    const slotExists = schedule.some((slot) => slot.dayOfWeek === dayOfWeek && slot.startTime === originalStartTime)
+    if (!slotExists) {
+      return json(404, { error: 'Taşınacak ders bulunamadı.' })
+    }
+
+    const exceptions = parseScheduleJson(currentRecord?.schedule_exceptions_json)
+    const alreadySkipped = exceptions.some(
+      (exception) =>
+        exception.dayOfWeek === dayOfWeek && exception.startTime === originalStartTime && exception.date === originalDate,
+    )
+    if (alreadySkipped) {
+      return json(409, { error: 'Bu ders zaten başka bir tarihe taşınmış.' })
+    }
+
+    const recurringEntries = (await fetchRecurringLessonEntries(teacherUserId)).filter(
+      (entry) =>
+        !(entry.studentTeacherId === studentTeacherId && entry.dayOfWeek === dayOfWeek && entry.startTime === originalStartTime),
+    )
+    const newDayOfWeek = weekdayIdForDate(date)
+    const recurringConflict = recurringEntries.some(
+      (entry) => entry.dayOfWeek === newDayOfWeek && timeRangesOverlap(startTime, endTime, entry.startTime, entry.endTime),
+    )
+
+    const oneTimeEntries = await fetchOneTimeLessonEntries(teacherUserId, date)
+    const oneTimeConflict = oneTimeEntries.some(
+      (entry) => entry.date === date && timeRangesOverlap(startTime, endTime, entry.startTime, entry.endTime),
+    )
+
+    if (recurringConflict || oneTimeConflict) {
+      return json(409, { error: 'Bu saatte planlanmış başka bir dersiniz var.' })
+    }
+
+    const subjectDb = await withRequest({ subjectId: { type: sql.UniqueIdentifier, value: subjectId } })
+    const subjectResult = await subjectDb.query(`SELECT TOP 1 name FROM dbo.Subjects WHERE id = @subjectId;`)
+    const subjectName = subjectResult.recordset[0]?.name || null
+    const title = subjectName ? `${subjectName} Dersi` : 'Özel Ders'
+
+    await withTransaction(async (requestInTransaction) => {
+      const nextExceptions = [...exceptions, { dayOfWeek, startTime: originalStartTime, date: originalDate }]
+      const updateScheduleDb = await requestInTransaction({
+        id: { type: sql.UniqueIdentifier, value: studentTeacherId },
+        scheduleExceptionsJson: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(nextExceptions) },
+      })
+      await updateScheduleDb.query(`
+        UPDATE dbo.StudentTeachers SET schedule_exceptions_json = @scheduleExceptionsJson WHERE id = @id;
+      `)
+
+      const insertDb = await requestInTransaction({
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+        date: { type: sql.Date, value: date },
+        title: { type: sql.NVarChar(200), value: title },
+        subject: { type: sql.NVarChar(100), value: subjectName },
+        startTime: { type: sql.Char(5), value: startTime },
+        endTime: { type: sql.Char(5), value: endTime },
+        durationMinutes: { type: sql.Int, value: durationMinutes },
+      })
+      await insertDb.query(`
+        INSERT INTO dbo.Tasks (
+          student_id, student_teacher_id, date, title, subject, task_type,
+          start_time, end_time, duration_minutes, status, priority, created_by, is_draft
+        )
+        VALUES (
+          @studentId, @studentTeacherId, @date, @title, @subject, 'ders-calisma',
+          @startTime, @endTime, @durationMinutes, 'bekliyor', 'orta', 'ogretmen', 0
+        );
+      `)
+    })
+
+    return json(200, { success: true })
+  } catch (error) {
+    return handleError(error, 'moveTeacherRecurringLessonOccurrenceHandler', 'Ders taşınamadı.')
+  }
+}
+
 async function addTeacherOneTimeLessonHandler(request) {
   try {
     const {
@@ -1309,7 +1439,7 @@ async function updateTeacherOneTimeLessonHandler(request) {
     const lessonResult = await lessonDb.query(`
       SELECT TOP 1 id FROM dbo.Tasks
       WHERE id = @id AND student_teacher_id = @studentTeacherId
-        AND task_type = 'ders-calisma' AND created_by = 'ogretmen';
+        AND ((task_type = 'ders-calisma' AND created_by = 'ogretmen') OR task_type = 'ozel-ders');
     `)
     if (!lessonResult.recordset[0]) {
       return json(404, { error: 'Ders bulunamadı.' })
@@ -1366,7 +1496,7 @@ async function deleteTeacherOneTimeLessonHandler(request) {
       DELETE FROM dbo.Tasks
       OUTPUT deleted.id
       WHERE id = @id AND student_teacher_id = @studentTeacherId
-        AND task_type = 'ders-calisma' AND created_by = 'ogretmen';
+        AND ((task_type = 'ders-calisma' AND created_by = 'ogretmen') OR task_type = 'ozel-ders');
     `)
     if (!deleteResult.recordset[0]) {
       return json(404, { error: 'Ders bulunamadı.' })
@@ -2037,7 +2167,7 @@ async function assignTeacherHomeworkTaskHandler(request) {
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return json(400, { error: 'Geçerli bir tarih seçilmeli.' })
     }
-    if (!isValidTime(startTime)) {
+    if (startTime && !isValidTime(startTime)) {
       return json(400, { error: 'Geçerli bir başlangıç saati seçilmeli.' })
     }
     if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
@@ -2062,7 +2192,7 @@ async function assignTeacherHomeworkTaskHandler(request) {
       return json(404, { error: 'Ödev bulunamadı.' })
     }
 
-    const endTime = computeEndTime(startTime, durationMinutes)
+    const endTime = startTime ? computeEndTime(startTime, durationMinutes) : null
 
     const existingDb = await withRequest({ homeworkId: { type: sql.UniqueIdentifier, value: homeworkId } })
     const existingResult = await existingDb.query(`
@@ -2075,8 +2205,8 @@ async function assignTeacherHomeworkTaskHandler(request) {
         id: { type: sql.UniqueIdentifier, value: existingTaskId },
         studentId: { type: sql.UniqueIdentifier, value: studentId },
         date: { type: sql.Date, value: date },
-        startTime: { type: sql.Char(5), value: startTime },
-        endTime: { type: sql.Char(5), value: endTime },
+        startTime: { type: sql.Char(5), value: startTime || null },
+        endTime: { type: sql.Char(5), value: endTime || null },
         durationMinutes: { type: sql.Int, value: durationMinutes },
       })
       await updateDb.query(`
@@ -2092,8 +2222,8 @@ async function assignTeacherHomeworkTaskHandler(request) {
         description: { type: sql.NVarChar(1000), value: homework.title },
         subject: { type: sql.NVarChar(100), value: homework.subject_name },
         taskType: { type: sql.NVarChar(40), value: 'odev' },
-        startTime: { type: sql.Char(5), value: startTime },
-        endTime: { type: sql.Char(5), value: endTime },
+        startTime: { type: sql.Char(5), value: startTime || null },
+        endTime: { type: sql.Char(5), value: endTime || null },
         durationMinutes: { type: sql.Int, value: durationMinutes },
         targetQuestionCount: { type: sql.Int, value: homework.total_question_count || null },
         completedQuestionCount: { type: sql.Int, value: homework.completed_question_count || 0 },
@@ -2544,6 +2674,7 @@ module.exports = {
   addTeacherRecurringLessonSlotHandler,
   updateTeacherRecurringLessonSlotHandler,
   deleteTeacherRecurringLessonSlotHandler,
+  moveTeacherRecurringLessonOccurrenceHandler,
   addTeacherOneTimeLessonHandler,
   updateTeacherOneTimeLessonHandler,
   deleteTeacherOneTimeLessonHandler,

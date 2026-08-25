@@ -61,6 +61,11 @@ function TeacherCard({ teacher, onEditResources }) {
         <span className="rounded-full bg-[#eef3f3] px-2.5 py-1 text-[11px] font-semibold text-[#5f7f81]">
           {teacher.typeLabel}
         </span>
+        {teacher.teacherUserId ? (
+          <span className="rounded-full bg-[#e8f3ee] px-2.5 py-1 text-[11px] font-semibold text-[#3f8f6c]">
+            Panelde
+          </span>
+        ) : null}
         <a
           href={`tel:${teacher.phone.replace(/\s/g, '')}`}
           className="inline-flex items-center gap-1 rounded-full bg-[#f3f5f5] px-2.5 py-1 text-[11px] font-semibold text-[#667475]"
@@ -97,6 +102,7 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
   const [subjects, setSubjects] = useState(null)
   const [form, setForm] = useState(INITIAL_FORM)
   const [error, setError] = useState('')
+  const [accessNotice, setAccessNotice] = useState('')
   const [saving, setSaving] = useState(false)
   const [resourceModalTeacher, setResourceModalTeacher] = useState(null)
 
@@ -188,12 +194,15 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
     const validationError = validateForm()
     if (validationError) {
       setError(validationError)
+      setAccessNotice('')
       return
     }
 
     setError('')
+    setAccessNotice('')
     setSaving(true)
     try {
+      const submittedName = form.fullName.trim()
       const data = await authRequest(`/api/parent/students/${student.id}/teachers`, {
         method: 'POST',
         body: JSON.stringify({
@@ -207,6 +216,11 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
       setTeachers(data.teachers)
       onSaved(student.id, data.teacherCount)
       resetForm()
+      if (data.teacherAccess?.isNewAccount) {
+        setAccessNotice(`${submittedName} için öğretmen hesabı oluşturuldu. Şifre telefon numarasının son 6 hanesi.`)
+      } else {
+        setAccessNotice(`${submittedName} mevcut öğretmen hesabına bağlandı.`)
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -243,6 +257,9 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
           {error ? (
             <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
+          ) : null}
+          {accessNotice ? (
+            <div className="mb-4 rounded-xl bg-[#e8f3ee] px-4 py-3 text-sm font-medium text-[#3f8f6c]">{accessNotice}</div>
           ) : null}
 
           {isLoading ? (

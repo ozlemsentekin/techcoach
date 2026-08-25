@@ -1,4 +1,5 @@
 import { parseTimeToMinutes } from './time'
+import { compareTasksBySchedule } from './taskSelectors'
 import { HOMEWORK_TASK_TYPES } from '../data/taskTypes'
 
 const STUDY_TASK_TYPES = new Set([
@@ -22,9 +23,7 @@ const MAX_CONTINUOUS_STUDY_MINUTES = 90
  * Sistem hiçbir zaman engellemez, yalnızca yapıcı bir dille öneri sunar.
  */
 export function evaluateDayBalance(tasks, { alreadySorted = false } = {}) {
-  const sorted = alreadySorted
-    ? tasks
-    : [...tasks].sort((a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime))
+  const sorted = alreadySorted ? tasks : [...tasks].sort(compareTasksBySchedule)
   const warnings = []
 
   const academicMinutes = sorted
@@ -71,7 +70,7 @@ export function evaluateDayBalance(tasks, { alreadySorted = false } = {}) {
   sorted.forEach((task) => {
     const isStudy = STUDY_TASK_TYPES.has(task.taskType)
     const start = parseTimeToMinutes(task.startTime)
-    if (isStudy && previousEnd === start) {
+    if (isStudy && start !== null && previousEnd === start) {
       continuousMinutes += task.durationMinutes || 0
     } else if (isStudy) {
       continuousMinutes = task.durationMinutes || 0

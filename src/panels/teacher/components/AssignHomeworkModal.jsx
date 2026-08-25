@@ -21,7 +21,6 @@ import { filterTopicsBySearch } from '../../shared/homework/topicSearch'
 import { cn } from '../../ui/utils'
 import { getTeacherResourceBooks, getTeacherResourceBookTopics } from '../../../services/teacherService'
 
-const DEFAULT_TASK_TIME = '18:00'
 const DEFAULT_TASK_DURATION_MINUTES = 45
 const DURATION_PRESETS = [30, 45, 60]
 
@@ -192,8 +191,8 @@ export default function AssignHomeworkModal({ studentTeacherId, subjectName, def
 
     const trimmedNote = note.trim()
     const trimmedTime = taskTime.trim()
-    const usingDefaultTime = !trimmedTime
     const selectedDuration = durationPreset === 'custom' ? Number(customDuration) || 0 : durationPreset
+    const effectiveDuration = selectedDuration || DEFAULT_TASK_DURATION_MINUTES
 
     setSaving(true)
     setSaveError('')
@@ -208,8 +207,8 @@ export default function AssignHomeworkModal({ studentTeacherId, subjectName, def
         totalQuestionCount: Number(totalQuestionCount) || 0,
         totalPageCount: isReadingBook ? Number(totalPageCount) || 0 : undefined,
         taskDate: defaultTaskDate,
-        taskTime: trimmedTime || DEFAULT_TASK_TIME,
-        taskDurationMinutes: usingDefaultTime ? DEFAULT_TASK_DURATION_MINUTES : selectedDuration || DEFAULT_TASK_DURATION_MINUTES,
+        taskTime: trimmedTime || null,
+        taskDurationMinutes: effectiveDuration,
       })
     } catch (err) {
       setSaveError(err.message || 'Bir hata oluştu, tekrar deneyin.')
@@ -488,7 +487,7 @@ export default function AssignHomeworkModal({ studentTeacherId, subjectName, def
                       ) : null}
                     </div>
                   ) : (
-                    <span className="text-xs text-panel-text-muted">Boş bırakılırsa 18:00 · 45 dk olarak kaydedilir.</span>
+                    <span className="text-xs text-panel-text-muted">Boş bırakılırsa görev saatsiz eklenir, süre 45 dk olarak kaydedilir.</span>
                   )}
                 </div>
               </div>

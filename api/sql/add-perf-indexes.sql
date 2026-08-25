@@ -112,3 +112,18 @@ BEGIN
     WITH (ONLINE = ON);
 END
 GO
+
+-- Hata Defteri konu istatistikleri (computeWrongQuestionTopicStats) her seferinde
+-- ogrencinin test_results_json dolu tum Tasks satirlarini tarayip OPENJSON calistiriyor.
+-- test_results_json NVARCHAR(MAX) oldugu icin IX_Tasks_StudentDateDraftStart'in INCLUDE
+-- listesinde yer almiyor ve her satir icin clustered index'e key lookup gerekiyor. Bu index
+-- taramayi tamamen kapsayarak (covering) key lookup'i ortadan kaldirir.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Tasks_StudentTestResultsJson' AND object_id = OBJECT_ID('dbo.Tasks'))
+BEGIN
+  CREATE INDEX IX_Tasks_StudentTestResultsJson
+    ON dbo.Tasks (student_id)
+    INCLUDE (test_results_json)
+    WHERE test_results_json IS NOT NULL
+    WITH (ONLINE = ON);
+END
+GO

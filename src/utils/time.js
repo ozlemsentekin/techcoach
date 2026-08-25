@@ -78,6 +78,7 @@ export function getRemainingDays(currentDate, targetDate) {
 }
 
 export function parseTimeToMinutes(time) {
+  if (!time) return null
   const [hours, minutes] = time.split(':').map(Number)
   return hours * 60 + minutes
 }
@@ -119,6 +120,8 @@ export function minutesUntil(targetTime) {
 }
 
 export function taskTimeState(task) {
+  if (!task.startTime || !task.endTime) return { phase: 'unscheduled' }
+
   const start = parseTimeToMinutes(task.startTime)
   const end = parseTimeToMinutes(task.endTime)
   const current = nowMinutes()

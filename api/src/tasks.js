@@ -125,8 +125,8 @@ const FIELD_MAP = {
   subject: (v) => ({ column: 'subject', type: sql.NVarChar(100), value: v || null }),
   topic: (v) => ({ column: 'topic', type: sql.NVarChar(200), value: v || null }),
   date: (v) => ({ column: 'date', type: sql.Date, value: v }),
-  startTime: (v) => ({ column: 'start_time', type: sql.Char(5), value: v }),
-  endTime: (v) => ({ column: 'end_time', type: sql.Char(5), value: v }),
+  startTime: (v) => ({ column: 'start_time', type: sql.Char(5), value: v || null }),
+  endTime: (v) => ({ column: 'end_time', type: sql.Char(5), value: v || null }),
   durationMinutes: (v) => ({ column: 'duration_minutes', type: sql.Int, value: Number(v) || 0 }),
   timerStartedAt: (v) => ({ column: 'timer_started_at', type: sql.DateTime2, value: v || null }),
   timerStoppedAt: (v) => ({ column: 'timer_stopped_at', type: sql.DateTime2, value: v || null }),
@@ -155,6 +155,7 @@ const FIELD_MAP = {
   completedSubGoals: (v) => ({ column: 'completed_sub_goals_json', type: sql.NVarChar(sql.MAX), value: v ? JSON.stringify(v) : null }),
   isDraft: (v) => ({ column: 'is_draft', type: sql.Bit, value: Boolean(v) }),
   resourceBookId: (v) => ({ column: 'resource_book_id', type: sql.UniqueIdentifier, value: v || null }),
+  studentTeacherId: (v) => ({ column: 'student_teacher_id', type: sql.UniqueIdentifier, value: v || null }),
   selectedTestIds: (v) => ({ column: 'selected_test_ids_json', type: sql.NVarChar(sql.MAX), value: v && v.length ? JSON.stringify(v) : null }),
   answers: (v) => ({ column: 'answers_json', type: sql.NVarChar(sql.MAX), value: v ? JSON.stringify(v) : null }),
   testResults: (v) => ({ column: 'test_results_json', type: sql.NVarChar(sql.MAX), value: v ? JSON.stringify(v) : null }),
@@ -164,6 +165,26 @@ const STUDENT_ACTIVITY_ACTOR_ROLE = 'ogrenci'
 const SYSTEM_ACTIVITY_ACTOR_ROLE = 'sistem'
 const DONE_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
 const BREAK_TASK_TYPES = new Set(['mola', 'dinlenme', 'yemek', 'yemek-dinlenme'])
+const PRIVATE_LESSON_TASK_TYPE = 'ozel-ders'
+
+// Ebeveynin "Özel Ders" görevi için gönderdiği student_teacher_id'nin gerçekten bu öğrenciye
+// bağlı, aktif ve özel öğretmen türünde bir kayıt olduğunu doğrular; aksi halde ebeveyn başka
+// bir öğrencinin öğretmenine görev sızdırabilir. Ders adı da buradan (istemciden değil) alınır.
+async function resolveActiveParentPrivateTeacher(studentId, studentTeacherId) {
+  const requestDb = await withRequest({
+    studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+  })
+  const result = await requestDb.query(`
+    SELECT st.id, st.subject_id, s.name AS subject_name
+    FROM dbo.StudentTeachers st
+    LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
+    WHERE st.id = @studentTeacherId AND st.student_id = @studentId
+      AND st.teacher_type = 'ozel_ogretmen' AND st.is_active = 1;
+  `)
+  return result.recordset[0] || null
+}
+
 // Bu proje şimdilik yalnızca TR kullanıcıları için çalışıyor; sunucu (Azure Functions) UTC'de
 // koşuyor ama date/start_time/end_time kolonları TR yerel duvar saati olarak saklanıyor.
 // TR, 2016'dan beri yaz saati uygulamıyor, bu yüzden sabit +3 saatlik ofset güvenli.
@@ -459,7 +480,7 @@ async function listTasksHandler(request) {
       const result = await requestDb.query(`
         ${SELECT_TASK}
         WHERE student_id = @studentId AND date BETWEEN @from AND @to AND is_draft = @isDraft
-        ORDER BY date ASC, start_time ASC;
+        ORDER BY date ASC, start_time ASC, created_at ASC;
       `)
 
       return json(200, { tasks: result.recordset.map(sanitizeTask) })
@@ -479,7 +500,7 @@ async function listTasksHandler(request) {
     const result = await requestDb.query(`
       ${SELECT_TASK}
       WHERE student_id = @studentId AND date = @date AND is_draft = @isDraft
-      ORDER BY start_time ASC;
+      ORDER BY start_time ASC, created_at ASC;
     `)
 
     return json(200, { tasks: result.recordset.map(sanitizeTask) })
@@ -541,8 +562,23 @@ async function createTaskHandler(request) {
       return error
     }
 
-    if (!payload?.date || !payload?.title || !payload?.taskType || !payload?.startTime || !payload?.endTime) {
-      return json(400, { error: 'Tarih, başlık, görev türü ve saat bilgileri zorunludur.' })
+    if (!payload?.date || !payload?.title || !payload?.taskType) {
+      return json(400, { error: 'Tarih, başlık ve görev türü zorunludur.' })
+    }
+
+    if (Boolean(payload.startTime) !== Boolean(payload.endTime)) {
+      return json(400, { error: 'Başlangıç ve bitiş saati birlikte girilmeli.' })
+    }
+
+    if (payload.taskType === PRIVATE_LESSON_TASK_TYPE || payload.studentTeacherId) {
+      if (!payload.studentTeacherId) {
+        return json(400, { error: 'Özel ders için öğretmen seçmelisiniz.' })
+      }
+      const teacherRecord = await resolveActiveParentPrivateTeacher(studentId, payload.studentTeacherId)
+      if (!teacherRecord) {
+        return json(400, { error: 'Geçersiz öğretmen seçimi.' })
+      }
+      payload.subject = teacherRecord.subject_name || null
     }
 
     const columns = ['student_id']
@@ -601,6 +637,14 @@ async function updateTaskHandler(request) {
     const previousRecord = previousResult.recordset[0]
     if (!previousRecord) {
       return json(404, { error: 'Görev bulunamadı.' })
+    }
+
+    if (payload?.studentTeacherId) {
+      const teacherRecord = await resolveActiveParentPrivateTeacher(studentId, payload.studentTeacherId)
+      if (!teacherRecord) {
+        return json(400, { error: 'Geçersiz öğretmen seçimi.' })
+      }
+      payload.subject = teacherRecord.subject_name || null
     }
 
     const setClauses = []

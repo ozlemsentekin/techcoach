@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { AlertCircle, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, GraduationCap, TrendingUp } from 'lucide-react'
 import LoadingState from '../../shared/LoadingState'
@@ -10,6 +10,7 @@ import WrongQuestionsView from '../../shared/WrongQuestionsView'
 import AssignHomeworkModal from '../components/AssignHomeworkModal'
 import TaskDetailModal from '../components/TaskDetailModal'
 import TaskOpticalResultModal from '../components/TaskOpticalResultModal'
+import ScheduleSlotModal from '../components/ScheduleSlotModal'
 import {
   getTeacherStudent,
   getTeacherStudentHomeworks,
@@ -51,7 +52,12 @@ export default function StudentDetailPage() {
   const [rescheduleHomework, setRescheduleHomework] = useState(null)
   const [detailTask, setDetailTask] = useState(null)
   const [answerSheetTask, setAnswerSheetTask] = useState(null)
+  const [managingSlot, setManagingSlot] = useState(null)
   const [banner, setBanner] = useState('')
+
+  const refreshStudent = async () => {
+    setStudent(await getTeacherStudent(studentTeacherId))
+  }
 
   useEffect(() => {
     let ignore = false
@@ -126,6 +132,23 @@ export default function StudentDetailPage() {
     setDetailTask(null)
     if (homework) setRescheduleHomework(homework)
   }
+
+  const fetchWrongQuestions = useCallback(
+    () => getTeacherStudentWrongQuestions(studentTeacherId),
+    [studentTeacherId],
+  )
+  const fetchTopicStats = useCallback(
+    () => getTeacherStudentWrongQuestionTopicStats(studentTeacherId),
+    [studentTeacherId],
+  )
+  const fetchPhoto = useCallback(
+    (id) => getTeacherStudentWrongQuestionPhoto(studentTeacherId, id),
+    [studentTeacherId],
+  )
+  const updateMistakeReason = useCallback(
+    (id, mistakeReason) => updateTeacherStudentWrongQuestion(studentTeacherId, id, { mistakeReason }),
+    [studentTeacherId],
+  )
 
   if (studentError) {
     return (
@@ -249,9 +272,11 @@ export default function StudentDetailPage() {
               weekDates={weekDates}
               tasksByDate={tasksByDate}
               lessonSchedule={student.schedule}
+              lessonScheduleExceptions={student.scheduleExceptions}
               onAddHomework={(date) => setHomeworkModalDate(date)}
               onEditTask={handleEditTask}
               onViewAnswerSheet={setAnswerSheetTask}
+              onManageLessonSlot={(slot) => setManagingSlot(slot)}
             />
           )}
         </div>
@@ -265,12 +290,10 @@ export default function StudentDetailPage() {
         />
       ) : (
         <WrongQuestionsView
-          fetchWrongQuestions={() => getTeacherStudentWrongQuestions(studentTeacherId)}
-          fetchTopicStats={() => getTeacherStudentWrongQuestionTopicStats(studentTeacherId)}
-          fetchPhoto={(id) => getTeacherStudentWrongQuestionPhoto(studentTeacherId, id)}
-          updateMistakeReason={(id, mistakeReason) =>
-            updateTeacherStudentWrongQuestion(studentTeacherId, id, { mistakeReason })
-          }
+          fetchWrongQuestions={fetchWrongQuestions}
+          fetchTopicStats={fetchTopicStats}
+          fetchPhoto={fetchPhoto}
+          updateMistakeReason={updateMistakeReason}
           hideHeaderWhenUnselected
         />
       )}
@@ -306,6 +329,18 @@ export default function StudentDetailPage() {
           task={answerSheetTask}
           studentTeacherId={studentTeacherId}
           onClose={() => setAnswerSheetTask(null)}
+        />
+      ) : null}
+
+      {managingSlot ? (
+        <ScheduleSlotModal
+          studentTeacherId={studentTeacherId}
+          slot={managingSlot}
+          onDone={async () => {
+            await Promise.all([refreshWeek(), refreshStudent()])
+            setManagingSlot(null)
+          }}
+          onClose={() => setManagingSlot(null)}
         />
       ) : null}
     </div>

@@ -1,0 +1,4 @@
+ALTER TABLE dbo.Tasks ALTER COLUMN start_time CHAR(5) NULL;
+GO
+ALTER TABLE dbo.Tasks ALTER COLUMN end_time CHAR(5) NULL;
+GO
