@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, BookOpen, Plus, Trash2, UserPlus } from 'lucide-react'
+import { ArrowLeft, BookOpen, Plus, Sparkles, Trash2, UserPlus } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { useAuth } from '../../../context/useAuth'
 import PageHeader from '../../layout/PageHeader'
@@ -11,6 +11,7 @@ import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import { libraryApiBase } from './libraryConstants'
 import AssignLibraryResourceModal from './AssignLibraryResourceModal'
 import AddLibraryResourceWizard from './AddLibraryResourceWizard'
+import ManualLibraryResourceModal from './ManualLibraryResourceModal'
 import LibraryResourceDetailModal from './LibraryResourceDetailModal'
 import ResourceSourceBadge from './ResourceSourceBadge'
 import { RESOURCE_SOURCE_LABELS } from './libraryConstants'
@@ -73,6 +74,7 @@ export default function LibraryGradeDetailPage({ role }) {
   const [assignBook, setAssignBook] = useState(null)
   const [viewBookId, setViewBookId] = useState(null)
   const [showAddWizard, setShowAddWizard] = useState(false)
+  const [showManualAdd, setShowManualAdd] = useState(false)
   const [deletingBook, setDeletingBook] = useState(null)
   const [deletingError, setDeletingError] = useState('')
   const [deletingLoading, setDeletingLoading] = useState(false)
@@ -156,10 +158,18 @@ export default function LibraryGradeDetailPage({ role }) {
         title={`${grade}. Sınıf Kütüphanesi`}
         subtitle="Bir ders seçip mevcut kaynaklara göz atın veya yeni kaynak ekleyin."
         actions={
-          <Button type="button" onClick={() => setShowAddWizard(true)} disabled={!activeSubjectId}>
-            <Plus size={16} aria-hidden="true" />
-            Kaynak Ekle
-          </Button>
+          authUser?.isAdmin ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="secondary" onClick={() => setShowManualAdd(true)} disabled={!activeSubjectId}>
+                <Plus size={16} aria-hidden="true" />
+                Kaynak Ekle
+              </Button>
+              <Button type="button" onClick={() => setShowAddWizard(true)} disabled={!activeSubjectId}>
+                <Sparkles size={16} aria-hidden="true" />
+                AI ile Kaynak Ekle
+              </Button>
+            </div>
+          ) : null
         }
       />
 
@@ -325,6 +335,19 @@ export default function LibraryGradeDetailPage({ role }) {
           onClose={() => setShowAddWizard(false)}
           onSubmitted={() => {
             setShowAddWizard(false)
+            loadResourceBooks()
+          }}
+        />
+      ) : null}
+
+      {showManualAdd && activeSubjectId ? (
+        <ManualLibraryResourceModal
+          grade={grade}
+          subjectId={activeSubjectId}
+          subjectName={activeSubject?.name}
+          onClose={() => setShowManualAdd(false)}
+          onSubmitted={() => {
+            setShowManualAdd(false)
             loadResourceBooks()
           }}
         />

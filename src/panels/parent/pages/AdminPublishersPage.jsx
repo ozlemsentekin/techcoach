@@ -9,6 +9,7 @@ import Button from '../../ui/Button'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import ResourceImageField from '../components/ResourceImageField'
 import { GRADE_OPTIONS } from '../components/studentWizardConstants'
+import { RESOURCE_SOURCE_LABELS } from '../../shared/library/libraryConstants'
 
 const RESOURCE_BOOK_TYPES = [
   { value: 'konu_anlatimi', label: 'Konu Anlatımı' },
@@ -154,6 +155,8 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
   const [grade, setGrade] = useState(book?.grade || '')
   const [type, setType] = useState(book?.type || '')
   const [publishMonthYear, setPublishMonthYear] = useState(book?.publishMonthYear || '')
+  const [barcode, setBarcode] = useState(book?.barcode || '')
+  const [resourceSource, setResourceSource] = useState(book?.resourceSource || 'okul')
   const [isActive, setIsActive] = useState(book ? book.isActive : true)
   const [hasAnswerKey, setHasAnswerKey] = useState(book ? book.hasAnswerKey : true)
   const [imageUrl, setImageUrl] = useState(book?.imageUrl || '')
@@ -184,6 +187,10 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
       setError('Sınıf seçilmeli.')
       return
     }
+    if (barcode.trim() && !/^\d{4,50}$/.test(barcode.trim())) {
+      setError('Barkod kodu sadece rakamlardan oluşmalı ve 4-50 karakter olmalı.')
+      return
+    }
 
     setError('')
     setLoading(true)
@@ -199,6 +206,8 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
         publishMonthYear: publishMonthYear.trim() || null,
         hasAnswerKey: type === 'soru_bankasi' ? hasAnswerKey : true,
         imageUrl: imageUrl.trim() || null,
+        barcode: barcode.trim() || null,
+        resourceSource,
       }
       const data = isEdit
         ? await authRequest(`/api/panel-admin/resource-books/${book.id}`, {
@@ -330,22 +339,50 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
               </label>
             </div>
 
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-panel-text-muted">Kaynak Tipi</span>
-              <select
-                value={type}
-                onChange={(event) => setType(event.target.value)}
-                className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-              >
-                <option value="" disabled>
-                  Tip seçin
-                </option>
-                {RESOURCE_BOOK_TYPES.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Kaynak Tipi</span>
+                <select
+                  value={type}
+                  onChange={(event) => setType(event.target.value)}
+                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+                >
+                  <option value="" disabled>
+                    Tip seçin
                   </option>
-                ))}
-              </select>
+                  {RESOURCE_BOOK_TYPES.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Kaynak Türü</span>
+                <select
+                  value={resourceSource}
+                  onChange={(event) => setResourceSource(event.target.value)}
+                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+                >
+                  {Object.entries(RESOURCE_SOURCE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-panel-text-muted">Barkod Kodu</span>
+              <input
+                value={barcode}
+                onChange={(event) => setBarcode(event.target.value)}
+                placeholder="Örn. 9789750000000"
+                inputMode="numeric"
+                className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+              />
             </label>
 
             <label className="flex items-center gap-2.5">
