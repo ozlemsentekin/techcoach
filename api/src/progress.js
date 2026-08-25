@@ -28,10 +28,13 @@ function sanitizeWrongQuestion(record) {
     testId: record.test_id || undefined,
     subject: record.subject,
     topic: record.topic || undefined,
+    topicName: record.topic_name || undefined,
     testName: record.test_name || undefined,
     bookName: record.book_name || undefined,
     publisherName: record.publisher_name || undefined,
     questionNumber: record.question_number || undefined,
+    pageStart: record.page_start ?? undefined,
+    pageEnd: record.page_end ?? undefined,
     errorType: record.error_type,
     studentNote: record.student_note || undefined,
     mistakeReason: record.mistake_reason || undefined,
@@ -315,7 +318,8 @@ async function listWrongQuestionsHandler(request) {
              COALESCE(tp.name, wq.topic) AS topic,
              COALESCE(rb.name, wq.book_name) AS book_name,
              COALESCE(pub.name, wq.publisher_name) AS publisher_name,
-             rb.image_url AS book_image_url
+             rb.image_url AS book_image_url,
+             t.topic_name, t.page_start, t.page_end
       FROM dbo.WrongQuestions wq
       LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
       LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id

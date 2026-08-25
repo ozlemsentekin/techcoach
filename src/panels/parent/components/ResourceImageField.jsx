@@ -24,7 +24,9 @@ function readFileAsDataUrl(file) {
   })
 }
 
-async function resizeImageFile(file) {
+// fit='cover' (varsayılan, örn. profil fotoğrafı) kareye kırpar; fit='contain' (örn. kitap kapağı)
+// hiçbir kısmı kırpmadan görseli kare içine sığdırır ve boşta kalan alanı beyazla doldurur.
+async function resizeImageFile(file, fit = 'cover') {
   if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
     throw new Error('JPG, PNG veya WEBP görsel seçin.')
   }
@@ -35,9 +37,8 @@ async function resizeImageFile(file) {
 
   const sourceUrl = await readFileAsDataUrl(file)
   const image = await loadImage(sourceUrl)
-  const sourceSize = Math.min(image.naturalWidth || image.width, image.naturalHeight || image.height)
-  const sourceX = ((image.naturalWidth || image.width) - sourceSize) / 2
-  const sourceY = ((image.naturalHeight || image.height) - sourceSize) / 2
+  const width = image.naturalWidth || image.width
+  const height = image.naturalHeight || image.height
 
   const canvas = document.createElement('canvas')
   canvas.width = OUTPUT_SIZE
@@ -46,7 +47,18 @@ async function resizeImageFile(file) {
   const context = canvas.getContext('2d')
   context.fillStyle = '#ffffff'
   context.fillRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE)
-  context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE)
+
+  if (fit === 'contain') {
+    const scale = Math.min(OUTPUT_SIZE / width, OUTPUT_SIZE / height)
+    const drawWidth = width * scale
+    const drawHeight = height * scale
+    context.drawImage(image, 0, 0, width, height, (OUTPUT_SIZE - drawWidth) / 2, (OUTPUT_SIZE - drawHeight) / 2, drawWidth, drawHeight)
+  } else {
+    const sourceSize = Math.min(width, height)
+    const sourceX = (width - sourceSize) / 2
+    const sourceY = (height - sourceSize) / 2
+    context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE)
+  }
 
   return canvas.toDataURL('image/jpeg', OUTPUT_QUALITY)
 }
@@ -61,6 +73,7 @@ export default function ResourceImageField({
   showUrlToggle = false,
   accent = '#c96a1f',
   accentSoft = '#fbe9d7',
+  fit = 'cover',
 }) {
   const inputId = useId()
   const previewShapeClass = shape === 'circle' ? 'rounded-full' : 'rounded-xl'
@@ -74,7 +87,7 @@ export default function ResourceImageField({
     setUploading(true)
     setError('')
     try {
-      const imageDataUrl = await resizeImageFile(file)
+      const imageDataUrl = await resizeImageFile(file, fit)
       onChange(imageDataUrl)
       setShowUrlInput(false)
     } catch (err) {

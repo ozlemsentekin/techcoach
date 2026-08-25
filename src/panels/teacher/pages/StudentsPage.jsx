@@ -27,9 +27,11 @@ import {
   deleteTeacherStudent,
   getTeacherEntitlement,
   getTeacherStudents,
+  updateTeacherStudentGrade,
   updateTeacherStudentStatus,
 } from '../../../services/teacherService'
 import { formatDateShort } from '../../../utils/time'
+import { LIBRARY_GRADES } from '../../shared/library/libraryConstants'
 
 const STATUS_FILTERS = [
   { value: 'active', label: 'Aktif' },
@@ -65,6 +67,66 @@ function schoolText(student) {
   const grade = student.studentGrade
   const gradeText = grade ? (/^\d+$/.test(grade) ? `${grade}. Sınıf` : grade) : null
   return [student.schoolName, gradeText].filter(Boolean).join(' · ') || null
+}
+
+// Öğretmen tarafından eklenen öğrencilerin sınıfı boş kalabiliyor; sınıfı olmayan öğrenci
+// kütüphanede kaynak atanabilir listesine hiç girmiyor. Bu, o eksikliği panelden tamamlamayı sağlar.
+function MissingGradeFix({ student, onSaved }) {
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleChange = async (event) => {
+    const grade = event.target.value
+    if (!grade) return
+    setSaving(true)
+    setError('')
+    try {
+      await updateTeacherStudentGrade(student.studentTeacherId, grade)
+      onSaved(student.studentTeacherId, grade)
+    } catch (err) {
+      setError(err.message)
+      setSaving(false)
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          setEditing(true)
+        }}
+        className="inline-flex w-fit items-center gap-1.5 rounded-full bg-panel-accent-soft px-2.5 py-1 text-xs font-semibold text-panel-warm"
+      >
+        <AlertCircle size={12} aria-hidden="true" />
+        Sınıf seçilmedi (kaynak ataması için tıklayın)
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-1" onClick={(event) => event.stopPropagation()}>
+      <select
+        autoFocus
+        disabled={saving}
+        defaultValue=""
+        onChange={handleChange}
+        className="w-fit rounded-lg border border-panel-border bg-white px-2 py-1.5 text-sm text-panel-text outline-none focus:border-panel-blue"
+      >
+        <option value="" disabled>
+          Sınıf seçin
+        </option>
+        {LIBRARY_GRADES.map((grade) => (
+          <option key={grade} value={grade}>
+            {grade}. Sınıf
+          </option>
+        ))}
+      </select>
+      {error ? <span className="text-xs text-panel-warm">{error}</span> : null}
+    </div>
+  )
 }
 
 export default function StudentsPage() {
@@ -132,6 +194,14 @@ export default function StudentsPage() {
     } finally {
       setActionStudentId(null)
     }
+  }
+
+  const handleGradeSaved = (studentTeacherId, grade) => {
+    setStudents((current) =>
+      current
+        ? current.map((item) => (item.studentTeacherId === studentTeacherId ? { ...item, studentGrade: grade } : item))
+        : current,
+    )
   }
 
   const handleDeleteConfirmed = async () => {
@@ -290,6 +360,9 @@ export default function StudentsPage() {
                       <School size={14} className="shrink-0" aria-hidden="true" />
                       <span className="truncate">{school}</span>
                     </p>
+                  ) : null}
+                  {!student.studentGrade ? (
+                    <MissingGradeFix student={student} onSaved={handleGradeSaved} />
                   ) : null}
                   {lesson ? (
                     <p className="inline-flex items-center gap-1.5">

@@ -26,6 +26,7 @@ const {
   fetchResourceBookStatsForStudent,
 } = require('./catalog')
 const { extractLibraryTocFromImages } = require('./libraryTocExtraction')
+const { extractLibraryCoverInfo } = require('./libraryCoverExtraction')
 
 const TEACHER_TYPES = new Set(['ozel_ogretmen', 'okul_ogretmeni'])
 const TEACHER_TYPE_LABELS = {
@@ -1157,6 +1158,34 @@ async function extractLibraryTocForParentHandler(request) {
   }
 }
 
+async function extractLibraryCoverForParentHandler(request) {
+  try {
+    const { error } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const payload = await request.json().catch(() => null)
+    const result = await extractLibraryCoverInfo(payload?.image)
+    if (result.error) {
+      return json(400, { error: result.error })
+    }
+
+    return json(200, result)
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('extractLibraryCoverForParentHandler failed', error)
+    return json(500, { error: 'Kapak okunamadı.' })
+  }
+}
+
 async function listAssignableStudentsForLibraryResourceHandler(request) {
   try {
     const { error, parentId } = await requireParentSession(request)
@@ -1854,6 +1883,7 @@ module.exports = {
   deleteLibraryResourceBookForParentHandler,
   addLibraryResourceBookTopicsForParentHandler,
   extractLibraryTocForParentHandler,
+  extractLibraryCoverForParentHandler,
   listAssignableStudentsForLibraryResourceHandler,
   assignLibraryResourceBookHandler,
   unassignLibraryResourceBookHandler,

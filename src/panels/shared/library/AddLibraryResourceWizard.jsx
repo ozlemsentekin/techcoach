@@ -1,9 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Camera, Plus, Sparkles, Trash2, X } from 'lucide-react'
+import { Camera, Info, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import Button from '../../ui/Button'
 import ResourceImageField from '../../parent/components/ResourceImageField'
-import { libraryApiBase, RESOURCE_SOURCE_LABELS } from './libraryConstants'
+import { libraryApiBase, RESOURCE_SOURCE_LABELS, RESOURCE_TYPE_LABELS } from './libraryConstants'
 
 const TOC_MAX_DIMENSION = 1600
 const TOC_JPEG_QUALITY = 0.82
@@ -169,6 +169,8 @@ function PhotoUploadStep({
   extracting,
   extractingLabel,
   idleHint,
+  guidanceTitle,
+  guidanceItems,
 }) {
   const inputId = useId()
 
@@ -197,6 +199,20 @@ function PhotoUploadStep({
 
   return (
     <div className="flex flex-col gap-4">
+      {guidanceItems?.length ? (
+        <div className="flex gap-2.5 rounded-xl bg-panel-blue-soft p-3 text-panel-blue">
+          <Info size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <div className="flex flex-col gap-1">
+            {guidanceTitle ? <p className="text-sm font-semibold">{guidanceTitle}</p> : null}
+            <ul className="list-disc space-y-0.5 pl-4 text-xs">
+              {guidanceItems.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
+
       <div className="rounded-xl border border-dashed border-panel-border bg-panel-surface-soft p-4 text-center">
         <label
           htmlFor={inputId}
@@ -262,6 +278,7 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
 
   const [step, setStep] = useState(1)
   const [resourceSource, setResourceSource] = useState('')
+  const [resourceType, setResourceType] = useState('')
   const [name, setName] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [barcode, setBarcode] = useState('')
@@ -274,6 +291,8 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+
+  const [coverExtracting, setCoverExtracting] = useState(false)
 
   const [tocImages, setTocImages] = useState([])
   const [tocExtracting, setTocExtracting] = useState(false)
@@ -296,9 +315,54 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
     }
   }, [])
 
-  const goToStep2 = () => {
+  const goToStep2 = async () => {
+    if (!imageUrl) {
+      setError('Kitap kapağının fotoğrafını ekleyin.')
+      return
+    }
+    setError('')
+
+    const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/)
+    if (match) {
+      const [, mediaType, imageBase64] = match
+      setCoverExtracting(true)
+      try {
+        const data = await authRequest(`${apiBase}/library/resource-books/extract-cover`, {
+          method: 'POST',
+          timeoutMs: 30000,
+          body: JSON.stringify({ image: { imageBase64, mediaType } }),
+        })
+        if (data.name) setName((current) => current || data.name)
+        if (data.barcode) setBarcode((current) => current || data.barcode)
+        if (data.publishYear) setPublishYear((current) => current || String(data.publishYear))
+        if (data.resourceType) setResourceType((current) => current || data.resourceType)
+        if (data.publisherName) {
+          const normalized = data.publisherName.toLocaleLowerCase('tr')
+          const matchedPublisher = publishers?.find((publisher) => publisher.name.toLocaleLowerCase('tr') === normalized)
+          if (matchedPublisher) {
+            setPublisherId((current) => current || matchedPublisher.id)
+          } else {
+            setUseNewPublisher(true)
+            setNewPublisherName((current) => current || data.publisherName)
+          }
+        }
+      } catch {
+        // Kapak otomatik okunamadı — kullanıcı bir sonraki adımda alanları elle doldurabilir.
+      } finally {
+        setCoverExtracting(false)
+      }
+    }
+
+    setStep(2)
+  }
+
+  const goToStep3 = () => {
     if (!resourceSource) {
-      setError('Kaynak türü (Okul Kaynağı / Özel Kaynak) seçilmeli.')
+      setError('Kaynak tipi (Okul Kaynağı / Özel Kaynak) seçilmeli.')
+      return
+    }
+    if (!resourceType) {
+      setError('Kaynak türü (Soru Bankası / Konu Anlatımlı Soru Bankası) seçilmeli.')
       return
     }
     if (name.trim().length < 2) {
@@ -320,12 +384,12 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
       return
     }
     setError('')
-    setStep(2)
+    setStep(3)
   }
 
-  const goToStep3 = async () => {
+  const goToStep4 = async () => {
     if (!tocImages.length) {
-      setStep(3)
+      setStep(4)
       return
     }
 
@@ -343,7 +407,7 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
         }),
       })
       setTopics(applyExtractedTopics(data.topics, nextId))
-      setStep(3)
+      setStep(4)
     } catch (err) {
       setTocError(err.message)
     } finally {
@@ -351,14 +415,14 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
     }
   }
 
-  const goToStep4 = () => {
+  const goToStep5 = () => {
     const validationError = validateTopics(topics)
     if (validationError) {
       setError(validationError)
       return
     }
     setError('')
-    setStep(4)
+    setStep(5)
   }
 
   const updateTopic = (topicId, changes) => {
@@ -404,6 +468,7 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
           grade,
           subjectId,
           resourceSource,
+          resourceType,
           name: name.trim(),
           imageUrl: imageUrl.trim() || null,
           barcode: barcode.trim(),
@@ -452,10 +517,12 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
     step === 1
       ? 'Kapak'
       : step === 2
-        ? 'İçindekiler Fotoğrafları'
+        ? 'Temel Bilgiler'
         : step === 3
-          ? 'İçerikler'
-          : 'Cevap Anahtarı Fotoğrafları'
+          ? 'İçindekiler Fotoğrafları'
+          : step === 4
+            ? 'İçerikler'
+            : 'Cevap Anahtarı Fotoğrafları'
 
   return (
     <div className="fixed inset-0 z-[70] flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
@@ -464,7 +531,7 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
           <div>
             <h2 className="text-lg font-bold text-panel-text">Kaynak Ekle</h2>
             <p className="text-xs text-panel-text-muted">
-              {grade}. Sınıf · {subjectName} · Adım {step}/4 — {stepLabel}
+              {grade}. Sınıf · {subjectName} · Adım {step}/5 — {stepLabel}
             </p>
           </div>
           <button type="button" aria-label="Kapat" onClick={onClose} className="shrink-0">
@@ -478,13 +545,18 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {step === 1 ? (
+            <div className="flex flex-col items-center gap-4 py-2 text-center">
+              <ResourceImageField value={imageUrl} onChange={setImageUrl} compact size={200} showUrlToggle fit="contain" />
+              <p className="max-w-xs text-xs text-panel-text-muted">
+                Kitabın ön kapağının net bir fotoğrafını yükleyin. Görsel otomatik olarak beyaz bir zemine
+                yerleştirilir ve kapaktaki bilgiler (kitap adı, yayınevi vb.) bir sonraki adım için otomatik
+                okunmaya çalışılır.
+              </p>
+            </div>
+          ) : step === 2 ? (
             <div className="flex flex-col gap-4">
-              <div className="flex justify-center">
-                <ResourceImageField value={imageUrl} onChange={setImageUrl} compact size={140} showUrlToggle />
-              </div>
-
               <div className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Kaynak Türü</span>
+                <span className="text-sm font-medium text-panel-text-muted">Kaynak Tipi</span>
                 <div className="flex gap-2">
                   {Object.entries(RESOURCE_SOURCE_LABELS).map(([value, label]) => (
                     <button
@@ -493,6 +565,26 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
                       onClick={() => setResourceSource(value)}
                       className={`flex-1 rounded-xl border p-2.5 text-sm font-medium transition-colors ${
                         resourceSource === value
+                          ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
+                          : 'border-panel-border text-panel-text-muted hover:border-panel-blue'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Kaynak Türü</span>
+                <div className="flex gap-2">
+                  {Object.entries(RESOURCE_TYPE_LABELS).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setResourceType(value)}
+                      className={`flex-1 rounded-xl border p-2.5 text-sm font-medium transition-colors ${
+                        resourceType === value
                           ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
                           : 'border-panel-border text-panel-text-muted hover:border-panel-blue'
                       }`}
@@ -584,7 +676,7 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
                 </label>
               )}
             </div>
-          ) : step === 2 ? (
+          ) : step === 3 ? (
             <PhotoUploadStep
               images={tocImages}
               setImages={setTocImages}
@@ -593,6 +685,12 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
               altPrefix="İçindekiler"
               inputLabel="Fihrist / İçindekiler Fotoğrafı Yükle"
               inputHint="Kitabın içindekiler sayfa(lar)ının fotoğrafını çekin veya seçin — birden fazla sayfa ekleyebilirsiniz."
+              guidanceTitle="Nasıl bir fotoğraf çekmelisiniz?"
+              guidanceItems={[
+                'İçindekiler (fihrist) bölümü yakın planda, sayfanın tamamı kadrajda ve yazılar net okunabilir olsun.',
+                'Bulanık, eğik açıdan veya parlama/gölge olan fotoğraflardan kaçının.',
+                'İçindekiler birden fazla sayfaya yayılıyorsa her sayfayı ayrı ayrı, aynı özenle çekip tek tek ekleyin.',
+              ]}
               extracting={tocExtracting}
               extractingLabel="Fotoğraflar okunuyor, içerik ve testler çıkarılıyor..."
               idleHint={
@@ -601,7 +699,7 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
                 'kolayca girebilirsiniz. Fotoğraf eklemeden de devam edip her şeyi elle girebilirsiniz.'
               }
             />
-          ) : step === 3 ? (
+          ) : step === 4 ? (
             <div className="flex flex-col gap-4">
               {tocImages.length ? (
                 <p className="rounded-lg bg-panel-blue-soft px-3 py-2 text-xs text-panel-blue">
@@ -730,34 +828,43 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
         <div className="mt-4 flex flex-col items-stretch gap-2 border-t border-panel-border pt-4 sm:flex-row sm:justify-end">
           {step === 1 ? (
             <>
-              <Button type="button" variant="secondary" size="md" onClick={onClose}>
+              <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={coverExtracting}>
                 Vazgeç
               </Button>
-              <Button type="button" size="md" onClick={goToStep2}>
-                Devam Et
+              <Button type="button" size="md" onClick={goToStep2} disabled={coverExtracting}>
+                {coverExtracting ? 'Okunuyor...' : 'Devam Et'}
               </Button>
             </>
           ) : step === 2 ? (
             <>
-              <Button type="button" variant="secondary" size="md" onClick={() => setStep(1)} disabled={tocExtracting}>
+              <Button type="button" variant="secondary" size="md" onClick={() => setStep(1)}>
                 Geri
               </Button>
-              <Button type="button" size="md" onClick={goToStep3} disabled={tocExtracting}>
-                {tocExtracting ? 'Okunuyor...' : 'Devam Et'}
+              <Button type="button" size="md" onClick={goToStep3}>
+                Devam Et
               </Button>
             </>
           ) : step === 3 ? (
             <>
-              <Button type="button" variant="secondary" size="md" onClick={() => setStep(2)}>
+              <Button type="button" variant="secondary" size="md" onClick={() => setStep(2)} disabled={tocExtracting}>
                 Geri
               </Button>
-              <Button type="button" size="md" onClick={goToStep4}>
+              <Button type="button" size="md" onClick={goToStep4} disabled={tocExtracting}>
+                {tocExtracting ? 'Okunuyor...' : 'Devam Et'}
+              </Button>
+            </>
+          ) : step === 4 ? (
+            <>
+              <Button type="button" variant="secondary" size="md" onClick={() => setStep(3)}>
+                Geri
+              </Button>
+              <Button type="button" size="md" onClick={goToStep5}>
                 Devam Et
               </Button>
             </>
           ) : (
             <>
-              <Button type="button" variant="secondary" size="md" onClick={() => setStep(3)} disabled={submitting}>
+              <Button type="button" variant="secondary" size="md" onClick={() => setStep(4)} disabled={submitting}>
                 Geri
               </Button>
               <Button type="button" size="md" onClick={handleSubmit} disabled={submitting}>

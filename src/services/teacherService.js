@@ -31,10 +31,20 @@ export async function getTeacherEntitlement() {
 }
 
 /** Öğretmenin kendi panel kotasından doğrudan bir öğrenci eklemesini sağlar. */
-export async function addTeacherStudent({ studentFullName, subjectId, parentFullName, parentPhone }) {
+export async function addTeacherStudent({ studentFullName, subjectId, grade, studentPhone, parentFullName, parentPhone }) {
   const result = await authRequest('/api/panel-teacher/students', {
     method: 'POST',
-    body: JSON.stringify({ studentFullName, subjectId, parentFullName, parentPhone }),
+    body: JSON.stringify({ studentFullName, subjectId, grade, studentPhone, parentFullName, parentPhone }),
+  })
+  invalidateCache('/api/panel-teacher/students')
+  return result
+}
+
+/** Sınıfı eksik kalmış bir öğrencinin sınıfını sonradan tanımlar/günceller (ör. kaynak atamada görünmesi için). */
+export async function updateTeacherStudentGrade(studentTeacherId, grade) {
+  const result = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/grade`, {
+    method: 'PATCH',
+    body: JSON.stringify({ grade }),
   })
   invalidateCache('/api/panel-teacher/students')
   return result

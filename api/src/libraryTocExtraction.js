@@ -78,7 +78,7 @@ async function extractLibraryTocFromImages(images) {
   const client = getAnthropicClient()
   const response = await client.messages.create({
     model: 'claude-opus-5',
-    max_tokens: 8000,
+    max_tokens: 24000,
     output_config: { format: { type: 'json_schema', schema: TOC_EXTRACTION_SCHEMA } },
     messages: [{ role: 'user', content }],
   })
@@ -92,7 +92,18 @@ async function extractLibraryTocFromImages(images) {
     return { error: 'Model beklenmeyen bir yanıt döndürdü.' }
   }
 
-  const parsed = JSON.parse(textBlock.text)
+  if (response.stop_reason === 'max_tokens') {
+    console.error('extractLibraryTocFromImages truncated at max_tokens', { imageCount: images.length })
+    return { error: 'İçindekiler çok uzun, tek seferde okunamadı. Fotoğrafları daha küçük gruplar halinde yükleyip tekrar deneyin.' }
+  }
+
+  let parsed
+  try {
+    parsed = JSON.parse(textBlock.text)
+  } catch (parseError) {
+    console.error('extractLibraryTocFromImages JSON parse failed', parseError)
+    return { error: 'Model yanıtı okunamadı. Elle girebilirsiniz.' }
+  }
   const topics = (parsed.topics || [])
     .map((topic) => ({
       name: (topic.name || '').trim(),

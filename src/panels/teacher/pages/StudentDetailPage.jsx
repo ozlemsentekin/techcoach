@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { AlertCircle, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, GraduationCap, TrendingUp } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, GraduationCap, Phone, TrendingUp } from 'lucide-react'
 import LoadingState from '../../shared/LoadingState'
 import Button from '../../ui/Button'
 import WeeklyPlannerGrid from '../../parent/components/WeeklyPlannerGrid'
@@ -179,9 +179,22 @@ export default function StudentDetailPage() {
           </span>
           <div>
             <h1 className="text-2xl font-bold text-panel-text">{student.studentFullName}</h1>
-            <span className="mt-1 inline-block rounded-full bg-panel-blue-soft px-2.5 py-1 text-xs font-semibold text-panel-blue">
-              {student.subjectName || 'Ders seçilmedi'}
-            </span>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="inline-block rounded-full bg-panel-blue-soft px-2.5 py-1 text-xs font-semibold text-panel-blue">
+                {student.subjectName || 'Ders seçilmedi'}
+              </span>
+              {student.studentGrade ? (
+                <span className="inline-block rounded-full bg-panel-surface-soft px-2.5 py-1 text-xs font-semibold text-panel-text-muted">
+                  {/^\d+$/.test(student.studentGrade) ? `${student.studentGrade}. Sınıf` : student.studentGrade}
+                </span>
+              ) : null}
+              {student.studentPhone ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-panel-surface-soft px-2.5 py-1 text-xs font-semibold text-panel-text-muted">
+                  <Phone size={12} aria-hidden="true" />
+                  {student.studentPhone}
+                </span>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>

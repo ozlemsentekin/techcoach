@@ -5,10 +5,13 @@ import { addTeacherStudent, getTeacherEntitlement } from '../../../services/teac
 import { useAuth } from '../../../context/useAuth'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
+import { LIBRARY_GRADES } from '../../shared/library/libraryConstants'
 
 const INITIAL_FORM = {
   studentFullName: '',
   subjectId: '',
+  grade: '',
+  studentPhone: '',
   parentFullName: '',
   parentPhone: '',
 }
@@ -69,6 +72,14 @@ export default function AddTeacherStudentModal({ onCreated, onClose }) {
     }
     if (!form.subjectId) {
       setError('Ders seçin.')
+      return
+    }
+    if (!form.grade) {
+      setError('Sınıf seçin.')
+      return
+    }
+    if (form.studentPhone.trim() && form.studentPhone.trim().length < 7) {
+      setError('Öğrenci telefon numarası en az 7 karakter olmalı.')
       return
     }
     if (form.parentFullName.trim().length < 3) {
@@ -171,6 +182,37 @@ export default function AddTeacherStudentModal({ onCreated, onClose }) {
                       Profilinizde tanımlı ders bulunamadı. Yönetici ile iletişime geçin.
                     </span>
                   ) : null}
+                </label>
+
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-panel-text-muted">Sınıf</span>
+                  <select
+                    name="grade"
+                    value={form.grade}
+                    onChange={handleChange}
+                    className={`${inputClass} appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="%236f6e78"><path d="M5.5 7.5l4.5 4.5 4.5-4.5" stroke="%236f6e78" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>')] bg-[right_0.75rem_center] bg-no-repeat pr-9`}
+                  >
+                    <option value="">Seçin</option>
+                    {LIBRARY_GRADES.map((grade) => (
+                      <option key={grade} value={grade}>
+                        {grade}. Sınıf
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-xs text-panel-text-muted">
+                    Kütüphaneden kaynak atayabilmek için öğrencinin sınıfı gereklidir.
+                  </span>
+                </label>
+
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-panel-text-muted">Öğrenci Telefon (opsiyonel)</span>
+                  <input
+                    name="studentPhone"
+                    type="tel"
+                    value={form.studentPhone}
+                    onChange={handleChange}
+                    className={inputClass}
+                  />
                 </label>
 
                 <label className="flex flex-col gap-1.5">

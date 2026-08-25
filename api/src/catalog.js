@@ -28,6 +28,8 @@ const RESOURCE_BOOK_TYPES = ['konu_anlatimi', 'soru_bankasi', 'okuma_kitabi', 'e
 // Kaynağın okulun resmi kaynağı mı yoksa ekleyen kişinin kendi seçtiği ek bir kaynak mı olduğu —
 // created_by_role'dan bağımsız: bir öğretmen hem okulun kullandığı kitabı hem de kendi özel kaynağını ekleyebilir.
 const RESOURCE_SOURCES = ['okul', 'ozel']
+// Veli/öğretmenin kütüphaneye kaynak eklerken seçebildiği tür — okuma_kitabi/etkinlik sadece admin panelinden eklenir.
+const LIBRARY_SUBMISSION_RESOURCE_TYPES = ['soru_bankasi', 'konu_anlatimi']
 const RESOURCE_BOOK_GRADES = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'])
 // Kütüphane özelliği (veli/öğretmen kaynak gezinme + ekleme) ortaokul (5-8) ve lise (9-12) kademelerini kapsıyor.
 const LIBRARY_GRADES = new Set(['5', '6', '7', '8', '9', '10', '11', '12'])
@@ -933,6 +935,7 @@ async function createLibraryResourceBookSubmission({ actorUserId, role, payload 
   const grade = payload?.grade
   const subjectId = payload?.subjectId
   const resourceSource = payload?.resourceSource
+  const resourceType = payload?.resourceType
   const imageResult = sanitizeResourceBookImageUrl(payload?.imageUrl)
   const publisherId = payload?.publisherId || null
   const publisherName = payload?.publisherName?.trim() || null
@@ -949,7 +952,10 @@ async function createLibraryResourceBookSubmission({ actorUserId, role, payload 
     return { error: 'Ders seçilmeli.' }
   }
   if (!RESOURCE_SOURCES.includes(resourceSource)) {
-    return { error: 'Kaynak türü (okul/özel) seçilmeli.' }
+    return { error: 'Kaynak tipi (okul/özel) seçilmeli.' }
+  }
+  if (!LIBRARY_SUBMISSION_RESOURCE_TYPES.includes(resourceType)) {
+    return { error: 'Kaynak türü (soru bankası/konu anlatımlı) seçilmeli.' }
   }
   if (imageResult.error) {
     return { error: imageResult.error }
@@ -1019,7 +1025,7 @@ async function createLibraryResourceBookSubmission({ actorUserId, role, payload 
     subjectId: { type: sql.UniqueIdentifier, value: subjectId },
     name: { type: sql.NVarChar(200), value: name },
     pageCount: { type: sql.Int, value: totalPageCount },
-    resourceType: { type: sql.NVarChar(30), value: 'soru_bankasi' },
+    resourceType: { type: sql.NVarChar(30), value: resourceType },
     hasAnswerKey: { type: sql.Bit, value: true },
     imageUrl: { type: sql.NVarChar(sql.MAX), value: imageResult.value },
     barcode: { type: sql.NVarChar(50), value: barcodeResult.value },
@@ -2628,6 +2634,7 @@ module.exports = {
   reviewResourceBookHandler,
   LIBRARY_GRADES,
   RESOURCE_SOURCES,
+  RESOURCE_BOOK_TYPES,
   fetchLibraryResourceBooks,
   createLibraryResourceBookSubmission,
   deleteLibraryResourceBookSubmission,

@@ -21,6 +21,7 @@ const {
   deleteLibraryResourceBookForParentHandler,
   addLibraryResourceBookTopicsForParentHandler,
   extractLibraryTocForParentHandler,
+  extractLibraryCoverForParentHandler,
   listAssignableStudentsForLibraryResourceHandler,
   assignLibraryResourceBookHandler,
   unassignLibraryResourceBookHandler,
@@ -43,6 +44,7 @@ const {
   listTeacherStudentsHandler,
   getTeacherStudentHandler,
   updateTeacherStudentStatusHandler,
+  updateTeacherStudentGradeHandler,
   deleteTeacherStudentHandler,
   listTeacherParentsHandler,
   getTeacherLessonPlanHandler,
@@ -65,6 +67,7 @@ const {
   deleteLibraryResourceBookForTeacherHandler,
   addLibraryResourceBookTopicsForTeacherHandler,
   extractLibraryTocForTeacherHandler,
+  extractLibraryCoverForTeacherHandler,
   listAssignableStudentsForLibraryResourceHandler: listAssignableStudentsForTeacherLibraryResourceHandler,
   assignLibraryResourceBookHandler: assignTeacherLibraryResourceBookHandler,
   listTeacherStudentHomeworksHandler,
@@ -341,6 +344,13 @@ app.http('parent-library-resource-books-extract-toc', {
   handler: extractLibraryTocForParentHandler,
 })
 
+app.http('parent-library-resource-books-extract-cover', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'parent/library/resource-books/extract-cover',
+  handler: extractLibraryCoverForParentHandler,
+})
+
 app.http('parent-library-resource-book-detail', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -451,6 +461,13 @@ app.http('panel-teacher-student-status-update', {
   methods: ['PATCH'],
   route: 'panel-teacher/students/{studentTeacherId}/status',
   handler: updateTeacherStudentStatusHandler,
+})
+
+app.http('panel-teacher-student-grade-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-teacher/students/{studentTeacherId}/grade',
+  handler: updateTeacherStudentGradeHandler,
 })
 
 app.http('panel-teacher-student-delete', {
@@ -626,6 +643,13 @@ app.http('panel-teacher-library-resource-books-extract-toc', {
   methods: ['POST'],
   route: 'panel-teacher/library/resource-books/extract-toc',
   handler: extractLibraryTocForTeacherHandler,
+})
+
+app.http('panel-teacher-library-resource-books-extract-cover', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/library/resource-books/extract-cover',
+  handler: extractLibraryCoverForTeacherHandler,
 })
 
 app.http('panel-teacher-library-resource-book-detail', {

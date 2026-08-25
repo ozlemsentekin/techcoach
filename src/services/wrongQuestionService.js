@@ -6,12 +6,15 @@ import { authRequest } from './authClient'
  * @property {string} [taskId]
  * @property {string} [testId]
  * @property {string} subject
- * @property {string} [topic]
+ * @property {string} [topic] Ünitenin adı (ResourceBookTopics.name) — bkz. [topicName] testin kendi konusu için.
+ * @property {string} [topicName] Testin kendi konusu (ResourceBookTopicTests.topic_name), ünite adından daha spesifik — ör. "Pozitif Tam Sayının Çarpanları".
  * @property {string} [testName]
  * @property {string} [bookName]
  * @property {string} [publisherName]
  * @property {string} [bookImageUrl]
  * @property {string} [questionNumber]
+ * @property {number} [pageStart] Testin kaynak kitaptaki başlangıç sayfası (ResourceBookTopicTests.page_start).
+ * @property {number} [pageEnd] Testin kaynak kitaptaki bitiş sayfası (ResourceBookTopicTests.page_end).
  * @property {string} errorType
  * @property {string} [studentNote]
  * @property {string} [mistakeReason]  // 'dikkat-hatasi' | 'bilgi-eksikligi'

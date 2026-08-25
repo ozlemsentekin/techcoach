@@ -6,3 +6,5 @@ export function libraryApiBase(role) {
 }
 
 export const RESOURCE_SOURCE_LABELS = { okul: 'Okul Kaynağı', ozel: 'Özel Kaynak' }
+
+export const RESOURCE_TYPE_LABELS = { soru_bankasi: 'Soru Bankası', konu_anlatimi: 'Konu Anlatımlı Soru Bankası' }

@@ -10,6 +10,7 @@ const {
 const { requireTeacherSession, requireTeacherStudentContext } = require('./teacherScope')
 const { fetchTeacherResourceBooks, verifySubjectExists } = require('./students')
 const { extractLibraryTocFromImages } = require('./libraryTocExtraction')
+const { extractLibraryCoverInfo } = require('./libraryCoverExtraction')
 const { getTeacherQuota, hasActiveParentEntitlement } = require('./entitlements')
 const {
   SELECT_HOMEWORK,
@@ -487,6 +488,39 @@ async function updateTeacherStudentStatusHandler(request) {
   }
 }
 
+// Öğretmen tarafından eklenen öğrencilerin StudentProfiles kaydı (dolayısıyla grade'i) olmayabilir
+// (bkz. createTeacherStudentHandler). Sınıfı olmayan öğrenci, kütüphanede kaynak atanabilir
+// öğrenci listesinden düşer (assignable-students sorgusu grade üzerinden filtreler). Bu uç,
+// mevcut bir öğrencinin sınıfını sonradan tanımlamayı/düzeltmeyi sağlar.
+async function updateTeacherStudentGradeHandler(request) {
+  try {
+    const { error, studentId } = await requireTeacherStudentContext(request, { includeInactive: true })
+    if (error) return error
+
+    const payload = await request.json().catch(() => null)
+    const grade = String(payload?.grade || '').trim()
+    if (!LIBRARY_GRADES.has(grade)) {
+      return json(400, { error: 'Geçerli bir sınıf seçilmeli.' })
+    }
+
+    const requestDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      grade: { type: sql.NVarChar(20), value: grade },
+    })
+    await requestDb.query(`
+      MERGE dbo.StudentProfiles AS target
+      USING (SELECT @studentId AS student_id) AS src
+      ON target.student_id = src.student_id
+      WHEN MATCHED THEN UPDATE SET grade = @grade
+      WHEN NOT MATCHED THEN INSERT (student_id, grade) VALUES (@studentId, @grade);
+    `)
+
+    return json(200, { student: { studentId, grade } })
+  } catch (error) {
+    return handleError(error, 'updateTeacherStudentGradeHandler', 'Sınıf güncellenemedi.')
+  }
+}
+
 async function deleteTeacherStudentRelationData(requestInTransaction, bindings) {
   await requestInTransaction(bindings).query(`
     DELETE FROM dbo.TaskActivityLogs
@@ -823,6 +857,17 @@ async function createTeacherStudentHandler(request) {
       return json(400, { error: 'Geçerli bir ders seçilmeli.' })
     }
 
+    const grade = String(payload.grade || '').trim()
+    if (!LIBRARY_GRADES.has(grade)) {
+      return json(400, { error: 'Geçerli bir sınıf seçilmeli.' })
+    }
+
+    const studentPhoneRaw = String(payload.studentPhone || '').trim()
+    const studentPhone = studentPhoneRaw ? normalizePhone(studentPhoneRaw) : null
+    if (studentPhoneRaw && !studentPhone) {
+      return json(400, { error: 'Geçerli bir öğrenci telefon numarası girin.' })
+    }
+
     const parentPhone = normalizePhone(payload.parentPhone)
     if (!parentPhone) {
       return json(400, { error: 'Geçerli bir veli telefon numarası girin.' })
@@ -895,17 +940,35 @@ async function createTeacherStudentHandler(request) {
     const insertStudentDb = await withRequest({
       fullName: { type: sql.NVarChar(120), value: studentFullName },
       role: { type: sql.NVarChar(20), value: 'ogrenci' },
+      phone: { type: sql.NVarChar(30), value: studentPhone },
       parentId: { type: sql.UniqueIdentifier, value: parentId },
       fundedByTeacherId: { type: sql.UniqueIdentifier, value: consumesQuota ? teacherUserId : null },
       aydinlatmaAcceptedAt: { type: sql.DateTime2, value: parentConsent?.aydinlatma_accepted_at || null },
       kvkkAcceptedAt: { type: sql.DateTime2, value: parentConsent?.kvkk_accepted_at || null },
     })
-    const studentResult = await insertStudentDb.query(`
-      INSERT INTO dbo.Users (full_name, role, parent_id, funded_by_teacher_id, aydinlatma_accepted_at, kvkk_accepted_at)
-      OUTPUT inserted.id
-      VALUES (@fullName, @role, @parentId, @fundedByTeacherId, @aydinlatmaAcceptedAt, @kvkkAcceptedAt);
-    `)
+    let studentResult
+    try {
+      studentResult = await insertStudentDb.query(`
+        INSERT INTO dbo.Users (full_name, role, phone_number, parent_id, funded_by_teacher_id, aydinlatma_accepted_at, kvkk_accepted_at)
+        OUTPUT inserted.id
+        VALUES (@fullName, @role, @phone, @parentId, @fundedByTeacherId, @aydinlatmaAcceptedAt, @kvkkAcceptedAt);
+      `)
+    } catch (insertError) {
+      if (studentPhone && (insertError.number === 2601 || insertError.number === 2627)) {
+        return json(409, { error: 'Bu öğrenci telefon numarası ile zaten bir kayıt var.' })
+      }
+      throw insertError
+    }
     const studentId = studentResult.recordset[0].id
+
+    const insertProfileDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      grade: { type: sql.NVarChar(20), value: grade },
+      phone: { type: sql.NVarChar(30), value: studentPhone },
+    })
+    await insertProfileDb.query(`
+      INSERT INTO dbo.StudentProfiles (student_id, grade, phone) VALUES (@studentId, @grade, @phone);
+    `)
 
     const insertStudentTeacherDb = await withRequest({
       studentId: { type: sql.UniqueIdentifier, value: studentId },
@@ -1932,6 +1995,26 @@ async function extractLibraryTocForTeacherHandler(request) {
   }
 }
 
+async function extractLibraryCoverForTeacherHandler(request) {
+  try {
+    const { error } = await requireTeacherSession(request)
+    if (error) return error
+
+    const payload = await request.json().catch(() => null)
+    const result = await extractLibraryCoverInfo(payload?.image)
+    if (result.error) {
+      return json(400, { error: result.error })
+    }
+
+    return json(200, result)
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
+    }
+    return handleError(error, 'extractLibraryCoverForTeacherHandler', 'Kapak okunamadı.')
+  }
+}
+
 async function listAssignableStudentsForLibraryResourceHandler(request) {
   try {
     const { error, teacherUserId } = await requireTeacherSession(request)
@@ -2545,7 +2628,8 @@ async function listTeacherStudentWrongQuestionsHandler(request) {
              COALESCE(tp.name, wq.topic) AS topic,
              COALESCE(rb.name, wq.book_name) AS book_name,
              COALESCE(pub.name, wq.publisher_name) AS publisher_name,
-             rb.image_url AS book_image_url
+             rb.image_url AS book_image_url,
+             t.topic_name, t.page_start, t.page_end
       FROM dbo.WrongQuestions wq
       LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
       LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
@@ -2668,6 +2752,7 @@ module.exports = {
   listTeacherStudentsHandler,
   getTeacherStudentHandler,
   updateTeacherStudentStatusHandler,
+  updateTeacherStudentGradeHandler,
   deleteTeacherStudentHandler,
   listTeacherParentsHandler,
   getTeacherLessonPlanHandler,
@@ -2690,6 +2775,7 @@ module.exports = {
   deleteLibraryResourceBookForTeacherHandler,
   addLibraryResourceBookTopicsForTeacherHandler,
   extractLibraryTocForTeacherHandler,
+  extractLibraryCoverForTeacherHandler,
   listAssignableStudentsForLibraryResourceHandler,
   assignLibraryResourceBookHandler,
   listTeacherStudentHomeworksHandler,

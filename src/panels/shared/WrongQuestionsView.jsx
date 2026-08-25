@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, ArrowLeft, BookOpen, ChevronDown, ChevronRight, Layers, Loader2, Search, Tag } from 'lucide-react'
+import { AlertCircle, ArrowLeft, BookOpen, ChevronDown, ChevronRight, Download, Layers, Loader2, Search, Tag } from 'lucide-react'
 import PageHeader from '../layout/PageHeader'
 import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
@@ -400,6 +400,58 @@ function SourceQuestionBoard({ subject, topics, statsForTopic, fetchPhoto, onSel
   )
 }
 
+// Aktif kaynaktaki (kitaptaki) tüm fotoğraflı yanlışları konu başlıklarıyla gruplayıp tek bir PDF'e
+// gömer. Fotoğraflar tembel çekildiği için (bkz. WrongQuestionThumbnail) burada da aynı fetchPhoto
+// ile sırayla indirilir; ilerleme durumu buton üzerinde "n/toplam" olarak gösterilir.
+function SourcePdfExportButton({ subject, source, fetchPhoto }) {
+  const [status, setStatus] = useState('idle')
+  const [progress, setProgress] = useState({ done: 0, total: 0 })
+  const [error, setError] = useState('')
+
+  const handleExport = async () => {
+    if (status === 'loading') return
+    setStatus('loading')
+    setError('')
+    setProgress({ done: 0, total: 0 })
+    try {
+      const [{ buildWrongQuestionsPdf, buildWrongQuestionsPdfFileName }, { savePdfDocument }] = await Promise.all([
+        import('../../utils/wrongQuestionsPdf'),
+        import('../../utils/savePdfDocument'),
+      ])
+      const doc = await buildWrongQuestionsPdf({
+        subject,
+        source,
+        fetchPhoto,
+        onProgress: (done, total) => setProgress({ done, total }),
+      })
+      await savePdfDocument(doc, buildWrongQuestionsPdfFileName(source.bookName))
+    } catch (err) {
+      setError(err.message || 'PDF oluşturulamadı.')
+    } finally {
+      setStatus('idle')
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button variant="secondary" onClick={handleExport} disabled={status === 'loading'}>
+        {status === 'loading' ? (
+          <>
+            <Loader2 size={15} className="animate-spin" aria-hidden="true" />
+            {progress.total ? `PDF hazırlanıyor (${progress.done}/${progress.total})` : 'PDF hazırlanıyor...'}
+          </>
+        ) : (
+          <>
+            <Download size={15} aria-hidden="true" />
+            PDF Olarak İndir
+          </>
+        )}
+      </Button>
+      {error ? <span className="max-w-[220px] text-right text-xs text-panel-warm">{error}</span> : null}
+    </div>
+  )
+}
+
 // Öğrenci/veli/öğretmen panellerinin ortak Hata Defteri görünümü: ders kartları -> içerik (konu)
 // kartları -> fotoğraf galerisi + Dikkat Hatası/Bilgi Eksikliği etiketleme. Kimin verisini
 // gösterdiği tamamen fetchWrongQuestions/fetchTopicStats/updateMistakeReason prop'larıyla
@@ -522,6 +574,7 @@ export default function WrongQuestionsView({
           actions={
             <div className="flex items-center gap-2">
               {headerActions}
+              <SourcePdfExportButton subject={effectiveSelectedSubject} source={activeSource} fetchPhoto={fetchPhoto} />
               <Button variant="secondary" onClick={() => setSelectedSourceKey(null)}>
                 <ArrowLeft size={15} aria-hidden="true" />
                 Kaynaklara Dön
