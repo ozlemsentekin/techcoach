@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../../context/useAuth'
-import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Clock3, Coffee, Info, Star } from 'lucide-react'
+import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Info } from 'lucide-react'
 import {
   getWeekDates,
   getDraftTasksForDate,
@@ -11,7 +11,6 @@ import {
   cleanupUnlinkedHomeworkTasksForWeek,
   saveTaskForDay,
   publishDay,
-  totalAcademicMinutes,
 } from '../../../services/weeklyPlanService'
 import { addHomework } from '../../../services/homeworkService'
 import { preloadPanelHomeworkResourceBooks } from '../../../services/resourceBookService'
@@ -24,63 +23,6 @@ import AddTaskDrawer from '../components/AddTaskDrawer'
 import AssignHomeworkModal from '../components/AssignHomeworkModal'
 
 const currentWeekStart = getMondayOfWeek(todayISODate())
-
-const SUMMARY_ITEMS = {
-  study: {
-    icon: Clock3,
-    label: 'Toplam çalışma süresi',
-    iconClassName: 'bg-panel-blue-soft text-panel-blue',
-  },
-  break: {
-    icon: Coffee,
-    label: 'Planlanan mola',
-    iconClassName: 'bg-panel-accent-soft text-panel-warm',
-  },
-  free: {
-    icon: Star,
-    label: 'Serbest zaman',
-    iconClassName: 'bg-emerald-50 text-emerald-600',
-  },
-}
-
-function formatSummaryDuration(totalMinutes) {
-  const hours = Math.floor(totalMinutes / 60)
-  const minutes = totalMinutes % 60
-
-  if (hours > 0 && minutes > 0) return `${hours}sa ${minutes}dk`
-  if (hours > 0) return `${hours}sa`
-  return `${minutes}dk`
-}
-
-function getWeekSummary(tasks) {
-  const breakCount = tasks.filter((task) => ['mola', 'dinlenme'].includes(task.taskType)).length
-  const freeMinutes = tasks
-    .filter((task) => task.taskType === 'serbest-zaman')
-    .reduce((sum, task) => sum + (task.durationMinutes || 0), 0)
-
-  return {
-    studyDuration: formatSummaryDuration(totalAcademicMinutes(tasks)),
-    breakCount: `${breakCount} mola`,
-    freeDuration: formatSummaryDuration(freeMinutes),
-  }
-}
-
-function SummaryItem({ type, value }) {
-  const item = SUMMARY_ITEMS[type]
-  const Icon = item.icon
-
-  return (
-    <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-      <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full sm:h-14 sm:w-14 ${item.iconClassName}`}>
-        <Icon size={26} strokeWidth={2.1} aria-hidden="true" />
-      </span>
-      <span className="min-w-0">
-        <span className="block text-xs font-semibold text-panel-blue sm:text-sm">{item.label}</span>
-        <span className="mt-1 block break-words text-xl font-bold text-panel-text sm:text-2xl">{value}</span>
-      </span>
-    </div>
-  )
-}
 
 export default function WeeklyPlanPage() {
   const { authUser } = useAuth()
@@ -224,8 +166,6 @@ export default function WeeklyPlanPage() {
     showBanner(`${minutes} dakikalık mola eklendi.`)
   }
 
-  const allTasks = useMemo(() => weekDates.flatMap((date) => tasksByDate[date] || []), [tasksByDate, weekDates])
-  const weekSummary = useMemo(() => getWeekSummary(allTasks), [allTasks])
   const getExistingTasksForDrawer = useCallback(
     (date) => tasksByDate[date] || getDraftTasksForDate(date),
     [tasksByDate],
@@ -291,12 +231,6 @@ export default function WeeklyPlanPage() {
         <LoadingState label="Haftalık plan yükleniyor..." />
       ) : (
         <>
-          <div className="grid gap-4 rounded-2xl border border-panel-border bg-panel-surface px-4 py-4 shadow-sm sm:grid-cols-3 lg:px-8">
-            <SummaryItem type="study" value={weekSummary.studyDuration} />
-            <SummaryItem type="break" value={weekSummary.breakCount} />
-            <SummaryItem type="free" value={weekSummary.freeDuration} />
-          </div>
-
           <WeeklyPlannerGrid
             weekDates={weekDates}
             tasksByDate={tasksByDate}

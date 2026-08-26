@@ -6,10 +6,15 @@ import Button from '../../ui/Button'
 import { FieldIcon, WizardSteps } from '../../parent/components/StudentWizardShared'
 import { GENDER_OPTIONS } from '../../parent/components/studentWizardConstants'
 import { LIBRARY_GRADES, RESOURCE_TYPE_LABELS } from '../../shared/library/libraryConstants'
+import { useAuth } from '../../../context/useAuth'
+import { authRequest } from '../../../services/authClient'
 import {
+  addTeacherStudent,
   assignTeacherLibraryResourceBook,
+  getTeacherEntitlement,
   getTeacherStudentPrivateResourceBooks,
   getTeacherStudentProfile,
+  getTeacherStudents,
   updateTeacherStudentProfile,
 } from '../../../services/teacherService'
 
@@ -21,6 +26,17 @@ const STEPS = [
 
 const LOCKED_FIELD_CLASS =
   'w-full cursor-not-allowed rounded-xl border border-panel-border bg-[#f4f5f6] p-2 pl-9 text-base text-panel-text-muted'
+const EDITABLE_FIELD_CLASS =
+  'w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text focus:border-panel-blue focus:outline-none'
+
+const CREATE_FORM_INITIAL = {
+  studentFullName: '',
+  subjectId: '',
+  grade: '',
+  studentPhone: '',
+  parentFullName: '',
+  parentPhone: '',
+}
 
 function ResourceAvatar({ book }) {
   if (book.imageUrl) {
@@ -40,7 +56,9 @@ function ResourceAvatar({ book }) {
   )
 }
 
-export default function TeacherStudentProfileModal({ student, onClose, onAssigned }) {
+export default function TeacherStudentProfileModal({ student, onClose, onChanged }) {
+  const { authUser } = useAuth()
+  const [activeStudent, setActiveStudent] = useState(student || null)
   const [step, setStep] = useState(1)
   const [profile, setProfile] = useState(null)
   const [profileError, setProfileError] = useState('')
@@ -63,21 +81,112 @@ export default function TeacherStudentProfileModal({ student, onClose, onAssigne
   const [basicsError, setBasicsError] = useState('')
   const [basicsSaving, setBasicsSaving] = useState(false)
 
+  const [subjects, setSubjects] = useState(null)
+  const [entitlement, setEntitlement] = useState(null)
+  const [createForm, setCreateForm] = useState(CREATE_FORM_INITIAL)
+  const [createError, setCreateError] = useState('')
+  const [creating, setCreating] = useState(false)
+
   useEffect(() => {
+    if (activeStudent) return
     let ignore = false
-    getTeacherStudentProfile(student.studentTeacherId)
+    Promise.all([authRequest('/api/panel/subjects', { method: 'GET' }), getTeacherEntitlement()])
+      .then(([subjectsData, entitlementData]) => {
+        if (ignore) return
+        setSubjects(subjectsData.subjects)
+        setEntitlement(entitlementData)
+      })
+      .catch((err) => {
+        if (!ignore) setCreateError(err.message)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [activeStudent])
+
+  // Öğretmenler yalnızca kendi profilindeki derslerden öğrenci ekleyebilir; branşı henüz
+  // atanmamış (eski) hesaplarda geriye dönük uyumluluk için tüm dersler gösterilir.
+  const teacherSubjectIds = authUser?.teacherSubjectIds
+  const visibleSubjects = useMemo(() => {
+    if (!subjects) return null
+    if (!teacherSubjectIds?.length) return subjects
+    const normalizedIds = teacherSubjectIds.map((id) => id.toLowerCase())
+    return subjects.filter((subject) => normalizedIds.includes(subject.id.toLowerCase()))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subjects, teacherSubjectIds?.length])
+
+  useEffect(() => {
+    if (!visibleSubjects) return
+    setCreateForm((current) => ({ ...current, subjectId: current.subjectId || visibleSubjects[0]?.id || '' }))
+  }, [visibleSubjects])
+
+  const handleCreateChange = (event) => {
+    const { name, value } = event.target
+    setCreateForm((current) => ({ ...current, [name]: value }))
+  }
+
+  const handleCreateSubmit = async () => {
+    if (createForm.studentFullName.trim().length < 3) {
+      setCreateError('Öğrenci adı en az 3 karakter olmalı.')
+      return
+    }
+    if (!createForm.subjectId) {
+      setCreateError('Ders seçin.')
+      return
+    }
+    if (!createForm.grade) {
+      setCreateError('Sınıf seçin.')
+      return
+    }
+    if (createForm.studentPhone.trim() && createForm.studentPhone.trim().length < 7) {
+      setCreateError('Öğrenci telefon numarası en az 7 karakter olmalı.')
+      return
+    }
+    if (createForm.parentFullName.trim().length < 3) {
+      setCreateError('Veli adı en az 3 karakter olmalı.')
+      return
+    }
+    if (createForm.parentPhone.trim().length < 7) {
+      setCreateError('Veli telefon numarası en az 7 karakter olmalı.')
+      return
+    }
+
+    setCreateError('')
+    setCreating(true)
+    try {
+      const result = await addTeacherStudent(createForm)
+      const list = await getTeacherStudents('all')
+      const matched = list.find((item) => item.studentId === result.student.id) || null
+      if (matched) {
+        setActiveStudent(matched)
+        setStep(2)
+      } else {
+        setCreateError('Öğrenci oluşturuldu ancak profil bilgisi yüklenemedi. Pencereyi kapatıp tekrar açabilirsiniz.')
+      }
+      onChanged?.()
+    } catch (err) {
+      setCreateError(err.message)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!activeStudent) return
+    let ignore = false
+    getTeacherStudentProfile(activeStudent.studentTeacherId)
       .then(({ profile: loadedProfile, canEditBasics: editable }) => {
         if (ignore) return
         setProfile(loadedProfile || {})
         setCanEditBasics(Boolean(editable))
 
-        const nameParts = student.studentFullName.trim().split(/\s+/)
+        const nameParts = activeStudent.studentFullName.trim().split(/\s+/)
         setBasicsFirstName(nameParts[0] || '')
         setBasicsLastName(nameParts.slice(1).join(' ') || '')
-        setBasicsGrade(loadedProfile?.grade || student.studentGrade || '')
+        setBasicsGrade(loadedProfile?.grade || activeStudent.studentGrade || '')
         setBasicsBirthDate(loadedProfile?.birthDate ? String(loadedProfile.birthDate).slice(0, 10) : '')
         setBasicsGender(loadedProfile?.gender || '')
-        setBasicsPhone(loadedProfile?.phone || student.studentPhone || '')
+        setBasicsPhone(loadedProfile?.phone || activeStudent.studentPhone || '')
       })
       .catch((err) => {
         if (!ignore) setProfileError(err.message)
@@ -85,13 +194,14 @@ export default function TeacherStudentProfileModal({ student, onClose, onAssigne
     return () => {
       ignore = true
     }
-  }, [student.studentTeacherId, student.studentFullName, student.studentGrade, student.studentPhone])
+  }, [activeStudent])
 
   const handleSaveBasics = async () => {
+    if (!activeStudent) return
     setBasicsSaving(true)
     setBasicsError('')
     try {
-      const { profile: savedProfile } = await updateTeacherStudentProfile(student.studentTeacherId, {
+      const { profile: savedProfile } = await updateTeacherStudentProfile(activeStudent.studentTeacherId, {
         firstName: basicsFirstName,
         lastName: basicsLastName,
         grade: basicsGrade,
@@ -100,7 +210,7 @@ export default function TeacherStudentProfileModal({ student, onClose, onAssigne
         phone: basicsPhone,
       })
       setProfile(savedProfile)
-      onAssigned?.()
+      onChanged?.()
     } catch (err) {
       setBasicsError(err.message)
     } finally {
@@ -109,8 +219,9 @@ export default function TeacherStudentProfileModal({ student, onClose, onAssigne
   }
 
   const loadResourceBooks = () => {
+    if (!activeStudent) return Promise.resolve()
     setResourceError('')
-    return getTeacherStudentPrivateResourceBooks(student.studentTeacherId)
+    return getTeacherStudentPrivateResourceBooks(activeStudent.studentTeacherId)
       .then((data) => {
         setBooks(data.resourceBooks)
         setGradeMissing(Boolean(data.gradeMissing))
@@ -121,7 +232,7 @@ export default function TeacherStudentProfileModal({ student, onClose, onAssigne
   useEffect(() => {
     loadResourceBooks()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [student.studentTeacherId])
+  }, [activeStudent])
 
   const visibleBooks = useMemo(() => {
     const source = books || []
@@ -168,16 +279,16 @@ export default function TeacherStudentProfileModal({ student, onClose, onAssigne
   }
 
   const handleAssignSelected = async () => {
-    if (!selectedIds.size) return
+    if (!selectedIds.size || !activeStudent) return
     setSaving(true)
     setResourceError('')
     try {
       await Promise.all(
-        [...selectedIds].map((resourceBookId) => assignTeacherLibraryResourceBook(student.studentTeacherId, resourceBookId)),
+        [...selectedIds].map((resourceBookId) => assignTeacherLibraryResourceBook(activeStudent.studentTeacherId, resourceBookId)),
       )
       setSelectedIds(new Set())
       await loadResourceBooks()
-      onAssigned?.()
+      onChanged?.()
     } catch (err) {
       setResourceError(err.message)
     } finally {
@@ -185,30 +296,133 @@ export default function TeacherStudentProfileModal({ student, onClose, onAssigne
     }
   }
 
-  const photoUrl = profile?.photoUrl || student.studentPhotoUrl || ''
+  const photoUrl = profile?.photoUrl || activeStudent?.studentPhotoUrl || ''
   const basicsGenderLabel = GENDER_OPTIONS.find((option) => option.value === basicsGender)?.label || ''
   const assignedCount = (books || []).filter((book) => book.assigned).length
-  const EDITABLE_FIELD_CLASS =
-    'w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text focus:border-panel-blue focus:outline-none'
+  const isCreateLoading = visibleSubjects === null || entitlement === null
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
       <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden bg-white shadow-panel-2 sm:h-[min(680px,90vh)] sm:rounded-2xl">
         <div className="flex items-center justify-between gap-4 px-4 pb-3 pt-3 sm:px-6 sm:pb-3.5 sm:pt-4">
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-panel-text">Profil Kartı</h2>
-            <p className="truncate text-xs text-panel-text-muted">{student.studentFullName}</p>
+            <h2 className="text-lg font-semibold text-panel-text">{activeStudent ? 'Profil Kartı' : 'Öğrenci Ekle'}</h2>
+            <p className="truncate text-xs text-panel-text-muted">
+              {activeStudent ? activeStudent.studentFullName : 'Yeni öğrenci bilgilerini girin'}
+            </p>
           </div>
           <button type="button" aria-label="Kapat" onClick={onClose}>
             <X size={20} />
           </button>
         </div>
 
-        <WizardSteps step={step} steps={STEPS} onStepClick={setStep} />
+        <WizardSteps step={step} steps={STEPS} onStepClick={activeStudent ? setStep : undefined} />
 
         <div className="min-h-0 flex-1 overflow-y-auto border-t border-[#edf0f1] px-4 py-4 sm:px-6 sm:py-5">
           {step === 1 ? (
-            profile === null ? (
+            !activeStudent ? (
+              isCreateLoading ? (
+                <LoadingState label="Yükleniyor..." />
+              ) : (
+                <div className="flex flex-col gap-2.5">
+                  {!entitlement.isActive ? (
+                    <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">
+                      Panel aboneliğiniz aktif değil, öğrenci ekleyemezsiniz.
+                    </div>
+                  ) : (
+                    <p className="rounded-xl bg-panel-surface-soft px-4 py-3 text-sm text-panel-text-muted">
+                      Kalan öğrenci hakkınız: <strong className="text-panel-text">{entitlement.remainingSeats}</strong> /{' '}
+                      {entitlement.totalSeats}. Eklediğiniz öğrencinin velisinin zaten aktif bir planı varsa hakkınız
+                      harcanmaz.
+                    </p>
+                  )}
+                  {createError ? (
+                    <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{createError}</div>
+                  ) : null}
+                  <div className="relative">
+                    <FieldIcon icon={Users} />
+                    <input
+                      name="studentFullName"
+                      value={createForm.studentFullName}
+                      onChange={handleCreateChange}
+                      placeholder="Öğrenci Ad Soyad"
+                      aria-label="Öğrenci Ad Soyad"
+                      className={EDITABLE_FIELD_CLASS}
+                    />
+                  </div>
+                  <div className="relative">
+                    <FieldIcon icon={BookOpen} />
+                    <select
+                      name="subjectId"
+                      value={createForm.subjectId}
+                      onChange={handleCreateChange}
+                      aria-label="Ders"
+                      disabled={!visibleSubjects.length}
+                      className={EDITABLE_FIELD_CLASS}
+                    >
+                      {visibleSubjects.length ? null : <option value="">Ders yok</option>}
+                      {visibleSubjects.map((subject) => (
+                        <option key={subject.id} value={subject.id}>
+                          {subject.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="relative">
+                    <FieldIcon icon={GraduationCap} />
+                    <select
+                      name="grade"
+                      value={createForm.grade}
+                      onChange={handleCreateChange}
+                      aria-label="Sınıf"
+                      className={EDITABLE_FIELD_CLASS}
+                    >
+                      <option value="">Sınıf seçin</option>
+                      {LIBRARY_GRADES.map((grade) => (
+                        <option key={grade} value={grade}>
+                          {grade}. Sınıf
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="relative">
+                    <FieldIcon icon={Phone} />
+                    <input
+                      name="studentPhone"
+                      type="tel"
+                      value={createForm.studentPhone}
+                      onChange={handleCreateChange}
+                      placeholder="Öğrenci Telefon (opsiyonel)"
+                      aria-label="Öğrenci Telefon"
+                      className={EDITABLE_FIELD_CLASS}
+                    />
+                  </div>
+                  <div className="relative">
+                    <FieldIcon icon={Users} />
+                    <input
+                      name="parentFullName"
+                      value={createForm.parentFullName}
+                      onChange={handleCreateChange}
+                      placeholder="Veli Ad Soyad"
+                      aria-label="Veli Ad Soyad"
+                      className={EDITABLE_FIELD_CLASS}
+                    />
+                  </div>
+                  <div className="relative">
+                    <FieldIcon icon={Phone} />
+                    <input
+                      name="parentPhone"
+                      type="tel"
+                      value={createForm.parentPhone}
+                      onChange={handleCreateChange}
+                      placeholder="Veli Telefon"
+                      aria-label="Veli Telefon"
+                      className={EDITABLE_FIELD_CLASS}
+                    />
+                  </div>
+                </div>
+              )
+            ) : profile === null ? (
               <LoadingState label="Profil yükleniyor..." />
             ) : profileError ? (
               <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{profileError}</div>
@@ -218,7 +432,7 @@ export default function TeacherStudentProfileModal({ student, onClose, onAssigne
                   {photoUrl ? (
                     <img loading="lazy" decoding="async"
                       src={photoUrl}
-                      alt={`${student.studentFullName} fotoğrafı`}
+                      alt={`${activeStudent.studentFullName} fotoğrafı`}
                       className="h-40 w-40 rounded-full border border-panel-border object-cover"
                     />
                   ) : (
@@ -396,7 +610,7 @@ export default function TeacherStudentProfileModal({ student, onClose, onAssigne
               {books?.length ? (
                 <div className="flex gap-1 overflow-x-auto border-b border-panel-border">
                   <span className="shrink-0 whitespace-nowrap border-b-2 border-panel-blue px-3 pb-2.5 text-sm font-semibold text-panel-blue">
-                    {student.subjectName || 'Ders'}
+                    {activeStudent?.subjectName || 'Ders'}
                   </span>
                 </div>
               ) : null}
@@ -547,9 +761,19 @@ export default function TeacherStudentProfileModal({ student, onClose, onAssigne
         </div>
 
         <div className="flex flex-col items-stretch gap-2 border-t border-[#edf0f1] px-4 py-3 sm:flex-row sm:items-center sm:justify-end sm:px-6 sm:py-4">
-          <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={saving}>
+          <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={saving || creating || basicsSaving}>
             Kapat
           </Button>
+          {!activeStudent && step === 1 ? (
+            <Button
+              type="button"
+              size="md"
+              onClick={handleCreateSubmit}
+              disabled={creating || isCreateLoading || (entitlement && !entitlement.isActive)}
+            >
+              {creating ? 'Ekleniyor...' : 'Öğrenciyi Ekle ve Devam Et'}
+            </Button>
+          ) : null}
           {step === 3 ? (
             <Button type="button" size="md" onClick={handleAssignSelected} disabled={saving || selectedIds.size === 0}>
               {saving ? 'Atanıyor...' : `Seçilenleri Ata (${selectedIds.size})`}

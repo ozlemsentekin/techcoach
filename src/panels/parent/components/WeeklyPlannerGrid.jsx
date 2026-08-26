@@ -575,6 +575,11 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onMana
             {task.title}
           </span>
         )}
+        {task.taskType === 'ozel-ders' && task.teacherFullName ? (
+          <span className="mt-0.5 block truncate text-[11px] font-semibold text-panel-text-muted">
+            {task.teacherFullName}
+          </span>
+        ) : null}
       </span>
     </>
   )

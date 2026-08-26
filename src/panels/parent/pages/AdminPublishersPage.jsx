@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { BookOpen, Building2, CheckCircle2, ChevronDown, ChevronRight, Copy, Dot, FileText, HelpCircle, ImagePlus, KeyRound, ListTree, Pencil, Search, Trash2, X } from 'lucide-react'
+import { BookOpen, Building2, ChevronDown, ChevronRight, Copy, Dot, FileText, HelpCircle, KeyRound, ListTree, Pencil, Search, Trash2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
@@ -477,7 +477,6 @@ function EditTestModal({ topic, test, onSaved, onClose }) {
   const [topicName, setTopicName] = useState(test.topicName || '')
   const [name, setName] = useState(test.name || '')
   const [pageStart, setPageStart] = useState(test.pageStart ? String(test.pageStart) : '')
-  const [pageEnd, setPageEnd] = useState(test.pageEnd ? String(test.pageEnd) : '')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -494,12 +493,7 @@ function EditTestModal({ topic, test, onSaved, onClose }) {
     }
     const pageStartNumber = Number(pageStart)
     if (!Number.isInteger(pageStartNumber) || pageStartNumber <= 0) {
-      setError('Başlangıç sayfası pozitif bir tam sayı olmalı.')
-      return
-    }
-    const pageEndNumber = Number(pageEnd)
-    if (!Number.isInteger(pageEndNumber) || pageEndNumber < pageStartNumber) {
-      setError('Bitiş sayfası başlangıç sayfasından küçük olamaz.')
+      setError('Sayfa numarası pozitif bir tam sayı olmalı.')
       return
     }
 
@@ -512,7 +506,7 @@ function EditTestModal({ topic, test, onSaved, onClose }) {
           topicName: topicName.trim(),
           name: name.trim(),
           pageStart: pageStartNumber,
-          pageEnd: pageEndNumber,
+          pageEnd: pageStartNumber,
         }),
       })
       onSaved(data.test)
@@ -567,31 +561,17 @@ function EditTestModal({ topic, test, onSaved, onClose }) {
             />
           </label>
 
-          <div className="flex gap-3">
-            <label className="flex flex-1 flex-col gap-1.5">
-              <span className="text-sm font-medium text-panel-text-muted">Başlangıç Sayfası</span>
-              <input
-                type="number"
-                min="1"
-                value={pageStart}
-                onChange={(event) => setPageStart(event.target.value)}
-                placeholder="Örn. 8"
-                className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-              />
-            </label>
-
-            <label className="flex flex-1 flex-col gap-1.5">
-              <span className="text-sm font-medium text-panel-text-muted">Bitiş Sayfası</span>
-              <input
-                type="number"
-                min="1"
-                value={pageEnd}
-                onChange={(event) => setPageEnd(event.target.value)}
-                placeholder="Örn. 11"
-                className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-              />
-            </label>
-          </div>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-panel-text-muted">Sayfa</span>
+            <input
+              type="number"
+              min="1"
+              value={pageStart}
+              onChange={(event) => setPageStart(event.target.value)}
+              placeholder="Örn. 8"
+              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+            />
+          </label>
 
           <Button type="submit" disabled={loading} size="md" className="w-full">
             {loading ? 'Kaydediliyor...' : 'Kaydet'}
@@ -858,251 +838,6 @@ function TestModal({ topic, test, onSaved, onClose }) {
   return <AddTestsModal topic={topic} onSaved={onSaved} onClose={onClose} />
 }
 
-function readFileAsBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result
-      const base64 = String(result).split(',')[1] || ''
-      resolve(base64)
-    }
-    reader.onerror = () => reject(reader.error || new Error('Dosya okunamadı.'))
-    reader.readAsDataURL(file)
-  })
-}
-
-function AddQuestionsFromImageModal({ test, onClose, onQuestionsSaved }) {
-  const [file, setFile] = useState(null)
-  const [previewUrl, setPreviewUrl] = useState(null)
-  const [extracting, setExtracting] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [draftQuestions, setDraftQuestions] = useState(null)
-
-  const handleFileChange = (event) => {
-    const selected = event.target.files?.[0] || null
-    setFile(selected)
-    setDraftQuestions(null)
-    setError('')
-    setPreviewUrl(selected ? URL.createObjectURL(selected) : null)
-  }
-
-  const handleExtract = async () => {
-    if (!file) return
-    setExtracting(true)
-    setError('')
-    try {
-      const imageBase64 = await readFileAsBase64(file)
-      const data = await authRequest(`/api/panel-admin/resource-book-topic-tests/${test.id}/questions/extract`, {
-        method: 'POST',
-        body: JSON.stringify({ imageBase64, mediaType: file.type || 'image/jpeg' }),
-      })
-      setDraftQuestions(data.questions)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setExtracting(false)
-    }
-  }
-
-  const updateQuestion = (index, patch) => {
-    setDraftQuestions((current) => current.map((question, i) => (i === index ? { ...question, ...patch } : question)))
-  }
-
-  const updateOption = (questionIndex, optionIndex, patch) => {
-    setDraftQuestions((current) =>
-      current.map((question, i) =>
-        i === questionIndex
-          ? {
-              ...question,
-              options: question.options.map((option, j) => (j === optionIndex ? { ...option, ...patch } : option)),
-            }
-          : question,
-      ),
-    )
-  }
-
-  const setCorrectOption = (questionIndex, optionIndex) => {
-    setDraftQuestions((current) =>
-      current.map((question, i) =>
-        i === questionIndex
-          ? {
-              ...question,
-              options: question.options.map((option, j) => ({ ...option, isCorrect: j === optionIndex })),
-            }
-          : question,
-      ),
-    )
-  }
-
-  const removeQuestion = (index) => {
-    setDraftQuestions((current) => current.filter((_, i) => i !== index))
-  }
-
-  const handleSave = async () => {
-    if (!draftQuestions || draftQuestions.length === 0) return
-    setSaving(true)
-    setError('')
-    try {
-      for (const question of draftQuestions) {
-        await authRequest(`/api/panel-admin/resource-book-topic-tests/${test.id}/questions`, {
-          method: 'POST',
-          body: JSON.stringify({
-            orderNo: Number(question.orderNo),
-            passageText: question.passageText,
-            questionText: question.questionText,
-            options: question.options,
-          }),
-        })
-      }
-      onQuestionsSaved()
-      onClose()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
-      <div className="flex h-full w-full flex-col bg-white sm:h-auto sm:max-h-[85vh] sm:max-w-2xl sm:rounded-2xl">
-        <div className="flex items-start justify-between gap-3 border-b border-[#edf0f1] px-4 py-3 sm:px-5 sm:py-4">
-          <div>
-            <h2 className="text-lg font-semibold text-panel-text">Fotoğraftan Soru Ekle</h2>
-            <p className="text-xs text-[#667475]">{test.name} · {test.topicName}</p>
-          </div>
-          <button type="button" aria-label="Kapat" onClick={onClose}>
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-          {error ? (
-            <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
-          ) : null}
-
-          {!draftQuestions ? (
-            <div className="flex flex-col gap-3">
-              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-[#dfe4e5] px-4 py-8 text-center hover:bg-[#faf3ec]">
-                <ImagePlus size={24} className="text-[#87a3a5]" aria-hidden="true" />
-                <span className="text-sm font-medium text-[#253d3e]">
-                  {file ? file.name : 'Sayfa fotoğrafını seçmek için tıkla'}
-                </span>
-                <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
-              </label>
-
-              {previewUrl ? (
-                <img loading="lazy" decoding="async" src={previewUrl} alt="Önizleme" className="max-h-80 w-full rounded-xl border border-[#e5e8e9] object-contain" />
-              ) : null}
-
-              <Button type="button" disabled={!file || extracting} size="md" className="w-full" onClick={handleExtract}>
-                {extracting ? 'Sorular okunuyor...' : 'Soruları Çıkar'}
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-6">
-              {draftQuestions.length === 0 ? (
-                <p className="text-sm text-[#667475]">Görselde soru tespit edilemedi.</p>
-              ) : (
-                draftQuestions.map((question, questionIndex) => (
-                  <div key={questionIndex} className="flex flex-col gap-2.5 rounded-xl border border-[#e5e8e9] p-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <label className="flex items-center gap-2 text-sm font-semibold text-[#b85f22]">
-                        Soru No
-                        <input
-                          type="number"
-                          min="1"
-                          value={question.orderNo}
-                          onChange={(event) => updateQuestion(questionIndex, { orderNo: event.target.value })}
-                          className="w-16 rounded-lg border border-panel-border p-1 text-sm text-panel-text"
-                        />
-                      </label>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {!question.hasAnswerKeyMatch ? (
-                          <span className="rounded-full bg-panel-accent-soft px-2 py-0.5 text-[11px] font-medium text-panel-warm">
-                            Cevap anahtarı bulunamadı, doğru şıkkı seç
-                          </span>
-                        ) : null}
-                        <button
-                          type="button"
-                          aria-label="Soruyu kaldır"
-                          className="text-[#87a3a5] hover:text-panel-warm"
-                          onClick={() => removeQuestion(questionIndex)}
-                        >
-                          <Trash2 size={15} aria-hidden="true" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <textarea
-                      value={question.passageText}
-                      onChange={(event) => updateQuestion(questionIndex, { passageText: event.target.value })}
-                      placeholder="Pasaj metni"
-                      rows={4}
-                      className="rounded-lg border border-panel-border p-2 text-sm text-panel-text"
-                    />
-                    <textarea
-                      value={question.questionText}
-                      onChange={(event) => updateQuestion(questionIndex, { questionText: event.target.value })}
-                      placeholder="Soru kökü"
-                      rows={2}
-                      className="rounded-lg border border-panel-border p-2 text-sm text-panel-text"
-                    />
-
-                    <div className="flex flex-col gap-1.5">
-                      {question.options.map((option, optionIndex) => (
-                        <div key={optionIndex} className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name={`correct-${questionIndex}`}
-                            checked={option.isCorrect}
-                            onChange={() => setCorrectOption(questionIndex, optionIndex)}
-                            className="h-4 w-4"
-                            aria-label={`${option.label} şıkkını doğru işaretle`}
-                          />
-                          <span className="w-5 text-sm font-semibold text-[#253d3e]">{option.label})</span>
-                          <input
-                            value={option.text}
-                            onChange={(event) => updateOption(questionIndex, optionIndex, { text: event.target.value })}
-                            className="min-w-0 flex-1 rounded-lg border border-panel-border p-1.5 text-sm text-panel-text"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))
-              )}
-
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="md"
-                  className="flex-1"
-                  onClick={() => setDraftQuestions(null)}
-                  disabled={saving}
-                >
-                  Başka Fotoğraf Seç
-                </Button>
-                <Button
-                  type="button"
-                  size="md"
-                  className="flex-1"
-                  onClick={handleSave}
-                  disabled={saving || draftQuestions.length === 0}
-                >
-                  {saving ? 'Kaydediliyor...' : `${draftQuestions.length} Soruyu Kaydet`}
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function SetQuestionCountModal({ test, onSaved, onClose }) {
   const [questionCount, setQuestionCount] = useState('')
   const [error, setError] = useState('')
@@ -1251,23 +986,37 @@ function AnswerKeyModal({ test, onClose }) {
               <p className="mb-3 text-xs text-[#667475]">
                 {filledCount}/{entries.length} sorunun cevabı girildi.
               </p>
-              <div className="grid grid-cols-3 gap-2.5 min-[380px]:grid-cols-4 sm:grid-cols-6">
+              <div className="flex flex-col gap-1.5">
                 {entries.map((label, index) => (
-                  <label key={index} className="flex flex-col items-center gap-1">
-                    <span className="text-xs font-semibold text-[#b85f22]">{index + 1}</span>
-                    <select
-                      value={label}
-                      onChange={(event) => setLabel(index, event.target.value)}
-                      className="w-full rounded-lg border border-panel-border p-1.5 text-center text-sm text-panel-text"
-                    >
-                      <option value="">—</option>
-                      {['A', 'B', 'C', 'D'].map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 rounded-xl border border-panel-border px-3 py-2"
+                  >
+                    <span className="w-5 shrink-0 text-center text-sm font-semibold text-[#b85f22]">
+                      {index + 1}
+                    </span>
+                    <div className="flex flex-1 justify-start gap-2">
+                      {['A', 'B', 'C', 'D'].map((option) => {
+                        const selected = label === option
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            onClick={() => setLabel(index, selected ? '' : option)}
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-sm font-semibold transition-colors ${
+                              selected
+                                ? 'border-panel-warm bg-panel-warm text-white'
+                                : 'border-panel-border text-panel-text hover:border-panel-warm'
+                            }`}
+                          >
+                            {option}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
                 ))}
               </div>
             </>
@@ -1280,123 +1029,6 @@ function AnswerKeyModal({ test, onClose }) {
           </Button>
         </div>
       </div>
-    </div>
-  )
-}
-
-function TestQuestionsModal({ test, resourceBookType, onTestUpdated, onClose }) {
-  const [questions, setQuestions] = useState(null)
-  const [error, setError] = useState('')
-  const [showAddFromImage, setShowAddFromImage] = useState(false)
-  const [showAnswerKey, setShowAnswerKey] = useState(false)
-
-  const loadQuestions = () => {
-    authRequest(`/api/panel-admin/resource-book-topic-tests/${test.id}/questions`, { method: 'GET' })
-      .then((data) => setQuestions(data.questions))
-      .catch((err) => setError(err.message))
-  }
-
-  useEffect(() => {
-    loadQuestions()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [test.id])
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
-      <div className="flex h-full w-full flex-col bg-white sm:h-auto sm:max-h-[85vh] sm:max-w-2xl sm:rounded-2xl">
-        <div className="flex flex-col gap-3 border-b border-[#edf0f1] px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-5 sm:py-4">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-panel-text">{test.name}</h2>
-            <p className="text-xs text-[#667475]">
-              {test.topicName} · {test.pageStart}–{test.pageEnd}. sayfalar ·{' '}
-              {test.questionCount ? `${test.questionCount} soru` : 'soru sayısı girilmedi'}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-            {resourceBookType === 'soru_bankasi' ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="h-[34px] rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#faf3ec]"
-                onClick={() => setShowAnswerKey(true)}
-              >
-                <KeyRound size={14} className="mr-1.5 inline" aria-hidden="true" />
-                Cevap Anahtarı
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="h-[34px] rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#faf3ec]"
-              onClick={() => setShowAddFromImage(true)}
-            >
-              <ImagePlus size={14} className="mr-1.5 inline" aria-hidden="true" />
-              Fotoğraftan Ekle
-            </Button>
-            <button type="button" aria-label="Kapat" onClick={onClose}>
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-          {error ? (
-            <div className="rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
-          ) : questions === null ? (
-            <LoadingState label="Sorular yükleniyor..." />
-          ) : questions.length === 0 ? (
-            <p className="text-sm text-[#667475]">Bu teste ait soru yok.</p>
-          ) : (
-            <div className="flex flex-col gap-6">
-              {questions.map((question) => (
-                <div key={question.id} className="flex flex-col gap-2.5">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-sm font-semibold text-[#b85f22]">{question.orderNo}.</span>
-                    {question.passageText ? (
-                      <p className="whitespace-pre-line text-sm leading-relaxed text-[#253d3e]">{question.passageText}</p>
-                    ) : null}
-                  </div>
-                  <p className="text-sm font-medium text-[#253d3e]">{question.questionText}</p>
-                  <div className="flex flex-col gap-1.5 pl-1">
-                    {question.options.map((option) => (
-                      <div
-                        key={option.id}
-                        className={`flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-sm ${
-                          option.isCorrect ? 'bg-[#e8f3ee] text-[#2f7a57]' : 'text-[#253d3e]'
-                        }`}
-                      >
-                        <span className="font-semibold">{option.label})</span>
-                        <span className="flex-1">{option.text}</span>
-                        {option.isCorrect ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" aria-hidden="true" /> : null}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {showAddFromImage ? (
-        <AddQuestionsFromImageModal
-          test={test}
-          onClose={() => setShowAddFromImage(false)}
-          onQuestionsSaved={loadQuestions}
-        />
-      ) : null}
-
-      {showAnswerKey ? (
-        <AnswerKeyFlow
-          test={test}
-          onTestUpdated={(updatedTest) => {
-            onTestUpdated?.(updatedTest)
-          }}
-          onClose={() => setShowAnswerKey(false)}
-        />
-      ) : null}
     </div>
   )
 }
@@ -1420,7 +1052,6 @@ function TopicBlock({
   onAddTest,
   onEditTopic,
   onEditTest,
-  onViewTest,
   onDeleteTest,
   onManageAnswerKey,
 }) {
@@ -1486,16 +1117,7 @@ function TopicBlock({
               {tests.map((test) => (
                 <article
                   key={test.id}
-                  role="button"
-                  tabIndex={0}
                   className="rounded-[10px] border border-[#e5e8e9] bg-white p-3 text-left"
-                  onClick={() => onViewTest(test)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      onViewTest(test)
-                    }
-                  }}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -1541,7 +1163,7 @@ function TopicBlock({
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-[#667475]">
-                    <span className="rounded-full bg-[#faf3ec] px-2 py-1">{test.pageStart}–{test.pageEnd}. sayfalar</span>
+                    <span className="rounded-full bg-[#faf3ec] px-2 py-1">{test.pageStart}. sayfa</span>
                     <span className="rounded-full bg-[#faf3ec] px-2 py-1">
                       {test.questionCount ? `${test.questionCount} soru` : 'Soru sayısı yok'}
                     </span>
@@ -1565,8 +1187,7 @@ function TopicBlock({
                 {tests.map((test) => (
                   <tr
                     key={test.id}
-                    className="cursor-pointer border-t border-[#edf0f1] hover:bg-[#faf3ec]"
-                    onClick={() => onViewTest(test)}
+                    className="border-t border-[#edf0f1] hover:bg-[#faf3ec]"
                   >
                     <td className="px-3 py-1.5 font-medium text-[#253d3e]">
                       <span className="flex items-center gap-1">
@@ -1575,7 +1196,7 @@ function TopicBlock({
                       </span>
                     </td>
                     <td className="px-3 py-1.5 font-medium text-[#253d3e]">{test.name}</td>
-                    <td className="px-3 py-1.5 text-[#667475]">{test.pageStart}–{test.pageEnd}. sayfalar</td>
+                    <td className="px-3 py-1.5 text-[#667475]">{test.pageStart}. sayfa</td>
                     <td className="px-3 py-1.5 text-[#667475]">
                       {test.questionCount ? `${test.questionCount} soru` : 'Soru sayısı yok'}
                     </td>
@@ -1647,7 +1268,6 @@ function BookBlock({
   onAddTest,
   onEditTopic,
   onEditTest,
-  onViewTest,
   onDeleteTest,
   onManageAnswerKey,
   onEditBook,
@@ -1848,7 +1468,6 @@ function BookBlock({
                 onAddTest={onAddTest}
                 onEditTopic={onEditTopic}
                 onEditTest={onEditTest}
-                onViewTest={onViewTest}
                 onDeleteTest={onDeleteTest}
                 onManageAnswerKey={onManageAnswerKey}
               />
@@ -1874,7 +1493,6 @@ function PublisherRow({
   onAddTest,
   onEditTopic,
   onEditTest,
-  onViewTest,
   onDeleteTest,
   onManageAnswerKey,
   onEditBook,
@@ -1935,7 +1553,6 @@ function PublisherRow({
                   onAddTest={onAddTest}
                   onEditTopic={onEditTopic}
                   onEditTest={onEditTest}
-                  onViewTest={onViewTest}
                   onDeleteTest={onDeleteTest}
                   onManageAnswerKey={onManageAnswerKey}
                   onEditBook={onEditBook}
@@ -1970,7 +1587,6 @@ export default function AdminPublishersPage() {
   const [testModalTopic, setTestModalTopic] = useState(null)
   const [editingTopic, setEditingTopic] = useState(null)
   const [editingTest, setEditingTest] = useState(null)
-  const [viewingTest, setViewingTest] = useState(null)
   const [answerKeyTest, setAnswerKeyTest] = useState(null)
   const [deletingTest, setDeletingTest] = useState(null)
   const [deletingTestError, setDeletingTestError] = useState('')
@@ -2125,6 +1741,24 @@ export default function AdminPublishersPage() {
     [missingAnswerKeyBooks],
   )
 
+  const refreshMissingAnswerKeyBooks = () => {
+    authRequest('/api/panel-admin/resource-books/missing-answer-key', { method: 'GET' })
+      .then((data) => setMissingAnswerKeyBooks(data.resourceBooks))
+      .catch(() => {})
+  }
+
+  const handleAddTopic = (book) => {
+    const missingInfo = missingAnswerKeyInfoById[book.id]
+    if (missingInfo) {
+      setError(
+        `"${book.name}" kaynağına yeni içerik eklemeden önce mevcut testlerin cevap anahtarını tamamlayın (${missingInfo.incompleteTestCount}/${missingInfo.totalTestCount} test eksik).`,
+      )
+      return
+    }
+    setError('')
+    setTopicModalBook(book)
+  }
+
   const filteredPublishers = useMemo(() => {
     if (!publishers || !resourceBooks) return null
     const q = query.trim().toLowerCase()
@@ -2149,13 +1783,6 @@ export default function AdminPublishersPage() {
     if (!focusBookId || !resourceBooks) return null
     return resourceBooks.find((book) => book.id === focusBookId)?.publisherId || null
   }, [focusBookId, resourceBooks])
-
-  const viewingTestResourceBookType = useMemo(() => {
-    if (!viewingTest) return null
-    const topic = topics?.find((item) => item.id === viewingTest.topicId)
-    const book = topic ? resourceBooks?.find((item) => item.id === topic.resourceBookId) : null
-    return book?.type || null
-  }, [viewingTest, topics, resourceBooks])
 
   return (
     <div data-theme="orange" className="-mx-4 -mt-5 -mb-24 bg-[#F7F8FA] px-4 pb-24 pt-5 md:-mx-6 md:-mb-6 md:px-6 md:pb-6">
@@ -2230,11 +1857,10 @@ export default function AdminPublishersPage() {
                   isFocusPublisher={publisher.id === focusPublisherId}
                   missingAnswerKeyInfoById={missingAnswerKeyInfoById}
                   onAddBook={setBookModalPublisher}
-                  onAddTopic={setTopicModalBook}
+                  onAddTopic={handleAddTopic}
                   onAddTest={setTestModalTopic}
                   onEditTopic={setEditingTopic}
                   onEditTest={setEditingTest}
-                  onViewTest={setViewingTest}
                   onDeleteTest={setDeletingTest}
                   onManageAnswerKey={setAnswerKeyTest}
                   onEditBook={setEditingBook}
@@ -2314,23 +1940,14 @@ export default function AdminPublishersPage() {
         />
       ) : null}
 
-      {viewingTest ? (
-        <TestQuestionsModal
-          test={viewingTest}
-          resourceBookType={viewingTestResourceBookType}
-          onTestUpdated={(test) => {
-            applyTestUpdate(test)
-            setViewingTest(test)
-          }}
-          onClose={() => setViewingTest(null)}
-        />
-      ) : null}
-
       {answerKeyTest ? (
         <AnswerKeyFlow
           test={answerKeyTest}
           onTestUpdated={handleAnswerKeyTestUpdated}
-          onClose={() => setAnswerKeyTest(null)}
+          onClose={() => {
+            setAnswerKeyTest(null)
+            refreshMissingAnswerKeyBooks()
+          }}
         />
       ) : null}
 

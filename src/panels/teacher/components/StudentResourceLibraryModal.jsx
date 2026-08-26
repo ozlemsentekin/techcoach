@@ -395,18 +395,14 @@ function BookTopics({ studentTeacherId, book }) {
                             ) : null}
                             <span className="min-w-0 flex-[1_1_12rem] truncate">
                               {test.name} · s.{test.pageStart}-{test.pageEnd} · {test.questionCount} soru
+                              {hasResults
+                                ? ` (D:${test.correctCount ?? 0} Y:${test.wrongCount ?? 0} B:${test.blankCount ?? 0})`
+                                : ''}
                             </span>
                             {isManual ? (
                               <Badge tone="lilac" className="shrink-0">
                                 Elle işaretlendi
                               </Badge>
-                            ) : null}
-                            {isManual && hasResults ? (
-                              <span className="flex flex-wrap items-center gap-1">
-                                <Badge tone="sage">D:{test.correctCount ?? 0}</Badge>
-                                <Badge tone="red">Y:{test.wrongCount ?? 0}</Badge>
-                                <Badge tone="yellow">B:{test.blankCount ?? 0}</Badge>
-                              </span>
                             ) : null}
                             {needsMistakePhotos ? (
                               <span

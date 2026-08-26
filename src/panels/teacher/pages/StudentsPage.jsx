@@ -23,7 +23,6 @@ import { SuccessRateBadge } from '../../shared/ResourceBookCard'
 import ActionsMenu from '../../ui/ActionsMenu'
 import Button from '../../ui/Button'
 import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
-import AddTeacherStudentModal from '../components/AddTeacherStudentModal'
 import TeacherStudentProfileModal from '../components/TeacherStudentProfileModal'
 import {
   deleteTeacherStudent,
@@ -138,7 +137,6 @@ export default function StudentsPage() {
   const [error, setError] = useState('')
   const [libraryStudent, setLibraryStudent] = useState(null)
   const [profileStudent, setProfileStudent] = useState(null)
-  const [showAddModal, setShowAddModal] = useState(false)
   const [deleteStudent, setDeleteStudent] = useState(null)
   const [actionStudentId, setActionStudentId] = useState(null)
   const [openActionsStudentId, setOpenActionsStudentId] = useState(null)
@@ -231,7 +229,7 @@ export default function StudentsPage() {
         subtitle="Size panel erişimi verilen öğrenciler."
         actions={
           entitlement?.isActive ? (
-            <Button type="button" onClick={() => setShowAddModal(true)}>
+            <Button type="button" onClick={() => setProfileStudent('new')}>
               <Plus size={16} aria-hidden="true" />
               Öğrenci Ekle
             </Button>
@@ -463,26 +461,13 @@ export default function StudentsPage() {
 
       {profileStudent ? (
         <TeacherStudentProfileModal
-          student={profileStudent}
+          student={profileStudent === 'new' ? null : profileStudent}
           onClose={() => setProfileStudent(null)}
-          onAssigned={() => {
+          onChanged={() => {
             getTeacherStudents(statusFilter)
               .then(setStudents)
               .catch((err) => setError(err.message))
           }}
-        />
-      ) : null}
-
-      {showAddModal ? (
-        <AddTeacherStudentModal
-          onCreated={() => {
-            setShowAddModal(false)
-            setStudents(null)
-            getTeacherStudents(statusFilter)
-              .then(setStudents)
-              .catch((err) => setError(err.message))
-          }}
-          onClose={() => setShowAddModal(false)}
         />
       ) : null}
 
