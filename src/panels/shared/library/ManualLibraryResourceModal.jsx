@@ -3,7 +3,6 @@ import { X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import Button from '../../ui/Button'
 import ResourceImageField from '../../parent/components/ResourceImageField'
-import { RESOURCE_SOURCE_LABELS } from './libraryConstants'
 
 const RESOURCE_BOOK_TYPES = [
   { value: 'konu_anlatimi', label: 'Konu Anlatımı' },
@@ -25,7 +24,6 @@ export default function ManualLibraryResourceModal({ grade, subjectId, subjectNa
   const [type, setType] = useState('')
   const [publishMonthYear, setPublishMonthYear] = useState('')
   const [barcode, setBarcode] = useState('')
-  const [resourceSource, setResourceSource] = useState('okul')
   const [isActive, setIsActive] = useState(true)
   const [hasAnswerKey, setHasAnswerKey] = useState(true)
   const [imageUrl, setImageUrl] = useState('')
@@ -103,7 +101,6 @@ export default function ManualLibraryResourceModal({ grade, subjectId, subjectNa
           hasAnswerKey: type === 'soru_bankasi' ? hasAnswerKey : true,
           imageUrl: imageUrl.trim() || null,
           barcode: barcode.trim() || null,
-          resourceSource,
         }),
       })
       onSubmitted(data.resourceBook)
@@ -231,40 +228,23 @@ export default function ManualLibraryResourceModal({ grade, subjectId, subjectNa
               </label>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Kaynak Tipi</span>
-                <select
-                  value={type}
-                  onChange={(event) => setType(event.target.value)}
-                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-                >
-                  <option value="" disabled>
-                    Tip seçin
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-panel-text-muted">Kaynak Tipi</span>
+              <select
+                value={type}
+                onChange={(event) => setType(event.target.value)}
+                className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+              >
+                <option value="" disabled>
+                  Tip seçin
+                </option>
+                {RESOURCE_BOOK_TYPES.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
                   </option>
-                  {RESOURCE_BOOK_TYPES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Kaynak Türü</span>
-                <select
-                  value={resourceSource}
-                  onChange={(event) => setResourceSource(event.target.value)}
-                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-                >
-                  {Object.entries(RESOURCE_SOURCE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+                ))}
+              </select>
+            </label>
 
             <label className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-panel-text-muted">Barkod Kodu</span>

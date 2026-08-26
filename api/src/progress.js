@@ -289,6 +289,28 @@ async function saveCheckInHandler(request) {
   }
 }
 
+// Kapak fotoğrafları ResourceBooks.image_url'de base64 JPEG olarak saklanıyor (~140KB/kitap).
+// listWrongQuestionsHandler'ın ana sorgusu bunu her yanlış-soru satırında tekrar seçseydi,
+// aynı kitaptan onlarca sorusu olan bir öğrencide tek sayfa yüklemesi onlarca MB'a çıkıyordu
+// (247 satır × 140KB ≈ 33MB — sayfanın "yükleniyor"da donmasının asıl nedeni buydu). Bunun
+// yerine sadece farklı kitaplar için bir kez çekip book_name üzerinden JS'te eşliyoruz.
+async function fetchWrongQuestionBookImagesByName(studentId, { resourceBookId } = {}) {
+  const requestDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    ...(resourceBookId ? { resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId } } : {}),
+  })
+  const result = await requestDb.query(`
+    SELECT DISTINCT rb.name AS book_name, rb.image_url AS book_image_url
+    FROM dbo.WrongQuestions wq
+    INNER JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
+    INNER JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
+    INNER JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
+    WHERE wq.student_id = @studentId AND wq.test_id IS NOT NULL AND rb.image_url IS NOT NULL
+    ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''};
+  `)
+  return new Map(result.recordset.map((row) => [row.book_name, row.book_image_url]))
+}
+
 async function listWrongQuestionsHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
@@ -310,27 +332,35 @@ async function listWrongQuestionsHandler(request) {
     // ünitede toplanırsa) eski kayıt bayatlar. Bu yüzden test_id üzerinden katalogdaki güncel
     // konu/kitap/yayın evi adına öncelik veriyoruz; test_id'siz eski manuel kayıtlarda tabloya
     // kaydedilmiş metne geri düşülür.
-    const result = await requestDb.query(`
-      SELECT wq.id, wq.student_id, wq.task_id, wq.test_id, wq.subject, wq.test_name,
-             wq.question_number, wq.error_type, wq.student_note, wq.mistake_reason,
-             wq.review_status, wq.resolved_at,
-             CAST(1 AS bit) AS has_photo, wq.created_at,
-             COALESCE(tp.name, wq.topic) AS topic,
-             COALESCE(rb.name, wq.book_name) AS book_name,
-             COALESCE(pub.name, wq.publisher_name) AS publisher_name,
-             rb.image_url AS book_image_url,
-             t.topic_name, t.page_start, t.page_end
-      FROM dbo.WrongQuestions wq
-      LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
-      LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
-      LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
-      LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
-      WHERE wq.student_id = @studentId AND wq.test_id IS NOT NULL
-      ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''}
-      ORDER BY wq.created_at DESC;
-    `)
+    const [result, bookImageByName] = await Promise.all([
+      requestDb.query(`
+        SELECT wq.id, wq.student_id, wq.task_id, wq.test_id, wq.subject, wq.test_name,
+               wq.question_number, wq.error_type, wq.student_note, wq.mistake_reason,
+               wq.review_status, wq.resolved_at,
+               CAST(1 AS bit) AS has_photo, wq.created_at,
+               COALESCE(tp.name, wq.topic) AS topic,
+               COALESCE(rb.name, wq.book_name) AS book_name,
+               COALESCE(pub.name, wq.publisher_name) AS publisher_name,
+               t.topic_name, t.page_start, t.page_end
+        FROM dbo.WrongQuestions wq
+        LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
+        LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
+        LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
+        LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
+        WHERE wq.student_id = @studentId AND wq.test_id IS NOT NULL
+        ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''}
+        ORDER BY wq.created_at DESC;
+      `),
+      fetchWrongQuestionBookImagesByName(studentId, { resourceBookId }),
+    ])
 
-    return json(200, { wrongQuestions: result.recordset.map(sanitizeWrongQuestion) })
+    // bookImageUrl'i her satırda tekrar tekrar döndürmek yerine (bkz. yukarıdaki
+    // fetchWrongQuestionBookImagesByName yorumu) ayrı, kitap başına tek girişli bir harita
+    // olarak gönderiyoruz; istemci bunu book_name ile eşleyip sadece görüntülerken kullanır.
+    return json(200, {
+      wrongQuestions: result.recordset.map(sanitizeWrongQuestion),
+      bookImages: Object.fromEntries(bookImageByName),
+    })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -728,6 +758,27 @@ async function listStudySessionsHandler(request) {
   }
 }
 
+// tasks/sessions/homeworks/manualTestCompletions'ın her biri aynı kitaba defalarca (öğrencinin
+// o kitaptan yaptığı her görev/oturum için bir kez) referans verebilir. rb.image_url'i (kapak
+// fotoğrafı, ~140KB base64) bu dört sorgunun her satırında tekrar seçmek — ve sanitize edilmiş
+// nesnelere tekrar tekrar gömmek — WrongQuestions listesinde yaşanan aynı N-kat büyüme sorununu
+// yaratır (bkz. fetchWrongQuestionBookImagesByName). Bunun yerine dört sonuç kümesi çözüldükten
+// sonra sadece gerçekten referans verilen kitapların kimliklerini toplayıp tek bir sorguda,
+// kitap başına bir kez çekiyoruz.
+async function fetchResourceBookImagesByIds(resourceBookIds) {
+  const ids = Array.from(new Set(resourceBookIds.filter(Boolean)))
+  if (!ids.length) return new Map()
+
+  const requestDb = await withRequest({ idsJson: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(ids) } })
+  const result = await requestDb.query(`
+    SELECT rb.id AS resource_book_id, rb.image_url AS book_image_url
+    FROM dbo.ResourceBooks rb
+    INNER JOIN OPENJSON(@idsJson) ids ON ids.value = CONVERT(NVARCHAR(36), rb.id)
+    WHERE rb.image_url IS NOT NULL;
+  `)
+  return new Map(result.recordset.map((row) => [row.resource_book_id, row.book_image_url]))
+}
+
 async function getProgressOverviewHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
@@ -779,7 +830,7 @@ async function getProgressOverviewHandler(request) {
                  t.target_page_count, t.completed_page_count, t.status, t.completed_at,
                  t.correct_count, t.wrong_count, t.blank_count, t.resource_book_id,
                  t.selected_test_ids_json, t.test_results_json, rb.name AS resource_book_name,
-                 rb.resource_type, rb.image_url, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
+                 rb.resource_type, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
                  s.name AS resource_subject_name, t.created_at, t.updated_at
           FROM dbo.Tasks t
           LEFT JOIN dbo.ResourceBooks rb ON rb.id = t.resource_book_id
@@ -797,7 +848,7 @@ async function getProgressOverviewHandler(request) {
                  t.title AS task_title, t.task_type, t.homework_id, t.duration_minutes AS task_duration_minutes,
                  t.subject, t.topic, t.resource_book_id,
                  t.selected_test_ids_json, t.test_results_json, rb.name AS resource_book_name,
-                 rb.resource_type, rb.image_url, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
+                 rb.resource_type, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
                  s.name AS resource_subject_name
           FROM dbo.StudySessions ss
           LEFT JOIN dbo.Tasks t ON t.id = ss.task_id
@@ -811,7 +862,7 @@ async function getProgressOverviewHandler(request) {
       withRequest(bindings).then((requestDb) =>
         requestDb.query(`
           SELECT h.id, h.subject_id, s.name AS subject_name, h.resource_book_id,
-                 rb.name AS resource_book_name, rb.resource_type, rb.image_url, p.name AS publisher_name,
+                 rb.name AS resource_book_name, rb.resource_type, p.name AS publisher_name,
                  h.title, h.description, h.assigned_date, h.due_date,
                  h.total_question_count, h.completed_question_count, h.total_page_count,
                  h.status, h.created_at, h.updated_at
@@ -836,7 +887,7 @@ async function getProgressOverviewHandler(request) {
         requestDb.query(`
           SELECT smtc.test_id, smtc.correct_count, smtc.wrong_count, smtc.blank_count, smtc.marked_at,
                  tt.name AS test_name, COALESCE(tt.topic_name, rbt.name) AS topic_name, tt.question_count,
-                 rb.id AS resource_book_id, rb.name AS resource_book_name, rb.resource_type, rb.image_url,
+                 rb.id AS resource_book_id, rb.name AS resource_book_name, rb.resource_type,
                  p.name AS publisher_name, rb.subject_id, s.name AS subject_name
           FROM dbo.StudentManualTestCompletions smtc
           INNER JOIN dbo.ResourceBookTopicTests tt ON tt.id = smtc.test_id
@@ -850,6 +901,13 @@ async function getProgressOverviewHandler(request) {
       ),
     ])
 
+    const resourceBookImages = await fetchResourceBookImagesByIds([
+      ...tasksResult.recordset.map((r) => r.resource_book_id),
+      ...sessionsResult.recordset.map((r) => r.resource_book_id),
+      ...homeworksResult.recordset.map((r) => r.resource_book_id),
+      ...manualTestCompletionsResult.recordset.map((r) => r.resource_book_id),
+    ])
+
     return json(200, {
       resourceBooks: resourceBooksResult.recordset.map(sanitizeProgressResourceBook),
       tests: testsResult.recordset.map(sanitizeProgressTest),
@@ -858,6 +916,7 @@ async function getProgressOverviewHandler(request) {
       homeworks: homeworksResult.recordset.map(sanitizeProgressHomework),
       wrongQuestions: wrongQuestionsResult.recordset.map(sanitizeWrongQuestion),
       manualTestCompletions: manualTestCompletionsResult.recordset.map(sanitizeManualTestCompletion),
+      resourceBookImages: Object.fromEntries(resourceBookImages),
     })
   } catch (error) {
     if (isConfigError(error)) {
@@ -986,6 +1045,7 @@ module.exports = {
   getCheckInHandler,
   saveCheckInHandler,
   listWrongQuestionsHandler,
+  fetchWrongQuestionBookImagesByName,
   getWrongQuestionPhotoHandler,
   addWrongQuestionHandler,
   updateWrongQuestionHandler,
@@ -995,6 +1055,7 @@ module.exports = {
   listStudySessionsHandler,
   addStudySessionHandler,
   getProgressOverviewHandler,
+  fetchResourceBookImagesByIds,
   getSmallGoalHandler,
   setSmallGoalHandler,
   sanitizeProgressResourceBook,

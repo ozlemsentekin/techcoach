@@ -454,4 +454,5 @@ async function updateStudentProfileHandler(request) {
 module.exports = {
   getStudentProfileHandler,
   updateStudentProfileHandler,
+  fetchStudentProfile,
 }

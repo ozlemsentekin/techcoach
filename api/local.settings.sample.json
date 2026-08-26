@@ -8,6 +8,13 @@
     "AUTH_COOKIE_NAME": "techcoach_session",
     "AUTH_COOKIE_SECURE": "false",
     "REVENUECAT_WEBHOOK_AUTH_HEADER": "replace-with-the-revenuecat-webhook-auth-header",
-    "TURNSTILE_SECRET_KEY": "replace-with-turnstile-secret-key"
+    "TURNSTILE_SECRET_KEY": "replace-with-turnstile-secret-key",
+    "IYZICO_API_KEY": "replace-with-iyzico-api-key",
+    "IYZICO_SECRET_KEY": "replace-with-iyzico-secret-key",
+    "IYZICO_BASE_URL": "https://sandbox-api.iyzipay.com",
+    "IYZICO_PARENT_MONTHLY_PLAN_REF": "replace-with-iyzico-parent-monthly-plan-ref",
+    "IYZICO_PARENT_YEARLY_PLAN_REF": "replace-with-iyzico-parent-yearly-plan-ref",
+    "IYZICO_CALLBACK_URL": "replace-with-iyzico-callback-url",
+    "IYZICO_WEB_REDIRECT_BASE_URL": "replace-with-iyzico-web-redirect-base-url"
   }
 }

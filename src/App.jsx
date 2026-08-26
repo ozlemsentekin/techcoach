@@ -10,6 +10,8 @@ const LandingPage = lazy(() => import('./marketing/LandingPage'))
 const AuthPage = lazy(() => import('./marketing/AuthPage'))
 const SignUpPage = lazy(() => import('./marketing/SignUpPage'))
 const PaywallPage = lazy(() => import('./marketing/PaywallPage'))
+const PaymentPage = lazy(() => import('./marketing/PaymentPage'))
+const PaymentResultPage = lazy(() => import('./marketing/PaymentResultPage'))
 const LegalPage = lazy(() => import('./marketing/LegalPage'))
 const StudentApp = lazy(() => import('./panels/student/StudentApp'))
 const ParentApp = lazy(() => import('./panels/parent/ParentApp'))
@@ -76,6 +78,8 @@ export default function App() {
         <Route path="/login" element={<AuthPage />} />
         <Route path="/uye-ol" element={<SignUpPage />} />
         <Route path="/paywall" element={<PaywallPage />} />
+        <Route path="/odeme" element={<PaymentPage />} />
+        <Route path="/odeme/sonuc" element={<PaymentResultPage />} />
         <Route path="/hakkimizda" element={<LegalPage slug="hakkimizda" />} />
         <Route path="/gizlilik-sozlesmesi" element={<LegalPage slug="gizlilik" />} />
         <Route path="/mesafeli-satis-sozlesmesi" element={<LegalPage slug="mesafeliSatis" />} />

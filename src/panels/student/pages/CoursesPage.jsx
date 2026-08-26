@@ -5,6 +5,7 @@ import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
+import { ImagePreviewLightbox } from '../../shared/ResourceBookCard'
 
 const RESOURCE_BOOK_TYPE_LABELS = {
   konu_anlatimi: 'Konu Anlatımı',
@@ -30,14 +31,36 @@ function groupResourceBooksBySubject(resourceBooks) {
   return Array.from(groups.values())
 }
 
-function ResourceCover({ book, className = 'h-20 w-16' }) {
+function ResourceCover({ book, className = 'h-20 w-16', onClick }) {
   if (book?.imageUrl) {
-    return (
+    const image = (
       <img loading="lazy" decoding="async"
         src={book.imageUrl}
         alt={`${book.name} görseli`}
         className={`${className} shrink-0 rounded-lg border border-[#e4e7ea] object-cover shadow-sm`}
       />
+    )
+
+    if (!onClick) return image
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={(event) => {
+          event.stopPropagation()
+          onClick(event)
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          event.stopPropagation()
+          onClick(event)
+        }}
+        className="shrink-0 cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-student-theme-primary"
+        aria-label={`${book.name} görselini büyüt`}
+      >
+        {image}
+      </span>
     )
   }
 
@@ -76,10 +99,14 @@ function SubjectShelfCard({ group, onOpen }) {
   )
 }
 
-function ResourceCard({ book }) {
+function ResourceCard({ book, onPreviewImage }) {
   return (
     <article className="flex min-h-[156px] gap-4 rounded-xl border border-[#e5e8e9] bg-white p-4 shadow-[0_2px_10px_rgba(20,25,40,0.04)]">
-      <ResourceCover book={book} className="h-28 w-20" />
+      <ResourceCover
+        book={book}
+        className="h-28 w-20"
+        onClick={book.imageUrl ? () => onPreviewImage({ url: book.imageUrl, name: book.name }) : undefined}
+      />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div>
           <h3 className="line-clamp-2 text-base font-bold leading-snug text-panel-text">{book.name}</h3>
@@ -102,6 +129,7 @@ export default function CoursesPage() {
   const [resourceBooks, setResourceBooks] = useState(null)
   const [error, setError] = useState('')
   const [selectedSubjectId, setSelectedSubjectId] = useState(null)
+  const [previewImage, setPreviewImage] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -151,7 +179,7 @@ export default function CoursesPage() {
       ) : selectedGroup ? (
         <div className="fade-slide-in grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {selectedGroup.books.map((book) => (
-            <ResourceCard key={book.id} book={book} />
+            <ResourceCard key={book.id} book={book} onPreviewImage={setPreviewImage} />
           ))}
         </div>
       ) : (
@@ -161,6 +189,8 @@ export default function CoursesPage() {
           ))}
         </div>
       )}
+
+      <ImagePreviewLightbox preview={previewImage} onClose={() => setPreviewImage(null)} />
     </div>
   )
 }

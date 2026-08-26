@@ -7,6 +7,7 @@ import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
 import DataTable from '../../ui/DataTable'
 import ResourceImageField from '../components/ResourceImageField'
+import { ImagePreviewLightbox } from '../../shared/ResourceBookCard'
 import { GRADE_OPTIONS } from '../components/studentWizardConstants'
 
 const RESOURCE_BOOK_TYPES = [
@@ -211,12 +212,19 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
   )
 }
 
-function BookRow({ book, publishersById, onEditBook, onToggleActive }) {
+function BookRow({ book, publishersById, onEditBook, onToggleActive, onPreviewImage }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#edf0f1] px-4 py-2.5">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         {book.imageUrl ? (
-          <img loading="lazy" decoding="async" src={book.imageUrl} alt={`${book.name} görseli`} className="h-8 w-8 rounded-lg object-cover" />
+          <button
+            type="button"
+            aria-label={`${book.name} görselini büyüt`}
+            onClick={() => onPreviewImage({ url: book.imageUrl, name: book.name })}
+            className="shrink-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1c2b5e]"
+          >
+            <img loading="lazy" decoding="async" src={book.imageUrl} alt={`${book.name} görseli`} className="h-8 w-8 rounded-lg object-cover" />
+          </button>
         ) : null}
         <span className="truncate text-sm font-medium text-[#253d3e]">{book.name}</span>
         <button
@@ -243,7 +251,7 @@ function BookRow({ book, publishersById, onEditBook, onToggleActive }) {
   )
 }
 
-function SubjectRow({ subject, books, publishersById, onToggleActive, onEditBook, onAddBook }) {
+function SubjectRow({ subject, books, publishersById, onToggleActive, onEditBook, onAddBook, onPreviewImage }) {
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -283,7 +291,14 @@ function SubjectRow({ subject, books, publishersById, onToggleActive, onEditBook
             <p className="px-4 py-3 text-xs text-[#667475]">Bu derse ait kaynak yok.</p>
           ) : (
             books.map((book) => (
-              <BookRow key={book.id} book={book} publishersById={publishersById} onEditBook={onEditBook} onToggleActive={onToggleActive} />
+              <BookRow
+                key={book.id}
+                book={book}
+                publishersById={publishersById}
+                onEditBook={onEditBook}
+                onToggleActive={onToggleActive}
+                onPreviewImage={onPreviewImage}
+              />
             ))
           )}
         </div>
@@ -299,6 +314,7 @@ export default function AdminSubjectsPage() {
   const [error, setError] = useState('')
   const [addBookSubject, setAddBookSubject] = useState(null)
   const [editingBook, setEditingBook] = useState(null)
+  const [previewImage, setPreviewImage] = useState(null)
 
   const loadData = () => {
     Promise.all([
@@ -382,6 +398,7 @@ export default function AdminSubjectsPage() {
                   onToggleActive={handleToggleActive}
                   onEditBook={setEditingBook}
                   onAddBook={setAddBookSubject}
+                  onPreviewImage={setPreviewImage}
                 />
               ))}
             </div>
@@ -407,6 +424,8 @@ export default function AdminSubjectsPage() {
           onClose={() => setEditingBook(null)}
         />
       ) : null}
+
+      <ImagePreviewLightbox preview={previewImage} onClose={() => setPreviewImage(null)} />
     </div>
   )
 }

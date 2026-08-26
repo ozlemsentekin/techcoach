@@ -115,10 +115,10 @@ export async function getWeekPlans(weekStartDateISO) {
  * Bugünden önceki (son `lookbackDays` gün içindeki) atandığı tarihte tamamlanmamış görevleri
  * döner — veli panelinin "Günün Akışı"nda "Biriken Görev" etiketiyle gösterilir.
  */
-export async function getBacklogTasks(beforeDateISO, lookbackDays = 30) {
+export async function getBacklogTasks(beforeDateISO, lookbackDays = 30, { studentId } = {}) {
   const fromDate = addDaysISO(beforeDateISO, -lookbackDays)
   const toDate = addDaysISO(beforeDateISO, -1)
-  const tasks = await getTasksForDateRange(fromDate, toDate)
+  const tasks = await getTasksForDateRange(fromDate, toDate, { studentId })
   return tasks.filter(isBacklogTask)
 }
 
@@ -343,14 +343,14 @@ export function hasOverlap(tasks, startTime, endTime, excludeTaskId) {
 }
 
 /** Öğrencinin okul ders programını döner (bkz. StudentProfiles.school_schedule_json). */
-export async function getSchoolSchedule() {
-  const data = await cachedGet('/api/panel/school-schedule')
+export async function getSchoolSchedule({ studentId } = {}) {
+  const data = await cachedGet(studentId ? `/api/panel/school-schedule?studentId=${studentId}` : '/api/panel/school-schedule')
   return data.entries
 }
 
 /** Öğrencinin özel öğretmenlerden gelen düzenli ders saatlerini döner (bkz. StudentTeachers.schedule_json). */
-export async function getTeacherLessonSchedule() {
-  const data = await cachedGet('/api/panel/teachers')
+export async function getTeacherLessonSchedule({ studentId } = {}) {
+  const data = await cachedGet(studentId ? `/api/panel/teachers?studentId=${studentId}` : '/api/panel/teachers')
   return normalizeTeacherLessonSchedule(data.teachers || [])
 }
 

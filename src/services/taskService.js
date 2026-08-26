@@ -1,20 +1,27 @@
 import { authRequest } from './authClient'
 
-function taskQuery(date, isDraft) {
-  return `/api/panel/tasks?date=${date}&isDraft=${isDraft}`
+/** Birden çocuğu olan bir veli hangi çocuğu görüntülüyorsa `studentId` ile ilgili endpoint'e iletilir. */
+function withStudentId(path, studentId) {
+  if (!studentId) return path
+  return `${path}${path.includes('?') ? '&' : '?'}studentId=${studentId}`
+}
+
+function taskQuery(date, isDraft, studentId) {
+  return withStudentId(`/api/panel/tasks?date=${date}&isDraft=${isDraft}`, studentId)
 }
 
 /** @returns {Promise<object[]>} */
-export async function getTasksForDate(date, { isDraft = false } = {}) {
-  const data = await authRequest(taskQuery(date, isDraft), { method: 'GET' })
+export async function getTasksForDate(date, { isDraft = false, studentId } = {}) {
+  const data = await authRequest(taskQuery(date, isDraft, studentId), { method: 'GET' })
   return data.tasks
 }
 
 /** Aralıktaki (dahil) tüm günlerin görevlerini tek istekte döner. @returns {Promise<object[]>} */
-export async function getTasksForDateRange(fromDate, toDate, { isDraft = false } = {}) {
-  const data = await authRequest(`/api/panel/tasks?from=${fromDate}&to=${toDate}&isDraft=${isDraft}`, {
-    method: 'GET',
-  })
+export async function getTasksForDateRange(fromDate, toDate, { isDraft = false, studentId } = {}) {
+  const data = await authRequest(
+    withStudentId(`/api/panel/tasks?from=${fromDate}&to=${toDate}&isDraft=${isDraft}`, studentId),
+    { method: 'GET' },
+  )
   return data.tasks
 }
 
@@ -25,8 +32,8 @@ export async function getTaskById(taskId) {
 }
 
 /** @returns {Promise<object>} */
-export async function postTask(taskData) {
-  const data = await authRequest('/api/panel/tasks', {
+export async function postTask(taskData, studentId) {
+  const data = await authRequest(withStudentId('/api/panel/tasks', studentId), {
     method: 'POST',
     body: JSON.stringify(taskData),
   })
@@ -34,16 +41,16 @@ export async function postTask(taskData) {
 }
 
 /** @returns {Promise<object>} */
-export async function patchTask(taskId, updates) {
-  const data = await authRequest(`/api/panel/tasks/${taskId}`, {
+export async function patchTask(taskId, updates, studentId) {
+  const data = await authRequest(withStudentId(`/api/panel/tasks/${taskId}`, studentId), {
     method: 'PATCH',
     body: JSON.stringify(updates),
   })
   return data.task
 }
 
-export async function removeTask(taskId) {
-  await authRequest(`/api/panel/tasks/${taskId}`, { method: 'DELETE' })
+export async function removeTask(taskId, studentId) {
+  await authRequest(withStudentId(`/api/panel/tasks/${taskId}`, studentId), { method: 'DELETE' })
 }
 
 /** Öğrencinin görev üzerinde yaptığı sayaç, tamamlama ve ilerleme işlem kayıtları. */
@@ -83,15 +90,18 @@ export async function removeTaskTest(taskId, testId) {
 }
 
 /** Ebeveyn panelinden yeni bir görev oluşturur (canlı plana doğrudan yazar). */
-export async function createTask(date, taskData, { isDraft = false } = {}) {
-  return postTask({
-    status: 'bekliyor',
-    createdBy: 'ebeveyn',
-    priority: 'orta',
-    ...taskData,
-    date,
-    isDraft,
-  })
+export async function createTask(date, taskData, { isDraft = false, studentId } = {}) {
+  return postTask(
+    {
+      status: 'bekliyor',
+      createdBy: 'ebeveyn',
+      priority: 'orta',
+      ...taskData,
+      date,
+      isDraft,
+    },
+    studentId,
+  )
 }
 
 export async function updateTask(date, taskId, updates, { isDraft = false } = {}) {

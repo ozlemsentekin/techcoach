@@ -1,11 +1,14 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Camera, Info, Plus, Sparkles, Trash2, X } from 'lucide-react'
+import { Camera, ClipboardList, Eye, Info, Loader2, Plus, Sparkles, Trash2, UploadCloud, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import Button from '../../ui/Button'
 import ResourceImageField from '../../parent/components/ResourceImageField'
-import { libraryApiBase, RESOURCE_SOURCE_LABELS, RESOURCE_TYPE_LABELS } from './libraryConstants'
+import { WizardSteps } from '../../parent/components/StudentWizardShared'
+import { libraryApiBase, RESOURCE_TYPE_LABELS, RESOURCE_WIZARD_STEPS } from './libraryConstants'
 
-const TOC_MAX_DIMENSION = 1600
+// Claude görselleri dahili olarak ~1568px'e küçültüyor; bunun üzerini göndermek sadece
+// yükleme boyutunu ve işlem süresini artırır, kaliteyi artırmaz.
+const TOC_MAX_DIMENSION = 1568
 const TOC_JPEG_QUALITY = 0.82
 const TOC_ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const TOC_MAX_UPLOAD_BYTES = 8 * 1024 * 1024
@@ -21,7 +24,7 @@ function validateBarcode(value) {
   if (barcode.length < BARCODE_MIN_LENGTH || barcode.length > BARCODE_MAX_LENGTH) {
     return `Barkod kodu ${BARCODE_MIN_LENGTH}-${BARCODE_MAX_LENGTH} karakter arasında olmalı.`
   }
-  if (/^\d+$/.test(barcode)) return 'Barkod kodu sadece rakamlardan oluşamaz.'
+  if (!/^\d+$/.test(barcode)) return 'Barkod kodu sadece rakamlardan oluşmalı.'
   return ''
 }
 
@@ -43,7 +46,7 @@ function useLocalId() {
 }
 
 function emptyTest(nextId) {
-  return { id: nextId(), topicName: '', name: '', pageStart: '', pageEnd: '', questionCount: '' }
+  return { id: nextId(), topicName: '', name: '', pageStart: '', pageEnd: '', questionCount: '', answerKey: [] }
 }
 
 function emptyTopic(nextId) {
@@ -97,6 +100,26 @@ async function resizeTocImage(file) {
   return canvas.toDataURL('image/jpeg', TOC_JPEG_QUALITY)
 }
 
+const EXTRACTION_POLL_INTERVAL_MS = 2500
+const EXTRACTION_POLL_MAX_ATTEMPTS = 96 // ~4 dakika üst sınır
+
+// AI çıkarma istekleri (kapak/içindekiler/cevap anahtarı) tek bir HTTP isteğinde beklenemeyecek
+// kadar uzun sürebiliyor (gözlemlenen: 60sn-4dk arası). Backend bu yüzden isteği hemen bir
+// "jobId" ile yanıtlayıp işi arka planda yürütüyor; burada iş bitene kadar kısa aralıklarla
+// durumu sorguluyoruz. Böylece tarayıcı bağlantısı uzun süre açık tutulmuyor.
+async function pollExtractionJob(apiBase, jobId) {
+  for (let attempt = 0; attempt < EXTRACTION_POLL_MAX_ATTEMPTS; attempt += 1) {
+    const data = await authRequest(`${apiBase}/library/resource-books/extraction-jobs/${jobId}`, {
+      method: 'GET',
+      timeoutMs: 15000,
+    })
+    if (data.status === 'done') return data
+    if (data.status === 'error') throw new Error(data.error || 'İşlem başarısız oldu.')
+    await new Promise((resolve) => setTimeout(resolve, EXTRACTION_POLL_INTERVAL_MS))
+  }
+  throw new Error('İşlem zaman aşımına uğradı. Lütfen tekrar deneyin.')
+}
+
 // Fihristte genelde sadece başlangıç sayfası yazar; bitiş sayfası açık değilse bir sonraki
 // testin başlangıcından çıkarım yapılır (aynı kitap boyunca kümülatif sayfa akışı varsayımıyla).
 function applyExtractedTopics(rawTopics, nextId) {
@@ -123,6 +146,7 @@ function applyExtractedTopics(rawTopics, nextId) {
       pageStart: Number.isInteger(test.pageStart) ? String(test.pageStart) : '',
       pageEnd: Number.isInteger(test.pageEnd) ? String(test.pageEnd) : '',
       questionCount: '',
+      answerKey: [],
     })),
   }))
 }
@@ -272,12 +296,227 @@ function PhotoUploadStep({
   )
 }
 
+function AnswerKeyUploadButton({ onFiles, disabled, extracting }) {
+  const inputId = useId()
+  return (
+    <>
+      <label
+        htmlFor={inputId}
+        className={`flex h-8 items-center gap-1.5 rounded-full bg-panel-blue px-3 text-xs font-medium text-white hover:opacity-90 ${
+          disabled ? 'pointer-events-none opacity-60' : 'cursor-pointer'
+        }`}
+      >
+        <UploadCloud size={13} aria-hidden="true" />
+        {extracting ? 'Okunuyor...' : 'Cevap Anahtarını Yükle'}
+      </label>
+      <input
+        id={inputId}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+        disabled={disabled}
+        className="hidden"
+        onChange={(event) => {
+          onFiles(event.target.files)
+          event.target.value = ''
+        }}
+      />
+    </>
+  )
+}
+
+const ANSWER_KEY_LABELS = ['A', 'B', 'C', 'D']
+
+// Admin panelindeki yayınevi > kaynak > test cevap anahtarı ekranıyla aynı ızgara tasarımı; farkı
+// burada test henüz veritabanında oluşturulmadığı için cevaplar backend'e değil sihirbazın
+// kendi state'ine (test.answerKey) kaydediliyor, kitap gönderiminde diğer bilgilerle birlikte gider.
+function TestAnswerKeyModal({ test, onSave, onClose }) {
+  const questionCount = Number(test.questionCount) || 0
+  const [entries, setEntries] = useState(() => {
+    const base = Array.isArray(test.answerKey) ? test.answerKey : []
+    return Array.from({ length: questionCount }, (_, index) => base[index] || '')
+  })
+
+  const setLabel = (index, value) => setEntries((current) => current.map((entry, i) => (i === index ? value : entry)))
+  const filledCount = entries.filter(Boolean).length
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/30 p-4">
+      <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-panel-border bg-white p-5 shadow-panel-1">
+        <div className="mb-1 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-panel-text">Cevap Anahtarı</h3>
+            <p className="text-xs text-panel-text-muted">
+              {test.topicName ? `${test.topicName} · ` : ''}
+              {test.name || 'Test'}
+            </p>
+          </div>
+          <button type="button" aria-label="Kapat" onClick={onClose} className="shrink-0 text-panel-text-muted hover:text-panel-text">
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+
+        <p className="mb-3 text-xs text-panel-text-muted">
+          {filledCount}/{questionCount} sorunun cevabı girildi
+        </p>
+
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          <div className="grid grid-cols-3 gap-2.5 min-[380px]:grid-cols-4 sm:grid-cols-6">
+            {entries.map((label, index) => (
+              <label key={index} className="flex flex-col items-center gap-1">
+                <span className="text-xs font-semibold text-panel-warm">{index + 1}</span>
+                <select
+                  value={label}
+                  onChange={(event) => setLabel(index, event.target.value)}
+                  className="w-full rounded-lg border border-panel-border p-1.5 text-center text-xs text-panel-text"
+                >
+                  <option value="">—</option>
+                  {ANSWER_KEY_LABELS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 flex justify-end gap-2 border-t border-panel-border pt-4">
+          <Button type="button" variant="secondary" size="md" onClick={onClose}>
+            Vazgeç
+          </Button>
+          <Button type="button" size="md" onClick={() => onSave(entries)}>
+            Kaydet
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TestRow({ test, canRemove, onUpdate, onRemove }) {
+  const [showAnswerKey, setShowAnswerKey] = useState(false)
+  const hasQuestionCount = Number(test.questionCount) > 0
+
+  return (
+    <div className="rounded-lg bg-panel-surface-soft p-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-[1.1fr_1.7fr_54px_54px_60px_28px_24px] sm:items-center">
+        <input
+          value={test.topicName}
+          onChange={(event) => onUpdate({ topicName: event.target.value })}
+          placeholder="Test konusu"
+          className="col-span-2 rounded-lg border border-panel-border p-1.5 text-xs text-panel-text sm:col-span-1"
+        />
+        <input
+          value={test.name}
+          onChange={(event) => onUpdate({ name: event.target.value })}
+          placeholder="Test adı"
+          className="col-span-2 rounded-lg border border-panel-border p-1.5 text-xs text-panel-text sm:col-span-1"
+        />
+        <input
+          type="number"
+          min="1"
+          value={test.pageStart}
+          onChange={(event) => onUpdate({ pageStart: event.target.value })}
+          placeholder="Başl."
+          className="w-full rounded-lg border border-panel-border p-1.5 text-xs text-panel-text"
+        />
+        <input
+          type="number"
+          min="1"
+          value={test.pageEnd}
+          onChange={(event) => onUpdate({ pageEnd: event.target.value })}
+          placeholder="Bit."
+          className="w-full rounded-lg border border-panel-border p-1.5 text-xs text-panel-text"
+        />
+        <input
+          type="number"
+          min="1"
+          value={test.questionCount}
+          onChange={(event) => onUpdate({ questionCount: event.target.value })}
+          placeholder="Soru"
+          className="w-full rounded-lg border border-panel-blue bg-panel-blue-soft p-1.5 text-xs text-panel-text"
+        />
+        <button
+          type="button"
+          aria-label="Cevap anahtarını görüntüle/düzenle"
+          title={hasQuestionCount ? 'Cevap anahtarını görüntüle/düzenle' : 'Cevap anahtarı girmeden önce soru sayısını yazın'}
+          disabled={!hasQuestionCount}
+          onClick={() => setShowAnswerKey(true)}
+          className={`flex items-center justify-center rounded-lg border p-1.5 ${
+            !hasQuestionCount
+              ? 'cursor-not-allowed border-panel-border text-panel-text-muted opacity-40'
+              : test.answerKey?.some(Boolean)
+                ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
+                : 'border-panel-border text-panel-text-muted hover:border-panel-blue hover:text-panel-blue'
+          }`}
+        >
+          <ClipboardList size={14} aria-hidden="true" />
+        </button>
+        {canRemove ? (
+          <button
+            type="button"
+            aria-label="Testi sil"
+            onClick={onRemove}
+            className="flex items-center justify-center rounded-lg text-panel-text-muted hover:text-panel-warm"
+          >
+            <Trash2 size={14} aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+
+      {showAnswerKey && hasQuestionCount ? (
+        <TestAnswerKeyModal
+          test={test}
+          onSave={(answerKey) => {
+            onUpdate({ answerKey })
+            setShowAnswerKey(false)
+          }}
+          onClose={() => setShowAnswerKey(false)}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function TopicAnswerKeyButton({ onFiles, disabled }) {
+  const inputId = useId()
+  return (
+    <>
+      <label
+        htmlFor={inputId}
+        aria-label="Bu bölüm için cevap anahtarı fotoğrafı ekle"
+        title="Bu bölüm için cevap anahtarı fotoğrafı ekle"
+        className={`flex shrink-0 items-center gap-1 rounded-full border border-panel-border px-2 py-1 text-[11px] font-medium text-panel-text-muted hover:border-panel-blue hover:text-panel-blue ${
+          disabled ? 'pointer-events-none opacity-50' : 'cursor-pointer'
+        }`}
+      >
+        <Camera size={12} aria-hidden="true" />
+        Cevap Anahtarı Ekle
+      </label>
+      <input
+        id={inputId}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+        disabled={disabled}
+        className="hidden"
+        onChange={(event) => {
+          onFiles(event.target.files)
+          event.target.value = ''
+        }}
+      />
+    </>
+  )
+}
+
 export default function AddLibraryResourceWizard({ role, grade, subjectId, subjectName, onClose, onSubmitted }) {
   const apiBase = libraryApiBase(role)
   const nextId = useLocalId()
+  const submittingRef = useRef(false)
 
   const [step, setStep] = useState(1)
-  const [resourceSource, setResourceSource] = useState('')
   const [resourceType, setResourceType] = useState('')
   const [name, setName] = useState('')
   const [imageUrl, setImageUrl] = useState('')
@@ -300,6 +539,9 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
 
   const [answerKeyImages, setAnswerKeyImages] = useState([])
   const [answerKeyError, setAnswerKeyError] = useState('')
+  const [answerKeyNotice, setAnswerKeyNotice] = useState('')
+  const [answerKeyExtracting, setAnswerKeyExtracting] = useState(false)
+  const [showAnswerKeyPreview, setShowAnswerKeyPreview] = useState(false)
 
   useEffect(() => {
     let ignore = false
@@ -327,11 +569,12 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
       const [, mediaType, imageBase64] = match
       setCoverExtracting(true)
       try {
-        const data = await authRequest(`${apiBase}/library/resource-books/extract-cover`, {
+        const { jobId } = await authRequest(`${apiBase}/library/resource-books/extract-cover`, {
           method: 'POST',
-          timeoutMs: 30000,
+          timeoutMs: 15000,
           body: JSON.stringify({ image: { imageBase64, mediaType } }),
         })
+        const data = await pollExtractionJob(apiBase, jobId)
         if (data.name) setName((current) => current || data.name)
         if (data.barcode) setBarcode((current) => current || data.barcode)
         if (data.publishYear) setPublishYear((current) => current || String(data.publishYear))
@@ -357,10 +600,6 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
   }
 
   const goToStep3 = () => {
-    if (!resourceSource) {
-      setError('Kaynak tipi (Okul Kaynağı / Özel Kaynak) seçilmeli.')
-      return
-    }
     if (!resourceType) {
       setError('Kaynak türü (Soru Bankası / Konu Anlatımlı Soru Bankası) seçilmeli.')
       return
@@ -396,9 +635,9 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
     setTocError('')
     setTocExtracting(true)
     try {
-      const data = await authRequest(`${apiBase}/library/resource-books/extract-toc`, {
+      const { jobId } = await authRequest(`${apiBase}/library/resource-books/extract-toc`, {
         method: 'POST',
-        timeoutMs: 60000,
+        timeoutMs: 15000,
         body: JSON.stringify({
           images: tocImages.map((image) => ({
             imageBase64: image.dataUrl.split(',')[1] || '',
@@ -406,6 +645,7 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
           })),
         }),
       })
+      const data = await pollExtractionJob(apiBase, jobId)
       setTopics(applyExtractedTopics(data.topics, nextId))
       setStep(4)
     } catch (err) {
@@ -415,15 +655,89 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
     }
   }
 
-  const goToStep5 = () => {
-    const validationError = validateTopics(topics)
-    if (validationError) {
-      setError(validationError)
+  // Cevap anahtarından okunan test adlarını mevcut içerik/test satırlarıyla eşleştirip, henüz
+  // soru sayısı girilmemiş satırları doldurur. Bölüm bazlı yüklemede (scopedTopicId) sadece test
+  // adı yeterli; kitap geneli yüklemede aynı test adı farklı bölümlerde tekrar edebileceğinden
+  // (Test 1, Test 2 gibi) yanlış eşleşmeyi önlemek için içerik adı da birebir uyuşmalı.
+  const applyAnswerKeyMatches = (extractedTests, scopedTopicId) => {
+    if (!extractedTests?.length) return 0
+    let matchedCount = 0
+    const nextTopics = topics.map((topic) => {
+      if (scopedTopicId && topic.id !== scopedTopicId) return topic
+      const normalizedTopicName = topic.name.trim().toLocaleLowerCase('tr')
+      return {
+        ...topic,
+        tests: topic.tests.map((test) => {
+          if (test.questionCount) return test
+          const normalizedTestName = test.name.trim().toLocaleLowerCase('tr')
+          if (!normalizedTestName) return test
+          const match = extractedTests.find((entry) => {
+            if (entry.testName.trim().toLocaleLowerCase('tr') !== normalizedTestName) return false
+            if (scopedTopicId) return true
+            const entryTopicName = (entry.topicName || '').trim().toLocaleLowerCase('tr')
+            return Boolean(entryTopicName) && entryTopicName === normalizedTopicName
+          })
+          if (!match) return test
+          matchedCount += 1
+          return { ...test, questionCount: String(match.questionCount) }
+        }),
+      }
+    })
+    setTopics(nextTopics)
+    return matchedCount
+  }
+
+  const handleAnswerKeyFiles = async (fileList, topicId = null) => {
+    const files = Array.from(fileList || [])
+    if (!files.length) return
+    if (answerKeyImages.length + files.length > TOC_MAX_IMAGES) {
+      setAnswerKeyError(`En fazla ${TOC_MAX_IMAGES} fotoğraf yükleyebilirsiniz.`)
       return
     }
-    setError('')
-    setStep(5)
+    setAnswerKeyError('')
+    setAnswerKeyNotice('')
+
+    let resized
+    try {
+      resized = await Promise.all(
+        files.map(async (file) => {
+          const dataUrl = await resizeTocImage(file)
+          return { id: `${Date.now()}-${Math.random()}`, dataUrl, mediaType: 'image/jpeg' }
+        }),
+      )
+    } catch (err) {
+      setAnswerKeyError(err.message || 'Görsel yüklenemedi.')
+      return
+    }
+    setAnswerKeyImages((current) => [...current, ...resized])
+
+    setAnswerKeyExtracting(true)
+    try {
+      const { jobId } = await authRequest(`${apiBase}/library/resource-books/extract-answer-key`, {
+        method: 'POST',
+        timeoutMs: 15000,
+        body: JSON.stringify({
+          images: resized.map((image) => ({
+            imageBase64: image.dataUrl.split(',')[1] || '',
+            mediaType: image.mediaType,
+          })),
+        }),
+      })
+      const data = await pollExtractionJob(apiBase, jobId)
+      const matchedCount = applyAnswerKeyMatches(data.tests, topicId)
+      setAnswerKeyNotice(
+        matchedCount > 0
+          ? `${matchedCount} testin soru sayısı cevap anahtarından otomatik dolduruldu.`
+          : 'Cevap anahtarından otomatik eşleşen test bulunamadı, soru sayılarını elle girebilirsiniz.',
+      )
+    } catch (err) {
+      setAnswerKeyError(err.message || 'Cevap anahtarı okunamadı.')
+    } finally {
+      setAnswerKeyExtracting(false)
+    }
   }
+
+  const removeAnswerKeyImage = (id) => setAnswerKeyImages((current) => current.filter((image) => image.id !== id))
 
   const updateTopic = (topicId, changes) => {
     setTopics((current) => current.map((topic) => (topic.id === topicId ? { ...topic, ...changes } : topic)))
@@ -453,12 +767,15 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
     )
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return
+
     const validationError = validateTopics(topics)
     if (validationError) {
       setError(validationError)
       return
     }
 
+    submittingRef.current = true
     setError('')
     setSubmitting(true)
     try {
@@ -467,7 +784,6 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
         body: JSON.stringify({
           grade,
           subjectId,
-          resourceSource,
           resourceType,
           name: name.trim(),
           imageUrl: imageUrl.trim() || null,
@@ -492,6 +808,7 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
     } catch (err) {
       setError(err.message)
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   }
@@ -513,25 +830,27 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
     )
   }
 
-  const stepLabel =
-    step === 1
-      ? 'Kapak'
-      : step === 2
-        ? 'Temel Bilgiler'
-        : step === 3
-          ? 'İçindekiler Fotoğrafları'
-          : step === 4
-            ? 'İçerikler'
-            : 'Cevap Anahtarı Fotoğrafları'
-
   return (
     <div className="fixed inset-0 z-[70] flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
-      <div className="flex h-full w-full max-w-4xl flex-col overflow-hidden border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-[85vh] sm:max-h-[95vh] sm:rounded-2xl sm:p-6">
-        <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="relative flex h-full w-full max-w-4xl flex-col overflow-hidden border border-panel-border bg-panel-surface shadow-panel-1 sm:h-[85vh] sm:max-h-[95vh] sm:rounded-2xl">
+        {answerKeyExtracting || tocExtracting || coverExtracting ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white/75 backdrop-blur-sm">
+            <Loader2 size={40} className="animate-spin text-panel-blue" aria-hidden="true" />
+            <p className="text-sm font-medium text-panel-text">
+              {answerKeyExtracting
+                ? 'Cevap anahtarı okunuyor, soru sayıları eşleştiriliyor...'
+                : tocExtracting
+                  ? 'Fotoğraflar okunuyor, içerik ve testler çıkarılıyor...'
+                  : 'Kapak okunuyor, bilgiler dolduruluyor...'}
+            </p>
+          </div>
+        ) : null}
+
+        <div className="flex items-center justify-between gap-4 px-4 pb-3 pt-3 sm:px-6 sm:pb-3.5 sm:pt-4">
           <div>
-            <h2 className="text-lg font-bold text-panel-text">Kaynak Ekle</h2>
+            <h2 className="text-lg font-semibold text-panel-text">Kaynak Ekle</h2>
             <p className="text-xs text-panel-text-muted">
-              {grade}. Sınıf · {subjectName} · Adım {step}/5 — {stepLabel}
+              {grade}. Sınıf {subjectName} dersine yeni kaynak ekliyorsunuz
             </p>
           </div>
           <button type="button" aria-label="Kapat" onClick={onClose} className="shrink-0">
@@ -539,11 +858,13 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
           </button>
         </div>
 
-        {error ? (
-          <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{error}</div>
-        ) : null}
+        <WizardSteps step={step} steps={RESOURCE_WIZARD_STEPS} />
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-panel-border px-4 py-4 sm:px-6 sm:py-5">
+          {error ? (
+            <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{error}</div>
+          ) : null}
+
           {step === 1 ? (
             <div className="flex flex-col items-center gap-4 py-2 text-center">
               <ResourceImageField value={imageUrl} onChange={setImageUrl} compact size={200} showUrlToggle fit="contain" />
@@ -555,26 +876,6 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
             </div>
           ) : step === 2 ? (
             <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Kaynak Tipi</span>
-                <div className="flex gap-2">
-                  {Object.entries(RESOURCE_SOURCE_LABELS).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setResourceSource(value)}
-                      className={`flex-1 rounded-xl border p-2.5 text-sm font-medium transition-colors ${
-                        resourceSource === value
-                          ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
-                          : 'border-panel-border text-panel-text-muted hover:border-panel-blue'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-panel-text-muted">Kaynak Türü</span>
                 <div className="flex gap-2">
@@ -691,8 +992,6 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
                 'Bulanık, eğik açıdan veya parlama/gölge olan fotoğraflardan kaçının.',
                 'İçindekiler birden fazla sayfaya yayılıyorsa her sayfayı ayrı ayrı, aynı özenle çekip tek tek ekleyin.',
               ]}
-              extracting={tocExtracting}
-              extractingLabel="Fotoğraflar okunuyor, içerik ve testler çıkarılıyor..."
               idleHint={
                 'Fotoğrafları yükledikten sonra "Devam Et" ile içerik başlıkları, test konuları, test adları ve sayfa ' +
                 'numaraları otomatik okunmaya çalışılır; bir sonraki adımda okunan bilgileri düzenleyip soru sayılarını ' +
@@ -701,6 +1000,63 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
             />
           ) : step === 4 ? (
             <div className="flex flex-col gap-4">
+              <div className="rounded-xl border border-panel-border p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-panel-text">Cevap Anahtarı</p>
+                    <p className="text-xs text-panel-text-muted">
+                      Kitabın tüm cevap anahtarı fotoğraflarını buradan yükleyin — eşleşen testlerin soru sayısı
+                      otomatik doldurulur. Birden fazla fotoğraf ekleyebilirsiniz.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {answerKeyImages.length ? (
+                      <button
+                        type="button"
+                        aria-label="Cevap anahtarı fotoğraflarını görüntüle/düzenle"
+                        title="Cevap anahtarı fotoğraflarını görüntüle/düzenle"
+                        onClick={() => setShowAnswerKeyPreview((current) => !current)}
+                        className={`flex h-8 w-8 items-center justify-center rounded-full border ${
+                          showAnswerKeyPreview
+                            ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
+                            : 'border-panel-border text-panel-text-muted hover:border-panel-blue hover:text-panel-blue'
+                        }`}
+                      >
+                        <Eye size={15} aria-hidden="true" />
+                      </button>
+                    ) : null}
+                    <AnswerKeyUploadButton onFiles={(files) => handleAnswerKeyFiles(files)} disabled={answerKeyExtracting} extracting={answerKeyExtracting} />
+                  </div>
+                </div>
+
+                {answerKeyError ? <p className="mt-2 text-xs text-panel-warm">{answerKeyError}</p> : null}
+                {!answerKeyExtracting && answerKeyNotice ? <p className="mt-2 text-xs text-panel-blue">{answerKeyNotice}</p> : null}
+
+                {showAnswerKeyPreview && answerKeyImages.length ? (
+                  <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                    {answerKeyImages.map((image, index) => (
+                      <div key={image.id} className="group relative overflow-hidden rounded-lg border border-panel-border">
+                        <img
+                          loading="lazy"
+                          decoding="async"
+                          src={image.dataUrl}
+                          alt={`Cevap anahtarı ${index + 1}`}
+                          className="h-20 w-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          aria-label="Fotoğrafı kaldır"
+                          onClick={() => removeAnswerKeyImage(image.id)}
+                          className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                        >
+                          <X size={11} aria-hidden="true" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
               {tocImages.length ? (
                 <p className="rounded-lg bg-panel-blue-soft px-3 py-2 text-xs text-panel-blue">
                   İçindekiler fotoğraflarından okunabilenler önceden dolduruldu. Lütfen kontrol edip soru
@@ -716,6 +1072,7 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
                       placeholder={`İçerik adı (örn. ${topicIndex + 1}. Ünite)`}
                       className="flex-1 rounded-xl border border-panel-border p-2 text-sm font-semibold text-panel-text"
                     />
+                    <TopicAnswerKeyButton onFiles={(files) => handleAnswerKeyFiles(files, topic.id)} disabled={answerKeyExtracting} />
                     {topics.length > 1 ? (
                       <button
                         type="button"
@@ -729,66 +1086,23 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    <div className="hidden gap-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-panel-text-muted sm:grid sm:grid-cols-[1.1fr_1.7fr_54px_54px_60px_24px]">
+                    <div className="hidden gap-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-panel-text-muted sm:grid sm:grid-cols-[1.1fr_1.7fr_54px_54px_60px_28px_24px]">
                       <span>Test Konusu</span>
                       <span>Test Adı</span>
                       <span>Başl.</span>
                       <span>Bit.</span>
                       <span>Soru</span>
                       <span />
+                      <span />
                     </div>
                     {topic.tests.map((test) => (
-                      <div
+                      <TestRow
                         key={test.id}
-                        className="grid grid-cols-2 gap-2 rounded-lg bg-panel-surface-soft p-2 sm:grid-cols-[1.1fr_1.7fr_54px_54px_60px_24px] sm:items-center"
-                      >
-                        <input
-                          value={test.topicName}
-                          onChange={(event) => updateTest(topic.id, test.id, { topicName: event.target.value })}
-                          placeholder="Test konusu"
-                          className="col-span-2 rounded-lg border border-panel-border p-1.5 text-xs text-panel-text sm:col-span-1"
-                        />
-                        <input
-                          value={test.name}
-                          onChange={(event) => updateTest(topic.id, test.id, { name: event.target.value })}
-                          placeholder="Test adı"
-                          className="col-span-2 rounded-lg border border-panel-border p-1.5 text-xs text-panel-text sm:col-span-1"
-                        />
-                        <input
-                          type="number"
-                          min="1"
-                          value={test.pageStart}
-                          onChange={(event) => updateTest(topic.id, test.id, { pageStart: event.target.value })}
-                          placeholder="Başl."
-                          className="w-full rounded-lg border border-panel-border p-1.5 text-xs text-panel-text"
-                        />
-                        <input
-                          type="number"
-                          min="1"
-                          value={test.pageEnd}
-                          onChange={(event) => updateTest(topic.id, test.id, { pageEnd: event.target.value })}
-                          placeholder="Bit."
-                          className="w-full rounded-lg border border-panel-border p-1.5 text-xs text-panel-text"
-                        />
-                        <input
-                          type="number"
-                          min="1"
-                          value={test.questionCount}
-                          onChange={(event) => updateTest(topic.id, test.id, { questionCount: event.target.value })}
-                          placeholder="Soru"
-                          className="w-full rounded-lg border border-panel-blue bg-panel-blue-soft p-1.5 text-xs text-panel-text"
-                        />
-                        {topic.tests.length > 1 ? (
-                          <button
-                            type="button"
-                            aria-label="Testi sil"
-                            onClick={() => removeTest(topic.id, test.id)}
-                            className="flex items-center justify-center rounded-lg text-panel-text-muted hover:text-panel-warm"
-                          >
-                            <Trash2 size={14} aria-hidden="true" />
-                          </button>
-                        ) : null}
-                      </div>
+                        test={test}
+                        canRemove={topic.tests.length > 1}
+                        onUpdate={(changes) => updateTest(topic.id, test.id, changes)}
+                        onRemove={() => removeTest(topic.id, test.id)}
+                      />
                     ))}
                     <button
                       type="button"
@@ -811,21 +1125,10 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
                 İçerik Ekle
               </button>
             </div>
-          ) : (
-            <PhotoUploadStep
-              images={answerKeyImages}
-              setImages={setAnswerKeyImages}
-              error={answerKeyError}
-              setError={setAnswerKeyError}
-              altPrefix="Cevap anahtarı"
-              inputLabel="Cevap Anahtarı Fotoğrafı Yükle"
-              inputHint="Kitabın cevap anahtarı sayfa(lar)ının fotoğrafını çekin veya seçin — birden fazla sayfa ekleyebilirsiniz."
-              idleHint='Cevap anahtarı fotoğrafı eklemeden de "Gönder" ile devam edebilirsiniz; daha sonra da ekleyebilirsiniz.'
-            />
-          )}
+          ) : null}
         </div>
 
-        <div className="mt-4 flex flex-col items-stretch gap-2 border-t border-panel-border pt-4 sm:flex-row sm:justify-end">
+        <div className="flex flex-col items-stretch gap-2 border-t border-panel-border px-4 py-3 sm:flex-row sm:items-center sm:justify-end sm:px-6 sm:py-4">
           {step === 1 ? (
             <>
               <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={coverExtracting}>
@@ -853,22 +1156,14 @@ export default function AddLibraryResourceWizard({ role, grade, subjectId, subje
                 {tocExtracting ? 'Okunuyor...' : 'Devam Et'}
               </Button>
             </>
-          ) : step === 4 ? (
-            <>
-              <Button type="button" variant="secondary" size="md" onClick={() => setStep(3)}>
-                Geri
-              </Button>
-              <Button type="button" size="md" onClick={goToStep5}>
-                Devam Et
-              </Button>
-            </>
           ) : (
             <>
-              <Button type="button" variant="secondary" size="md" onClick={() => setStep(4)} disabled={submitting}>
+              <Button type="button" variant="secondary" size="md" onClick={() => setStep(3)} disabled={submitting}>
                 Geri
               </Button>
               <Button type="button" size="md" onClick={handleSubmit} disabled={submitting}>
-                {submitting ? 'Gönderiliyor...' : 'Gönder'}
+                {submitting ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : null}
+                {submitting ? 'Kaydediliyor...' : 'Kaydet ve Onaya Gönder'}
               </Button>
             </>
           )}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, Check, ChevronDown, ChevronRight, Loader2, Search, Trash2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { TASK_TYPES } from '../../../data/taskTypes'
@@ -11,10 +11,11 @@ import { filterTopicsBySearch } from '../../shared/homework/topicSearch'
 
 const QUESTION_BANK_HOMEWORK_TASK_TYPE = 'soru-bankasi-odevi'
 const SCHOOL_HOMEWORK_TASK_TYPE = 'okul-odevi'
-const ACTIVITY_HOMEWORK_TASK_TYPE = 'etkinlik-odevi'
 const PRIVATE_LESSON_TASK_TYPE = 'ozel-ders'
-const RESOURCE_TASK_TYPES = new Set([QUESTION_BANK_HOMEWORK_TASK_TYPE, SCHOOL_HOMEWORK_TASK_TYPE, ACTIVITY_HOMEWORK_TASK_TYPE])
-const REQUIRED_RESOURCE_TASK_TYPES = new Set([QUESTION_BANK_HOMEWORK_TASK_TYPE, SCHOOL_HOMEWORK_TASK_TYPE])
+const RESOURCE_TASK_TYPES = new Set([QUESTION_BANK_HOMEWORK_TASK_TYPE, SCHOOL_HOMEWORK_TASK_TYPE])
+const REQUIRED_RESOURCE_TASK_TYPES = new Set([QUESTION_BANK_HOMEWORK_TASK_TYPE])
+const TITLE_OPTIONAL_TASK_TYPES = new Set(['mola', 'serbest-zaman', 'spor', 'yemek'])
+const STUDY_TASK_TYPES = new Set([QUESTION_BANK_HOMEWORK_TASK_TYPE, SCHOOL_HOMEWORK_TASK_TYPE, PRIVATE_LESSON_TASK_TYPE])
 const TASK_TYPE_OPTIONS = [
   { id: 'mola', label: TASK_TYPES.mola.label },
   { id: 'serbest-zaman', label: TASK_TYPES['serbest-zaman'].label },
@@ -22,10 +23,11 @@ const TASK_TYPE_OPTIONS = [
   { id: 'yemek', label: TASK_TYPES.yemek.label },
   { id: QUESTION_BANK_HOMEWORK_TASK_TYPE, label: TASK_TYPES[QUESTION_BANK_HOMEWORK_TASK_TYPE].label },
   { id: SCHOOL_HOMEWORK_TASK_TYPE, label: TASK_TYPES[SCHOOL_HOMEWORK_TASK_TYPE].label },
-  { id: ACTIVITY_HOMEWORK_TASK_TYPE, label: TASK_TYPES[ACTIVITY_HOMEWORK_TASK_TYPE].label },
   { id: PRIVATE_LESSON_TASK_TYPE, label: TASK_TYPES[PRIVATE_LESSON_TASK_TYPE].label },
-]
+].sort((a, b) => a.label.localeCompare(b.label, 'tr'))
 const TASK_TYPE_OPTION_IDS = new Set(TASK_TYPE_OPTIONS.map((option) => option.id))
+const STUDY_TASK_TYPE_OPTIONS = TASK_TYPE_OPTIONS.filter((option) => STUDY_TASK_TYPES.has(option.id))
+const OTHER_TASK_TYPE_OPTIONS = TASK_TYPE_OPTIONS.filter((option) => !STUDY_TASK_TYPES.has(option.id))
 const DURATION_OPTIONS = [10, 20, 30, 45, 60, 90]
 
 function computeDurationMinutes(startTime, endTime) {
@@ -42,16 +44,21 @@ function addMinutesToTime(startTime, minutes) {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
-function normalizeTaskType(seed) {
+function normalizeTaskType(seed, hasSeed) {
   if (TASK_TYPE_OPTION_IDS.has(seed.taskType)) return seed.taskType
   if (seed.taskType === 'odev') {
     return seed.resourceType === 'soru_bankasi' ? QUESTION_BANK_HOMEWORK_TASK_TYPE : SCHOOL_HOMEWORK_TASK_TYPE
   }
-  return QUESTION_BANK_HOMEWORK_TASK_TYPE
+  return hasSeed ? QUESTION_BANK_HOMEWORK_TASK_TYPE : ''
 }
 
 function getDefaultTitle(taskType) {
   return TASK_TYPES[taskType]?.label || 'Görev'
+}
+
+function buildAutoTitle(taskType, subjectName, extraName) {
+  if (!taskType) return ''
+  return [getDefaultTitle(taskType), subjectName, extraName].filter(Boolean).join(' - ')
 }
 
 function buildQuestionBankNote(resourceBookName, topics, selectedTestIds) {
@@ -156,6 +163,77 @@ function ResourceBookButton({ book, selected, onSelect }) {
   )
 }
 
+function ResourceBookDropdown({ books, selectedBook, onSelect, placeholder }) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return undefined
+    const handlePointerDown = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [open])
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 rounded-xl border border-panel-border bg-white p-2.5 text-left shadow-sm outline-none transition-colors hover:border-panel-warm focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+      >
+        {selectedBook ? (
+          <>
+            <ResourceBookCover book={selectedBook} />
+            <span className="flex min-w-0 flex-1 flex-col gap-1">
+              {selectedBook.publisherName ? (
+                <Badge tone="lilac" className="max-w-full self-start overflow-hidden text-ellipsis whitespace-nowrap">
+                  {selectedBook.publisherName}
+                </Badge>
+              ) : null}
+              <span className="line-clamp-1 text-sm font-semibold text-panel-text">{selectedBook.name}</span>
+              {selectedBook.subjectName ? (
+                <span className="text-xs text-panel-text-muted">{selectedBook.subjectName}</span>
+              ) : null}
+            </span>
+          </>
+        ) : (
+          <span className="flex-1 py-1.5 text-sm text-panel-text-muted">{placeholder}</span>
+        )}
+        <ChevronDown
+          size={16}
+          className={cn('shrink-0 self-start text-panel-text-muted transition-transform', open && 'rotate-180')}
+          aria-hidden="true"
+        />
+      </button>
+
+      {open ? (
+        <div className="absolute z-10 mt-2 max-h-80 w-full overflow-y-auto rounded-xl border border-panel-border bg-white p-2 shadow-lg">
+          {books.length === 0 ? (
+            <p className="p-3 text-sm text-panel-text-muted">Bu derse ait kaynak yok.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {books.map((book) => (
+                <ResourceBookButton
+                  key={book.id}
+                  book={book}
+                  selected={selectedBook?.id === book.id}
+                  onSelect={(picked) => {
+                    onSelect(picked)
+                    setOpen(false)
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export default function AddTaskDrawer({
   initialTask,
   initialTemplate,
@@ -167,21 +245,23 @@ export default function AddTaskDrawer({
   schoolSchedule,
 }) {
   const seed = { ...initialTemplate?.task, ...initialTask }
-  const seedTaskType = normalizeTaskType(seed)
+  const seedTaskType = normalizeTaskType(seed, Boolean(initialTask || initialTemplate))
   const seedStartTime = seed.startTime || ''
   const seedEndTime =
     seed.endTime || (seedStartTime && seed.durationMinutes ? addMinutesToTime(seedStartTime, seed.durationMinutes) : '')
   const seedDurationMinutes =
-    Number(seed.durationMinutes) || (seedStartTime ? computeDurationMinutes(seedStartTime, seedEndTime) : 0) || 45
+    Number(seed.durationMinutes) || (seedStartTime ? computeDurationMinutes(seedStartTime, seedEndTime) : 0) || 0
+  const seedTitle = seed.title || (seedTaskType ? getDefaultTitle(seedTaskType) : '')
 
   const [form, setForm] = useState(() => ({
-    title: seed.title || getDefaultTitle(seedTaskType),
+    title: seedTitle,
     taskType: seedTaskType,
     date: seed.date || defaultDate || todayISODate(),
     startTime: seedStartTime,
     durationMinutes: seedDurationMinutes,
     description: seed.description || '',
   }))
+  const autoTitleRef = useRef(seedTitle)
   const [resourceBookId, setResourceBookId] = useState(seed.resourceBookId || '')
   const [subjectId, setSubjectId] = useState('')
   const [lessonSubjectId, setLessonSubjectId] = useState('')
@@ -196,7 +276,7 @@ export default function AddTaskDrawer({
   const [collapsedTopicIds, setCollapsedTopicIds] = useState(new Set())
   const [searchQuery, setSearchQuery] = useState('')
   const [durationMode, setDurationMode] = useState(() =>
-    DURATION_OPTIONS.includes(seedDurationMinutes) ? seedDurationMinutes : 'custom',
+    DURATION_OPTIONS.includes(seedDurationMinutes) ? seedDurationMinutes : seedDurationMinutes > 0 ? 'custom' : '',
   )
   const [error, setError] = useState('')
   const [deleting, setDeleting] = useState(false)
@@ -207,11 +287,11 @@ export default function AddTaskDrawer({
   const schoolConflict = endTime ? getSchoolScheduleConflict(schoolSchedule, form.date, form.startTime, endTime) : null
   const isQuestionBankHomework = form.taskType === QUESTION_BANK_HOMEWORK_TASK_TYPE
   const isSchoolHomework = form.taskType === SCHOOL_HOMEWORK_TASK_TYPE
-  const isActivityHomework = form.taskType === ACTIVITY_HOMEWORK_TASK_TYPE
   const isPrivateLesson = form.taskType === PRIVATE_LESSON_TASK_TYPE
   const needsResource = RESOURCE_TASK_TYPES.has(form.taskType)
   const resourceRequired = REQUIRED_RESOURCE_TASK_TYPES.has(form.taskType)
-  const modalMaxWidth = needsResource ? '48rem' : '38rem'
+  const needsTitleInput = !TITLE_OPTIONAL_TASK_TYPES.has(form.taskType)
+  const modalMaxWidth = '48rem'
 
   const [conflict, setConflict] = useState(false)
 
@@ -305,26 +385,37 @@ export default function AddTaskDrawer({
     }
   }, [isQuestionBankHomework, resourceBookId])
 
-  // Etkinlik ödevi düzenlenirken kaydedilmiş kaynaktan dersi geri türet (ayrıca saklanmıyor).
+  // Kaynak seçili görev düzenlenirken kaydedilmiş kaynaktan dersi geri türet (ayrıca saklanmıyor).
   const effectiveSubjectId = useMemo(() => {
-    if (subjectId || !isActivityHomework || !resourceBookId || !resourceBooks) return subjectId
+    if (subjectId || !needsResource || !resourceBookId || !resourceBooks) return subjectId
     const book = resourceBooks.find((candidate) => candidate.id === resourceBookId)
     return book ? book.subjectId || 'no-subject' : subjectId
-  }, [subjectId, isActivityHomework, resourceBookId, resourceBooks])
+  }, [subjectId, needsResource, resourceBookId, resourceBooks])
+
+  // Kaynak Türü (okul/özel) ayrımı kaldırıldı — Okul Ödevi kaynak seçimi artık kütüphanedeki
+  // tüm kaynakları kapsar.
+  const schoolResourceBooks = useMemo(
+    () => resourceBooks || [],
+    [resourceBooks],
+  )
+  const questionBankResourceBooks = useMemo(
+    () => (resourceBooks || []).filter((book) => book.type === 'soru_bankasi'),
+    [resourceBooks],
+  )
+  const schoolSubjectGroups = useMemo(() => groupBooksBySubject(schoolResourceBooks), [schoolResourceBooks])
+  const questionBankSubjectGroups = useMemo(() => groupBooksBySubject(questionBankResourceBooks), [questionBankResourceBooks])
+  const activeSubjectGroups = isSchoolHomework ? schoolSubjectGroups : isQuestionBankHomework ? questionBankSubjectGroups : []
 
   const filteredResourceBooks = useMemo(() => {
-    if (!resourceBooks) return []
-    if (isQuestionBankHomework) return resourceBooks.filter((book) => book.type === 'soru_bankasi')
-    if (isSchoolHomework) return resourceBooks.filter((book) => book.resourceSource === 'okul')
-    if (isActivityHomework) {
-      if (!effectiveSubjectId) return []
-      return resourceBooks.filter((book) => (book.subjectId || 'no-subject') === effectiveSubjectId)
+    if (!resourceBooks || !effectiveSubjectId) return []
+    if (isQuestionBankHomework) {
+      return questionBankResourceBooks.filter((book) => (book.subjectId || 'no-subject') === effectiveSubjectId)
+    }
+    if (isSchoolHomework) {
+      return schoolResourceBooks.filter((book) => (book.subjectId || 'no-subject') === effectiveSubjectId)
     }
     return []
-  }, [isQuestionBankHomework, isSchoolHomework, isActivityHomework, resourceBooks, effectiveSubjectId])
-
-  const resourceGroups = useMemo(() => groupBooksBySubject(filteredResourceBooks), [filteredResourceBooks])
-  const subjectGroups = useMemo(() => groupBooksBySubject(resourceBooks || []), [resourceBooks])
+  }, [resourceBooks, effectiveSubjectId, isQuestionBankHomework, isSchoolHomework, questionBankResourceBooks, schoolResourceBooks])
 
   const lessonSubjectGroups = useMemo(() => {
     const groups = new Map()
@@ -388,18 +479,19 @@ export default function AddTaskDrawer({
     setSearchQuery('')
   }
 
+  const applyAutoTitle = (nextAutoTitle, extra) => {
+    setForm((current) => {
+      const shouldReplaceTitle = !current.title.trim() || current.title === autoTitleRef.current
+      return shouldReplaceTitle ? { ...current, title: nextAutoTitle, ...extra } : { ...current, ...extra }
+    })
+    autoTitleRef.current = nextAutoTitle
+  }
+
   const handleTaskTypeChange = (event) => {
     const nextTaskType = event.target.value
-    setForm((current) => {
-      const currentDefault = getDefaultTitle(current.taskType)
-      const optionLabel = TASK_TYPE_OPTIONS.find((option) => option.label === current.title)
-      const shouldReplaceTitle = !current.title.trim() || current.title === currentDefault || Boolean(optionLabel)
-      return {
-        ...current,
-        taskType: nextTaskType,
-        title: shouldReplaceTitle ? getDefaultTitle(nextTaskType) : current.title,
-        description: nextTaskType === QUESTION_BANK_HOMEWORK_TASK_TYPE ? '' : current.description,
-      }
+    applyAutoTitle(buildAutoTitle(nextTaskType, null, null), {
+      taskType: nextTaskType,
+      description: nextTaskType === QUESTION_BANK_HOMEWORK_TASK_TYPE ? '' : form.description,
     })
     setSubjectId('')
     setLessonSubjectId('')
@@ -408,23 +500,43 @@ export default function AddTaskDrawer({
   }
 
   const handleSubjectChange = (event) => {
-    setSubjectId(event.target.value)
+    const nextSubjectId = event.target.value
+    const subjectName = activeSubjectGroups.find((group) => group.id === nextSubjectId)?.name || null
+    applyAutoTitle(buildAutoTitle(form.taskType, subjectName, null))
+    setSubjectId(nextSubjectId)
+    resetResourceSelection()
+  }
+
+  const handleClearResourceSelection = () => {
+    applyAutoTitle(buildAutoTitle(form.taskType, selectedSubjectName, null))
     resetResourceSelection()
   }
 
   const handleLessonSubjectChange = (event) => {
-    setLessonSubjectId(event.target.value)
+    const nextLessonSubjectId = event.target.value
+    const subjectName = lessonSubjectGroups.find((group) => group.id === nextLessonSubjectId)?.name || null
+    applyAutoTitle(buildAutoTitle(form.taskType, subjectName, null))
+    setLessonSubjectId(nextLessonSubjectId)
     setStudentTeacherId('')
   }
 
+  const handleTeacherChange = (event) => {
+    const nextTeacherId = event.target.value
+    const teacher = lessonTeachersForSubject.find((candidate) => candidate.id === nextTeacherId) || null
+    applyAutoTitle(buildAutoTitle(form.taskType, selectedLessonSubjectName, teacher?.fullName || null))
+    setStudentTeacherId(nextTeacherId)
+  }
+
   const handleSelectResourceBook = (book) => {
+    applyAutoTitle(buildAutoTitle(form.taskType, book.subjectName || null, book.name || null), {
+      description: isQuestionBankHomework ? '' : form.description,
+    })
     setResourceBookId(book.id)
     setTopics(null)
     setTopicsError('')
     setSelectedTestIds(new Set())
     setCollapsedTopicIds(new Set())
     setSearchQuery('')
-    if (isQuestionBankHomework) setForm((current) => ({ ...current, description: '' }))
   }
 
   const toggleTopicCollapsed = (topicId) => {
@@ -447,7 +559,18 @@ export default function AddTaskDrawer({
     }
   }
 
-  const selectDuration = (minutes) => {
+  const handleDurationSelectChange = (event) => {
+    const value = event.target.value
+    if (value === '') {
+      setDurationMode('')
+      setForm((current) => ({ ...current, durationMinutes: 0 }))
+      return
+    }
+    if (value === 'custom') {
+      setDurationMode('custom')
+      return
+    }
+    const minutes = Number(value)
     setDurationMode(minutes)
     setForm((current) => ({ ...current, durationMinutes: minutes }))
   }
@@ -469,22 +592,28 @@ export default function AddTaskDrawer({
     }
   }
 
-  const selectedSubjectName = selectedBook?.subjectName || subjectGroups.find((group) => group.id === effectiveSubjectId)?.name || null
+  const selectedSubjectName =
+    selectedBook?.subjectName || activeSubjectGroups.find((group) => group.id === effectiveSubjectId)?.name || null
   const selectedLessonSubjectName =
     selectedPrivateTeacher?.subjectName || lessonSubjectGroups.find((group) => group.id === effectiveLessonSubjectId)?.name || null
 
+  const hasRequiredSubSelection = isPrivateLesson
+    ? Boolean(effectiveLessonSubjectId)
+    : needsResource
+      ? Boolean(effectiveSubjectId)
+      : true
+  const showTitleInput = needsTitleInput && Boolean(form.taskType) && hasRequiredSubSelection
+
   const buildPayload = () => {
     const title =
-      form.title.trim() ||
+      (needsTitleInput && form.title.trim()) ||
       (selectedBook?.subjectName && isQuestionBankHomework
         ? `${selectedBook.subjectName} Soru Bankası Ödevi`
-        : selectedBook?.subjectName && isSchoolHomework
-          ? `${selectedBook.subjectName} Okul Ödevi`
-          : selectedSubjectName && isActivityHomework
-            ? `${selectedSubjectName} Etkinlik Ödevi`
-            : selectedLessonSubjectName && isPrivateLesson
-              ? `${selectedLessonSubjectName} Özel Ders`
-              : getDefaultTitle(form.taskType))
+        : selectedSubjectName && isSchoolHomework
+          ? `${selectedSubjectName} Okul Ödevi`
+          : selectedLessonSubjectName && isPrivateLesson
+            ? `${selectedLessonSubjectName} Özel Ders`
+            : getDefaultTitle(form.taskType))
     const payload = {
       title,
       taskType: form.taskType,
@@ -529,21 +658,6 @@ export default function AddTaskDrawer({
       return {
         ...payload,
         title,
-        subject: selectedBook?.subjectName || null,
-        resourceBookId,
-        studentTeacherId: null,
-        selectedTestIds: [],
-        targetQuestionCount: null,
-        completedQuestionCount: null,
-        targetPageCount: null,
-        completedPageCount: null,
-      }
-    }
-
-    if (isActivityHomework) {
-      return {
-        ...payload,
-        title,
         subject: selectedSubjectName,
         resourceBookId: resourceBookId || null,
         studentTeacherId: null,
@@ -562,7 +676,7 @@ export default function AddTaskDrawer({
 
     const questionBankPayload = {
       ...payload,
-      subject: selectedBook?.subjectName || null,
+      subject: selectedSubjectName,
       resourceBookId,
       studentTeacherId: null,
       selectedTestIds: nextSelectedTestIds,
@@ -594,16 +708,12 @@ export default function AddTaskDrawer({
       setError('Gün zorunludur.')
       return
     }
-    if (durationMinutes <= 0) {
-      setError('Süre seçin.')
-      return
-    }
     if (!needsResource && !form.title.trim()) {
       setError('Görev konusu boş bırakılamaz.')
       return
     }
-    if (isActivityHomework && !effectiveSubjectId) {
-      setError('Etkinlik ödevi için ders seçin.')
+    if ((isSchoolHomework || isQuestionBankHomework) && !effectiveSubjectId) {
+      setError(isQuestionBankHomework ? 'Soru bankası ödevi için ders seçin.' : 'Okul ödevi için ders seçin.')
       return
     }
     if (isPrivateLesson && !effectiveLessonSubjectId) {
@@ -615,7 +725,7 @@ export default function AddTaskDrawer({
       return
     }
     if (resourceRequired && (!selectedBook || !hasValidResourceSelection)) {
-      setError(isQuestionBankHomework ? 'Soru bankası ödevi için kaynak seçin.' : 'Okul ödevi için okul kaynağı seçin.')
+      setError('Soru bankası ödevi için kaynak seçin.')
       return
     }
     if (isQuestionBankHomework && selectedTestIds.size === 0) {
@@ -680,7 +790,7 @@ export default function AddTaskDrawer({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+        <div className="min-h-[26rem] flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           {error ? (
             <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
           ) : null}
@@ -699,197 +809,93 @@ export default function AddTaskDrawer({
             <label className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-panel-text-muted">Görev türü</span>
               <select
+                required
                 value={form.taskType}
                 onChange={handleTaskTypeChange}
                 className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
               >
-                {TASK_TYPE_OPTIONS.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
+                <option value="" disabled>
+                  Görev türü seçin
+                </option>
+                <optgroup label="Çalışma Tipleri">
+                  {STUDY_TASK_TYPE_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Diğer">
+                  {OTHER_TASK_TYPE_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </label>
 
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-panel-text-muted">Görev konusu</span>
-              <input
-                value={form.title}
-                onChange={handleChange('title')}
-                className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-              />
-            </label>
-
-            <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Gün</span>
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={handleChange('date')}
-                  className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-                />
-              </label>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Başlangıç saati (isteğe bağlı)</span>
-                <input
-                  type="time"
-                  value={form.startTime}
-                  onChange={handleChange('startTime')}
-                  className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-                />
-              </label>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <span className="text-sm font-medium text-panel-text-muted">Süre</span>
-              <div className="grid grid-cols-2 gap-2 min-[420px]:grid-cols-4">
-                {DURATION_OPTIONS.map((minutes) => {
-                  const selected = durationMode === minutes
-                  return (
-                    <button
-                      key={minutes}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => selectDuration(minutes)}
-                      className={`h-11 rounded-xl border px-3 text-sm font-semibold transition-colors ${
-                        selected
-                          ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
-                          : 'border-panel-border bg-white text-panel-text-muted hover:bg-panel-surface-soft'
-                      }`}
-                    >
-                      {minutes} dk
-                    </button>
-                  )
-                })}
-                <button
-                  type="button"
-                  aria-pressed={durationMode === 'custom'}
-                  onClick={() => setDurationMode('custom')}
-                  className={`h-11 rounded-xl border px-3 text-sm font-semibold transition-colors ${
-                    durationMode === 'custom'
-                      ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
-                      : 'border-panel-border bg-white text-panel-text-muted hover:bg-panel-surface-soft'
-                  }`}
-                >
-                  Özel
-                </button>
-              </div>
-
-              {durationMode === 'custom' ? (
-                <label className="mt-1 flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-panel-text-muted">Özel süre (dk)</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="360"
-                    value={form.durationMinutes}
-                    onChange={handleCustomDurationChange}
-                    className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-                  />
-                </label>
-              ) : null}
-            </div>
-
             {needsResource ? (
               <div className="flex flex-col gap-2 rounded-2xl border border-panel-border bg-panel-surface-soft/60 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-panel-text">
-                    {isQuestionBankHomework
-                      ? 'Soru bankası kaynağı'
-                      : isSchoolHomework
-                        ? 'Okul dersleri kaynakları'
-                        : 'Etkinlik kaynağı (isteğe bağlı)'}
-                  </span>
-                  {selectedBook ? (
-                    <span className="flex items-center gap-1.5">
-                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-panel-text-muted">
-                        {selectedBook.subjectName || 'Kaynak seçildi'}
-                      </span>
-                      {isActivityHomework ? (
-                        <button
-                          type="button"
-                          onClick={resetResourceSelection}
-                          className="text-xs font-semibold text-panel-blue hover:underline"
-                        >
-                          Seçimi kaldır
-                        </button>
-                      ) : null}
-                    </span>
-                  ) : null}
-                </div>
-
-                {isActivityHomework ? (
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-xs font-medium text-panel-text-muted">Ders</span>
-                    <select
-                      value={effectiveSubjectId}
-                      onChange={handleSubjectChange}
-                      className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-                    >
-                      <option value="">Ders seçin</option>
-                      {subjectGroups.map((group) => (
-                        <option key={group.id} value={group.id}>
-                          {group.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
+                <span className="text-sm font-semibold text-panel-text">
+                  {isQuestionBankHomework ? 'Soru bankası kaynağı' : 'Okul dersleri kaynakları'}
+                </span>
 
                 {resourceBooksError ? (
                   <p className="rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{resourceBooksError}</p>
                 ) : resourceBooks === null ? (
                   <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">Kaynaklar yükleniyor...</p>
-                ) : isActivityHomework && !effectiveSubjectId ? (
-                  <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">Kaynakları görmek için ders seçin.</p>
-                ) : filteredResourceBooks.length === 0 ? (
+                ) : activeSubjectGroups.length === 0 ? (
                   <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">
                     {isQuestionBankHomework
                       ? 'Öğrenciye atanmış soru bankası kaynağı yok.'
-                      : isSchoolHomework
-                        ? 'Öğrenciye atanmış okul kaynağı yok.'
-                        : 'Bu derse ait kaynak yok.'}
+                      : 'Öğrenciye atanmış okul kaynağı yok.'}
                   </p>
-                ) : isSchoolHomework ? (
-                  <div className="max-h-80 overflow-y-auto pr-1">
-                    <div className="flex flex-col gap-3">
-                      {resourceGroups.map((group) => (
-                        <div key={group.id} className="flex flex-col gap-2">
-                          <p className="text-xs font-bold uppercase tracking-wide text-panel-text-muted">{group.name}</p>
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            {group.books.map((book) => (
-                              <ResourceBookButton
-                                key={book.id}
-                                book={book}
-                                selected={book.id === resourceBookId}
-                                onSelect={handleSelectResourceBook}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 ) : (
-                  <div className="grid max-h-80 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-                    {filteredResourceBooks.map((book) => (
-                      <ResourceBookButton
-                        key={book.id}
-                        book={book}
-                        selected={book.id === resourceBookId}
-                        onSelect={handleSelectResourceBook}
-                      />
-                    ))}
-                  </div>
+                  <>
+                    <select
+                      aria-label="Ders"
+                      value={effectiveSubjectId}
+                      onChange={handleSubjectChange}
+                      className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                    >
+                      <option value="">Ders seçin</option>
+                      {activeSubjectGroups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    {!effectiveSubjectId ? (
+                      <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">
+                        Kaynakları görmek için ders seçin.
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        <ResourceBookDropdown
+                          books={filteredResourceBooks}
+                          selectedBook={selectedBook}
+                          onSelect={handleSelectResourceBook}
+                          placeholder={isSchoolHomework ? 'Kaynak seçin (isteğe bağlı)' : 'Kaynak seçin'}
+                        />
+                        {selectedBook && isSchoolHomework ? (
+                          <button
+                            type="button"
+                            onClick={handleClearResourceSelection}
+                            className="self-start text-xs font-semibold text-panel-blue hover:underline"
+                          >
+                            Seçimi kaldır
+                          </button>
+                        ) : null}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             ) : null}
 
             {isPrivateLesson ? (
-              <div className="flex flex-col gap-3 rounded-2xl border border-panel-border bg-panel-surface-soft/60 p-3">
-                <span className="text-sm font-semibold text-panel-text">Ders ve öğretmen</span>
-
+              <div className="flex flex-col gap-2 rounded-2xl border border-panel-border bg-panel-surface-soft/60 p-3">
                 {privateTeachersError ? (
                   <p className="rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{privateTeachersError}</p>
                 ) : privateTeachers === null ? (
@@ -900,42 +906,49 @@ export default function AddTaskDrawer({
                   </p>
                 ) : (
                   <>
-                    <label className="flex flex-col gap-1.5">
-                      <span className="text-xs font-medium text-panel-text-muted">Ders</span>
+                    <select
+                      aria-label="Ders"
+                      value={effectiveLessonSubjectId}
+                      onChange={handleLessonSubjectChange}
+                      className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                    >
+                      <option value="">Ders seçin</option>
+                      {lessonSubjectGroups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    {effectiveLessonSubjectId ? (
                       <select
-                        value={effectiveLessonSubjectId}
-                        onChange={handleLessonSubjectChange}
+                        aria-label="Öğretmen"
+                        value={studentTeacherId}
+                        onChange={handleTeacherChange}
                         className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
                       >
-                        <option value="">Ders seçin</option>
-                        {lessonSubjectGroups.map((group) => (
-                          <option key={group.id} value={group.id}>
-                            {group.name}
+                        <option value="">Öğretmen seçin</option>
+                        {lessonTeachersForSubject.map((teacher) => (
+                          <option key={teacher.id} value={teacher.id}>
+                            {teacher.fullName}
                           </option>
                         ))}
                       </select>
-                    </label>
-
-                    {effectiveLessonSubjectId ? (
-                      <label className="flex flex-col gap-1.5">
-                        <span className="text-xs font-medium text-panel-text-muted">Öğretmen</span>
-                        <select
-                          value={studentTeacherId}
-                          onChange={(event) => setStudentTeacherId(event.target.value)}
-                          className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-                        >
-                          <option value="">Öğretmen seçin</option>
-                          {lessonTeachersForSubject.map((teacher) => (
-                            <option key={teacher.id} value={teacher.id}>
-                              {teacher.fullName}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
                     ) : null}
                   </>
                 )}
               </div>
+            ) : null}
+
+            {showTitleInput ? (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Görev konusu</span>
+                <input
+                  value={form.title}
+                  onChange={handleChange('title')}
+                  className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                />
+              </label>
             ) : null}
 
             {isQuestionBankHomework && resourceBookId ? (
@@ -1022,6 +1035,58 @@ export default function AddTaskDrawer({
                 </div>
                 {topicsError ? <span className="text-xs text-panel-warm">{topicsError}</span> : null}
               </div>
+            ) : null}
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Gün</span>
+                <input
+                  required
+                  type="date"
+                  value={form.date}
+                  onChange={handleChange('date')}
+                  className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Saat (isteğe bağlı)</span>
+                <input
+                  type="time"
+                  value={form.startTime}
+                  onChange={handleChange('startTime')}
+                  className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Süre (isteğe bağlı)</span>
+                <select
+                  value={String(durationMode)}
+                  onChange={handleDurationSelectChange}
+                  className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                >
+                  <option value="">Süre yok</option>
+                  {DURATION_OPTIONS.map((minutes) => (
+                    <option key={minutes} value={minutes}>
+                      {minutes} dk
+                    </option>
+                  ))}
+                  <option value="custom">Özel...</option>
+                </select>
+              </label>
+            </div>
+
+            {durationMode === 'custom' ? (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Özel süre (dk)</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="360"
+                  value={form.durationMinutes}
+                  onChange={handleCustomDurationChange}
+                  className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                />
+              </label>
             ) : null}
 
             <label className="flex flex-col gap-1.5">

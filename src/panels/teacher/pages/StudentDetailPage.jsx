@@ -8,15 +8,19 @@ import AssignTaskModal from '../../shared/homework/AssignTaskModal'
 import StudentProgressView from '../../shared/StudentProgressView'
 import WrongQuestionsView from '../../shared/WrongQuestionsView'
 import AssignHomeworkModal from '../components/AssignHomeworkModal'
+import EditHomeworkModal from '../components/EditHomeworkModal'
 import TaskDetailModal from '../components/TaskDetailModal'
 import TaskOpticalResultModal from '../components/TaskOpticalResultModal'
 import ScheduleSlotModal from '../components/ScheduleSlotModal'
+import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import {
   getTeacherStudent,
   getTeacherStudentHomeworks,
   getTeacherStudentTasksForDate,
   addTeacherHomework,
   assignTeacherHomeworkTask,
+  updateTeacherHomework,
+  deleteTeacherHomework,
   getTeacherStudentProgressOverview,
   getTeacherStudentWrongQuestions,
   getTeacherStudentWrongQuestionTopicStats,
@@ -50,6 +54,8 @@ export default function StudentDetailPage() {
 
   const [homeworkModalDate, setHomeworkModalDate] = useState('')
   const [rescheduleHomework, setRescheduleHomework] = useState(null)
+  const [editingHomework, setEditingHomework] = useState(null)
+  const [deletingHomework, setDeletingHomework] = useState(null)
   const [detailTask, setDetailTask] = useState(null)
   const [answerSheetTask, setAnswerSheetTask] = useState(null)
   const [managingSlot, setManagingSlot] = useState(null)
@@ -131,6 +137,37 @@ export default function StudentDetailPage() {
     const homework = homeworks.find((item) => item.id === task.homeworkId)
     setDetailTask(null)
     if (homework) setRescheduleHomework(homework)
+  }
+
+  const openEditForTask = (task) => {
+    const homework = homeworks.find((item) => item.id === task.homeworkId)
+    setDetailTask(null)
+    if (homework) setEditingHomework(homework)
+  }
+
+  const openDeleteForTask = (task) => {
+    const homework = homeworks.find((item) => item.id === task.homeworkId)
+    setDetailTask(null)
+    if (homework) setDeletingHomework(homework)
+  }
+
+  const handleEditHomeworkSave = async (updates) => {
+    await updateTeacherHomework(studentTeacherId, editingHomework.id, updates)
+    await refreshWeek()
+    setEditingHomework(null)
+    showBanner('Ödev güncellendi.')
+  }
+
+  const handleDeleteHomeworkConfirmed = async () => {
+    const homeworkId = deletingHomework?.id
+    setDeletingHomework(null)
+    try {
+      await deleteTeacherHomework(studentTeacherId, homeworkId)
+      await refreshWeek()
+      showBanner('Ödev silindi.')
+    } catch (err) {
+      setWeekError(err.message)
+    }
   }
 
   const fetchWrongQuestions = useCallback(
@@ -325,6 +362,8 @@ export default function StudentDetailPage() {
         <TaskDetailModal
           task={detailTask}
           onReschedule={detailTask.homeworkId ? () => openRescheduleForTask(detailTask) : undefined}
+          onEdit={detailTask.homeworkId ? () => openEditForTask(detailTask) : undefined}
+          onDelete={detailTask.homeworkId ? () => openDeleteForTask(detailTask) : undefined}
           onClose={() => setDetailTask(null)}
         />
       ) : null}
@@ -334,6 +373,26 @@ export default function StudentDetailPage() {
           homework={rescheduleHomework}
           onSave={handleReschedule}
           onClose={() => setRescheduleHomework(null)}
+        />
+      ) : null}
+
+      {editingHomework ? (
+        <EditHomeworkModal
+          studentTeacherId={studentTeacherId}
+          homework={editingHomework}
+          onSave={handleEditHomeworkSave}
+          onClose={() => setEditingHomework(null)}
+        />
+      ) : null}
+
+      {deletingHomework ? (
+        <ConfirmationDialog
+          title="Ödevi sil"
+          description={`"${deletingHomework.title}" ödevini silmek istediğine emin misin?`}
+          confirmLabel="Sil"
+          cancelLabel="Vazgeç"
+          onConfirm={handleDeleteHomeworkConfirmed}
+          onCancel={() => setDeletingHomework(null)}
         />
       ) : null}
 

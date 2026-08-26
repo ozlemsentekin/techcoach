@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../../context/useAuth'
-import { AlertTriangle, CalendarDays, Plus, Sparkles } from 'lucide-react'
+import { AlertTriangle, CalendarDays, Plus, Sparkles, Users } from 'lucide-react'
+import { cachedGet } from '../../../services/authClient'
 import { getTasksForDate, patchTask, createTask, removeTask } from '../../../services/taskService'
 import { getSchoolSchedule, getBacklogTasks, getTeacherLessonSchedule, buildTeacherLessonTasksForDate } from '../../../services/weeklyPlanService'
 import { sendMessage } from '../../../services/messageService'
@@ -10,6 +11,7 @@ import { getSortedTasks } from '../../../utils/taskSelectors'
 import { formatDateLong, todayISODate } from '../../../utils/time'
 import useVisiblePolling from '../../../hooks/useVisiblePolling'
 import LoadingState from '../../shared/LoadingState'
+import EmptyState from '../../shared/EmptyState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import DailyPlanTable from '../components/DailyPlanTable'
 import AddTaskDrawer from '../components/AddTaskDrawer'
@@ -28,13 +30,36 @@ function getVisibleBalanceWarnings(warnings) {
     .slice(0, 2)
 }
 
-function ParentHomeHeader({ onAddTask }) {
+function ParentHomeHeader({ onAddTask, students, selectedStudentId, onSelectStudent }) {
+  const hasMultipleStudents = (students?.length || 0) > 1
+  const selectedStudent = students?.find((student) => student.id === selectedStudentId)
+  const studentName = selectedStudent?.fullName?.trim().split(/\s+/)[0] || ''
+
   return (
     <section className="rounded-2xl border border-panel-border bg-panel-surface px-4 py-4 sm:px-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <h1 className="text-2xl font-bold text-panel-text sm:text-3xl">Aylin'in Bugünü</h1>
+            <h1 className="text-2xl font-bold text-panel-text sm:text-3xl">
+              {studentName ? `${studentName} için Bugün` : 'Bugün'}
+            </h1>
+            {hasMultipleStudents ? (
+              <label className="inline-flex w-fit items-center gap-2 rounded-full border border-panel-border bg-panel-surface-soft px-3 py-1 text-sm font-semibold text-panel-text">
+                <Users size={15} aria-hidden="true" />
+                <select
+                  value={selectedStudentId}
+                  onChange={(event) => onSelectStudent(event.target.value)}
+                  aria-label="Öğrenci seç"
+                  className="bg-transparent text-sm font-semibold text-panel-text focus:outline-none"
+                >
+                  {students.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.fullName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <p className="inline-flex w-fit items-center gap-2 rounded-full border border-panel-accent/35 bg-panel-accent-soft px-3 py-1 text-sm font-semibold text-panel-blue">
               <CalendarDays size={15} aria-hidden="true" />
               {formatDateLong(new Date())}
@@ -160,7 +185,10 @@ function TodaySidePanel({ requests, warnings, onApprove, onMessage, onSuggestOth
 
 export default function DashboardPage() {
   const { authUser } = useAuth()
-  const restricted = Boolean(authUser?.restricted)
+  const [students, setStudents] = useState(null)
+  const [selectedStudentId, setSelectedStudentId] = useState('')
+  const selectedStudent = students?.find((student) => student.id === selectedStudentId)
+  const restricted = Boolean(selectedStudent ? selectedStudent.restricted : authUser?.restricted)
   const [tasks, setTasks] = useState([])
   const [backlogTasks, setBacklogTasks] = useState([])
   const [requests, setRequests] = useState([])
@@ -177,11 +205,37 @@ export default function DashboardPage() {
   useEffect(() => {
     let ignore = false
 
+    cachedGet('/api/parent/students')
+      .then((data) => {
+        if (ignore) return
+        const sorted = [...data.students].sort((a, b) => a.fullName.localeCompare(b.fullName, 'tr'))
+        setStudents(sorted)
+        setSelectedStudentId((current) =>
+          current && sorted.some((student) => student.id === current) ? current : sorted[0]?.id || '',
+        )
+      })
+      .catch((err) => {
+        if (!ignore) {
+          setStudents([])
+          setLoadError(err.message)
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [authUser?.id])
+
+  useEffect(() => {
+    if (!selectedStudentId) return undefined
+    let ignore = false
+
     Promise.all([
-      getTasksForDate(date),
-      getBacklogTasks(date),
-      getRequests(),
-      getTeacherLessonSchedule().catch(() => []),
+      getTasksForDate(date, { studentId: selectedStudentId }),
+      getBacklogTasks(date, 30, { studentId: selectedStudentId }),
+      getRequests({ studentId: selectedStudentId }),
+      getTeacherLessonSchedule({ studentId: selectedStudentId }).catch(() => []),
     ])
       .then(([tasksData, backlogTasksData, requestsData, teacherLessonScheduleData]) => {
         if (ignore) return
@@ -200,25 +254,27 @@ export default function DashboardPage() {
     return () => {
       ignore = true
     }
-  }, [])
+  }, [selectedStudentId])
 
   // Mola süresi dolduğunda backend'i sistem olarak otomatik tamamlar (bkz. tasks.js
   // autoCompleteExpiredBreaks); burada periyodik yenileme yalnızca gün özeti ve
   // akışın taze kalmasını sağlar.
   useVisiblePolling(() => {
-    getTasksForDate(date)
+    if (!selectedStudentId) return
+    getTasksForDate(date, { studentId: selectedStudentId })
       .then((tasksData) => setTasks(tasksData))
       .catch(() => {})
-    getBacklogTasks(date)
+    getBacklogTasks(date, 30, { studentId: selectedStudentId })
       .then((backlogTasksData) => setBacklogTasks(backlogTasksData))
       .catch(() => {})
   }, 30000)
 
   useEffect(() => {
-    getSchoolSchedule()
+    if (!selectedStudentId) return
+    getSchoolSchedule({ studentId: selectedStudentId })
       .then(setSchoolSchedule)
       .catch(() => setSchoolSchedule([]))
-  }, [])
+  }, [selectedStudentId])
 
   useEffect(() => () => {
     if (bannerTimeoutRef.current) window.clearTimeout(bannerTimeoutRef.current)
@@ -246,24 +302,24 @@ export default function DashboardPage() {
   )
 
   const getExistingTasksForDrawer = useCallback(
-    (targetDate) => (targetDate === date ? tasks : getTasksForDate(targetDate)),
-    [tasks],
+    (targetDate) => (targetDate === date ? tasks : getTasksForDate(targetDate, { studentId: selectedStudentId })),
+    [tasks, selectedStudentId],
   )
 
   const handleSaveDrawerTask = async (taskData) => {
     const initialTask = drawerState?.initialTask
     if (initialTask && taskData.date === initialTask.date) {
-      const updatedTask = await patchTask(initialTask.id, taskData)
+      const updatedTask = await patchTask(initialTask.id, taskData, selectedStudentId)
       setTasks((current) => current.map((task) => (task.id === updatedTask.id ? updatedTask : task)))
     } else if (initialTask) {
-      await removeTask(initialTask.id)
-      const createdTask = await createTask(taskData.date, taskData)
+      await removeTask(initialTask.id, selectedStudentId)
+      const createdTask = await createTask(taskData.date, taskData, { studentId: selectedStudentId })
       setTasks((current) => {
         const withoutInitialTask = current.filter((task) => task.id !== initialTask.id)
         return createdTask.date === date ? getSortedTasks([...withoutInitialTask, createdTask]) : withoutInitialTask
       })
     } else {
-      const createdTask = await createTask(taskData.date, taskData)
+      const createdTask = await createTask(taskData.date, taskData, { studentId: selectedStudentId })
       if (createdTask.date === date) {
         setTasks((current) => getSortedTasks([...current, createdTask]))
       }
@@ -273,30 +329,45 @@ export default function DashboardPage() {
   }
 
   const handleDeleteConfirmed = async () => {
-    await removeTask(deletingTask.id)
-    setTasks((current) => current.filter((task) => task.id !== deletingTask.id))
-    setDeletingTask(null)
+    try {
+      await removeTask(deletingTask.id, selectedStudentId)
+      setTasks((current) => current.filter((task) => task.id !== deletingTask.id))
+      setDeletingTask(null)
+    } catch (err) {
+      setDeletingTask(null)
+      setLoadError(err.message)
+    }
   }
 
   const handleApproveRequest = async (request) => {
-    setRequests(await updateRequestStatus(request.id, 'onaylandi'))
-    await sendMessage({ from: 'ebeveyn', text: 'İsteğini onayladım, planına yansıttım.' })
+    setRequests(await updateRequestStatus(request.id, 'onaylandi', selectedStudentId))
+    await sendMessage({ from: 'ebeveyn', text: 'İsteğini onayladım, planına yansıttım.', studentId: selectedStudentId })
     showBanner('Talep onaylandı.')
   }
 
   const handleMessageRequest = async (request) => {
-    await sendMessage({ from: 'ebeveyn', text: `"${request.message}" konusunu konuşalım.` })
+    await sendMessage({ from: 'ebeveyn', text: `"${request.message}" konusunu konuşalım.`, studentId: selectedStudentId })
     showBanner('Mesaj gönderildi.')
   }
 
   const handleSuggestOtherTime = async (request) => {
-    setRequests(await updateRequestStatus(request.id, 'reddedildi'))
-    await sendMessage({ from: 'ebeveyn', text: 'Başka bir saat önerdim, birlikte bakalım.' })
+    setRequests(await updateRequestStatus(request.id, 'reddedildi', selectedStudentId))
+    await sendMessage({ from: 'ebeveyn', text: 'Başka bir saat önerdim, birlikte bakalım.', studentId: selectedStudentId })
     showBanner('Alternatif saat mesajı gönderildi.')
   }
 
   const handlePostponeRequest = async (request) => {
-    setRequests(await updateRequestStatus(request.id, 'ertelendi'))
+    setRequests(await updateRequestStatus(request.id, 'ertelendi', selectedStudentId))
+  }
+
+  if (students && students.length === 0) {
+    return (
+      <EmptyState
+        icon={Users}
+        title="Bağlı öğrenci bulunamadı"
+        description="Panel verilerini görebilmek için önce bir öğrenci profili eklemelisin."
+      />
+    )
   }
 
   if (loading) {
@@ -320,7 +391,23 @@ export default function DashboardPage() {
 
       <ParentHomeHeader
         onAddTask={restricted ? null : () => setDrawerState({ defaultDate: date })}
+        students={students}
+        selectedStudentId={selectedStudentId}
+        onSelectStudent={(studentId) => {
+          setLoading(true)
+          setSelectedStudentId(studentId)
+        }}
       />
+
+      {restricted ? (
+        <div className="flex items-start gap-2.5 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">
+          <AlertTriangle size={17} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <span>
+            Bu öğrenci bir öğretmen tarafından eklendi. Görevler öğretmen tarafından yönetiliyor; veli olarak
+            görev ekleyemez, düzenleyemez veya silemezsiniz.
+          </span>
+        </div>
+      ) : null}
 
       <div
         className={`grid gap-4 xl:items-start ${
@@ -331,8 +418,8 @@ export default function DashboardPage() {
           tasks={dailyFlowTasks}
           backlogTasks={backlogTasks}
           onAddTask={restricted ? null : () => setDrawerState({ defaultDate: date })}
-          onEdit={(task) => setDrawerState({ initialTask: task })}
-          onDelete={(task) => setDeletingTask(task)}
+          onEdit={restricted ? null : (task) => setDrawerState({ initialTask: task })}
+          onDelete={restricted ? null : (task) => setDeletingTask(task)}
           onOpenAnswerSheet={setAnswerSheetTask}
         />
 

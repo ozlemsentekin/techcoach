@@ -8,3 +8,10 @@ export function libraryApiBase(role) {
 export const RESOURCE_SOURCE_LABELS = { okul: 'Okul Kaynağı', ozel: 'Özel Kaynak' }
 
 export const RESOURCE_TYPE_LABELS = { soru_bankasi: 'Soru Bankası', konu_anlatimi: 'Konu Anlatımlı Soru Bankası' }
+
+export const RESOURCE_WIZARD_STEPS = [
+  { key: 1, label: 'Kapak' },
+  { key: 2, label: 'Temel Bilgiler' },
+  { key: 3, label: 'İçindekiler' },
+  { key: 4, label: 'Kontrol ve Cevap Anahtarı' },
+]

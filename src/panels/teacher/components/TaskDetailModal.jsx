@@ -1,11 +1,11 @@
-import { CalendarClock, CheckCircle2, Circle, X, XCircle } from 'lucide-react'
+import { CalendarClock, CheckCircle2, Circle, Pencil, Trash2, X, XCircle } from 'lucide-react'
 
 function formatDate(dateISO) {
   if (!dateISO) return ''
   return new Date(dateISO).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-export default function TaskDetailModal({ task, onReschedule, onClose }) {
+export default function TaskDetailModal({ task, onReschedule, onEdit, onDelete, onClose }) {
   const isGraded = task.status === 'tamamlandi' && task.correctCount != null
   const hasQuestionProgress = task.targetQuestionCount > 0
 
@@ -79,6 +79,31 @@ export default function TaskDetailModal({ task, onReschedule, onClose }) {
             >
               Yeniden Planla
             </button>
+          ) : null}
+
+          {onEdit || onDelete ? (
+            <div className="flex items-center gap-2">
+              {onEdit ? (
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-panel-border bg-panel-surface px-4 py-3 text-sm font-semibold text-panel-text hover:bg-panel-surface-soft"
+                >
+                  <Pencil size={15} aria-hidden="true" />
+                  Düzenle
+                </button>
+              ) : null}
+              {onDelete ? (
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-panel-red/30 bg-panel-surface px-4 py-3 text-sm font-semibold text-panel-red hover:bg-panel-red/10"
+                >
+                  <Trash2 size={15} aria-hidden="true" />
+                  Sil
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>

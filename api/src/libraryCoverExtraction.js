@@ -11,8 +11,7 @@ const COVER_EXTRACTION_SCHEMA = {
     barcode: { type: ['string', 'null'], description: 'Kapakta görünen barkod numarası, yoksa null' },
     publishYear: { type: ['integer', 'null'], description: 'Kapakta açıkça yazan basım yılı, yoksa null' },
     resourceType: {
-      type: ['string', 'null'],
-      enum: ['soru_bankasi', 'konu_anlatimi', null],
+      anyOf: [{ type: 'string', enum: ['soru_bankasi', 'konu_anlatimi'] }, { type: 'null' }],
       description:
         'Kapakta "konu anlatımlı/konu anlatımı" ifadesi varsa konu_anlatimi, "soru bankası" ön plandaysa soru_bankasi, emin değilsen null',
     },
@@ -32,7 +31,7 @@ Sadece kapakta açıkça basılı/yazılı olan bilgileri çıkar, tahmin veya y
 
 function getAnthropicClient() {
   const { anthropicApiKey } = getAnthropicConfig()
-  return new Anthropic({ apiKey: anthropicApiKey })
+  return new Anthropic({ apiKey: anthropicApiKey, maxRetries: 1 })
 }
 
 async function extractLibraryCoverInfo(image) {
@@ -44,7 +43,7 @@ async function extractLibraryCoverInfo(image) {
 
   const client = getAnthropicClient()
   const response = await client.messages.create({
-    model: 'claude-opus-5',
+    model: 'claude-sonnet-5',
     max_tokens: 1000,
     output_config: { format: { type: 'json_schema', schema: COVER_EXTRACTION_SCHEMA } },
     messages: [

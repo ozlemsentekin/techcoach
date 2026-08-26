@@ -6,14 +6,13 @@ import {
   Layers3,
   Target,
   Trophy,
-  X,
 } from 'lucide-react'
 import { getProgressOverview } from '../../services/progressService'
 import { calculateNet } from '../../utils/netCalculator'
 import { dateToISO, getMondayOfWeek, todayISODate } from '../../utils/time'
 import PageHeader from '../layout/PageHeader'
 import LoadingState from './LoadingState'
-import { ResourceBookAvatar } from './ResourceBookCard'
+import { ImagePreviewLightbox, ResourceBookAvatar } from './ResourceBookCard'
 
 const RANGE_FILTERS = [
   { id: 'today', label: 'Bugün' },
@@ -70,8 +69,12 @@ function publisherLabel(item) {
   return item?.publisherName || ''
 }
 
-function resourceImageUrl(item) {
-  return item?.resourceBookImageUrl || undefined
+// Kapak fotoğrafları artık her task/session/homework/manualTestCompletion satırında değil,
+// resourceBookId'ye göre tek bir haritada (overview.resourceBookImages) geliyor — bkz.
+// api/src/progress.js'deki fetchResourceBookImagesByIds yorumu (aynı görselin onlarca satırda
+// tekrarlanmasını önlemek için, WrongQuestionsView'daki bookImages deseniyle aynı fikir).
+function resourceImageUrl(item, bookImages) {
+  return (item?.resourceBookId && bookImages?.[item.resourceBookId]) || undefined
 }
 
 function contentLabel(item) {
@@ -95,7 +98,7 @@ function dateInRange(dateKey, rangeId, today) {
   return true
 }
 
-function splitTestResults(item, testsById, { idPrefix, minutes, source }) {
+function splitTestResults(item, testsById, bookImages, { idPrefix, minutes, source }) {
   const entries = Object.entries(item.testResults || {})
     .map(([testId, result]) => {
       const test = testsById.get(testId)
@@ -115,7 +118,7 @@ function splitTestResults(item, testsById, { idPrefix, minutes, source }) {
         content: testName ? `${topic} · ${testName}` : topic,
         contentGroup: topic,
         resource: resourceLabel(item),
-        resourceImageUrl: resourceImageUrl(item),
+        resourceImageUrl: resourceImageUrl(item, bookImages),
         publisher: publisherLabel(item),
         questions,
         correct,
@@ -137,6 +140,7 @@ function splitTestResults(item, testsById, { idPrefix, minutes, source }) {
 function buildActivityRecords(overview, testsById) {
   const records = []
   const taskIdsWithSessions = new Set()
+  const bookImages = overview.resourceBookImages || {}
 
   ;(overview.sessions || []).forEach((session) => {
     if (session.taskId) taskIdsWithSessions.add(session.taskId)
@@ -144,6 +148,7 @@ function buildActivityRecords(overview, testsById) {
     const detailedRecords = splitTestResults(
       { ...session, sessionId: session.id },
       testsById,
+      bookImages,
       {
         idPrefix: `session-test-${session.id}`,
         minutes: asNumber(session.durationMinutes) || asNumber(session.taskDurationMinutes),
@@ -165,7 +170,7 @@ function buildActivityRecords(overview, testsById) {
       content: contentLabel(session),
       contentGroup: contentLabel(session),
       resource: resourceLabel(session),
-      resourceImageUrl: resourceImageUrl(session),
+      resourceImageUrl: resourceImageUrl(session, bookImages),
       publisher: publisherLabel(session),
       questions: asNumber(session.completedQuestionCount),
       correct: asNumber(session.correctCount),
@@ -179,7 +184,7 @@ function buildActivityRecords(overview, testsById) {
   ;(overview.tasks || []).forEach((task) => {
     if (taskIdsWithSessions.has(task.id)) return
 
-    const detailedRecords = splitTestResults(task, testsById, {
+    const detailedRecords = splitTestResults(task, testsById, bookImages, {
       idPrefix: `task-test-${task.id}`,
       minutes: task.durationMinutes,
       source: 'task',
@@ -208,7 +213,7 @@ function buildActivityRecords(overview, testsById) {
       content: contentLabel(task),
       contentGroup: contentLabel(task),
       resource: resourceLabel(task),
-      resourceImageUrl: resourceImageUrl(task),
+      resourceImageUrl: resourceImageUrl(task, bookImages),
       publisher: publisherLabel(task),
       questions,
       correct: asNumber(task.correctCount),
@@ -233,7 +238,7 @@ function buildActivityRecords(overview, testsById) {
       content: completion.testName ? `${topic} · ${completion.testName}` : topic,
       contentGroup: topic,
       resource: resourceLabel(completion),
-      resourceImageUrl: resourceImageUrl(completion),
+      resourceImageUrl: resourceImageUrl(completion, bookImages),
       publisher: publisherLabel(completion),
       questions: correct + wrong,
       correct,
@@ -259,7 +264,7 @@ function buildActivityRecords(overview, testsById) {
       content: homework.title || contentLabel(homework),
       contentGroup: homework.title || contentLabel(homework),
       resource: resourceLabel(homework),
-      resourceImageUrl: resourceImageUrl(homework),
+      resourceImageUrl: resourceImageUrl(homework, bookImages),
       publisher: publisherLabel(homework),
       questions,
       correct: 0,
@@ -565,34 +570,6 @@ function BreakdownPanel({ icon, title, subtitle, rows, emptyLabel, showResourceA
       </div>
       <BreakdownRows rows={rows} emptyLabel={emptyLabel} showResourceAvatar={showResourceAvatar} onPreviewImage={onPreviewImage} />
     </section>
-  )
-}
-
-function ImagePreviewLightbox({ preview, onClose }) {
-  if (!preview) return null
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      role="dialog"
-      aria-modal="true"
-      onClick={onClose}
-    >
-      <button
-        type="button"
-        aria-label="Kapat"
-        onClick={onClose}
-        className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-      >
-        <X size={20} aria-hidden="true" />
-      </button>
-      <img loading="lazy" decoding="async"
-        src={preview.url}
-        alt={`${preview.name} görseli`}
-        className="max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
-      />
-    </div>
   )
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { BookOpen, Building2, CheckCircle2, ChevronDown, ChevronRight, Dot, FileText, HelpCircle, ImagePlus, KeyRound, ListTree, Pencil, Search, Trash2, X } from 'lucide-react'
+import { BookOpen, Building2, CheckCircle2, ChevronDown, ChevronRight, Copy, Dot, FileText, HelpCircle, ImagePlus, KeyRound, ListTree, Pencil, Search, Trash2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
@@ -8,8 +8,8 @@ import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import ResourceImageField from '../components/ResourceImageField'
+import { ImagePreviewLightbox } from '../../shared/ResourceBookCard'
 import { GRADE_OPTIONS } from '../components/studentWizardConstants'
-import { RESOURCE_SOURCE_LABELS } from '../../shared/library/libraryConstants'
 
 const RESOURCE_BOOK_TYPES = [
   { value: 'konu_anlatimi', label: 'Konu Anlatımı' },
@@ -156,7 +156,6 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
   const [type, setType] = useState(book?.type || '')
   const [publishMonthYear, setPublishMonthYear] = useState(book?.publishMonthYear || '')
   const [barcode, setBarcode] = useState(book?.barcode || '')
-  const [resourceSource, setResourceSource] = useState(book?.resourceSource || 'okul')
   const [isActive, setIsActive] = useState(book ? book.isActive : true)
   const [hasAnswerKey, setHasAnswerKey] = useState(book ? book.hasAnswerKey : true)
   const [imageUrl, setImageUrl] = useState(book?.imageUrl || '')
@@ -207,7 +206,6 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
         hasAnswerKey: type === 'soru_bankasi' ? hasAnswerKey : true,
         imageUrl: imageUrl.trim() || null,
         barcode: barcode.trim() || null,
-        resourceSource,
       }
       const data = isEdit
         ? await authRequest(`/api/panel-admin/resource-books/${book.id}`, {
@@ -339,40 +337,23 @@ function ResourceBookModal({ publisher, book, subjects, onSaved, onClose }) {
               </label>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Kaynak Tipi</span>
-                <select
-                  value={type}
-                  onChange={(event) => setType(event.target.value)}
-                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-                >
-                  <option value="" disabled>
-                    Tip seçin
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-panel-text-muted">Kaynak Tipi</span>
+              <select
+                value={type}
+                onChange={(event) => setType(event.target.value)}
+                className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+              >
+                <option value="" disabled>
+                  Tip seçin
+                </option>
+                {RESOURCE_BOOK_TYPES.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
                   </option>
-                  {RESOURCE_BOOK_TYPES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Kaynak Türü</span>
-                <select
-                  value={resourceSource}
-                  onChange={(event) => setResourceSource(event.target.value)}
-                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-                >
-                  {Object.entries(RESOURCE_SOURCE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+                ))}
+              </select>
+            </label>
 
             <label className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-panel-text-muted">Barkod Kodu</span>
@@ -492,13 +473,11 @@ function TopicModal({ book, topic, onSaved, onClose }) {
   )
 }
 
-function TestModal({ topic, test, onSaved, onClose }) {
-  const isEdit = Boolean(test)
-  const [topicName, setTopicName] = useState(test?.topicName || '')
-  const [name, setName] = useState(test?.name || '')
-  const [pageStart, setPageStart] = useState(test?.pageStart ? String(test.pageStart) : '')
-  const [pageEnd, setPageEnd] = useState(test?.pageEnd ? String(test.pageEnd) : '')
-  const [questionCount, setQuestionCount] = useState(test ? String(test.questionCount) : '')
+function EditTestModal({ topic, test, onSaved, onClose }) {
+  const [topicName, setTopicName] = useState(test.topicName || '')
+  const [name, setName] = useState(test.name || '')
+  const [pageStart, setPageStart] = useState(test.pageStart ? String(test.pageStart) : '')
+  const [pageEnd, setPageEnd] = useState(test.pageEnd ? String(test.pageEnd) : '')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -523,37 +502,19 @@ function TestModal({ topic, test, onSaved, onClose }) {
       setError('Bitiş sayfası başlangıç sayfasından küçük olamaz.')
       return
     }
-    const questionCountNumber = Number(questionCount)
-    if (!Number.isInteger(questionCountNumber) || questionCountNumber <= 0) {
-      setError('Soru sayısı pozitif bir tam sayı olmalı.')
-      return
-    }
 
     setError('')
     setLoading(true)
     try {
-      const data = isEdit
-        ? await authRequest(`/api/panel-admin/resource-book-topic-tests/${test.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              topicName: topicName.trim(),
-              name: name.trim(),
-              pageStart: pageStartNumber,
-              pageEnd: pageEndNumber,
-              questionCount: questionCountNumber,
-            }),
-          })
-        : await authRequest('/api/panel-admin/resource-book-topic-tests', {
-            method: 'POST',
-            body: JSON.stringify({
-              topicId: topic.id,
-              topicName: topicName.trim(),
-              name: name.trim(),
-              pageStart: pageStartNumber,
-              pageEnd: pageEndNumber,
-              questionCount: questionCountNumber,
-            }),
-          })
+      const data = await authRequest(`/api/panel-admin/resource-book-topic-tests/${test.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          topicName: topicName.trim(),
+          name: name.trim(),
+          pageStart: pageStartNumber,
+          pageEnd: pageEndNumber,
+        }),
+      })
       onSaved(data.test)
     } catch (err) {
       setError(err.message)
@@ -569,7 +530,7 @@ function TestModal({ topic, test, onSaved, onClose }) {
         className="h-full w-full overflow-y-auto border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-auto sm:max-h-[90vh] sm:max-w-md sm:rounded-2xl sm:p-5"
       >
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-panel-text">{isEdit ? 'Test Düzenle' : 'Test Ekle'}</h2>
+          <h2 className="text-lg font-semibold text-panel-text">Test Düzenle</h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
             <X size={20} />
           </button>
@@ -632,24 +593,269 @@ function TestModal({ topic, test, onSaved, onClose }) {
             </label>
           </div>
 
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">Soru Sayısı</span>
-            <input
-              type="number"
-              min="1"
-              value={questionCount}
-              onChange={(event) => setQuestionCount(event.target.value)}
-              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-            />
-          </label>
-
           <Button type="submit" disabled={loading} size="md" className="w-full">
-            {loading ? 'Kaydediliyor...' : isEdit ? 'Kaydet' : 'Test Oluştur'}
+            {loading ? 'Kaydediliyor...' : 'Kaydet'}
           </Button>
         </div>
       </form>
     </div>
   )
+}
+
+let testRowIdCounter = 0
+function createEmptyTestRow() {
+  testRowIdCounter += 1
+  return { id: `row-${testRowIdCounter}`, topicName: '', name: '', pageStart: '' }
+}
+
+function AddTestsModal({ topic, onSaved, onClose }) {
+  const [rows, setRows] = useState(() => [createEmptyTestRow()])
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const updateRow = (id, patch) => {
+    setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)))
+  }
+
+  const addRow = () => {
+    setRows((current) => [...current, createEmptyTestRow()])
+  }
+
+  // Aynı konudan art arda birkaç test eklemek (Test 1, Test 2, ...) en sık yapılan işlem;
+  // konu adını yeni satıra kopyalayarak her seferinde yeniden yazmayı önler.
+  const duplicateRow = (id) => {
+    setRows((current) => {
+      const index = current.findIndex((row) => row.id === id)
+      if (index === -1) return current
+      const newRow = { ...createEmptyTestRow(), topicName: current[index].topicName }
+      return [...current.slice(0, index + 1), newRow, ...current.slice(index + 1)]
+    })
+  }
+
+  const removeRow = (id) => {
+    setRows((current) => (current.length > 1 ? current.filter((row) => row.id !== id) : current))
+  }
+
+  const validateRows = () => {
+    for (const row of rows) {
+      if (row.topicName.trim().length < 2) return 'Konu adı en az 2 karakter olmalı.'
+      if (row.name.trim().length < 2) return 'Test adı en az 2 karakter olmalı.'
+      const pageStartNumber = Number(row.pageStart)
+      if (!Number.isInteger(pageStartNumber) || pageStartNumber <= 0) {
+        return 'Başlangıç sayfası pozitif bir tam sayı olmalı.'
+      }
+    }
+    return ''
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    const validationError = validateRows()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    setError('')
+    setLoading(true)
+    const createdTests = []
+    let remainingRows = rows
+    try {
+      for (const row of rows) {
+        const data = await authRequest('/api/panel-admin/resource-book-topic-tests', {
+          method: 'POST',
+          body: JSON.stringify({
+            topicId: topic.id,
+            topicName: row.topicName.trim(),
+            name: row.name.trim(),
+            pageStart: Number(row.pageStart),
+            pageEnd: Number(row.pageStart),
+          }),
+        })
+        createdTests.push(data.test)
+        remainingRows = remainingRows.filter((item) => item.id !== row.id)
+      }
+      onSaved(createdTests)
+    } catch (err) {
+      setError(err.message)
+      setRows(remainingRows.length > 0 ? remainingRows : [createEmptyTestRow()])
+      if (createdTests.length > 0) onSaved(createdTests)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="h-full w-full overflow-y-auto border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-2xl sm:p-5"
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-panel-text">Test Ekle</h2>
+          <button type="button" aria-label="Kapat" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        {topic ? (
+          <p className="mb-3 text-sm text-panel-text-muted">
+            İçerik: <span className="font-medium text-panel-text">{topic.name}</span>
+          </p>
+        ) : null}
+
+        <p className="mb-3 text-xs text-panel-text-muted">
+          Sadece başlangıç sayfasını girin, sayfa aralığını sonra "Test Düzenle" ile ayarlayabilirsiniz. Soru
+          sayısını da şimdi girmenize gerek yok; test listesindeki cevap anahtarı ikonuna tıklayınca
+          belirleyebilirsiniz.
+        </p>
+
+        {error ? (
+          <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
+        ) : null}
+
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2.5 sm:hidden">
+            {rows.map((row, index) => (
+              <div key={row.id} className="rounded-xl border border-panel-border p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-panel-text-muted">{index + 1}. Test</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label="Satırı çoğalt"
+                      onClick={() => duplicateRow(row.id)}
+                      className="text-panel-text-muted hover:text-panel-blue"
+                    >
+                      <Copy size={14} aria-hidden="true" />
+                    </button>
+                    {rows.length > 1 ? (
+                      <button
+                        type="button"
+                        aria-label="Satırı sil"
+                        onClick={() => removeRow(row.id)}
+                        className="text-panel-text-muted hover:text-panel-warm"
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <input
+                    value={row.topicName}
+                    onChange={(event) => updateRow(row.id, { topicName: event.target.value })}
+                    placeholder="Konu adı"
+                    className="rounded-lg border border-panel-border p-2 text-sm text-panel-text"
+                  />
+                  <input
+                    value={row.name}
+                    onChange={(event) => updateRow(row.id, { name: event.target.value })}
+                    placeholder="Test adı"
+                    className="rounded-lg border border-panel-border p-2 text-sm text-panel-text"
+                  />
+                  <input
+                    type="number"
+                    min="1"
+                    value={row.pageStart}
+                    onChange={(event) => updateRow(row.id, { pageStart: event.target.value })}
+                    placeholder="Başlangıç sayfası"
+                    className="rounded-lg border border-panel-border p-2 text-sm text-panel-text"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-xl border border-panel-border sm:block">
+            <table className="w-full min-w-[460px] text-left text-sm">
+              <thead>
+                <tr className="bg-panel-surface-soft text-xs font-semibold text-panel-text-muted">
+                  <th className="px-3 py-2">Konu Adı</th>
+                  <th className="px-3 py-2">Test Adı</th>
+                  <th className="w-32 px-3 py-2">Başl. Sayfa</th>
+                  <th className="w-16 px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className="border-t border-panel-border">
+                    <td className="p-1.5">
+                      <input
+                        value={row.topicName}
+                        onChange={(event) => updateRow(row.id, { topicName: event.target.value })}
+                        placeholder="Örn. Paragrafın Konusu"
+                        className="w-full rounded-lg border border-panel-border p-1.5 text-sm text-panel-text"
+                      />
+                    </td>
+                    <td className="p-1.5">
+                      <input
+                        value={row.name}
+                        onChange={(event) => updateRow(row.id, { name: event.target.value })}
+                        placeholder="Örn. 1. Test"
+                        className="w-full rounded-lg border border-panel-border p-1.5 text-sm text-panel-text"
+                      />
+                    </td>
+                    <td className="p-1.5">
+                      <input
+                        type="number"
+                        min="1"
+                        value={row.pageStart}
+                        onChange={(event) => updateRow(row.id, { pageStart: event.target.value })}
+                        placeholder="8"
+                        className="w-full rounded-lg border border-panel-border p-1.5 text-sm text-panel-text"
+                      />
+                    </td>
+                    <td className="p-1.5">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          aria-label="Satırı çoğalt"
+                          onClick={() => duplicateRow(row.id)}
+                          className="text-panel-text-muted hover:text-panel-blue"
+                        >
+                          <Copy size={14} aria-hidden="true" />
+                        </button>
+                        {rows.length > 1 ? (
+                          <button
+                            type="button"
+                            aria-label="Satırı sil"
+                            onClick={() => removeRow(row.id)}
+                            className="text-panel-text-muted hover:text-panel-warm"
+                          >
+                            <Trash2 size={14} aria-hidden="true" />
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <button
+            type="button"
+            onClick={addRow}
+            className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-panel-blue hover:underline"
+          >
+            + Satır Ekle
+          </button>
+
+          <Button type="submit" disabled={loading} size="md" className="mt-2 w-full">
+            {loading ? 'Kaydediliyor...' : rows.length > 1 ? `${rows.length} Test Oluştur` : 'Test Oluştur'}
+          </Button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function TestModal({ topic, test, onSaved, onClose }) {
+  if (test) {
+    return <EditTestModal test={test} topic={topic} onSaved={onSaved} onClose={onClose} />
+  }
+  return <AddTestsModal topic={topic} onSaved={onSaved} onClose={onClose} />
 }
 
 function readFileAsBase64(file) {
@@ -897,6 +1103,89 @@ function AddQuestionsFromImageModal({ test, onClose, onQuestionsSaved }) {
   )
 }
 
+function SetQuestionCountModal({ test, onSaved, onClose }) {
+  const [questionCount, setQuestionCount] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    const questionCountNumber = Number(questionCount)
+    if (!Number.isInteger(questionCountNumber) || questionCountNumber <= 0) {
+      setError('Soru sayısı pozitif bir tam sayı olmalı.')
+      return
+    }
+
+    setError('')
+    setLoading(true)
+    try {
+      const data = await authRequest(`/api/panel-admin/resource-book-topic-tests/${test.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          topicName: test.topicName,
+          name: test.name,
+          pageStart: test.pageStart,
+          pageEnd: test.pageEnd,
+          questionCount: questionCountNumber,
+        }),
+      })
+      onSaved(data.test)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="h-full w-full overflow-y-auto border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-auto sm:max-w-sm sm:rounded-2xl sm:p-5"
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-panel-text">Soru Sayısı</h2>
+          <button type="button" aria-label="Kapat" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <p className="mb-3 text-sm text-panel-text-muted">
+          Cevap anahtarını girebilmek için önce <span className="font-medium text-panel-text">{test.name}</span>{' '}
+          testinin soru sayısını belirleyin.
+        </p>
+
+        {error ? (
+          <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
+        ) : null}
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-panel-text-muted">Soru Sayısı</span>
+          <input
+            type="number"
+            min="1"
+            autoFocus
+            value={questionCount}
+            onChange={(event) => setQuestionCount(event.target.value)}
+            className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+          />
+        </label>
+
+        <Button type="submit" disabled={loading} size="md" className="mt-3 w-full">
+          {loading ? 'Kaydediliyor...' : 'Devam Et'}
+        </Button>
+      </form>
+    </div>
+  )
+}
+
+function AnswerKeyFlow({ test, onTestUpdated, onClose }) {
+  if (!test.questionCount) {
+    return <SetQuestionCountModal test={test} onSaved={onTestUpdated} onClose={onClose} />
+  }
+  return <AnswerKeyModal test={test} onClose={onClose} />
+}
+
 function AnswerKeyModal({ test, onClose }) {
   const [entries, setEntries] = useState(null)
   const [error, setError] = useState('')
@@ -995,7 +1284,7 @@ function AnswerKeyModal({ test, onClose }) {
   )
 }
 
-function TestQuestionsModal({ test, resourceBookType, onClose }) {
+function TestQuestionsModal({ test, resourceBookType, onTestUpdated, onClose }) {
   const [questions, setQuestions] = useState(null)
   const [error, setError] = useState('')
   const [showAddFromImage, setShowAddFromImage] = useState(false)
@@ -1019,7 +1308,8 @@ function TestQuestionsModal({ test, resourceBookType, onClose }) {
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-panel-text">{test.name}</h2>
             <p className="text-xs text-[#667475]">
-              {test.topicName} · {test.pageStart}–{test.pageEnd}. sayfalar · {test.questionCount} soru
+              {test.topicName} · {test.pageStart}–{test.pageEnd}. sayfalar ·{' '}
+              {test.questionCount ? `${test.questionCount} soru` : 'soru sayısı girilmedi'}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -1098,7 +1388,15 @@ function TestQuestionsModal({ test, resourceBookType, onClose }) {
         />
       ) : null}
 
-      {showAnswerKey ? <AnswerKeyModal test={test} onClose={() => setShowAnswerKey(false)} /> : null}
+      {showAnswerKey ? (
+        <AnswerKeyFlow
+          test={test}
+          onTestUpdated={(updatedTest) => {
+            onTestUpdated?.(updatedTest)
+          }}
+          onClose={() => setShowAnswerKey(false)}
+        />
+      ) : null}
     </div>
   )
 }
@@ -1113,10 +1411,23 @@ function StatBadge({ icon, value }) {
   )
 }
 
-function TopicBlock({ topic, tests, expanded, onToggle, onAddTest, onEditTopic, onEditTest, onViewTest, onDeleteTest }) {
+function TopicBlock({
+  topic,
+  tests,
+  resourceBookType,
+  expanded,
+  onToggle,
+  onAddTest,
+  onEditTopic,
+  onEditTest,
+  onViewTest,
+  onDeleteTest,
+  onManageAnswerKey,
+}) {
   const totalTests = tests.length
   const totalPages = tests.reduce((sum, test) => sum + test.pageCount, 0)
-  const totalQuestions = tests.reduce((sum, test) => sum + test.questionCount, 0)
+  const totalQuestions = tests.reduce((sum, test) => sum + (test.questionCount || 0), 0)
+  const showAnswerKeyAction = resourceBookType === 'soru_bankasi'
 
   return (
     <div className="px-4 py-2">
@@ -1192,6 +1503,19 @@ function TopicBlock({ topic, tests, expanded, onToggle, onAddTest, onEditTopic, 
                       <p className="mt-1 line-clamp-2 text-xs text-[#667475]">{test.topicName}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
+                      {showAnswerKeyAction ? (
+                        <button
+                          type="button"
+                          aria-label="Cevap anahtarı"
+                          className={`hover:text-[#253d3e] ${test.questionCount ? 'text-[#87a3a5]' : 'text-panel-warm'}`}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onManageAnswerKey(test)
+                          }}
+                        >
+                          <KeyRound size={14} aria-hidden="true" />
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         aria-label="Testi düzenle"
@@ -1218,7 +1542,9 @@ function TopicBlock({ topic, tests, expanded, onToggle, onAddTest, onEditTopic, 
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-[#667475]">
                     <span className="rounded-full bg-[#faf3ec] px-2 py-1">{test.pageStart}–{test.pageEnd}. sayfalar</span>
-                    <span className="rounded-full bg-[#faf3ec] px-2 py-1">{test.questionCount} soru</span>
+                    <span className="rounded-full bg-[#faf3ec] px-2 py-1">
+                      {test.questionCount ? `${test.questionCount} soru` : 'Soru sayısı yok'}
+                    </span>
                   </div>
                 </article>
               ))}
@@ -1232,7 +1558,7 @@ function TopicBlock({ topic, tests, expanded, onToggle, onAddTest, onEditTopic, 
                   <th className="px-3 py-1.5">Test Adı</th>
                   <th className="px-3 py-1.5">Sayfa Sayısı</th>
                   <th className="px-3 py-1.5">Soru Sayısı</th>
-                  <th className="w-10 px-3 py-1.5">İşlem</th>
+                  <th className="w-20 px-3 py-1.5">İşlem</th>
                 </tr>
               </thead>
               <tbody>
@@ -1250,9 +1576,25 @@ function TopicBlock({ topic, tests, expanded, onToggle, onAddTest, onEditTopic, 
                     </td>
                     <td className="px-3 py-1.5 font-medium text-[#253d3e]">{test.name}</td>
                     <td className="px-3 py-1.5 text-[#667475]">{test.pageStart}–{test.pageEnd}. sayfalar</td>
-                    <td className="px-3 py-1.5 text-[#667475]">{test.questionCount} soru</td>
+                    <td className="px-3 py-1.5 text-[#667475]">
+                      {test.questionCount ? `${test.questionCount} soru` : 'Soru sayısı yok'}
+                    </td>
                     <td className="px-3 py-1.5 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {showAnswerKeyAction ? (
+                          <button
+                            type="button"
+                            aria-label="Cevap anahtarı"
+                            title="Cevap Anahtarı"
+                            className={`hover:text-[#253d3e] ${test.questionCount ? 'text-[#87a3a5]' : 'text-panel-warm'}`}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              onManageAnswerKey(test)
+                            }}
+                          >
+                            <KeyRound size={13} aria-hidden="true" />
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           aria-label="Testi düzenle"
@@ -1307,10 +1649,12 @@ function BookBlock({
   onEditTest,
   onViewTest,
   onDeleteTest,
+  onManageAnswerKey,
   onEditBook,
   onToggleActive,
   onApproveBook,
   onRejectBook,
+  onPreviewImage,
 }) {
   const [expanded, setExpanded] = useState(isFocused)
   const [expandedTopicId, setExpandedTopicId] = useState(null)
@@ -1363,11 +1707,28 @@ function BookBlock({
             {expanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
           </button>
           {book.imageUrl ? (
-            <img loading="lazy" decoding="async"
-              src={book.imageUrl}
-              alt={`${book.name} görseli`}
-              className="h-11 w-11 shrink-0 rounded-[10px] border border-[#e4e5ec] object-cover"
-            />
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(event) => {
+                event.stopPropagation()
+                onPreviewImage({ url: book.imageUrl, name: book.name })
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.preventDefault()
+                event.stopPropagation()
+                onPreviewImage({ url: book.imageUrl, name: book.name })
+              }}
+              className="shrink-0 cursor-pointer rounded-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9772f]"
+              aria-label={`${book.name} görselini büyüt`}
+            >
+              <img loading="lazy" decoding="async"
+                src={book.imageUrl}
+                alt={`${book.name} görseli`}
+                className="h-11 w-11 shrink-0 rounded-[10px] border border-[#e4e5ec] object-cover"
+              />
+            </span>
           ) : (
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#f8e3d0] text-[#c9772f]">
               <BookOpen size={16} aria-hidden="true" />
@@ -1479,6 +1840,7 @@ function BookBlock({
                 key={representative.id}
                 topic={representative}
                 tests={tests.filter((test) => topicIds.includes(test.topicId))}
+                resourceBookType={book.type}
                 expanded={expandedTopicId === representative.id}
                 onToggle={() =>
                   setExpandedTopicId((current) => (current === representative.id ? null : representative.id))
@@ -1488,6 +1850,7 @@ function BookBlock({
                 onEditTest={onEditTest}
                 onViewTest={onViewTest}
                 onDeleteTest={onDeleteTest}
+                onManageAnswerKey={onManageAnswerKey}
               />
             ))}
           </div>
@@ -1513,10 +1876,12 @@ function PublisherRow({
   onEditTest,
   onViewTest,
   onDeleteTest,
+  onManageAnswerKey,
   onEditBook,
   onToggleActive,
   onApproveBook,
   onRejectBook,
+  onPreviewImage,
 }) {
   const [expanded, setExpanded] = useState(isFocusPublisher)
 
@@ -1572,10 +1937,12 @@ function PublisherRow({
                   onEditTest={onEditTest}
                   onViewTest={onViewTest}
                   onDeleteTest={onDeleteTest}
+                  onManageAnswerKey={onManageAnswerKey}
                   onEditBook={onEditBook}
                   onToggleActive={onToggleActive}
                   onApproveBook={onApproveBook}
                   onRejectBook={onRejectBook}
+                  onPreviewImage={onPreviewImage}
                 />
               ))}
             </div>
@@ -1604,12 +1971,14 @@ export default function AdminPublishersPage() {
   const [editingTopic, setEditingTopic] = useState(null)
   const [editingTest, setEditingTest] = useState(null)
   const [viewingTest, setViewingTest] = useState(null)
+  const [answerKeyTest, setAnswerKeyTest] = useState(null)
   const [deletingTest, setDeletingTest] = useState(null)
   const [deletingTestError, setDeletingTestError] = useState('')
   const [deletingTestLoading, setDeletingTestLoading] = useState(false)
   const [query, setQuery] = useState('')
   const [onlyMissingAnswerKey, setOnlyMissingAnswerKey] = useState(false)
   const [missingAnswerKeyBooks, setMissingAnswerKeyBooks] = useState([])
+  const [previewImage, setPreviewImage] = useState(null)
 
   const loadData = () => {
     Promise.all([
@@ -1702,8 +2071,9 @@ export default function AdminPublishersPage() {
     setTopicModalBook(null)
   }
 
-  const handleTestCreated = (test) => {
-    setTests((current) => [...(current || []), test])
+  const handleTestCreated = (testOrTests) => {
+    const created = Array.isArray(testOrTests) ? testOrTests : [testOrTests]
+    setTests((current) => [...(current || []), ...created])
     setTestModalTopic(null)
   }
 
@@ -1712,9 +2082,20 @@ export default function AdminPublishersPage() {
     setEditingTopic(null)
   }
 
-  const handleTestUpdated = (test) => {
+  // Testler listesini yerinde günceller; hangi diyaloğun açık olduğuna dokunmaz. Test Düzenle,
+  // testler tablosundaki cevap anahtarı akışı ve soru detay modalı ortak olarak bunu kullanır.
+  const applyTestUpdate = (test) => {
     setTests((current) => (current || []).map((item) => (item.id === test.id ? test : item)))
+  }
+
+  const handleTestUpdated = (test) => {
+    applyTestUpdate(test)
     setEditingTest(null)
+  }
+
+  const handleAnswerKeyTestUpdated = (test) => {
+    applyTestUpdate(test)
+    setAnswerKeyTest(test)
   }
 
   const handleDeleteTest = async () => {
@@ -1855,10 +2236,12 @@ export default function AdminPublishersPage() {
                   onEditTest={setEditingTest}
                   onViewTest={setViewingTest}
                   onDeleteTest={setDeletingTest}
+                  onManageAnswerKey={setAnswerKeyTest}
                   onEditBook={setEditingBook}
                   onToggleActive={handleToggleActive}
                   onApproveBook={handleApproveBook}
                   onRejectBook={setRejectingBook}
+                  onPreviewImage={setPreviewImage}
                 />
               ))
             )}
@@ -1935,7 +2318,19 @@ export default function AdminPublishersPage() {
         <TestQuestionsModal
           test={viewingTest}
           resourceBookType={viewingTestResourceBookType}
+          onTestUpdated={(test) => {
+            applyTestUpdate(test)
+            setViewingTest(test)
+          }}
           onClose={() => setViewingTest(null)}
+        />
+      ) : null}
+
+      {answerKeyTest ? (
+        <AnswerKeyFlow
+          test={answerKeyTest}
+          onTestUpdated={handleAnswerKeyTestUpdated}
+          onClose={() => setAnswerKeyTest(null)}
         />
       ) : null}
 
@@ -1955,6 +2350,8 @@ export default function AdminPublishersPage() {
           }}
         />
       ) : null}
+
+      <ImagePreviewLightbox preview={previewImage} onClose={() => setPreviewImage(null)} />
     </div>
     </div>
   )

@@ -4,7 +4,7 @@ import Badge from '../../ui/Badge'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
-import { ResourceBookAvatar, ResourceBookRates } from '../../shared/ResourceBookCard'
+import { ImagePreviewLightbox, ResourceBookAvatar, ResourceBookRates } from '../../shared/ResourceBookCard'
 import { authRequest } from '../../../services/authClient'
 import { verifyMistakePhotoQuestionNumber } from '../../../services/mistakePhotoService'
 import StudentResourceAssignModal from './StudentResourceAssignModal'
@@ -566,6 +566,7 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
   const [removeError, setRemoveError] = useState('')
   const [removing, setRemoving] = useState(false)
   const [showAssignModal, setShowAssignModal] = useState(false)
+  const [previewImage, setPreviewImage] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -718,7 +719,11 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
                   >
                     <Trash2 size={15} aria-hidden="true" />
                   </button>
-                  <ResourceBookAvatar book={book} size="row" />
+                  <ResourceBookAvatar
+                    book={book}
+                    size="row"
+                    onClick={book.imageUrl ? () => setPreviewImage({ url: book.imageUrl, name: book.name }) : undefined}
+                  />
                   <div className="min-w-0 flex-1">
                     {book.publisherName ? (
                       <Badge tone="lilac" className="mb-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
@@ -769,6 +774,8 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
           onClose={() => setShowAssignModal(false)}
         />
       ) : null}
+
+      <ImagePreviewLightbox preview={previewImage} onClose={() => setPreviewImage(null)} />
     </div>
   )
 }

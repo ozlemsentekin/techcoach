@@ -229,6 +229,56 @@ async function getTeacherQuota(teacherId) {
   }
 }
 
+async function upsertParentEntitlementFromIyzico({
+  parentId,
+  status,
+  pricingPlanReferenceCode,
+  billingCycle,
+  subscriptionReferenceCode,
+  currentPeriodEnd,
+}) {
+  const upsertDb = await withRequest({
+    parentId: { type: sql.UniqueIdentifier, value: parentId },
+    status: { type: sql.NVarChar(20), value: status },
+    productId: { type: sql.NVarChar(120), value: pricingPlanReferenceCode },
+    period: { type: sql.NVarChar(10), value: billingCycle },
+    subscriptionReferenceCode: { type: sql.NVarChar(100), value: subscriptionReferenceCode },
+    currentPeriodEnd: { type: sql.DateTime2, value: currentPeriodEnd },
+  })
+
+  await upsertDb.query(`
+    MERGE dbo.Entitlements AS target
+    USING (SELECT @parentId AS parent_id) AS source_row
+    ON target.parent_id = source_row.parent_id
+    WHEN MATCHED THEN
+      UPDATE SET status = @status, source = 'iyzico', product_id = @productId, period = @period,
+                 subscription_reference_code = @subscriptionReferenceCode, current_period_end = @currentPeriodEnd
+    WHEN NOT MATCHED THEN
+      INSERT (parent_id, status, source, product_id, period, subscription_reference_code, current_period_end)
+      VALUES (@parentId, @status, 'iyzico', @productId, @period, @subscriptionReferenceCode, @currentPeriodEnd);
+  `)
+}
+
+async function updateParentEntitlementStatus(parentId, status) {
+  const updateDb = await withRequest({
+    parentId: { type: sql.UniqueIdentifier, value: parentId },
+    status: { type: sql.NVarChar(20), value: status },
+  })
+  await updateDb.query(`
+    UPDATE dbo.Entitlements SET status = @status WHERE parent_id = @parentId;
+  `)
+}
+
+async function findParentIdBySubscriptionReferenceCode(subscriptionReferenceCode) {
+  const requestDb = await withRequest({
+    subscriptionReferenceCode: { type: sql.NVarChar(100), value: subscriptionReferenceCode },
+  })
+  const result = await requestDb.query(`
+    SELECT TOP 1 parent_id FROM dbo.Entitlements WHERE subscription_reference_code = @subscriptionReferenceCode;
+  `)
+  return result.recordset[0]?.parent_id || null
+}
+
 async function hasActiveParentEntitlement(parentId) {
   const requestDb = await withRequest({ parentId: { type: sql.UniqueIdentifier, value: parentId } })
   const result = await requestDb.query(`
@@ -263,5 +313,8 @@ module.exports = {
   getTeacherQuota,
   hasActiveParentEntitlement,
   getParentStudentQuota,
+  upsertParentEntitlementFromIyzico,
+  updateParentEntitlementStatus,
+  findParentIdBySubscriptionReferenceCode,
   ACTIVE_STATUSES,
 }

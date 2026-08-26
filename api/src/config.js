@@ -130,6 +130,30 @@ function getSmsConfig() {
   }
 }
 
+function getIyzicoConfig() {
+  return {
+    apiKey: getRequiredEnv('IYZICO_API_KEY', {
+      placeholders: ['replace-with-iyzico-api-key'],
+    }),
+    secretKey: getRequiredEnv('IYZICO_SECRET_KEY', {
+      placeholders: ['replace-with-iyzico-secret-key'],
+    }),
+    baseUrl: getRequiredEnv('IYZICO_BASE_URL'),
+    parentMonthlyPlanRef: getRequiredEnv('IYZICO_PARENT_MONTHLY_PLAN_REF', {
+      placeholders: ['replace-with-iyzico-parent-monthly-plan-ref'],
+    }),
+    parentYearlyPlanRef: getRequiredEnv('IYZICO_PARENT_YEARLY_PLAN_REF', {
+      placeholders: ['replace-with-iyzico-parent-yearly-plan-ref'],
+    }),
+    callbackUrl: getRequiredEnv('IYZICO_CALLBACK_URL', {
+      placeholders: ['replace-with-iyzico-callback-url'],
+    }),
+    webRedirectBaseUrl: getRequiredEnv('IYZICO_WEB_REDIRECT_BASE_URL', {
+      placeholders: ['replace-with-iyzico-web-redirect-base-url'],
+    }),
+  }
+}
+
 function getCaptchaConfig() {
   return {
     turnstileSecretKey: getRequiredEnv('TURNSTILE_SECRET_KEY', {
@@ -155,6 +179,7 @@ module.exports = {
   getAnthropicConfig,
   getBillingConfig,
   getSmsConfig,
+  getIyzicoConfig,
   getCaptchaConfig,
   isCaptchaConfigured,
   getRuntimeConfig,

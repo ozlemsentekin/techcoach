@@ -63,7 +63,10 @@ function groupBySubjectAndTopic(wrongQuestions) {
 // konu adı almış olabilir. "Kaynağa göre" görünüm bu yüzden birincil olarak bookName'e göre
 // gruplar (bookName olmayan eski manuel kayıtlar tek bir "Kaynaksız" grubunda toplanır) ve her
 // kaynağın altında konulara göre alt kırılım sunar.
-function groupBySubjectAndSource(wrongQuestions) {
+// bookImages, sunucunun her satırda tekrar tekrar döndürmediği kapak fotoğraflarının kitap
+// adına göre haritası (bkz. wrongQuestionService.js'deki WrongQuestionsResponse yorumu) —
+// aynı ~140KB'lık base64 görüntünün yüzlerce soru satırında kopyalanmasını önler.
+function groupBySubjectAndSource(wrongQuestions, bookImages) {
   const bySubject = new Map()
   wrongQuestions.forEach((item) => {
     if (!bySubject.has(item.subject)) {
@@ -77,7 +80,7 @@ function groupBySubjectAndSource(wrongQuestions) {
       subjectGroup.sourcesByKey.set(sourceKey, {
         bookName: item.bookName || null,
         publisherName: item.publisherName || null,
-        bookImageUrl: item.bookImageUrl || null,
+        bookImageUrl: (item.bookName && bookImages?.[item.bookName]) || null,
         items: [],
         topicsByKey: new Map(),
       })
@@ -282,7 +285,9 @@ function WrongQuestionThumbnail({ item, fetchPhoto, onClick }) {
     }
   }, [item.id, fetchPhoto])
 
-  const caption = `${item.testName || 'Test'} - ${item.topic || 'Genel'} - ${
+  // topic (içerik grubu) zaten akordeon başlığında gösteriliyor; burada tekrar etmemek için
+  // başlıkta sadece test adı ve soru numarası yer alır (bkz. kullanıcı isteği).
+  const caption = `${item.testName || 'Test'} - Soru No: ${
     item.questionNumber != null && item.questionNumber !== '' ? item.questionNumber : '-'
   }`
 
@@ -292,6 +297,9 @@ function WrongQuestionThumbnail({ item, fetchPhoto, onClick }) {
       onClick={onClick}
       className="group flex flex-col overflow-hidden rounded-xl border border-panel-border bg-panel-surface text-left shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-md"
     >
+      <p className="line-clamp-2 px-2 py-1.5 text-[11px] font-medium leading-snug text-panel-text" title={caption}>
+        {caption}
+      </p>
       <div className="flex aspect-square w-full items-center justify-center overflow-hidden bg-panel-surface-soft">
         {photoUrl ? (
           <img
@@ -307,9 +315,6 @@ function WrongQuestionThumbnail({ item, fetchPhoto, onClick }) {
           <Loader2 size={20} className="animate-spin text-panel-text-muted" aria-hidden="true" />
         )}
       </div>
-      <p className="line-clamp-2 px-2 py-1.5 text-[11px] font-medium leading-snug text-panel-text" title={caption}>
-        {caption}
-      </p>
     </button>
   )
 }
@@ -467,6 +472,7 @@ export default function WrongQuestionsView({
   hideHeaderWhenUnselected = false,
 }) {
   const [wrongQuestions, setWrongQuestions] = useState(null)
+  const [bookImages, setBookImages] = useState({})
   const [topicStats, setTopicStats] = useState([])
   const [sourceTopicStats, setSourceTopicStats] = useState([])
   const [error, setError] = useState('')
@@ -480,10 +486,11 @@ export default function WrongQuestionsView({
     let ignore = false
 
     fetchWrongQuestions()
-      .then((wrongQuestionsData) => {
+      .then((data) => {
         if (ignore) return
         setError('')
-        setWrongQuestions(wrongQuestionsData)
+        setWrongQuestions(data.wrongQuestions)
+        setBookImages(data.bookImages || {})
       })
       .catch((err) => {
         if (!ignore) setError(err.message)
@@ -512,7 +519,7 @@ export default function WrongQuestionsView({
   )
 
   const contentGroups = useMemo(() => groupBySubjectAndTopic(photoQuestions), [photoQuestions])
-  const sourceGroups = useMemo(() => groupBySubjectAndSource(photoQuestions), [photoQuestions])
+  const sourceGroups = useMemo(() => groupBySubjectAndSource(photoQuestions, bookImages), [photoQuestions, bookImages])
   const hasSingleSubject = contentGroups.length === 1
 
   // Tek ders varsa (ör. öğretmen-öğrenci ilişkisi zaten tek derse özgü), ders seçim

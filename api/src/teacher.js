@@ -8,9 +8,13 @@ const {
   normalizePhone,
 } = require('./security')
 const { requireTeacherSession, requireTeacherStudentContext } = require('./teacherScope')
+const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
 const { fetchTeacherResourceBooks, verifySubjectExists } = require('./students')
+const { fetchStudentProfile } = require('./studentProfile')
 const { extractLibraryTocFromImages } = require('./libraryTocExtraction')
 const { extractLibraryCoverInfo } = require('./libraryCoverExtraction')
+const { extractLibraryAnswerKeyFromImages } = require('./libraryAnswerKeyExtraction')
+const { createExtractionJob, getExtractionJob, runExtractionJobInBackground } = require('./libraryExtractionJobs')
 const { getTeacherQuota, hasActiveParentEntitlement } = require('./entitlements')
 const {
   SELECT_HOMEWORK,
@@ -58,6 +62,8 @@ const {
   sanitizeWrongQuestion,
   sanitizeManualTestCompletion,
   computeWrongQuestionTopicStats,
+  fetchWrongQuestionBookImagesByName,
+  fetchResourceBookImagesByIds,
   MISTAKE_REASONS,
 } = require('./progress')
 const { gradeTestAnswers } = require('./testGrading')
@@ -448,6 +454,128 @@ async function getTeacherStudentHandler(request) {
   }
 }
 
+// Öğretmen tarafındaki "Profil Kartı" görünümü — veli panelindeki profil sihirbazının Temel
+// Bilgiler ve Okul Bilgileri adımlarını salt okunur gösterir (bu bilgiler normalde veli
+// tarafından doldurulur). Öğrenciyi bizzat öğretmen eklediyse (funded_by_teacher_id kendisiyse),
+// hiçbir zaman panel erişimi olmayan bir veli bu alanları dolduramayacağı için Temel Bilgiler
+// adımı öğretmen tarafından da düzenlenebilir hale gelir (bkz. updateTeacherStudentProfileHandler).
+async function getTeacherStudentProfileHandler(request) {
+  try {
+    const { error, studentId, actorId: teacherUserId } = await requireTeacherStudentContext(request, {
+      includeInactive: true,
+    })
+    if (error) return error
+
+    const profile = await fetchStudentProfile(studentId)
+    const canEditBasics = await isStudentFundedByTeacher(studentId, teacherUserId)
+    return json(200, { profile, canEditBasics })
+  } catch (error) {
+    return handleError(error, 'getTeacherStudentProfileHandler', 'Profil yüklenemedi.')
+  }
+}
+
+async function isStudentFundedByTeacher(studentId, teacherUserId) {
+  const requestDb = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
+  const result = await requestDb.query(`
+    SELECT funded_by_teacher_id FROM dbo.Users WHERE id = @studentId;
+  `)
+  const fundedByTeacherId = result.recordset[0]?.funded_by_teacher_id
+  return Boolean(fundedByTeacherId) && String(fundedByTeacherId).toLowerCase() === String(teacherUserId).toLowerCase()
+}
+
+const STUDENT_GENDERS = new Set(['kiz', 'erkek'])
+const PROFILE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
+// createTeacherStudentHandler ile eklenen öğrencinin velisi hiçbir zaman panele giriş yapmamış
+// olabilir (password_hash yok) — bu durumda Temel Bilgiler adımındaki alanlar hiç doldurulamaz.
+// Bu uç, sadece öğretmenin bizzat eklediği (funded_by_teacher_id kendisi olan) öğrenciler için
+// bu alanların öğretmen panelinden düzenlenmesine izin verir.
+async function updateTeacherStudentProfileHandler(request) {
+  try {
+    const { error, studentId, actorId: teacherUserId } = await requireTeacherStudentContext(request, {
+      includeInactive: true,
+    })
+    if (error) return error
+
+    const canEdit = await isStudentFundedByTeacher(studentId, teacherUserId)
+    if (!canEdit) {
+      return json(403, { error: 'Bu bilgiler yalnızca öğrenciyi ekleyen öğretmen tarafından düzenlenebilir.' })
+    }
+
+    const payload = await request.json().catch(() => null)
+    if (!payload) {
+      return json(400, { error: 'Geçersiz istek gövdesi.' })
+    }
+
+    const firstName = String(payload.firstName || '').trim()
+    const lastName = String(payload.lastName || '').trim()
+    const fullName = `${firstName} ${lastName}`.trim()
+    if (fullName.length < 3 || fullName.length > 120) {
+      return json(400, { error: 'Öğrenci adı 3 ile 120 karakter arasında olmalı.' })
+    }
+
+    const grade = String(payload.grade || '').trim()
+    if (!LIBRARY_GRADES.has(grade)) {
+      return json(400, { error: 'Geçerli bir sınıf seçilmeli.' })
+    }
+
+    const birthDateRaw = String(payload.birthDate || '').trim()
+    let birthDate = null
+    if (birthDateRaw) {
+      if (!PROFILE_DATE_PATTERN.test(birthDateRaw) || Number.isNaN(new Date(birthDateRaw).getTime())) {
+        return json(400, { error: 'Doğum tarihi geçerli olmalı.' })
+      }
+      if (new Date(birthDateRaw).getTime() > Date.now()) {
+        return json(400, { error: 'Doğum tarihi gelecekte olamaz.' })
+      }
+      birthDate = birthDateRaw
+    }
+
+    const genderRaw = String(payload.gender || '').trim()
+    if (genderRaw && !STUDENT_GENDERS.has(genderRaw)) {
+      return json(400, { error: 'Geçerli bir cinsiyet seçilmeli.' })
+    }
+    const gender = genderRaw || null
+
+    const phoneRaw = String(payload.phone || '').trim()
+    let phone = null
+    if (phoneRaw) {
+      phone = normalizePhone(phoneRaw)
+      if (!phone) {
+        return json(400, { error: 'Geçerli bir telefon numarası girin.' })
+      }
+    }
+
+    const updateDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      fullName: { type: sql.NVarChar(120), value: fullName },
+      grade: { type: sql.NVarChar(20), value: grade },
+      birthDate: { type: sql.Date, value: birthDate },
+      gender: { type: sql.NVarChar(20), value: gender },
+      phone: { type: sql.NVarChar(30), value: phone },
+    })
+    await updateDb.query(`
+      UPDATE dbo.Users SET full_name = @fullName WHERE id = @studentId;
+
+      MERGE dbo.StudentProfiles AS target
+      USING (SELECT @studentId AS student_id) AS src
+      ON target.student_id = src.student_id
+      WHEN MATCHED THEN UPDATE SET
+        grade = @grade,
+        birth_date = @birthDate,
+        gender = @gender,
+        phone = @phone
+      WHEN NOT MATCHED THEN INSERT (student_id, grade, birth_date, gender, phone)
+        VALUES (@studentId, @grade, @birthDate, @gender, @phone);
+    `)
+
+    const profile = await fetchStudentProfile(studentId)
+    return json(200, { profile, studentFullName: fullName })
+  } catch (error) {
+    return handleError(error, 'updateTeacherStudentProfileHandler', 'Profil kaydedilemedi.')
+  }
+}
+
 async function updateTeacherStudentStatusHandler(request) {
   try {
     const { error, studentTeacherId, actorId: teacherUserId } = await requireTeacherStudentContext(request, {
@@ -730,6 +858,40 @@ async function getTeacherEntitlementHandler(request) {
     return json(200, { entitlement: quota })
   } catch (error) {
     return handleError(error, 'getTeacherEntitlementHandler', 'Panel kotası yüklenemedi.')
+  }
+}
+
+async function updateTeacherProfileHandler(request) {
+  try {
+    const { error, teacherUserId } = await requireTeacherSession(request)
+    if (error) return error
+
+    const payload = await request.json().catch(() => null)
+    const subjectIdsResult = normalizeTeacherSubjectIds(payload?.subjectIds)
+    if (subjectIdsResult.error) {
+      return json(400, { error: subjectIdsResult.error })
+    }
+    const teacherSubjectIds = subjectIdsResult.value
+
+    const requestDb = await withRequest({
+      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+      teacherSubjectIdsJson: {
+        type: sql.NVarChar(sql.MAX),
+        value: teacherSubjectIds.length ? JSON.stringify(teacherSubjectIds) : null,
+      },
+    })
+    const result = await requestDb.query(`
+      UPDATE dbo.Users
+      SET teacher_subject_ids_json = @teacherSubjectIdsJson
+      WHERE id = @teacherUserId;
+
+      SELECT teacher_subject_ids_json FROM dbo.Users WHERE id = @teacherUserId;
+    `)
+
+    const updated = result.recordset[0]
+    return json(200, { teacherSubjectIds: parseTeacherSubjectIdsJson(updated?.teacher_subject_ids_json) })
+  } catch (error) {
+    return handleError(error, 'updateTeacherProfileHandler', 'Branş bilgisi güncellenemedi.')
   }
 }
 
@@ -1585,6 +1747,51 @@ async function listTeacherResourceBooksHandler(request) {
   }
 }
 
+// Profil Kartı'ndaki "Özel Kaynaklar" adımı için: öğretmenin bu öğrenciyle paylaştığı derse
+// ait, "özel" kaynak türündeki (resource_source = 'ozel') tüm kütüphane kaynaklarını listeler
+// ve öğretmenin bu öğrenciye zaten atadıklarını (StudentTeacherResourceBooks) işaretler —
+// böylece öğretmen tek ekrandan toplu olarak yeni kaynak atayabilir.
+async function listTeacherStudentPrivateResourceBooksHandler(request) {
+  try {
+    const { error, studentId, subjectId, studentTeacherId, actorId: teacherUserId } = await requireTeacherStudentContext(
+      request,
+      { includeInactive: true },
+    )
+    if (error) return error
+
+    const gradeDb = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
+    const gradeResult = await gradeDb.query(`
+      SELECT grade FROM dbo.StudentProfiles WHERE student_id = @studentId;
+    `)
+    const grade = gradeResult.recordset[0]?.grade || null
+    if (!grade) {
+      return json(200, { resourceBooks: [], gradeMissing: true })
+    }
+
+    const resourceBooks = await fetchLibraryResourceBooks({
+      grade,
+      subjectId,
+      actorUserId: teacherUserId,
+      source: 'ozel',
+    })
+
+    const assignedDb = await withRequest({
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+    })
+    const assignedResult = await assignedDb.query(`
+      SELECT resource_book_id FROM dbo.StudentTeacherResourceBooks WHERE teacher_id = @studentTeacherId;
+    `)
+    const assignedIds = new Set(assignedResult.recordset.map((record) => String(record.resource_book_id)))
+
+    return json(200, {
+      resourceBooks: resourceBooks.map((book) => ({ ...book, assigned: assignedIds.has(String(book.id)) })),
+      gradeMissing: false,
+    })
+  } catch (error) {
+    return handleError(error, 'listTeacherStudentPrivateResourceBooksHandler', 'Kaynaklar yüklenemedi.')
+  }
+}
+
 async function listTeacherResourceBookTopicsHandler(request) {
   try {
     const { error, studentId, studentTeacherId } = await requireTeacherStudentContext(request)
@@ -1871,7 +2078,7 @@ async function saveTeacherManualWrongQuestionPhotoHandler(request) {
 
 async function listLibraryResourceBooksForTeacherHandler(request) {
   try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
+    const { error, teacherUserId, isAdmin } = await requireTeacherSession(request)
     if (error) return error
 
     const grade = request.query.get('grade')
@@ -1887,7 +2094,7 @@ async function listLibraryResourceBooksForTeacherHandler(request) {
       return json(400, { error: 'Geçersiz kaynak türü.' })
     }
 
-    const resourceBooks = await fetchLibraryResourceBooks({ grade, subjectId, actorUserId: teacherUserId, source })
+    const resourceBooks = await fetchLibraryResourceBooks({ grade, subjectId, actorUserId: teacherUserId, source, isAdmin })
     return json(200, { resourceBooks })
   } catch (error) {
     return handleError(error, 'listLibraryResourceBooksForTeacherHandler', 'Kütüphane kaynakları yüklenemedi.')
@@ -1916,11 +2123,11 @@ async function createLibraryResourceBookForTeacherHandler(request) {
 
 async function getLibraryResourceBookDetailForTeacherHandler(request) {
   try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
+    const { error, teacherUserId, isAdmin } = await requireTeacherSession(request)
     if (error) return error
 
     const resourceBookId = request.params.resourceBookId
-    const detail = await fetchLibraryResourceBookDetail({ resourceBookId, actorUserId: teacherUserId })
+    const detail = await fetchLibraryResourceBookDetail({ resourceBookId, actorUserId: teacherUserId, isAdmin })
     if (!detail) {
       return json(404, { error: 'Kaynak bulunamadı.' })
     }
@@ -1933,7 +2140,7 @@ async function getLibraryResourceBookDetailForTeacherHandler(request) {
 
 async function deleteLibraryResourceBookForTeacherHandler(request) {
   try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
+    const { error, teacherUserId, isAdmin } = await requireTeacherSession(request)
     if (error) return error
 
     const resourceBookId = request.params.resourceBookId
@@ -1941,6 +2148,7 @@ async function deleteLibraryResourceBookForTeacherHandler(request) {
       actorUserId: teacherUserId,
       role: 'ogretmen',
       resourceBookId,
+      isAdmin,
     })
     if (result.error) {
       return json(404, { error: result.error })
@@ -1977,16 +2185,23 @@ async function addLibraryResourceBookTopicsForTeacherHandler(request) {
 
 async function extractLibraryTocForTeacherHandler(request) {
   try {
-    const { error } = await requireTeacherSession(request)
+    const { error, teacherUserId } = await requireTeacherSession(request)
     if (error) return error
 
     const payload = await request.json().catch(() => null)
-    const result = await extractLibraryTocFromImages(payload?.images)
-    if (result.error) {
-      return json(400, { error: result.error })
+    const images = payload?.images
+    if (!Array.isArray(images) || !images.length) {
+      return json(400, { error: 'En az bir içindekiler fotoğrafı yükleyin.' })
     }
 
-    return json(200, { topics: result.topics })
+    const jobId = await createExtractionJob({ jobType: 'toc', actorUserId: teacherUserId })
+    runExtractionJobInBackground(jobId, async () => {
+      const result = await extractLibraryTocFromImages(images)
+      if (result.error) throw new Error(result.error)
+      return { topics: result.topics }
+    })
+
+    return json(202, { jobId })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
@@ -1997,21 +2212,80 @@ async function extractLibraryTocForTeacherHandler(request) {
 
 async function extractLibraryCoverForTeacherHandler(request) {
   try {
-    const { error } = await requireTeacherSession(request)
+    const { error, teacherUserId } = await requireTeacherSession(request)
     if (error) return error
 
     const payload = await request.json().catch(() => null)
-    const result = await extractLibraryCoverInfo(payload?.image)
-    if (result.error) {
-      return json(400, { error: result.error })
+    const image = payload?.image
+    if (!image) {
+      return json(400, { error: 'Kapak fotoğrafı yükleyin.' })
     }
 
-    return json(200, result)
+    const jobId = await createExtractionJob({ jobType: 'cover', actorUserId: teacherUserId })
+    runExtractionJobInBackground(jobId, async () => {
+      const result = await extractLibraryCoverInfo(image)
+      if (result.error) throw new Error(result.error)
+      return result
+    })
+
+    return json(202, { jobId })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
     }
     return handleError(error, 'extractLibraryCoverForTeacherHandler', 'Kapak okunamadı.')
+  }
+}
+
+async function extractLibraryAnswerKeyForTeacherHandler(request) {
+  try {
+    const { error, teacherUserId } = await requireTeacherSession(request)
+    if (error) return error
+
+    const payload = await request.json().catch(() => null)
+    const images = payload?.images
+    if (!Array.isArray(images) || !images.length) {
+      return json(400, { error: 'En az bir cevap anahtarı fotoğrafı yükleyin.' })
+    }
+
+    const jobId = await createExtractionJob({ jobType: 'answer_key', actorUserId: teacherUserId })
+    runExtractionJobInBackground(jobId, async () => {
+      const result = await extractLibraryAnswerKeyFromImages(images)
+      if (result.error) throw new Error(result.error)
+      return { tests: result.tests }
+    })
+
+    return json(202, { jobId })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
+    }
+    return handleError(error, 'extractLibraryAnswerKeyForTeacherHandler', 'Cevap anahtarı okunamadı.')
+  }
+}
+
+async function getLibraryExtractionJobForTeacherHandler(request) {
+  try {
+    const { error, teacherUserId } = await requireTeacherSession(request)
+    if (error) return error
+
+    const jobId = request.params.jobId
+    const job = await getExtractionJob(jobId, teacherUserId)
+    if (!job) {
+      return json(404, { error: 'İş bulunamadı.' })
+    }
+    if (job.status === 'pending') {
+      return json(200, { status: 'pending' })
+    }
+    if (job.status === 'error') {
+      return json(200, { status: 'error', error: job.error_message })
+    }
+    return json(200, { status: 'done', ...JSON.parse(job.result_json) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
+    }
+    return handleError(error, 'getLibraryExtractionJobForTeacherHandler', 'İş durumu okunamadı.')
   }
 }
 
@@ -2344,6 +2618,154 @@ async function assignTeacherHomeworkTaskHandler(request) {
   }
 }
 
+async function updateTeacherHomeworkHandler(request) {
+  try {
+    const homeworkId = request.params.homeworkId
+    const payload = await request.json().catch(() => null)
+    const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request, {
+      studentTeacherId: payload?.studentTeacherId,
+    })
+    if (error) return error
+
+    const ownershipDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: homeworkId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+    })
+    const ownershipResult = await ownershipDb.query(`
+      SELECT h.id
+      FROM dbo.Homeworks h
+      WHERE h.id = @id AND h.student_id = @studentId AND h.subject_id = @subjectId
+        AND (h.resource_book_id IS NULL OR EXISTS (
+          SELECT 1 FROM dbo.StudentTeacherResourceBooks strb
+          WHERE strb.teacher_id = @studentTeacherId AND strb.resource_book_id = h.resource_book_id
+        ));
+    `)
+    if (!ownershipResult.recordset.length) {
+      return json(404, { error: 'Ödev bulunamadı.' })
+    }
+
+    const updates = []
+    const bindings = {
+      id: { type: sql.UniqueIdentifier, value: homeworkId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    }
+
+    if (payload?.title !== undefined) {
+      const title = payload.title.trim()
+      if (!title || title.length < 2) {
+        return json(400, { error: 'Ödev notu en az 2 karakter olmalı.' })
+      }
+      updates.push('title = @title', 'description = @description')
+      bindings.title = { type: sql.NVarChar(200), value: title.slice(0, 200) }
+      bindings.description = { type: sql.NVarChar(1000), value: title }
+    }
+    if (payload?.totalQuestionCount !== undefined) {
+      updates.push('total_question_count = @totalQuestionCount')
+      bindings.totalQuestionCount = { type: sql.Int, value: Number(payload.totalQuestionCount) || 0 }
+    }
+    if (payload?.totalPageCount !== undefined) {
+      updates.push('total_page_count = @totalPageCount')
+      bindings.totalPageCount = { type: sql.Int, value: Number(payload.totalPageCount) || 0 }
+    }
+    if (payload?.resourceBookId !== undefined) {
+      const assignedResource = await getAssignedResourceBook(studentId, subjectId, payload.resourceBookId, {
+        studentTeacherId,
+      })
+      if (!assignedResource) {
+        return json(400, { error: 'Seçilen kaynak sizin takip ettiğiniz kaynaklardan değil.' })
+      }
+      updates.push('resource_book_id = @resourceBookId')
+      bindings.resourceBookId = { type: sql.UniqueIdentifier, value: payload.resourceBookId }
+    }
+
+    if (updates.length === 0) {
+      return json(400, { error: 'Güncellenecek alan bulunamadı.' })
+    }
+
+    const requestDb = await withRequest(bindings)
+    await requestDb.query(`
+      UPDATE dbo.Homeworks
+      SET ${updates.join(', ')}
+      WHERE id = @id AND student_id = @studentId;
+    `)
+
+    const fetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: homeworkId } })
+    const fetchResult = await fetchDb.query(`
+      ${SELECT_HOMEWORK}
+      WHERE h.id = @id;
+    `)
+
+    return json(200, { homework: sanitizeHomework(fetchResult.recordset[0]) })
+  } catch (error) {
+    return handleError(error, 'updateTeacherHomeworkHandler', 'Ödev güncellenemedi.')
+  }
+}
+
+async function deleteTeacherHomeworkHandler(request) {
+  try {
+    const homeworkId = request.params.homeworkId
+    const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    const ownershipDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: homeworkId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+    })
+    const ownershipResult = await ownershipDb.query(`
+      SELECT h.id
+      FROM dbo.Homeworks h
+      WHERE h.id = @id AND h.student_id = @studentId AND h.subject_id = @subjectId
+        AND (h.resource_book_id IS NULL OR EXISTS (
+          SELECT 1 FROM dbo.StudentTeacherResourceBooks strb
+          WHERE strb.teacher_id = @studentTeacherId AND strb.resource_book_id = h.resource_book_id
+        ));
+    `)
+    if (!ownershipResult.recordset.length) {
+      return json(404, { error: 'Ödev bulunamadı.' })
+    }
+
+    // Homeworks silindiğinde bağlı dbo.Tasks satırı FK (ON DELETE SET NULL) yüzünden
+    // otomatik silinmiyor; öğrenci panelinde ödev kaldırılmış olsa bile görev görünmeye
+    // devam etmesin diye burada elle temizliyoruz (bkz. homework.js deleteHomeworkHandler).
+    const cleanupDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: homeworkId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    await cleanupDb.query(`
+      DECLARE @taskId UNIQUEIDENTIFIER;
+      SELECT @taskId = id FROM dbo.Tasks WHERE homework_id = @id AND student_id = @studentId;
+
+      IF @taskId IS NOT NULL
+      BEGIN
+        UPDATE dbo.WrongQuestions SET task_id = NULL WHERE task_id = @taskId;
+        UPDATE dbo.StudySessions SET task_id = NULL WHERE task_id = @taskId;
+        UPDATE dbo.ParentMotivationMessages SET linked_task_id = NULL WHERE linked_task_id = @taskId;
+        DELETE FROM dbo.Tasks WHERE id = @taskId;
+      END
+    `)
+
+    const deleteDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: homeworkId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const result = await deleteDb.query(`
+      DELETE FROM dbo.Homeworks WHERE id = @id AND student_id = @studentId;
+    `)
+
+    if (!result.rowsAffected[0]) {
+      return json(404, { error: 'Ödev bulunamadı.' })
+    }
+
+    return json(200, { success: true })
+  } catch (error) {
+    return handleError(error, 'deleteTeacherHomeworkHandler', 'Ödev silinemedi.')
+  }
+}
+
 async function listTeacherStudentTasksHandler(request) {
   try {
     const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
@@ -2487,7 +2909,7 @@ async function getTeacherStudentProgressOverviewHandler(request) {
                    t.target_page_count, t.completed_page_count, t.status, t.completed_at,
                    t.correct_count, t.wrong_count, t.blank_count, t.resource_book_id,
                    t.selected_test_ids_json, t.test_results_json, rb.name AS resource_book_name,
-                   rb.resource_type, rb.image_url, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
+                   rb.resource_type, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
                    s.name AS resource_subject_name, t.created_at, t.updated_at
             FROM dbo.Tasks t
             LEFT JOIN dbo.ResourceBooks rb ON rb.id = t.resource_book_id
@@ -2510,7 +2932,7 @@ async function getTeacherStudentProgressOverviewHandler(request) {
                    t.title AS task_title, t.task_type, t.homework_id, t.duration_minutes AS task_duration_minutes,
                    t.subject, t.topic, t.resource_book_id,
                    t.selected_test_ids_json, t.test_results_json, rb.name AS resource_book_name,
-                   rb.resource_type, rb.image_url, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
+                   rb.resource_type, p.name AS publisher_name, rb.subject_id AS resource_subject_id,
                    s.name AS resource_subject_name
             FROM dbo.StudySessions ss
             LEFT JOIN dbo.Tasks t ON t.id = ss.task_id
@@ -2531,7 +2953,7 @@ async function getTeacherStudentProgressOverviewHandler(request) {
         withRequest(bindings).then((requestDb) =>
           requestDb.query(`
             SELECT h.id, h.subject_id, s.name AS subject_name, h.resource_book_id,
-                   rb.name AS resource_book_name, rb.resource_type, rb.image_url, p.name AS publisher_name,
+                   rb.name AS resource_book_name, rb.resource_type, p.name AS publisher_name,
                    h.title, h.description, h.assigned_date, h.due_date,
                    h.total_question_count, h.completed_question_count, h.total_page_count,
                    h.status, h.created_at, h.updated_at
@@ -2560,7 +2982,7 @@ async function getTeacherStudentProgressOverviewHandler(request) {
           requestDb.query(`
             SELECT smtc.test_id, smtc.correct_count, smtc.wrong_count, smtc.blank_count, smtc.marked_at,
                    tt.name AS test_name, COALESCE(tt.topic_name, rbt.name) AS topic_name, tt.question_count,
-                   rb.id AS resource_book_id, rb.name AS resource_book_name, rb.resource_type, rb.image_url,
+                   rb.id AS resource_book_id, rb.name AS resource_book_name, rb.resource_type,
                    p.name AS publisher_name, rb.subject_id, s.name AS subject_name
             FROM dbo.StudentManualTestCompletions smtc
             INNER JOIN dbo.ResourceBookTopicTests tt ON tt.id = smtc.test_id
@@ -2576,6 +2998,13 @@ async function getTeacherStudentProgressOverviewHandler(request) {
         ),
       ])
 
+    const resourceBookImages = await fetchResourceBookImagesByIds([
+      ...tasksResult.recordset.map((r) => r.resource_book_id),
+      ...sessionsResult.recordset.map((r) => r.resource_book_id),
+      ...homeworksResult.recordset.map((r) => r.resource_book_id),
+      ...manualTestCompletionsResult.recordset.map((r) => r.resource_book_id),
+    ])
+
     return json(200, {
       resourceBooks: resourceBooksResult.recordset.map(sanitizeProgressResourceBook),
       tests: testsResult.recordset.map(sanitizeProgressTest),
@@ -2584,6 +3013,7 @@ async function getTeacherStudentProgressOverviewHandler(request) {
       homeworks: homeworksResult.recordset.map(sanitizeProgressHomework),
       wrongQuestions: wrongQuestionsResult.recordset.map(sanitizeWrongQuestion),
       manualTestCompletions: manualTestCompletionsResult.recordset.map(sanitizeManualTestCompletion),
+      resourceBookImages: Object.fromEntries(resourceBookImages),
     })
   } catch (error) {
     return handleError(error, 'getTeacherStudentProgressOverviewHandler', 'Gelişim verileri yüklenemedi.')
@@ -2620,27 +3050,35 @@ async function listTeacherStudentWrongQuestionsHandler(request) {
     // sonradan yeniden düzenlenmişse (testler farklı bir üniteye taşınmışsa) test_id üzerinden
     // katalogdaki güncel konu/kitap/yayın evi adına öncelik veriyoruz, tablodaki bayat metin
     // sadece test_id'siz eski manuel kayıtlar için geri düşüş.
-    const result = await requestDb.query(`
-      SELECT wq.id, wq.student_id, wq.task_id, wq.test_id, wq.subject, wq.test_name,
-             wq.question_number, wq.error_type, wq.student_note, wq.mistake_reason,
-             wq.review_status, wq.resolved_at,
-             CAST(1 AS bit) AS has_photo, wq.created_at,
-             COALESCE(tp.name, wq.topic) AS topic,
-             COALESCE(rb.name, wq.book_name) AS book_name,
-             COALESCE(pub.name, wq.publisher_name) AS publisher_name,
-             rb.image_url AS book_image_url,
-             t.topic_name, t.page_start, t.page_end
-      FROM dbo.WrongQuestions wq
-      LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
-      LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
-      LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
-      LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
-      WHERE wq.student_id = @studentId AND wq.subject = @subject AND wq.test_id IS NOT NULL
-      ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''}
-      ORDER BY wq.created_at DESC;
-    `)
+    // rb.image_url'i (kapak fotoğrafı, ~140KB base64) burada her satırda tekrar seçmek yerine
+    // fetchWrongQuestionBookImagesByName ile bir kez çekip book_name üzerinden eşliyoruz —
+    // bkz. progress.js'deki aynı fonksiyonun yorumu.
+    const [result, bookImageByName] = await Promise.all([
+      requestDb.query(`
+        SELECT wq.id, wq.student_id, wq.task_id, wq.test_id, wq.subject, wq.test_name,
+               wq.question_number, wq.error_type, wq.student_note, wq.mistake_reason,
+               wq.review_status, wq.resolved_at,
+               CAST(1 AS bit) AS has_photo, wq.created_at,
+               COALESCE(tp.name, wq.topic) AS topic,
+               COALESCE(rb.name, wq.book_name) AS book_name,
+               COALESCE(pub.name, wq.publisher_name) AS publisher_name,
+               t.topic_name, t.page_start, t.page_end
+        FROM dbo.WrongQuestions wq
+        LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
+        LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
+        LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
+        LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
+        WHERE wq.student_id = @studentId AND wq.subject = @subject AND wq.test_id IS NOT NULL
+        ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''}
+        ORDER BY wq.created_at DESC;
+      `),
+      fetchWrongQuestionBookImagesByName(studentId, { resourceBookId }),
+    ])
 
-    return json(200, { wrongQuestions: result.recordset.map(sanitizeWrongQuestion) })
+    return json(200, {
+      wrongQuestions: result.recordset.map(sanitizeWrongQuestion),
+      bookImages: Object.fromEntries(bookImageByName),
+    })
   } catch (error) {
     return handleError(error, 'listTeacherStudentWrongQuestionsHandler', 'Yanlış sorular yüklenemedi.')
   }
@@ -2751,6 +3189,9 @@ async function updateTeacherStudentWrongQuestionHandler(request) {
 module.exports = {
   listTeacherStudentsHandler,
   getTeacherStudentHandler,
+  getTeacherStudentProfileHandler,
+  updateTeacherStudentProfileHandler,
+  listTeacherStudentPrivateResourceBooksHandler,
   updateTeacherStudentStatusHandler,
   updateTeacherStudentGradeHandler,
   deleteTeacherStudentHandler,
@@ -2776,11 +3217,15 @@ module.exports = {
   addLibraryResourceBookTopicsForTeacherHandler,
   extractLibraryTocForTeacherHandler,
   extractLibraryCoverForTeacherHandler,
+  extractLibraryAnswerKeyForTeacherHandler,
+  getLibraryExtractionJobForTeacherHandler,
   listAssignableStudentsForLibraryResourceHandler,
   assignLibraryResourceBookHandler,
   listTeacherStudentHomeworksHandler,
   createTeacherHomeworkHandler,
   assignTeacherHomeworkTaskHandler,
+  updateTeacherHomeworkHandler,
+  deleteTeacherHomeworkHandler,
   listTeacherStudentTasksHandler,
   getTeacherTaskAnswerSheetHandler,
   getTeacherStudentProgressOverviewHandler,
@@ -2790,6 +3235,7 @@ module.exports = {
   updateTeacherStudentWrongQuestionHandler,
   grantParentAccessHandler,
   getTeacherEntitlementHandler,
+  updateTeacherProfileHandler,
   createTeacherStudentHandler,
   listTeacherLibraryGradesHandler,
   addTeacherLibraryGradeHandler,

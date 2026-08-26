@@ -16,10 +16,10 @@ export async function getMessages() {
 }
 
 /** @returns {Promise<ParentMessage>} */
-export async function sendMessage({ from, text }) {
+export async function sendMessage({ from, text, studentId }) {
   const data = await authRequest('/api/panel/messages', {
     method: 'POST',
-    body: JSON.stringify({ from, text }),
+    body: JSON.stringify({ from, text, studentId }),
   })
   return data.message
 }

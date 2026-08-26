@@ -1,10 +1,12 @@
 import { Capacitor } from '@capacitor/core'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 
 export default function PaywallPage() {
   const { authUser, logout } = useAuth()
   const isNative = Capacitor.isNativePlatform()
   const status = authUser?.entitlement?.status || 'none'
+  const canPayOnWeb = !isNative && authUser?.role === 'ebeveyn'
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-panel-bg px-6 text-center text-panel-text">
@@ -18,19 +20,28 @@ export default function PaywallPage() {
         <p className="max-w-md text-sm text-panel-text-muted">
           Abonelik satın alma yakında burada açılacak.
         </p>
-      ) : (
+      ) : !canPayOnWeb ? (
         <p className="max-w-md text-sm text-panel-text-muted">
           Abonelik satın almak için techcoach mobil uygulamasını indirin.
         </p>
-      )}
+      ) : null}
       <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="rounded-md bg-panel-blue px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-        >
-          Tekrar Dene
-        </button>
+        {canPayOnWeb ? (
+          <Link
+            to="/odeme"
+            className="rounded-md bg-panel-blue px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+          >
+            Paketi Seç ve Öde
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-md bg-panel-blue px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+          >
+            Tekrar Dene
+          </button>
+        )}
         <button
           type="button"
           onClick={logout}

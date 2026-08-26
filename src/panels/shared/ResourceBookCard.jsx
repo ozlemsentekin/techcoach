@@ -1,4 +1,4 @@
-import { BookOpen, CheckCircle2, Target } from 'lucide-react'
+import { BookOpen, CheckCircle2, Target, X } from 'lucide-react'
 import { cn } from '../ui/utils'
 import { RATE_TONES, completionRateTone, successRateTone } from './rateTones'
 
@@ -23,14 +23,24 @@ export function ResourceBookAvatar({ book, size = 'md', onClick }) {
     )
     if (!onClick) return image
     return (
-      <button
-        type="button"
-        onClick={onClick}
-        className="shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-student-theme-primary"
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={(event) => {
+          event.stopPropagation()
+          onClick(event)
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          event.stopPropagation()
+          onClick(event)
+        }}
+        className="shrink-0 cursor-pointer rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-student-theme-primary"
         aria-label={`${book.name} görselini büyüt`}
       >
         {image}
-      </button>
+      </span>
     )
   }
 
@@ -43,9 +53,9 @@ export function ResourceBookAvatar({ book, size = 'md', onClick }) {
   )
 }
 
-export function ResourceBookCover({ book }) {
+export function ResourceBookCover({ book, onClick }) {
   if (book?.imageUrl) {
-    return (
+    const image = (
       <img
         src={book.imageUrl}
         alt={`${book.name} görseli`}
@@ -54,12 +64,64 @@ export function ResourceBookCover({ book }) {
         className="aspect-[3/4] w-full rounded-lg border border-panel-border object-cover"
       />
     )
+
+    if (!onClick) return image
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={(event) => {
+          event.stopPropagation()
+          onClick(event)
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          event.stopPropagation()
+          onClick(event)
+        }}
+        className="block cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-student-theme-primary"
+        aria-label={`${book.name} görselini büyüt`}
+      >
+        {image}
+      </span>
+    )
   }
 
   return (
     <span className="flex aspect-[3/4] w-full items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
       <BookOpen size={28} aria-hidden="true" />
     </span>
+  )
+}
+
+export function ImagePreviewLightbox({ preview, onClose }) {
+  if (!preview) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        aria-label="Kapat"
+        onClick={onClose}
+        className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+      >
+        <X size={20} aria-hidden="true" />
+      </button>
+      <img
+        loading="lazy"
+        decoding="async"
+        src={preview.url}
+        alt={`${preview.name} görseli`}
+        className="max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      />
+    </div>
   )
 }
 

@@ -3,15 +3,16 @@ import { useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
   BookOpen,
+  CalendarClock,
   CalendarDays,
   GraduationCap,
+  IdCard,
   Phone,
   Plus,
   Power,
   School,
   Trash2,
   TrendingUp,
-  UserRound,
   Users,
 } from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
@@ -23,6 +24,7 @@ import ActionsMenu from '../../ui/ActionsMenu'
 import Button from '../../ui/Button'
 import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
 import AddTeacherStudentModal from '../components/AddTeacherStudentModal'
+import TeacherStudentProfileModal from '../components/TeacherStudentProfileModal'
 import {
   deleteTeacherStudent,
   getTeacherEntitlement,
@@ -135,6 +137,7 @@ export default function StudentsPage() {
   const [statusFilter, setStatusFilter] = useState('active')
   const [error, setError] = useState('')
   const [libraryStudent, setLibraryStudent] = useState(null)
+  const [profileStudent, setProfileStudent] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [deleteStudent, setDeleteStudent] = useState(null)
   const [actionStudentId, setActionStudentId] = useState(null)
@@ -365,7 +368,7 @@ export default function StudentsPage() {
                     <MissingGradeFix student={student} onSaved={handleGradeSaved} />
                   ) : null}
                   {lesson ? (
-                    <p className="inline-flex items-center gap-1.5">
+                    <p className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-panel-blue-soft px-2 py-1 text-xs font-bold text-panel-blue">
                       <CalendarDays size={14} className="shrink-0" aria-hidden="true" />
                       <span className="truncate">{lesson}</span>
                     </p>
@@ -376,7 +379,18 @@ export default function StudentsPage() {
                   </p>
                 </div>
 
-                <div className="flex flex-col gap-1.5" onClick={(event) => event.stopPropagation()}>
+                <div className="mt-auto flex flex-col gap-1.5" onClick={(event) => event.stopPropagation()}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setProfileStudent(student)}
+                    disabled={!student.isActive || isBusy}
+                    className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+                  >
+                    <IdCard size={16} className="shrink-0" aria-hidden="true" />
+                    Profil Kartı
+                  </Button>
                   <Button
                     type="button"
                     variant="secondary"
@@ -385,8 +399,8 @@ export default function StudentsPage() {
                     disabled={!student.isActive || isBusy}
                     className="h-auto w-full justify-start gap-2.5 px-3 py-2"
                   >
-                    <UserRound size={16} className="shrink-0" aria-hidden="true" />
-                    Detay
+                    <CalendarClock size={16} className="shrink-0" aria-hidden="true" />
+                    Çalışma Takvimi
                   </Button>
                   <Button
                     type="button"
@@ -436,7 +450,27 @@ export default function StudentsPage() {
       ) : null}
 
       {libraryStudent ? (
-        <StudentResourceLibraryModal student={libraryStudent} onClose={() => setLibraryStudent(null)} />
+        <StudentResourceLibraryModal
+          student={libraryStudent}
+          onClose={() => setLibraryStudent(null)}
+          onAssigned={() => {
+            getTeacherStudents(statusFilter)
+              .then(setStudents)
+              .catch((err) => setError(err.message))
+          }}
+        />
+      ) : null}
+
+      {profileStudent ? (
+        <TeacherStudentProfileModal
+          student={profileStudent}
+          onClose={() => setProfileStudent(null)}
+          onAssigned={() => {
+            getTeacherStudents(statusFilter)
+              .then(setStudents)
+              .catch((err) => setError(err.message))
+          }}
+        />
       ) : null}
 
       {showAddModal ? (

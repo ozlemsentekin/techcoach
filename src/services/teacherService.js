@@ -13,6 +13,26 @@ export async function getTeacherStudent(studentTeacherId) {
   return data.student
 }
 
+/**
+ * Öğrencinin profilini döner. `canEditBasics` true ise (öğrenci bizzat bu öğretmen tarafından
+ * eklenmişse) Temel Bilgiler alanları updateTeacherStudentProfile ile düzenlenebilir; aksi halde
+ * bu bilgiler veli tarafından doldurulur ve öğretmen panelinden salt okunurdur.
+ * @returns {Promise<{profile: Object|null, canEditBasics: boolean}>}
+ */
+export async function getTeacherStudentProfile(studentTeacherId) {
+  return authRequest(`/api/panel-teacher/students/${studentTeacherId}/profile`, { method: 'GET' })
+}
+
+/** Öğretmenin bizzat eklediği bir öğrencinin Temel Bilgiler alanlarını günceller. */
+export async function updateTeacherStudentProfile(studentTeacherId, { firstName, lastName, grade, birthDate, gender, phone }) {
+  const result = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/profile`, {
+    method: 'PUT',
+    body: JSON.stringify({ firstName, lastName, grade, birthDate: birthDate || null, gender: gender || null, phone: phone || null }),
+  })
+  invalidateCache('/api/panel-teacher/students')
+  return result
+}
+
 /** @returns {Promise<Array>} */
 export async function getTeacherParents() {
   const data = await authRequest('/api/panel-teacher/parents', { method: 'GET' })
@@ -28,6 +48,15 @@ export async function grantParentAccess(parentId) {
 export async function getTeacherEntitlement() {
   const data = await authRequest('/api/panel-teacher/entitlement', { method: 'GET' })
   return data.entitlement
+}
+
+/** Öğretmenin branşlarını (ders id listesi) günceller. @returns {Promise<Array>} güncel teacherSubjectIds */
+export async function updateTeacherSubjects(subjectIds) {
+  const data = await authRequest('/api/panel-teacher/profile', {
+    method: 'PATCH',
+    body: JSON.stringify({ subjectIds }),
+  })
+  return data.teacherSubjectIds
 }
 
 /** Öğretmenin kendi panel kotasından doğrudan bir öğrenci eklemesini sağlar. */
@@ -160,6 +189,18 @@ export async function getTeacherResourceBooks(studentTeacherId) {
   return data.resourceBooks
 }
 
+/** Öğretmenin bu öğrenciyle paylaştığı derse ait "özel" kaynakları listeler (Profil Kartı > Özel Kaynaklar). */
+export async function getTeacherStudentPrivateResourceBooks(studentTeacherId) {
+  return authRequest(`/api/panel-teacher/students/${studentTeacherId}/private-resource-books`, { method: 'GET' })
+}
+
+/** Bir kaynağı öğrenciye atar (idempotent). */
+export async function assignTeacherLibraryResourceBook(studentTeacherId, resourceBookId) {
+  return authRequest(`/api/panel-teacher/students/${studentTeacherId}/library/resource-books/${resourceBookId}`, {
+    method: 'POST',
+  })
+}
+
 /** @returns {Promise<Array>} */
 export async function getTeacherResourceBookTopics(studentTeacherId, resourceBookId) {
   const data = await authRequest(
@@ -220,6 +261,19 @@ export async function assignTeacherHomeworkTask(studentTeacherId, homeworkId, { 
   return data.homework
 }
 
+/** @returns {Promise<Object>} */
+export async function updateTeacherHomework(studentTeacherId, homeworkId, updates) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/homeworks/${homeworkId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  })
+  return data.homework
+}
+
+export async function deleteTeacherHomework(studentTeacherId, homeworkId) {
+  await authRequest(`/api/panel-teacher/students/${studentTeacherId}/homeworks/${homeworkId}`, { method: 'DELETE' })
+}
+
 /** @returns {Promise<Array>} */
 export async function getTeacherStudentTasksForDate(studentTeacherId, date) {
   const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/tasks?date=${date}`, {
@@ -240,13 +294,13 @@ export async function getTeacherStudentProgressOverview(studentTeacherId) {
   return authRequest(`/api/panel-teacher/students/${studentTeacherId}/progress-overview`, { method: 'GET' })
 }
 
-/** @returns {Promise<import('./wrongQuestionService').WrongQuestion[]>} */
+/** @returns {Promise<import('./wrongQuestionService').WrongQuestionsResponse>} */
 export async function getTeacherStudentWrongQuestions(studentTeacherId, resourceBookId) {
   const query = resourceBookId ? `?resourceBookId=${resourceBookId}` : ''
   const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/wrong-questions${query}`, {
     method: 'GET',
   })
-  return data.wrongQuestions
+  return { wrongQuestions: data.wrongQuestions || [], bookImages: data.bookImages || {} }
 }
 
 /** @returns {Promise<import('./wrongQuestionService').WrongQuestionTopicStatsResponse>} */

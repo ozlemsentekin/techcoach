@@ -22,6 +22,8 @@ const {
   addLibraryResourceBookTopicsForParentHandler,
   extractLibraryTocForParentHandler,
   extractLibraryCoverForParentHandler,
+  extractLibraryAnswerKeyForParentHandler,
+  getLibraryExtractionJobForParentHandler,
   listAssignableStudentsForLibraryResourceHandler,
   assignLibraryResourceBookHandler,
   unassignLibraryResourceBookHandler,
@@ -43,6 +45,9 @@ const {
 const {
   listTeacherStudentsHandler,
   getTeacherStudentHandler,
+  getTeacherStudentProfileHandler,
+  updateTeacherStudentProfileHandler,
+  listTeacherStudentPrivateResourceBooksHandler,
   updateTeacherStudentStatusHandler,
   updateTeacherStudentGradeHandler,
   deleteTeacherStudentHandler,
@@ -68,11 +73,15 @@ const {
   addLibraryResourceBookTopicsForTeacherHandler,
   extractLibraryTocForTeacherHandler,
   extractLibraryCoverForTeacherHandler,
+  extractLibraryAnswerKeyForTeacherHandler,
+  getLibraryExtractionJobForTeacherHandler,
   listAssignableStudentsForLibraryResourceHandler: listAssignableStudentsForTeacherLibraryResourceHandler,
   assignLibraryResourceBookHandler: assignTeacherLibraryResourceBookHandler,
   listTeacherStudentHomeworksHandler,
   createTeacherHomeworkHandler,
   assignTeacherHomeworkTaskHandler,
+  updateTeacherHomeworkHandler,
+  deleteTeacherHomeworkHandler,
   listTeacherStudentTasksHandler,
   getTeacherTaskAnswerSheetHandler,
   getTeacherStudentProgressOverviewHandler,
@@ -82,6 +91,7 @@ const {
   updateTeacherStudentWrongQuestionHandler,
   grantParentAccessHandler,
   getTeacherEntitlementHandler,
+  updateTeacherProfileHandler,
   createTeacherStudentHandler,
   listTeacherLibraryGradesHandler,
   addTeacherLibraryGradeHandler,
@@ -179,6 +189,11 @@ const {
 } = require('./motivation')
 const { revenuecatWebhookHandler } = require('./entitlements')
 const {
+  initiateIyzicoCheckoutHandler,
+  iyzicoCheckoutCallbackHandler,
+  iyzicoWebhookHandler,
+} = require('./payments')
+const {
   listMotivationMessagesHandler,
   createMotivationMessageHandler,
   updateMotivationMessageHandler,
@@ -244,6 +259,27 @@ app.http('billing-revenuecat-webhook', {
   methods: ['POST'],
   route: 'billing/revenuecat-webhook',
   handler: revenuecatWebhookHandler,
+})
+
+app.http('parent-payments-iyzico-checkout-initialize', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'parent/payments/iyzico/checkout-initialize',
+  handler: initiateIyzicoCheckoutHandler,
+})
+
+app.http('payments-iyzico-callback', {
+  authLevel: 'anonymous',
+  methods: ['GET', 'POST'],
+  route: 'payments/iyzico/callback',
+  handler: iyzicoCheckoutCallbackHandler,
+})
+
+app.http('payments-iyzico-webhook', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'payments/iyzico/webhook',
+  handler: iyzicoWebhookHandler,
 })
 
 app.http('panel-admin-users', {
@@ -351,6 +387,20 @@ app.http('parent-library-resource-books-extract-cover', {
   handler: extractLibraryCoverForParentHandler,
 })
 
+app.http('parent-library-resource-books-extract-answer-key', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'parent/library/resource-books/extract-answer-key',
+  handler: extractLibraryAnswerKeyForParentHandler,
+})
+
+app.http('parent-library-extraction-job-detail', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'parent/library/resource-books/extraction-jobs/{jobId}',
+  handler: getLibraryExtractionJobForParentHandler,
+})
+
 app.http('parent-library-resource-book-detail', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -456,6 +506,27 @@ app.http('panel-teacher-student-get', {
   handler: getTeacherStudentHandler,
 })
 
+app.http('panel-teacher-student-profile-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/profile',
+  handler: getTeacherStudentProfileHandler,
+})
+
+app.http('panel-teacher-student-profile-update', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel-teacher/students/{studentTeacherId}/profile',
+  handler: updateTeacherStudentProfileHandler,
+})
+
+app.http('panel-teacher-student-private-resource-books-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/private-resource-books',
+  handler: listTeacherStudentPrivateResourceBooksHandler,
+})
+
 app.http('panel-teacher-student-status-update', {
   authLevel: 'anonymous',
   methods: ['PATCH'],
@@ -489,6 +560,13 @@ app.http('panel-teacher-entitlement', {
   methods: ['GET'],
   route: 'panel-teacher/entitlement',
   handler: getTeacherEntitlementHandler,
+})
+
+app.http('panel-teacher-profile-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-teacher/profile',
+  handler: updateTeacherProfileHandler,
 })
 
 app.http('panel-teacher-library-grades-list', {
@@ -652,6 +730,20 @@ app.http('panel-teacher-library-resource-books-extract-cover', {
   handler: extractLibraryCoverForTeacherHandler,
 })
 
+app.http('panel-teacher-library-resource-books-extract-answer-key', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/library/resource-books/extract-answer-key',
+  handler: extractLibraryAnswerKeyForTeacherHandler,
+})
+
+app.http('panel-teacher-library-extraction-job-detail', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/library/resource-books/extraction-jobs/{jobId}',
+  handler: getLibraryExtractionJobForTeacherHandler,
+})
+
 app.http('panel-teacher-library-resource-book-detail', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -706,6 +798,20 @@ app.http('panel-teacher-homeworks-assign-task', {
   methods: ['PUT'],
   route: 'panel-teacher/students/{studentTeacherId}/homeworks/{homeworkId}/task',
   handler: assignTeacherHomeworkTaskHandler,
+})
+
+app.http('panel-teacher-homeworks-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-teacher/students/{studentTeacherId}/homeworks/{homeworkId}',
+  handler: updateTeacherHomeworkHandler,
+})
+
+app.http('panel-teacher-homeworks-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-teacher/students/{studentTeacherId}/homeworks/{homeworkId}',
+  handler: deleteTeacherHomeworkHandler,
 })
 
 app.http('panel-teacher-tasks-list', {

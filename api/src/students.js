@@ -27,6 +27,8 @@ const {
 } = require('./catalog')
 const { extractLibraryTocFromImages } = require('./libraryTocExtraction')
 const { extractLibraryCoverInfo } = require('./libraryCoverExtraction')
+const { extractLibraryAnswerKeyFromImages } = require('./libraryAnswerKeyExtraction')
+const { createExtractionJob, getExtractionJob, runExtractionJobInBackground } = require('./libraryExtractionJobs')
 
 const TEACHER_TYPES = new Set(['ozel_ogretmen', 'okul_ogretmeni'])
 const TEACHER_TYPE_LABELS = {
@@ -299,7 +301,7 @@ async function requireParentSession(request) {
     id: { type: sql.UniqueIdentifier, value: session.sub },
   })
   const result = await requestDb.query(`
-    SELECT TOP 1 role, aydinlatma_accepted_at, kvkk_accepted_at FROM dbo.Users WHERE id = @id;
+    SELECT TOP 1 role, aydinlatma_accepted_at, kvkk_accepted_at, is_admin FROM dbo.Users WHERE id = @id;
   `)
   const record = result.recordset[0]
 
@@ -320,7 +322,7 @@ async function requireParentSession(request) {
     }
   }
 
-  return { parentId: session.sub }
+  return { parentId: session.sub, isAdmin: Boolean(record.is_admin) }
 }
 
 async function verifyParentOwnsStudent(parentId, studentId) {
@@ -961,7 +963,7 @@ async function updateStudentResourceBooksHandler(request) {
 
 async function listLibraryResourceBooksForParentHandler(request) {
   try {
-    const { error, parentId } = await requireParentSession(request)
+    const { error, parentId, isAdmin } = await requireParentSession(request)
     if (error) {
       return error
     }
@@ -987,6 +989,7 @@ async function listLibraryResourceBooksForParentHandler(request) {
       subjectId,
       actorUserId: parentId,
       source,
+      isAdmin,
       ...(limit ? { limit } : {}),
     })
     return json(200, { resourceBooks })
@@ -1038,13 +1041,13 @@ async function createLibraryResourceBookForParentHandler(request) {
 
 async function getLibraryResourceBookDetailForParentHandler(request) {
   try {
-    const { error, parentId } = await requireParentSession(request)
+    const { error, parentId, isAdmin } = await requireParentSession(request)
     if (error) {
       return error
     }
 
     const resourceBookId = request.params.resourceBookId
-    const detail = await fetchLibraryResourceBookDetail({ resourceBookId, actorUserId: parentId })
+    const detail = await fetchLibraryResourceBookDetail({ resourceBookId, actorUserId: parentId, isAdmin })
     if (!detail) {
       return json(404, { error: 'Kaynak bulunamadı.' })
     }
@@ -1066,7 +1069,7 @@ async function getLibraryResourceBookDetailForParentHandler(request) {
 
 async function deleteLibraryResourceBookForParentHandler(request) {
   try {
-    const { error, parentId } = await requireParentSession(request)
+    const { error, parentId, isAdmin } = await requireParentSession(request)
     if (error) {
       return error
     }
@@ -1076,6 +1079,7 @@ async function deleteLibraryResourceBookForParentHandler(request) {
       actorUserId: parentId,
       role: 'ebeveyn',
       resourceBookId,
+      isAdmin,
     })
     if (result.error) {
       return json(404, { error: result.error })
@@ -1132,18 +1136,25 @@ async function addLibraryResourceBookTopicsForParentHandler(request) {
 
 async function extractLibraryTocForParentHandler(request) {
   try {
-    const { error } = await requireParentSession(request)
+    const { error, parentId } = await requireParentSession(request)
     if (error) {
       return error
     }
 
     const payload = await request.json().catch(() => null)
-    const result = await extractLibraryTocFromImages(payload?.images)
-    if (result.error) {
-      return json(400, { error: result.error })
+    const images = payload?.images
+    if (!Array.isArray(images) || !images.length) {
+      return json(400, { error: 'En az bir içindekiler fotoğrafı yükleyin.' })
     }
 
-    return json(200, { topics: result.topics })
+    const jobId = await createExtractionJob({ jobType: 'toc', actorUserId: parentId })
+    runExtractionJobInBackground(jobId, async () => {
+      const result = await extractLibraryTocFromImages(images)
+      if (result.error) throw new Error(result.error)
+      return { topics: result.topics }
+    })
+
+    return json(202, { jobId })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
@@ -1160,18 +1171,25 @@ async function extractLibraryTocForParentHandler(request) {
 
 async function extractLibraryCoverForParentHandler(request) {
   try {
-    const { error } = await requireParentSession(request)
+    const { error, parentId } = await requireParentSession(request)
     if (error) {
       return error
     }
 
     const payload = await request.json().catch(() => null)
-    const result = await extractLibraryCoverInfo(payload?.image)
-    if (result.error) {
-      return json(400, { error: result.error })
+    const image = payload?.image
+    if (!image) {
+      return json(400, { error: 'Kapak fotoğrafı yükleyin.' })
     }
 
-    return json(200, result)
+    const jobId = await createExtractionJob({ jobType: 'cover', actorUserId: parentId })
+    runExtractionJobInBackground(jobId, async () => {
+      const result = await extractLibraryCoverInfo(image)
+      if (result.error) throw new Error(result.error)
+      return result
+    })
+
+    return json(202, { jobId })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
@@ -1183,6 +1201,74 @@ async function extractLibraryCoverForParentHandler(request) {
 
     console.error('extractLibraryCoverForParentHandler failed', error)
     return json(500, { error: 'Kapak okunamadı.' })
+  }
+}
+
+async function extractLibraryAnswerKeyForParentHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const payload = await request.json().catch(() => null)
+    const images = payload?.images
+    if (!Array.isArray(images) || !images.length) {
+      return json(400, { error: 'En az bir cevap anahtarı fotoğrafı yükleyin.' })
+    }
+
+    const jobId = await createExtractionJob({ jobType: 'answer_key', actorUserId: parentId })
+    runExtractionJobInBackground(jobId, async () => {
+      const result = await extractLibraryAnswerKeyFromImages(images)
+      if (result.error) throw new Error(result.error)
+      return { tests: result.tests }
+    })
+
+    return json(202, { jobId })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('extractLibraryAnswerKeyForParentHandler failed', error)
+    return json(500, { error: 'Cevap anahtarı okunamadı.' })
+  }
+}
+
+async function getLibraryExtractionJobForParentHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const jobId = request.params.jobId
+    const job = await getExtractionJob(jobId, parentId)
+    if (!job) {
+      return json(404, { error: 'İş bulunamadı.' })
+    }
+    if (job.status === 'pending') {
+      return json(200, { status: 'pending' })
+    }
+    if (job.status === 'error') {
+      return json(200, { status: 'error', error: job.error_message })
+    }
+    return json(200, { status: 'done', ...JSON.parse(job.result_json) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('getLibraryExtractionJobForParentHandler failed', error)
+    return json(500, { error: 'İş durumu okunamadı.' })
   }
 }
 
@@ -1884,6 +1970,8 @@ module.exports = {
   addLibraryResourceBookTopicsForParentHandler,
   extractLibraryTocForParentHandler,
   extractLibraryCoverForParentHandler,
+  extractLibraryAnswerKeyForParentHandler,
+  getLibraryExtractionJobForParentHandler,
   listAssignableStudentsForLibraryResourceHandler,
   assignLibraryResourceBookHandler,
   unassignLibraryResourceBookHandler,

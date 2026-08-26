@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, BookOpen, Plus, Sparkles, Trash2, UserPlus } from 'lucide-react'
+import { ArrowLeft, BookOpen, ChevronDown, ChevronRight, Plus, Sparkles, Trash2, UserPlus } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { useAuth } from '../../../context/useAuth'
 import PageHeader from '../../layout/PageHeader'
@@ -14,6 +14,7 @@ import AddLibraryResourceWizard from './AddLibraryResourceWizard'
 import ManualLibraryResourceModal from './ManualLibraryResourceModal'
 import LibraryResourceDetailModal from './LibraryResourceDetailModal'
 import ResourceSourceBadge from './ResourceSourceBadge'
+import { ImagePreviewLightbox } from '../ResourceBookCard'
 import { RESOURCE_SOURCE_LABELS } from './libraryConstants'
 
 const RESOURCE_BOOK_TYPE_LABELS = {
@@ -23,14 +24,36 @@ const RESOURCE_BOOK_TYPE_LABELS = {
   etkinlik: 'Etkinlik & Soru Bankası',
 }
 
-function ResourceAvatar({ book }) {
+function ResourceAvatar({ book, onClick }) {
   if (book.imageUrl) {
-    return (
+    const image = (
       <img loading="lazy" decoding="async"
         src={book.imageUrl}
         alt={`${book.name} görseli`}
         className="h-14 w-14 shrink-0 rounded-xl border border-panel-border object-cover"
       />
+    )
+
+    if (!onClick) return image
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={(event) => {
+          event.stopPropagation()
+          onClick(event)
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          event.stopPropagation()
+          onClick(event)
+        }}
+        className="shrink-0 cursor-pointer rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-panel-blue"
+        aria-label={`${book.name} görselini büyüt`}
+      >
+        {image}
+      </span>
     )
   }
 
@@ -78,6 +101,8 @@ export default function LibraryGradeDetailPage({ role }) {
   const [deletingBook, setDeletingBook] = useState(null)
   const [deletingError, setDeletingError] = useState('')
   const [deletingLoading, setDeletingLoading] = useState(false)
+  const [collapsedPublishers, setCollapsedPublishers] = useState(() => new Set())
+  const [previewImage, setPreviewImage] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -127,6 +152,31 @@ export default function LibraryGradeDetailPage({ role }) {
   }, [activeSubjectId, activeSource, grade])
 
   const activeSubject = visibleSubjects?.find((subject) => subject.id === activeSubjectId) || null
+
+  const publisherGroups = useMemo(() => {
+    if (!resourceBooks) return null
+    const groups = new Map()
+    resourceBooks.forEach((book) => {
+      const key = book.publisherName || 'Yayın evi yok'
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(book)
+    })
+    return Array.from(groups.entries())
+      .map(([publisherName, books]) => ({ publisherName, books }))
+      .sort((a, b) => a.publisherName.localeCompare(b.publisherName, 'tr'))
+  }, [resourceBooks])
+
+  const togglePublisher = (publisherName) => {
+    setCollapsedPublishers((current) => {
+      const next = new Set(current)
+      if (next.has(publisherName)) {
+        next.delete(publisherName)
+      } else {
+        next.add(publisherName)
+      }
+      return next
+    })
+  }
 
   const handleDeleteBook = async () => {
     if (!deletingBook) return
@@ -224,68 +274,102 @@ export default function LibraryGradeDetailPage({ role }) {
           description="Bu sınıf ve derse ait bir kaynak bulunmuyor. İsterseniz ilk kaynağı siz ekleyebilirsiniz."
         />
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {resourceBooks.map((book) => (
-            <div
-              key={book.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => setViewBookId(book.id)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  setViewBookId(book.id)
-                }
-              }}
-              className="flex min-h-[128px] cursor-pointer items-start gap-3 rounded-xl border border-panel-border bg-panel-surface p-3 transition-colors hover:border-panel-blue"
-            >
-              <ResourceAvatar book={book} />
-              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                <p className="line-clamp-2 text-sm font-bold leading-snug text-panel-text">{book.name}</p>
-                <p className="truncate text-xs text-panel-text-muted">{book.publisherName || 'Yayın evi yok'}</p>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="rounded-full bg-panel-surface-soft px-2 py-0.5 text-[11px] font-medium text-panel-text">
-                    {RESOURCE_BOOK_TYPE_LABELS[book.type] || book.type}
+        <div className="flex flex-col gap-3">
+          {publisherGroups.map(({ publisherName, books }) => {
+            const isCollapsed = collapsedPublishers.has(publisherName)
+            return (
+              <div key={publisherName} className="overflow-hidden rounded-xl border border-panel-border bg-panel-surface">
+                <button
+                  type="button"
+                  onClick={() => togglePublisher(publisherName)}
+                  className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-panel-surface-soft"
+                  aria-expanded={!isCollapsed}
+                >
+                  <span className="flex items-center gap-2 text-sm font-bold text-panel-text">
+                    {publisherName}
+                    <span className="rounded-full bg-panel-surface-soft px-2 py-0.5 text-[11px] font-medium text-panel-text-muted">
+                      {books.length}
+                    </span>
                   </span>
-                  <span className="rounded-full bg-panel-surface-soft px-2 py-0.5 text-[11px] font-medium text-panel-text-muted">
-                    {book.pageCount} sayfa
-                  </span>
-                  <ResourceSourceBadge source={book.resourceSource} />
-                  <StatusBadge status={book.status} />
-                </div>
-                {book.status === 'rejected' && book.rejectionReason ? (
-                  <p className="text-xs text-panel-warm">Gerekçe: {book.rejectionReason}</p>
-                ) : null}
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      setAssignBook(book)
-                    }}
-                    className="inline-flex w-fit items-center gap-1.5 rounded-full bg-panel-blue-soft px-2.5 py-1 text-xs font-semibold text-panel-blue hover:opacity-90"
-                  >
-                    <UserPlus size={12} aria-hidden="true" />
-                    Ata
-                  </button>
-                  {book.canDelete ? (
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        setDeletingError('')
-                        setDeletingBook(book)
-                      }}
-                      className="inline-flex w-fit items-center gap-1.5 rounded-full bg-panel-accent-soft px-2.5 py-1 text-xs font-semibold text-panel-warm hover:opacity-90"
-                    >
-                      <Trash2 size={12} aria-hidden="true" />
-                      Sil
-                    </button>
-                  ) : null}
-                </div>
+                  {isCollapsed ? (
+                    <ChevronRight size={16} className="shrink-0 text-panel-text-muted" aria-hidden="true" />
+                  ) : (
+                    <ChevronDown size={16} className="shrink-0 text-panel-text-muted" aria-hidden="true" />
+                  )}
+                </button>
+                {isCollapsed ? null : (
+                  <div className="grid grid-cols-1 gap-3 border-t border-panel-border p-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {books.map((book) => (
+                      <div
+                        key={book.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setViewBookId(book.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            setViewBookId(book.id)
+                          }
+                        }}
+                        className="flex min-h-[128px] cursor-pointer items-start gap-3 rounded-xl border border-panel-border bg-panel-surface p-3 transition-colors hover:border-panel-blue"
+                      >
+                        <ResourceAvatar
+                          book={book}
+                          onClick={
+                            book.imageUrl ? () => setPreviewImage({ url: book.imageUrl, name: book.name }) : undefined
+                          }
+                        />
+                        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                          <p className="line-clamp-2 text-sm font-bold leading-snug text-panel-text">{book.name}</p>
+                          <p className="truncate text-xs text-panel-text-muted">{book.publisherName || 'Yayın evi yok'}</p>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="rounded-full bg-panel-surface-soft px-2 py-0.5 text-[11px] font-medium text-panel-text">
+                              {RESOURCE_BOOK_TYPE_LABELS[book.type] || book.type}
+                            </span>
+                            <span className="rounded-full bg-panel-surface-soft px-2 py-0.5 text-[11px] font-medium text-panel-text-muted">
+                              {book.pageCount} sayfa
+                            </span>
+                            <ResourceSourceBadge source={book.resourceSource} />
+                            <StatusBadge status={book.status} />
+                          </div>
+                          {book.status === 'rejected' && book.rejectionReason ? (
+                            <p className="text-xs text-panel-warm">Gerekçe: {book.rejectionReason}</p>
+                          ) : null}
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setAssignBook(book)
+                              }}
+                              className="inline-flex w-fit items-center gap-1.5 rounded-full bg-panel-blue-soft px-2.5 py-1 text-xs font-semibold text-panel-blue hover:opacity-90"
+                            >
+                              <UserPlus size={12} aria-hidden="true" />
+                              Ata
+                            </button>
+                            {book.canDelete ? (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  setDeletingError('')
+                                  setDeletingBook(book)
+                                }}
+                                className="inline-flex w-fit items-center gap-1.5 rounded-full bg-panel-accent-soft px-2.5 py-1 text-xs font-semibold text-panel-warm hover:opacity-90"
+                              >
+                                <Trash2 size={12} aria-hidden="true" />
+                                Sil
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -352,6 +436,8 @@ export default function LibraryGradeDetailPage({ role }) {
           }}
         />
       ) : null}
+
+      <ImagePreviewLightbox preview={previewImage} onClose={() => setPreviewImage(null)} />
     </div>
   )
 }

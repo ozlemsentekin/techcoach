@@ -526,7 +526,9 @@ async function createResourceBookHandler(request) {
     const publishMonthYearResult = sanitizeResourceBookPublishMonthYear(payload?.publishMonthYear)
     const grade = payload?.grade || null
     const barcodeResult = sanitizeResourceBookBarcode(payload?.barcode, { required: false })
-    const resourceSource = payload?.resourceSource || 'okul'
+    // Kaynak türü (okul/özel) artık UI'da seçtirilmiyor — tüm yeni kaynaklar 'ozel' olarak eklenir.
+    // Kolon ileride tekrar kullanılabilir diye tabloda bırakıldı.
+    const resourceSource = 'ozel'
 
     if (!publisherId) {
       return json(400, { error: 'Yayın evi seçilmeli.' })
@@ -551,9 +553,6 @@ async function createResourceBookHandler(request) {
     }
     if (barcodeResult.error) {
       return json(400, { error: barcodeResult.error })
-    }
-    if (!RESOURCE_SOURCES.includes(resourceSource)) {
-      return json(400, { error: 'Kaynak türü (okul/özel) seçilmeli.' })
     }
 
     const requestDb = await withRequest({
@@ -612,7 +611,9 @@ async function updateResourceBookHandler(request) {
     const publishMonthYearResult = sanitizeResourceBookPublishMonthYear(payload?.publishMonthYear)
     const grade = payload?.grade || null
     const barcodeResult = sanitizeResourceBookBarcode(payload?.barcode, { required: false })
-    const resourceSource = payload?.resourceSource || 'okul'
+    // Kaynak türü (okul/özel) artık UI'da seçtirilmiyor — tüm kaynaklar 'ozel' olarak kalır.
+    // Kolon ileride tekrar kullanılabilir diye tabloda bırakıldı.
+    const resourceSource = 'ozel'
 
     if (!publisherId) {
       return json(400, { error: 'Yayın evi seçilmeli.' })
@@ -637,9 +638,6 @@ async function updateResourceBookHandler(request) {
     }
     if (barcodeResult.error) {
       return json(400, { error: barcodeResult.error })
-    }
-    if (!RESOURCE_SOURCES.includes(resourceSource)) {
-      return json(400, { error: 'Kaynak türü (okul/özel) seçilmeli.' })
     }
 
     const requestDb = await withRequest({
@@ -701,7 +699,7 @@ const LIBRARY_RESOURCE_BOOK_SELECT = `
  */
 // limit varsayılanı yüksek tutulur (200) ki bugünkü tam liste davranışı fiilen değişmesin —
 // sadece kaynak sayısı büyüdükçe listenin sınırsız büyümesine karşı bir güvenlik sınırı sağlar.
-async function fetchLibraryResourceBooks({ grade, subjectId, actorUserId, source, limit = 200 }) {
+async function fetchLibraryResourceBooks({ grade, subjectId, actorUserId, source, limit = 200, isAdmin = false }) {
   const requestDb = await withRequest({
     grade: { type: sql.NVarChar(20), value: grade },
     subjectId: { type: sql.UniqueIdentifier, value: subjectId },
@@ -718,7 +716,7 @@ async function fetchLibraryResourceBooks({ grade, subjectId, actorUserId, source
   `)
   return result.recordset.map((record) => ({
     ...sanitizeResourceBook(record),
-    canDelete: String(record.created_by_user_id).toLowerCase() === String(actorUserId).toLowerCase(),
+    canDelete: isAdmin || String(record.created_by_user_id).toLowerCase() === String(actorUserId).toLowerCase(),
   }))
 }
 
@@ -736,7 +734,7 @@ async function fetchResourceBookById(resourceBookId) {
  * yapısı (tamamlanma bilgisi olmadan — bu sadece bir öğrenciye özel değil, kaynağın genel
  * önizlemesi). Onay bekleyen/reddedilen bir kaynak sadece onu ekleyen kullanıcıya görünür.
  */
-async function fetchLibraryResourceBookDetail({ resourceBookId, actorUserId }) {
+async function fetchLibraryResourceBookDetail({ resourceBookId, actorUserId, isAdmin = false }) {
   const bookDb = await withRequest({
     id: { type: sql.UniqueIdentifier, value: resourceBookId },
     actorUserId: { type: sql.UniqueIdentifier, value: actorUserId },
@@ -785,7 +783,7 @@ async function fetchLibraryResourceBookDetail({ resourceBookId, actorUserId }) {
   return {
     resourceBook: {
       ...sanitizeResourceBook(bookRecord),
-      canDelete: String(bookRecord.created_by_user_id).toLowerCase() === String(actorUserId).toLowerCase(),
+      canDelete: isAdmin || String(bookRecord.created_by_user_id).toLowerCase() === String(actorUserId).toLowerCase(),
     },
     topics,
   }
@@ -793,10 +791,11 @@ async function fetchLibraryResourceBookDetail({ resourceBookId, actorUserId }) {
 
 /**
  * Kütüphaneye eklenen bir kaynağı, onu ekleyen kişi kaldırır (soft delete: is_active = 0).
- * Başkasının eklediği bir kaynak silinemez.
+ * Başkasının eklediği bir kaynak normalde silinemez — admin (is_admin) bu kısıtlamadan
+ * muaftır ve kim eklemiş olursa olsun herhangi bir kaynağı silebilir.
  */
-async function deleteLibraryResourceBookSubmission({ actorUserId, role, resourceBookId }) {
-  if (!LIBRARY_CREATOR_ROLES.has(role)) {
+async function deleteLibraryResourceBookSubmission({ actorUserId, role, resourceBookId, isAdmin = false }) {
+  if (!isAdmin && !LIBRARY_CREATOR_ROLES.has(role)) {
     return { error: 'Geçersiz rol.' }
   }
 
@@ -808,7 +807,7 @@ async function deleteLibraryResourceBookSubmission({ actorUserId, role, resource
     UPDATE dbo.ResourceBooks
     SET is_active = 0
     OUTPUT inserted.id
-    WHERE id = @id AND is_active = 1 AND created_by_user_id = @actorUserId;
+    WHERE id = @id AND is_active = 1 ${isAdmin ? '' : 'AND created_by_user_id = @actorUserId'};
   `)
 
   if (!result.recordset[0]) {
@@ -957,7 +956,9 @@ async function createLibraryResourceBookSubmission({ actorUserId, role, payload 
   const name = payload?.name?.trim()
   const grade = payload?.grade
   const subjectId = payload?.subjectId
-  const resourceSource = payload?.resourceSource
+  // Kaynak türü (okul/özel) artık UI'da seçtirilmiyor — veli/öğretmen gönderimleri her zaman
+  // 'ozel' olarak eklenir. Kolon ileride tekrar kullanılabilir diye tabloda bırakıldı.
+  const resourceSource = 'ozel'
   const resourceType = payload?.resourceType
   const imageResult = sanitizeResourceBookImageUrl(payload?.imageUrl)
   const publisherId = payload?.publisherId || null
@@ -973,9 +974,6 @@ async function createLibraryResourceBookSubmission({ actorUserId, role, payload 
   }
   if (!subjectId) {
     return { error: 'Ders seçilmeli.' }
-  }
-  if (!RESOURCE_SOURCES.includes(resourceSource)) {
-    return { error: 'Kaynak tipi (okul/özel) seçilmeli.' }
   }
   if (!LIBRARY_SUBMISSION_RESOURCE_TYPES.includes(resourceType)) {
     return { error: 'Kaynak türü (soru bankası/konu anlatımlı) seçilmeli.' }
@@ -2109,7 +2107,11 @@ async function createResourceBookTopicTestHandler(request) {
     const topicId = payload?.topicId
     const pageStart = Number(payload?.pageStart)
     const pageEnd = Number(payload?.pageEnd)
-    const questionCount = Number(payload?.questionCount)
+    const questionCountRaw = payload?.questionCount
+    const questionCount =
+      questionCountRaw === undefined || questionCountRaw === null || questionCountRaw === ''
+        ? null
+        : Number(questionCountRaw)
 
     if (!topicId) {
       return json(400, { error: 'İçerik seçilmeli.' })
@@ -2126,7 +2128,7 @@ async function createResourceBookTopicTestHandler(request) {
     if (!Number.isInteger(pageEnd) || pageEnd < pageStart) {
       return json(400, { error: 'Bitiş sayfası başlangıç sayfasından küçük olamaz.' })
     }
-    if (!Number.isInteger(questionCount) || questionCount <= 0) {
+    if (questionCount !== null && (!Number.isInteger(questionCount) || questionCount <= 0)) {
       return json(400, { error: 'Soru sayısı pozitif bir tam sayı olmalı.' })
     }
 
@@ -2180,7 +2182,14 @@ async function updateResourceBookTopicTestHandler(request) {
     const topicName = payload?.topicName?.trim()
     const pageStart = Number(payload?.pageStart)
     const pageEnd = Number(payload?.pageEnd)
-    const questionCount = Number(payload?.questionCount)
+    // Soru sayısı isteğe bağlı: alan hiç gönderilmezse (örn. konu/sayfa düzenlemesi) mevcut
+    // değer korunur; cevap anahtarı akışında ise ayrıca gönderilip güncellenir.
+    const hasQuestionCount = payload ? Object.prototype.hasOwnProperty.call(payload, 'questionCount') : false
+    const questionCountRaw = payload?.questionCount
+    const questionCount =
+      questionCountRaw === undefined || questionCountRaw === null || questionCountRaw === ''
+        ? null
+        : Number(questionCountRaw)
 
     if (!topicName || topicName.length < 2) {
       return json(400, { error: 'Konu adı en az 2 karakter olmalı.' })
@@ -2194,7 +2203,7 @@ async function updateResourceBookTopicTestHandler(request) {
     if (!Number.isInteger(pageEnd) || pageEnd < pageStart) {
       return json(400, { error: 'Bitiş sayfası başlangıç sayfasından küçük olamaz.' })
     }
-    if (!Number.isInteger(questionCount) || questionCount <= 0) {
+    if (hasQuestionCount && questionCount !== null && (!Number.isInteger(questionCount) || questionCount <= 0)) {
       return json(400, { error: 'Soru sayısı pozitif bir tam sayı olmalı.' })
     }
 
@@ -2207,12 +2216,14 @@ async function updateResourceBookTopicTestHandler(request) {
       pageStart: { type: sql.Int, value: pageStart },
       pageEnd: { type: sql.Int, value: pageEnd },
       pageCount: { type: sql.Int, value: pageCount },
+      hasQuestionCount: { type: sql.Bit, value: hasQuestionCount },
       questionCount: { type: sql.Int, value: questionCount },
     })
 
     const result = await requestDb.query(`
       UPDATE dbo.ResourceBookTopicTests
-      SET topic_name = @topicName, name = @name, page_start = @pageStart, page_end = @pageEnd, page_count = @pageCount, question_count = @questionCount
+      SET topic_name = @topicName, name = @name, page_start = @pageStart, page_end = @pageEnd, page_count = @pageCount,
+          question_count = CASE WHEN @hasQuestionCount = 1 THEN @questionCount ELSE question_count END
       OUTPUT inserted.id, inserted.topic_id, inserted.topic_name, inserted.name, inserted.page_start, inserted.page_end, inserted.page_count, inserted.question_count, inserted.created_at
       WHERE id = @id;
     `)
@@ -2253,6 +2264,7 @@ async function deleteResourceBookTopicTestHandler(request) {
     const result = await requestDb.query(`
       DELETE FROM dbo.QuestionOptions WHERE question_id IN (SELECT id FROM dbo.Questions WHERE test_id = @testId);
       DELETE FROM dbo.Questions WHERE test_id = @testId;
+      DELETE FROM dbo.TestAnswerKeys WHERE test_id = @testId;
       DELETE FROM dbo.ResourceBookTopicTests WHERE id = @testId;
     `)
 

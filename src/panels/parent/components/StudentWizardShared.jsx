@@ -20,7 +20,7 @@ export function WizardSteps({ step, steps, onStepClick }) {
         const isActive = item.key === step
         const isDone = item.key < step
         return (
-          <div key={item.key} className="flex shrink-0 items-center gap-2 sm:flex-1 sm:gap-3">
+          <div key={item.key} className="flex shrink-0 items-center gap-2 sm:min-w-0 sm:flex-1 sm:gap-3">
             <button
               type="button"
               disabled={!clickable}
@@ -39,7 +39,7 @@ export function WizardSteps({ step, steps, onStepClick }) {
               type="button"
               disabled={!clickable}
               onClick={() => onStepClick?.(item.key)}
-              className={`whitespace-nowrap text-left text-xs font-semibold sm:text-sm ${
+              className={`whitespace-nowrap text-left text-xs font-semibold sm:min-w-0 sm:whitespace-normal sm:text-sm ${
                 isActive ? 'text-panel-warm' : isDone ? 'text-panel-text' : 'text-panel-text-muted'
               } ${clickable ? 'cursor-pointer' : ''}`}
             >

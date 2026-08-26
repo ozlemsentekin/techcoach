@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Check, ChevronDown, ChevronRight, ImageOff, Pencil, X } from 'lucide-react'
+import { ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ImageOff, Pencil, Search, X } from 'lucide-react'
 import Badge from '../../ui/Badge'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
-import { ResourceBookCover, ResourceBookRates } from '../../shared/ResourceBookCard'
-import ResourceSourceBadge from '../../shared/library/ResourceSourceBadge'
+import EmptyState from '../../shared/EmptyState'
+import { ImagePreviewLightbox, ResourceBookAvatar, ResourceBookRates } from '../../shared/ResourceBookCard'
 import ManualOpticalAnswerModal from '../../shared/ManualOpticalAnswerModal'
+import { RESOURCE_TYPE_LABELS } from '../../shared/library/libraryConstants'
 import {
+  assignTeacherLibraryResourceBook,
   getTeacherResourceBooks,
   getTeacherResourceBookTopics,
+  getTeacherStudentPrivateResourceBooks,
   markTeacherResourceBookTopicTestCompletion,
   unmarkTeacherResourceBookTopicTestCompletion,
   submitTeacherManualOpticalAnswers,
@@ -121,7 +124,7 @@ function BookTopics({ studentTeacherId, book }) {
 
     getTeacherStudentWrongQuestions(studentTeacherId, book.id)
       .then((data) => {
-        if (!ignore) setWrongQuestions(data || [])
+        if (!ignore) setWrongQuestions(data?.wrongQuestions || [])
       })
       .catch(() => {
         // Sessizce yok say: uyarı ikonu gösterilmez ama liste yine çalışır.
@@ -496,10 +499,24 @@ function groupResourceBooksByPublisher(resourceBooks) {
     }))
 }
 
-export default function StudentResourceLibraryModal({ student, onClose }) {
+export default function StudentResourceLibraryModal({ student, onClose, onAssigned }) {
+  const [activeTab, setActiveTab] = useState('assigned')
   const [resourceBooks, setResourceBooks] = useState(null)
   const [error, setError] = useState('')
   const [selectedBook, setSelectedBook] = useState(null)
+  const [previewImage, setPreviewImage] = useState(null)
+
+  const [libraryBooks, setLibraryBooks] = useState(null)
+  const [libraryGradeMissing, setLibraryGradeMissing] = useState(false)
+  const [libraryError, setLibraryError] = useState('')
+  const [libraryQuery, setLibraryQuery] = useState('')
+  const [selectedLibraryIds, setSelectedLibraryIds] = useState(new Set())
+  const [assigning, setAssigning] = useState(false)
+
+  const loadAssignedBooks = () =>
+    getTeacherResourceBooks(student.studentTeacherId)
+      .then((data) => setResourceBooks(data))
+      .catch((err) => setError(err.message))
 
   useEffect(() => {
     let ignore = false
@@ -517,7 +534,67 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
     }
   }, [student.studentTeacherId])
 
+  const loadLibraryBooks = () => {
+    setLibraryError('')
+    return getTeacherStudentPrivateResourceBooks(student.studentTeacherId)
+      .then((data) => {
+        setLibraryBooks(data.resourceBooks)
+        setLibraryGradeMissing(Boolean(data.gradeMissing))
+      })
+      .catch((err) => setLibraryError(err.message))
+  }
+
+  useEffect(() => {
+    if (activeTab !== 'library' || libraryBooks !== null) return
+    loadLibraryBooks()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, student.studentTeacherId])
+
   const publisherGroups = useMemo(() => (resourceBooks ? groupResourceBooksByPublisher(resourceBooks) : []), [resourceBooks])
+
+  const filteredLibraryBooks = useMemo(() => {
+    const source = libraryBooks || []
+    const query = libraryQuery.trim().toLocaleLowerCase('tr-TR')
+    if (!query) return source
+    return source.filter((book) =>
+      [book.name, book.publisherName].filter(Boolean).some((value) => value.toLocaleLowerCase('tr-TR').includes(query)),
+    )
+  }, [libraryBooks, libraryQuery])
+
+  const libraryPublisherGroups = useMemo(
+    () => groupResourceBooksByPublisher(filteredLibraryBooks),
+    [filteredLibraryBooks],
+  )
+
+  const toggleLibrarySelection = (book) => {
+    if (book.assigned) return
+    setSelectedLibraryIds((current) => {
+      const next = new Set(current)
+      if (next.has(book.id)) next.delete(book.id)
+      else next.add(book.id)
+      return next
+    })
+  }
+
+  const handleAssignSelected = async () => {
+    if (!selectedLibraryIds.size) return
+    setAssigning(true)
+    setLibraryError('')
+    try {
+      await Promise.all(
+        [...selectedLibraryIds].map((resourceBookId) =>
+          assignTeacherLibraryResourceBook(student.studentTeacherId, resourceBookId),
+        ),
+      )
+      setSelectedLibraryIds(new Set())
+      await Promise.all([loadLibraryBooks(), loadAssignedBooks()])
+      onAssigned?.()
+    } catch (err) {
+      setLibraryError(err.message)
+    } finally {
+      setAssigning(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center overflow-hidden bg-black/40 sm:items-center sm:p-4">
@@ -553,9 +630,139 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
           </button>
         </div>
 
+        {selectedBook ? null : (
+          <div className="flex shrink-0 gap-1 border-b border-panel-border bg-panel-surface px-4 pt-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('assigned')}
+              className={`shrink-0 whitespace-nowrap border-b-2 px-3 pb-2.5 text-sm font-semibold transition-colors ${
+                activeTab === 'assigned'
+                  ? 'border-panel-blue text-panel-blue'
+                  : 'border-transparent text-panel-text-muted hover:text-panel-text'
+              }`}
+            >
+              Kaynaklarım
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('library')}
+              className={`shrink-0 whitespace-nowrap border-b-2 px-3 pb-2.5 text-sm font-semibold transition-colors ${
+                activeTab === 'library'
+                  ? 'border-panel-blue text-panel-blue'
+                  : 'border-transparent text-panel-text-muted hover:text-panel-text'
+              }`}
+            >
+              Kütüphane
+            </button>
+          </div>
+        )}
+
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-3">
           {selectedBook ? (
             <BookTopics key={selectedBook.id} studentTeacherId={student.studentTeacherId} book={selectedBook} />
+          ) : activeTab === 'library' ? (
+            <div className="flex min-w-0 flex-col gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="relative w-full sm:w-72">
+                  <Search
+                    size={14}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-panel-text-muted"
+                    aria-hidden="true"
+                  />
+                  <input
+                    value={libraryQuery}
+                    onChange={(event) => setLibraryQuery(event.target.value)}
+                    placeholder="Kaynak veya yayın evi ara..."
+                    className="w-full rounded-xl border border-panel-border bg-white py-2 pl-9 pr-3 text-sm text-panel-text focus:outline-none focus:ring-2 focus:ring-[#1c2b5e]/20"
+                  />
+                </div>
+                {selectedLibraryIds.size ? (
+                  <span className="rounded-full bg-[#fbe9d7] px-3 py-1 text-xs font-semibold text-[#c96a1f]">
+                    {selectedLibraryIds.size} kaynak seçili
+                  </span>
+                ) : null}
+              </div>
+
+              {libraryError ? (
+                <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{libraryError}</div>
+              ) : null}
+
+              {libraryBooks === null ? (
+                <LoadingState label="Kütüphane yükleniyor..." />
+              ) : libraryGradeMissing ? (
+                <EmptyState
+                  icon={BookOpen}
+                  title="Sınıf seçilmedi"
+                  description="Kütüphaneyi görüntülemek için önce Öğrencilerim listesinden bu öğrencinin sınıfını tanımlayın."
+                />
+              ) : libraryPublisherGroups.length === 0 ? (
+                <p className="p-2 text-sm text-panel-text-muted">
+                  {libraryQuery.trim() ? 'Aramayla eşleşen kaynak yok.' : 'Bu derse ait onaylı özel kaynak bulunamadı.'}
+                </p>
+              ) : (
+                <div className="flex min-w-0 flex-col gap-5">
+                  {libraryPublisherGroups.map((publisherGroup) => (
+                    <section key={publisherGroup.id} className="min-w-0">
+                      <div className="mb-2 flex min-w-0 items-center gap-2">
+                        <h3 className="truncate text-sm font-bold text-panel-text">{publisherGroup.name}</h3>
+                        <span className="shrink-0 rounded-full bg-panel-surface-soft px-2 py-0.5 text-[11px] font-semibold text-panel-text-muted">
+                          {publisherGroup.books.length} kaynak
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                        {publisherGroup.books.map((book) => {
+                          const selected = selectedLibraryIds.has(book.id)
+                          return (
+                            <button
+                              key={book.id}
+                              type="button"
+                              aria-pressed={book.assigned || selected}
+                              onClick={() => toggleLibrarySelection(book)}
+                              disabled={book.assigned}
+                              className={`flex min-h-[96px] min-w-0 items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
+                                book.assigned
+                                  ? 'cursor-default border-panel-blue bg-panel-blue-soft'
+                                  : selected
+                                    ? 'border-[#1c2b5e] bg-[#f8f7fb] shadow-[0_2px_10px_rgba(101,94,148,0.12)]'
+                                    : 'border-panel-border bg-white hover:border-[#c1c8e0] hover:bg-[#f7f8fc]'
+                              }`}
+                            >
+                              <ResourceBookAvatar book={book} size="row" />
+                              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                                <span className="flex items-start justify-between gap-2">
+                                  <span className="line-clamp-2 text-sm font-bold leading-snug text-panel-text">
+                                    {book.name}
+                                  </span>
+                                  <span
+                                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+                                      book.assigned || selected
+                                        ? 'border-[#1c2b5e] bg-[#1c2b5e] text-white'
+                                        : 'border-panel-border bg-white'
+                                    }`}
+                                  >
+                                    {book.assigned || selected ? <Check size={13} aria-hidden="true" /> : null}
+                                  </span>
+                                </span>
+                                <span className="flex flex-wrap items-center gap-1.5 pt-1">
+                                  <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#1c2b5e]">
+                                    {RESOURCE_TYPE_LABELS[book.type] || book.type}
+                                  </span>
+                                  {book.assigned ? (
+                                    <span className="rounded-full bg-panel-blue px-2 py-0.5 text-[11px] font-medium text-white">
+                                      Atandı
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : error ? (
             <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
           ) : resourceBooks === null ? (
@@ -572,26 +779,41 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
                       {publisherGroup.books.length} kaynak
                     </span>
                   </div>
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-3">
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                     {publisherGroup.books.map((book) => (
-                      <button
+                      <div
                         key={book.id}
-                        type="button"
+                        role="button"
+                        tabIndex={0}
                         onClick={() => setSelectedBook(book)}
-                        className="flex min-w-0 flex-col items-stretch gap-1.5 rounded-xl border border-panel-border p-2 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-panel-blue hover:shadow-panel-2"
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Enter' && event.key !== ' ') return
+                          event.preventDefault()
+                          setSelectedBook(book)
+                        }}
+                        className="group grid min-w-0 cursor-pointer grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-3 rounded-xl border border-panel-border bg-white p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-panel-blue hover:shadow-panel-2 sm:grid-cols-[4rem_minmax(0,1fr)]"
                       >
-                        <ResourceBookCover book={book} />
-                        <div className="flex min-w-0 flex-col gap-0.5">
-                          <div className="flex flex-wrap items-center gap-1">
-                            <ResourceSourceBadge source={book.resourceSource} />
-                          </div>
-                          <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-panel-text">{book.name}</p>
+                        <ResourceBookAvatar
+                          book={book}
+                          size="row"
+                          onClick={
+                            book.imageUrl ? () => setPreviewImage({ url: book.imageUrl, name: book.name }) : undefined
+                          }
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="line-clamp-2 text-sm font-semibold leading-snug text-panel-text group-hover:text-panel-blue">
+                            {book.name}
+                          </p>
                           {book.subjectName ? (
                             <p className="truncate text-[11px] text-panel-text-muted">{book.subjectName}</p>
                           ) : null}
+                          <ResourceBookRates
+                            completionRate={book.completionRate}
+                            successRate={book.successRate}
+                            className="grid-cols-2"
+                          />
                         </div>
-                        <ResourceBookRates completionRate={book.completionRate} successRate={book.successRate} />
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </section>
@@ -599,7 +821,21 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
             </div>
           )}
         </div>
+
+        {activeTab === 'library' && !selectedBook ? (
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-panel-border bg-panel-surface px-4 py-3">
+            <Button
+              type="button"
+              size="md"
+              onClick={handleAssignSelected}
+              disabled={assigning || selectedLibraryIds.size === 0}
+            >
+              {assigning ? 'Atanıyor...' : `Seçilenleri Ata (${selectedLibraryIds.size})`}
+            </Button>
+          </div>
+        ) : null}
       </div>
+      <ImagePreviewLightbox preview={previewImage} onClose={() => setPreviewImage(null)} />
     </div>
   )
 }

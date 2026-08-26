@@ -1019,24 +1019,33 @@ async function saveTaskAnswersHandler(request) {
     let totalBlank = 0
     let allGraded = true
 
-    for (const testId of selectedTestIds) {
-      const questionCount = questionCountByTestId.get(testId) || 0
-      const testAnswers = answers[testId] || {}
-      const answeredCount = Object.keys(testAnswers).length
+    // Her test kendi cevap anahtarını bağımsız sorguladığından (bkz. gradeTestAnswers), bir
+    // görevdeki testleri sırayla notlamak testler kadar ardışık DB round-trip'ine yol açıyordu.
+    // Testler birbirinden bağımsız olduğu için hepsini paralel çalıştırıp toplamları sonra çıkarıyoruz.
+    const gradedTests = await Promise.all(
+      selectedTestIds.map(async (testId) => {
+        const questionCount = questionCountByTestId.get(testId) || 0
+        const testAnswers = answers[testId] || {}
+        const answeredCount = Object.keys(testAnswers).length
+        const { result } = await gradeTestAnswers(testId, questionCount, testAnswers)
+        return { testId, questionCount, answeredCount, result }
+      }),
+    )
+
+    gradedTests.forEach(({ testId, questionCount, answeredCount, result }) => {
       totalCompleted += Math.min(answeredCount, questionCount)
 
-      const { result } = await gradeTestAnswers(testId, questionCount, testAnswers)
       if (result) {
         results[testId] = result
         totalCorrect += result.correct
         totalWrong += result.wrong
         totalBlank += result.blank
-        continue
+        return
       }
 
       delete results[testId]
       allGraded = false
-    }
+    })
 
     const nextStatus = allGraded ? 'tamamlandi' : totalCompleted > 0 ? 'devam-ediyor' : 'bekliyor'
 

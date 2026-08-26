@@ -3,6 +3,14 @@ const DEFAULT_CACHE_TTL_MS = 30000
 
 const getCache = new Map() // path -> { expiresAt, promise }
 
+let consentRequiredHandler = null
+
+/** AuthContext, backend'in herhangi bir istekte CONSENT_REQUIRED döndüğü anı yakalayıp
+ * authUser.needsConsent'i güncelleyebilmek için burada bir dinleyici kaydeder. */
+export function setConsentRequiredHandler(handler) {
+  consentRequiredHandler = handler
+}
+
 /**
  * GET isteklerini kısa süreliğine (varsayılan 30sn) önbelleğe alır ve eşzamanlı çağrılarda
  * aynı bekleyen promise'i paylaşır. Sık gezilen ekranlar arasında (ör. öğrenci/öğretmen roster'ı)
@@ -61,7 +69,13 @@ export async function authRequest(path, options = {}) {
           ? 'Kimlik doğrulama servisine ulaşılamadı. API sunucusunun çalıştığını kontrol edin.'
           : 'İşlem tamamlanamadı.'
 
-      throw new Error(data.error || fallbackMessage)
+      if (data.code === 'CONSENT_REQUIRED') {
+        consentRequiredHandler?.()
+      }
+
+      const requestError = new Error(data.error || fallbackMessage)
+      requestError.code = data.code
+      throw requestError
     }
 
     return data

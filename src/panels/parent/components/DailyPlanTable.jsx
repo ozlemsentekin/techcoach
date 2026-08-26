@@ -663,6 +663,7 @@ function TaskAgendaItem({
   const taskKind = getTaskKind(task)
   const isLessonSlot = taskKind === 'lesson'
   const showStatus = taskKind !== 'break' && taskKind !== 'activity' && !isLessonSlot
+  const hasActions = Boolean(onEdit || onDelete)
 
   return (
     <article
@@ -687,7 +688,7 @@ function TaskAgendaItem({
       </div>
 
       <div className="col-start-2 row-start-1 justify-self-end sm:col-start-4 sm:row-start-1">
-        {isLessonSlot ? null : (
+        {isLessonSlot || !hasActions ? null : (
           <TaskActionsMenu
             isOpen={isMenuOpen}
             onToggle={onToggleMenu}
@@ -803,8 +804,8 @@ export default function DailyPlanTable({ tasks, backlogTasks = [], onEdit, onDel
               isMenuOpen={openMenuId === task.id}
               onToggleMenu={() => setOpenMenuId(openMenuId === task.id ? null : task.id)}
               onCloseMenu={() => setOpenMenuId(null)}
-              onEdit={() => onEdit(task)}
-              onDelete={() => onDelete(task)}
+              onEdit={onEdit ? () => onEdit(task) : undefined}
+              onDelete={onDelete ? () => onDelete(task) : undefined}
               onOpenAnswerSheet={onOpenAnswerSheet}
             />
           ))}

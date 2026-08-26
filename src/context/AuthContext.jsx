@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { authRequest } from '../services/authClient'
+import { authRequest, invalidateCache, setConsentRequiredHandler } from '../services/authClient'
 import AuthContext from './authContextObject'
 
 export function AuthProvider({ children }) {
@@ -8,6 +8,16 @@ export function AuthProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(false)
   const [authError, setAuthError] = useState('')
   const [authMessage, setAuthMessage] = useState('')
+
+  useEffect(() => {
+    // Herhangi bir API çağrısı backend'den CONSENT_REQUIRED dönerse (ör. onay durumu
+    // sunucu tarafında güncel değil), authUser.needsConsent'i işaretleyip RequireRole'ün
+    // ConsentGate'i göstermesini sağlar — düz bir hata banner'ı yerine gerçek onay ekranı açılır.
+    setConsentRequiredHandler(() => {
+      setAuthUser((current) => (current && !current.needsConsent ? { ...current, needsConsent: true } : current))
+    })
+    return () => setConsentRequiredHandler(null)
+  }, [])
 
   useEffect(() => {
     let ignore = false
@@ -51,6 +61,7 @@ export function AuthProvider({ children }) {
         method: 'POST',
         body: JSON.stringify(payload),
       })
+      invalidateCache()
       setAuthUser(data.user)
       setAuthMessage('Giriş başarılı.')
       return data.user
@@ -94,6 +105,7 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({}),
         timeoutMs: 10000,
       })
+      invalidateCache()
       setAuthUser(null)
       setAuthMessage('Oturum kapatıldı.')
     } catch (error) {
@@ -124,11 +136,18 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const refreshSession = async () => {
+    const data = await authRequest('/api/auth/me', { method: 'GET' })
+    setAuthUser(data.user)
+    return data.user
+  }
+
   const enterStudent = async (studentId) => {
     const data = await authRequest(`/api/parent/students/${studentId}/enter`, {
       method: 'POST',
       body: JSON.stringify({}),
     })
+    invalidateCache()
     setAuthUser(data.user)
     return data.user
   }
@@ -138,6 +157,7 @@ export function AuthProvider({ children }) {
       method: 'POST',
       body: JSON.stringify({}),
     })
+    invalidateCache()
     setAuthUser(data.user)
     return data.user
   }
@@ -147,6 +167,7 @@ export function AuthProvider({ children }) {
       method: 'POST',
       body: JSON.stringify({}),
     })
+    invalidateCache()
     setAuthUser(data.user)
     return data.user
   }
@@ -156,6 +177,7 @@ export function AuthProvider({ children }) {
       method: 'POST',
       body: JSON.stringify({}),
     })
+    invalidateCache()
     setAuthUser(data.user)
     return data.user
   }
@@ -171,6 +193,7 @@ export function AuthProvider({ children }) {
       register,
       logout,
       acceptConsent,
+      refreshSession,
       enterStudent,
       returnToParent,
       impersonateUser,

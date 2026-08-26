@@ -7,6 +7,7 @@ import Button from '../../ui/Button'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import { libraryApiBase } from './libraryConstants'
 import AddLibraryResourceContentModal from './AddLibraryResourceContentModal'
+import { ImagePreviewLightbox } from '../ResourceBookCard'
 
 const RESOURCE_BOOK_TYPE_LABELS = {
   konu_anlatimi: 'Konu Anlatımı',
@@ -24,6 +25,7 @@ export default function LibraryResourceDetailModal({ role, resourceBookId, onClo
   const [deleteError, setDeleteError] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [showContentModal, setShowContentModal] = useState(false)
+  const [previewImage, setPreviewImage] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -62,11 +64,18 @@ export default function LibraryResourceDetailModal({ role, resourceBookId, onClo
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             {book?.imageUrl ? (
-              <img loading="lazy" decoding="async"
-                src={book.imageUrl}
-                alt={`${book.name} görseli`}
-                className="h-14 w-14 shrink-0 rounded-xl border border-panel-border object-cover"
-              />
+              <button
+                type="button"
+                aria-label={`${book.name} görselini büyüt`}
+                onClick={() => setPreviewImage({ url: book.imageUrl, name: book.name })}
+                className="shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-panel-blue"
+              >
+                <img loading="lazy" decoding="async"
+                  src={book.imageUrl}
+                  alt={`${book.name} görseli`}
+                  className="h-14 w-14 shrink-0 rounded-xl border border-panel-border object-cover"
+                />
+              </button>
             ) : (
               <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#fbe9d7] text-[#c96a1f]">
                 <BookOpen size={22} aria-hidden="true" />
@@ -186,6 +195,8 @@ export default function LibraryResourceDetailModal({ role, resourceBookId, onClo
           }}
         />
       ) : null}
+
+      <ImagePreviewLightbox preview={previewImage} onClose={() => setPreviewImage(null)} />
     </div>
   )
 }

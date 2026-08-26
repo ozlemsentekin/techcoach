@@ -4,6 +4,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  GraduationCap,
   HeartPulse,
   KeyRound,
   LifeBuoy,
@@ -21,6 +22,7 @@ import { todayISODate } from '../../utils/time'
 import ThemeContext from '../../theme/themeContextObject'
 import { THEMES } from '../../theme/themes'
 import ChangePasswordDialog from './ChangePasswordDialog'
+import TeacherSubjectsDialog from '../teacher/components/TeacherSubjectsDialog'
 
 const STUDENT_SUPPORT_EVENT = 'student-support-requested'
 const STUDENT_ENERGY_UPDATED_EVENT = 'student-energy-updated'
@@ -126,8 +128,10 @@ export default function PanelHeader({ role }) {
   const [wellbeingSaving, setWellbeingSaving] = useState(false)
   const [wellbeingError, setWellbeingError] = useState('')
   const [students, setStudents] = useState(null)
+  const [teacherSubjects, setTeacherSubjects] = useState(null)
   const [switching, setSwitching] = useState(false)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
+  const [subjectsDialogOpen, setSubjectsDialogOpen] = useState(false)
   const menuRef = useRef(null)
   const themeMenuRef = useRef(null)
   const wellbeingMenuRef = useRef(null)
@@ -138,6 +142,7 @@ export default function PanelHeader({ role }) {
   const roleLabel = ROLE_LABELS[authUser?.role] || 'Hesap'
   const contactLabel = authUser?.email || authUser?.phone || roleLabel
   const isParent = authUser?.role === 'ebeveyn'
+  const isTeacher = authUser?.role === 'ogretmen'
   const isStudentPanel = role === 'student'
   const actingParent = authUser?.actingParent
   const actingAdmin = authUser?.actingAdmin
@@ -169,6 +174,21 @@ export default function PanelHeader({ role }) {
       .then((data) => setStudents(data.students))
       .catch(() => setStudents([]))
   }, [open, isParent, students])
+
+  useEffect(() => {
+    if (!open || !isTeacher || teacherSubjects !== null) return
+
+    cachedGet('/api/panel/subjects')
+      .then((data) => setTeacherSubjects(data.subjects))
+      .catch(() => setTeacherSubjects([]))
+  }, [open, isTeacher, teacherSubjects])
+
+  const teacherSubjectNames = teacherSubjects && authUser?.teacherSubjectIds
+    ? teacherSubjects
+        .filter((subject) => authUser.teacherSubjectIds.includes(subject.id.toLowerCase()))
+        .map((subject) => subject.name)
+        .join(', ')
+    : ''
 
   useEffect(() => {
     if (!isStudentPanel) return undefined
@@ -419,6 +439,11 @@ export default function PanelHeader({ role }) {
               <span className="mt-2 inline-flex rounded-full border border-panel-border bg-panel-surface px-2.5 py-1 text-[11px] font-bold text-panel-text-muted">
                 {authUser?.isAdmin ? 'Admin yetkili ebeveyn hesabı' : roleLabel}
               </span>
+              {isTeacher ? (
+                <p className="mt-2 truncate text-xs font-medium text-panel-text-muted">
+                  Branş: {teacherSubjectNames || 'Henüz seçilmedi'}
+                </p>
+              ) : null}
             </div>
 
             {isParent ? (
@@ -472,6 +497,22 @@ export default function PanelHeader({ role }) {
 
               ) : null}
 
+              {isTeacher ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false)
+                    setSubjectsDialogOpen(true)
+                  }}
+                  className="flex min-h-11 w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-panel-text transition-colors hover:bg-panel-surface-soft"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
+                    <GraduationCap size={16} aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-bold">Branşlarım</span>
+                </button>
+              ) : null}
+
               <button
                 type="button"
                 onClick={() => {
@@ -507,6 +548,7 @@ export default function PanelHeader({ role }) {
       </div>
 
       {changePasswordOpen ? <ChangePasswordDialog onClose={() => setChangePasswordOpen(false)} /> : null}
+      {subjectsDialogOpen ? <TeacherSubjectsDialog onClose={() => setSubjectsDialogOpen(false)} /> : null}
     </header>
   )
 }

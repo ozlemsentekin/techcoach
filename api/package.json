@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.115.0",
     "@azure/functions": "^4.8.0",
     "bcryptjs": "^2.4.3",
+    "iyzipay": "^2.0.69",
     "jsonwebtoken": "^9.0.2",
     "mssql": "^11.0.1"
   },
