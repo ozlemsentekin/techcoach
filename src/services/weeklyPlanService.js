@@ -342,10 +342,22 @@ export function hasOverlap(tasks, startTime, endTime, excludeTaskId) {
   })
 }
 
-/** Öğrencinin okul ders programını döner (bkz. StudentProfiles.school_schedule_json). */
+/**
+ * Öğrencinin okul ders programını döner. Okul + sınıf biliniyorsa saatler admin şablonundan
+ * (SchoolClassSchedules) canlı türetilir; `holidays` okulun tatil/kapalı gün takvimidir
+ * (SchoolCalendarEntries). Bu günlerde okul slotları planda gösterilmez ve o güne görev
+ * eklenirken okul çakışması engeli uygulanmaz.
+ * @returns {Promise<{ entries: any[], holidays: { startDate: string, endDate: string, name: string|null }[] }>}
+ */
 export async function getSchoolSchedule({ studentId } = {}) {
   const data = await cachedGet(studentId ? `/api/panel/school-schedule?studentId=${studentId}` : '/api/panel/school-schedule')
-  return data.entries
+  return { entries: data.entries || [], holidays: data.holidays || [] }
+}
+
+/** Verilen tarih, okulun tatil takvimindeki bir aralığa (start/end dahil) denk geliyor mu? */
+export function isSchoolHoliday(dateISO, holidays) {
+  if (!dateISO || !holidays?.length) return false
+  return holidays.some((entry) => dateISO >= entry.startDate && dateISO <= entry.endDate)
 }
 
 /** Öğrencinin özel öğretmenlerden gelen düzenli ders saatlerini döner (bkz. StudentTeachers.schedule_json). */
@@ -390,8 +402,9 @@ export function buildTeacherLessonTasksForDate(lessonSchedule, dateISO) {
  * görev-görev çakışmasını değil görev-okul çakışmasını kontrol etmesi — bu haftalık planda
  * sert bir engel olarak kullanılır (bkz. AddTaskDrawer/AssignHomeworkModal).
  */
-export function getSchoolScheduleConflict(schoolSchedule, dateISO, startTime, endTime) {
+export function getSchoolScheduleConflict(schoolSchedule, dateISO, startTime, endTime, holidays) {
   if (!schoolSchedule?.length || !startTime || !endTime) return null
+  if (isSchoolHoliday(dateISO, holidays)) return null
 
   const dayOfWeek = getWeekdayKey(dateISO)
   const start = parseTimeToMinutes(startTime)

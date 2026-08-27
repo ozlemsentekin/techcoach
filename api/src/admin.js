@@ -39,6 +39,34 @@ async function requireAdmin(request) {
   return { session }
 }
 
+// Kütüphane kataloğu (yayın evleri, kaynak kitaplar, içerikler, testler, cevap anahtarları)
+// admin dışında öğretmen ve veli paneline de aynı ekranla açılıyor — bu üçü için ortak yetki kontrolü.
+async function requireCatalogStaff(request) {
+  const token = readSessionToken(request)
+  if (!token) {
+    return { error: json(401, { error: 'Oturum bulunamadı.' }) }
+  }
+
+  const session = verifySessionToken(token)
+  const requestDb = await withRequest({
+    id: { type: sql.UniqueIdentifier, value: session.sub },
+  })
+  const result = await requestDb.query(`
+    SELECT TOP 1 is_admin, role FROM dbo.Users WHERE id = @id;
+  `)
+  const record = result.recordset[0]
+
+  if (!record) {
+    return { error: json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders()) }
+  }
+
+  if (!record.is_admin && record.role !== 'ogretmen' && record.role !== 'ebeveyn') {
+    return { error: json(403, { error: 'Bu alana erişim yetkiniz yok.' }) }
+  }
+
+  return { session }
+}
+
 function sanitizeUser(record) {
   return {
     id: record.id,
@@ -274,7 +302,7 @@ async function impersonateUserHandler(request) {
     const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: targetId } })
     const result = await requestDb.query(`
       SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.parent_id,
-             p.full_name AS parent_full_name, u.last_login_at, u.created_at,
+             p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json,
              sp.theme_id,
              e.status AS entitlement_status, e.source AS entitlement_source,
              e.current_period_end AS entitlement_current_period_end
@@ -440,6 +468,7 @@ async function returnToAdminHandler(request) {
 module.exports = {
   listUsersHandler,
   requireAdmin,
+  requireCatalogStaff,
   updateUserHandler,
   deleteUserHandler,
   impersonateUserHandler,

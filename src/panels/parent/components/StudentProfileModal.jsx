@@ -282,11 +282,21 @@ export default function StudentProfileModal({ student, onClose }) {
 
           {profile !== null && step === 3 ? (
             <div className="flex flex-col gap-3">
-              <p className="text-sm text-panel-text-muted">
-                Okul ders saatlerini girin (hafta sonu kurs programı varsa cumartesi/pazar da eklenebilir). Bu
-                saatler haftalık planda "Okulda" olarak görünür ve bu saatlere ödev eklenemez.
-              </p>
-              <SchoolScheduleEditor entries={schoolSchedule} onChange={setSchoolSchedule} />
+              {school?.id && grade ? (
+                <p className="rounded-xl bg-panel-blue-soft/50 px-3 py-2.5 text-sm text-panel-text">
+                  Okul ders saatleri, seçilen okul ve sınıf bilgisinden otomatik alınır ve haftalık planda "Okulda"
+                  olarak görünür. Değişiklik için okul yönetimindeki ders programını güncelleyin.
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-panel-text-muted">
+                    Okul sistemde tanımlı değil. Okul ders saatlerini elle girin (hafta sonu kurs programı varsa
+                    cumartesi/pazar da eklenebilir). Bu saatler haftalık planda "Okulda" olarak görünür ve bu saatlere
+                    ödev eklenemez.
+                  </p>
+                  <SchoolScheduleEditor entries={schoolSchedule} onChange={setSchoolSchedule} />
+                </>
+              )}
             </div>
           ) : null}
 

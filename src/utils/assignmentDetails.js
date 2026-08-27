@@ -45,7 +45,8 @@ export function parseAssignmentDetails(task) {
   }
 
   return {
-    kaynak: null,
+    // Okul Ödevi'nde kaynak, okul+sınıf+ders bazlı okul kaynağıdır (SchoolClassResources).
+    kaynak: task.schoolResourceName || null,
     testTopic: task.topic || null,
     testName: null,
     testGroups: [],

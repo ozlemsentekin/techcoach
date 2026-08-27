@@ -12,7 +12,9 @@ import { filterTopicsBySearch } from '../../shared/homework/topicSearch'
 const QUESTION_BANK_HOMEWORK_TASK_TYPE = 'soru-bankasi-odevi'
 const SCHOOL_HOMEWORK_TASK_TYPE = 'okul-odevi'
 const PRIVATE_LESSON_TASK_TYPE = 'ozel-ders'
-const RESOURCE_TASK_TYPES = new Set([QUESTION_BANK_HOMEWORK_TASK_TYPE, SCHOOL_HOMEWORK_TASK_TYPE])
+// Kütüphane "kaynak kitabı" (ResourceBooks) seçimi gerektiren türler. Okul Ödevi artık
+// kütüphane kitabı değil, okul+sınıf+ders bazlı okul kaynağı (SchoolClassResources) kullanır.
+const RESOURCE_TASK_TYPES = new Set([QUESTION_BANK_HOMEWORK_TASK_TYPE])
 const REQUIRED_RESOURCE_TASK_TYPES = new Set([QUESTION_BANK_HOMEWORK_TASK_TYPE])
 const TITLE_OPTIONAL_TASK_TYPES = new Set(['mola', 'serbest-zaman', 'spor', 'yemek'])
 const STUDY_TASK_TYPES = new Set([QUESTION_BANK_HOMEWORK_TASK_TYPE, SCHOOL_HOMEWORK_TASK_TYPE, PRIVATE_LESSON_TASK_TYPE])
@@ -234,6 +236,103 @@ function ResourceBookDropdown({ books, selectedBook, onSelect, placeholder }) {
   )
 }
 
+function SchoolResourceAvatar({ resource, size = 'md' }) {
+  const dimClass = size === 'sm' ? 'h-9 w-9' : 'h-11 w-11'
+  if (resource?.imageUrl) {
+    return (
+      <img
+        loading="lazy"
+        decoding="async"
+        src={resource.imageUrl}
+        alt={`${resource.name} görseli`}
+        className={cn(dimClass, 'shrink-0 rounded-full border border-panel-border object-cover')}
+      />
+    )
+  }
+  return (
+    <span className={cn(dimClass, 'flex shrink-0 items-center justify-center rounded-full bg-panel-warm-soft text-panel-warm')}>
+      <BookOpen size={size === 'sm' ? 16 : 18} aria-hidden="true" />
+    </span>
+  )
+}
+
+// Okul Ödevi için okul+sınıf+ders bazlı okul kaynağı seçimi (bkz. api/src/schoolResources.js).
+// ResourceBookDropdown'un sadeleştirilmiş hâli: yuvarlak profil resmi + kaynak adı.
+function SchoolResourceDropdown({ resources, selectedResource, onSelect, placeholder }) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return undefined
+    const handlePointerDown = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [open])
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 rounded-xl border border-panel-border bg-white p-2.5 text-left shadow-sm outline-none transition-colors hover:border-panel-warm focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+      >
+        {selectedResource ? (
+          <>
+            <SchoolResourceAvatar resource={selectedResource} />
+            <span className="line-clamp-1 flex-1 text-sm font-semibold text-panel-text">{selectedResource.name}</span>
+          </>
+        ) : (
+          <span className="flex-1 py-1.5 text-sm text-panel-text-muted">{placeholder}</span>
+        )}
+        <ChevronDown
+          size={16}
+          className={cn('shrink-0 text-panel-text-muted transition-transform', open && 'rotate-180')}
+          aria-hidden="true"
+        />
+      </button>
+
+      {open ? (
+        <div className="absolute z-10 mt-2 max-h-72 w-full overflow-y-auto rounded-xl border border-panel-border bg-white p-2 shadow-lg">
+          {resources.length === 0 ? (
+            <p className="p-3 text-sm text-panel-text-muted">Bu derse tanımlı okul kaynağı yok.</p>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {resources.map((resource) => (
+                <button
+                  key={resource.id}
+                  type="button"
+                  onClick={() => {
+                    onSelect(resource)
+                    setOpen(false)
+                  }}
+                  aria-pressed={selectedResource?.id === resource.id}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg border p-2 text-left transition-colors',
+                    selectedResource?.id === resource.id
+                      ? 'border-panel-blue bg-panel-blue-soft/45'
+                      : 'border-transparent hover:bg-panel-warm-soft/50',
+                  )}
+                >
+                  <SchoolResourceAvatar resource={resource} size="sm" />
+                  <span className="line-clamp-1 flex-1 text-sm font-medium text-panel-text">{resource.name}</span>
+                  {selectedResource?.id === resource.id ? (
+                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-panel-blue text-white">
+                      <Check size={12} strokeWidth={3} aria-hidden="true" />
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export default function AddTaskDrawer({
   initialTask,
   initialTemplate,
@@ -243,6 +342,7 @@ export default function AddTaskDrawer({
   onClose,
   getExistingTasksForDate,
   schoolSchedule,
+  schoolHolidays,
 }) {
   const seed = { ...initialTemplate?.task, ...initialTask }
   const seedTaskType = normalizeTaskType(seed, Boolean(initialTask || initialTemplate))
@@ -263,6 +363,10 @@ export default function AddTaskDrawer({
   }))
   const autoTitleRef = useRef(seedTitle)
   const [resourceBookId, setResourceBookId] = useState(seed.resourceBookId || '')
+  const [schoolResourceId, setSchoolResourceId] = useState(seed.schoolResourceId || '')
+  const [schoolSubjectId, setSchoolSubjectId] = useState('')
+  const [schoolResourceGroups, setSchoolResourceGroups] = useState(null)
+  const [schoolResourceGroupsError, setSchoolResourceGroupsError] = useState('')
   const [subjectId, setSubjectId] = useState('')
   const [lessonSubjectId, setLessonSubjectId] = useState('')
   const [studentTeacherId, setStudentTeacherId] = useState(seed.studentTeacherId || '')
@@ -284,7 +388,9 @@ export default function AddTaskDrawer({
 
   const durationMinutes = Number(form.durationMinutes) || 0
   const endTime = durationMinutes > 0 ? addMinutesToTime(form.startTime, durationMinutes) : ''
-  const schoolConflict = endTime ? getSchoolScheduleConflict(schoolSchedule, form.date, form.startTime, endTime) : null
+  const schoolConflict = endTime
+    ? getSchoolScheduleConflict(schoolSchedule, form.date, form.startTime, endTime, schoolHolidays)
+    : null
   const isQuestionBankHomework = form.taskType === QUESTION_BANK_HOMEWORK_TASK_TYPE
   const isSchoolHomework = form.taskType === SCHOOL_HOMEWORK_TASK_TYPE
   const isPrivateLesson = form.taskType === PRIVATE_LESSON_TASK_TYPE
@@ -346,6 +452,23 @@ export default function AddTaskDrawer({
   }, [needsResource, resourceBooks, resourceBooksError])
 
   useEffect(() => {
+    if (!isSchoolHomework || schoolResourceGroups !== null || schoolResourceGroupsError) return undefined
+
+    let ignore = false
+    authRequest('/api/panel/school-resources', { method: 'GET' })
+      .then((data) => {
+        if (!ignore) setSchoolResourceGroups(data.groups || [])
+      })
+      .catch((err) => {
+        if (!ignore) setSchoolResourceGroupsError(err.message || 'Okul kaynakları yüklenemedi.')
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [isSchoolHomework, schoolResourceGroups, schoolResourceGroupsError])
+
+  useEffect(() => {
     if (!isPrivateLesson || privateTeachers !== null || privateTeachersError) return undefined
 
     let ignore = false
@@ -392,30 +515,38 @@ export default function AddTaskDrawer({
     return book ? book.subjectId || 'no-subject' : subjectId
   }, [subjectId, needsResource, resourceBookId, resourceBooks])
 
-  // Kaynak Türü (okul/özel) ayrımı kaldırıldı — Okul Ödevi kaynak seçimi artık kütüphanedeki
-  // tüm kaynakları kapsar.
-  const schoolResourceBooks = useMemo(
-    () => resourceBooks || [],
-    [resourceBooks],
-  )
   const questionBankResourceBooks = useMemo(
     () => (resourceBooks || []).filter((book) => book.type === 'soru_bankasi'),
     [resourceBooks],
   )
-  const schoolSubjectGroups = useMemo(() => groupBooksBySubject(schoolResourceBooks), [schoolResourceBooks])
   const questionBankSubjectGroups = useMemo(() => groupBooksBySubject(questionBankResourceBooks), [questionBankResourceBooks])
-  const activeSubjectGroups = isSchoolHomework ? schoolSubjectGroups : isQuestionBankHomework ? questionBankSubjectGroups : []
+  const activeSubjectGroups = isQuestionBankHomework ? questionBankSubjectGroups : []
 
   const filteredResourceBooks = useMemo(() => {
-    if (!resourceBooks || !effectiveSubjectId) return []
-    if (isQuestionBankHomework) {
-      return questionBankResourceBooks.filter((book) => (book.subjectId || 'no-subject') === effectiveSubjectId)
-    }
-    if (isSchoolHomework) {
-      return schoolResourceBooks.filter((book) => (book.subjectId || 'no-subject') === effectiveSubjectId)
-    }
-    return []
-  }, [resourceBooks, effectiveSubjectId, isQuestionBankHomework, isSchoolHomework, questionBankResourceBooks, schoolResourceBooks])
+    if (!resourceBooks || !effectiveSubjectId || !isQuestionBankHomework) return []
+    return questionBankResourceBooks.filter((book) => (book.subjectId || 'no-subject') === effectiveSubjectId)
+  }, [resourceBooks, effectiveSubjectId, isQuestionBankHomework, questionBankResourceBooks])
+
+  // --- Okul Ödevi: okul+sınıf+ders bazlı okul kaynağı seçimi ---
+  // Görev düzenlenirken kayıtlı kaynaktan dersi geri türet.
+  const effectiveSchoolSubjectId =
+    schoolSubjectId ||
+    (schoolResourceId && schoolResourceGroups
+      ? schoolResourceGroups.find((group) => group.resources.some((r) => r.id === schoolResourceId))?.subjectId || ''
+      : '')
+  const selectedSchoolSubjectName =
+    schoolResourceGroups?.find((group) => group.subjectId === effectiveSchoolSubjectId)?.subjectName || null
+  const schoolResourcesForSubject =
+    schoolResourceGroups?.find((group) => group.subjectId === effectiveSchoolSubjectId)?.resources || []
+  const selectedSchoolResource =
+    schoolResourceGroups?.flatMap((group) => group.resources).find((r) => r.id === schoolResourceId) ||
+    (schoolResourceId && seed.schoolResourceId === schoolResourceId
+      ? {
+          id: schoolResourceId,
+          name: seed.schoolResourceName || seed.title || 'Seçili kaynak',
+          imageUrl: seed.schoolResourceImageUrl || null,
+        }
+      : null)
 
   const lessonSubjectGroups = useMemo(() => {
     const groups = new Map()
@@ -477,6 +608,8 @@ export default function AddTaskDrawer({
     setSelectedTestIds(new Set())
     setCollapsedTopicIds(new Set())
     setSearchQuery('')
+    setSchoolSubjectId('')
+    setSchoolResourceId('')
   }
 
   const applyAutoTitle = (nextAutoTitle, extra) => {
@@ -507,9 +640,22 @@ export default function AddTaskDrawer({
     resetResourceSelection()
   }
 
-  const handleClearResourceSelection = () => {
-    applyAutoTitle(buildAutoTitle(form.taskType, selectedSubjectName, null))
-    resetResourceSelection()
+  const handleSchoolSubjectChange = (event) => {
+    const nextSubjectId = event.target.value
+    const subjectName = schoolResourceGroups?.find((group) => group.subjectId === nextSubjectId)?.subjectName || null
+    applyAutoTitle(buildAutoTitle(form.taskType, subjectName, null))
+    setSchoolSubjectId(nextSubjectId)
+    setSchoolResourceId('')
+  }
+
+  const handleSelectSchoolResource = (resource) => {
+    applyAutoTitle(buildAutoTitle(form.taskType, selectedSchoolSubjectName, resource.name || null))
+    setSchoolResourceId(resource.id)
+  }
+
+  const handleClearSchoolResource = () => {
+    applyAutoTitle(buildAutoTitle(form.taskType, selectedSchoolSubjectName, null))
+    setSchoolResourceId('')
   }
 
   const handleLessonSubjectChange = (event) => {
@@ -599,9 +745,11 @@ export default function AddTaskDrawer({
 
   const hasRequiredSubSelection = isPrivateLesson
     ? Boolean(effectiveLessonSubjectId)
-    : needsResource
-      ? Boolean(effectiveSubjectId)
-      : true
+    : isSchoolHomework
+      ? true
+      : needsResource
+        ? Boolean(effectiveSubjectId)
+        : true
   const showTitleInput = needsTitleInput && Boolean(form.taskType) && hasRequiredSubSelection
 
   const buildPayload = () => {
@@ -609,8 +757,8 @@ export default function AddTaskDrawer({
       (needsTitleInput && form.title.trim()) ||
       (selectedBook?.subjectName && isQuestionBankHomework
         ? `${selectedBook.subjectName} Soru Bankası Ödevi`
-        : selectedSubjectName && isSchoolHomework
-          ? `${selectedSubjectName} Okul Ödevi`
+        : selectedSchoolSubjectName && isSchoolHomework
+          ? `${selectedSchoolSubjectName} Okul Ödevi`
           : selectedLessonSubjectName && isPrivateLesson
             ? `${selectedLessonSubjectName} Özel Ders`
             : getDefaultTitle(form.taskType))
@@ -630,7 +778,24 @@ export default function AddTaskDrawer({
         subject: selectedLessonSubjectName,
         topic: null,
         resourceBookId: null,
+        schoolResourceId: null,
         studentTeacherId: studentTeacherId || null,
+        selectedTestIds: [],
+        targetQuestionCount: null,
+        completedQuestionCount: null,
+        targetPageCount: null,
+        completedPageCount: null,
+      }
+    }
+
+    if (isSchoolHomework) {
+      return {
+        ...payload,
+        title,
+        subject: selectedSchoolSubjectName,
+        resourceBookId: null,
+        schoolResourceId: schoolResourceId || null,
+        studentTeacherId: null,
         selectedTestIds: [],
         targetQuestionCount: null,
         completedQuestionCount: null,
@@ -645,21 +810,7 @@ export default function AddTaskDrawer({
         subject: null,
         topic: null,
         resourceBookId: null,
-        studentTeacherId: null,
-        selectedTestIds: [],
-        targetQuestionCount: null,
-        completedQuestionCount: null,
-        targetPageCount: null,
-        completedPageCount: null,
-      }
-    }
-
-    if (isSchoolHomework) {
-      return {
-        ...payload,
-        title,
-        subject: selectedSubjectName,
-        resourceBookId: resourceBookId || null,
+        schoolResourceId: null,
         studentTeacherId: null,
         selectedTestIds: [],
         targetQuestionCount: null,
@@ -678,6 +829,7 @@ export default function AddTaskDrawer({
       ...payload,
       subject: selectedSubjectName,
       resourceBookId,
+      schoolResourceId: null,
       studentTeacherId: null,
       selectedTestIds: nextSelectedTestIds,
     }
@@ -712,8 +864,12 @@ export default function AddTaskDrawer({
       setError('Görev konusu boş bırakılamaz.')
       return
     }
-    if ((isSchoolHomework || isQuestionBankHomework) && !effectiveSubjectId) {
-      setError(isQuestionBankHomework ? 'Soru bankası ödevi için ders seçin.' : 'Okul ödevi için ders seçin.')
+    if (isQuestionBankHomework && !effectiveSubjectId) {
+      setError('Soru bankası ödevi için ders seçin.')
+      return
+    }
+    if (isSchoolHomework && !form.title.trim()) {
+      setError('Görev konusu boş bırakılamaz.')
       return
     }
     if (isPrivateLesson && !effectiveLessonSubjectId) {
@@ -836,9 +992,7 @@ export default function AddTaskDrawer({
 
             {needsResource ? (
               <div className="flex flex-col gap-2 rounded-2xl border border-panel-border bg-panel-surface-soft/60 p-3">
-                <span className="text-sm font-semibold text-panel-text">
-                  {isQuestionBankHomework ? 'Soru bankası kaynağı' : 'Okul dersleri kaynakları'}
-                </span>
+                <span className="text-sm font-semibold text-panel-text">Soru bankası kaynağı</span>
 
                 {resourceBooksError ? (
                   <p className="rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{resourceBooksError}</p>
@@ -846,9 +1000,7 @@ export default function AddTaskDrawer({
                   <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">Kaynaklar yükleniyor...</p>
                 ) : activeSubjectGroups.length === 0 ? (
                   <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">
-                    {isQuestionBankHomework
-                      ? 'Öğrenciye atanmış soru bankası kaynağı yok.'
-                      : 'Öğrenciye atanmış okul kaynağı yok.'}
+                    Öğrenciye atanmış soru bankası kaynağı yok.
                   </p>
                 ) : (
                   <>
@@ -871,17 +1023,64 @@ export default function AddTaskDrawer({
                         Kaynakları görmek için ders seçin.
                       </p>
                     ) : (
+                      <ResourceBookDropdown
+                        books={filteredResourceBooks}
+                        selectedBook={selectedBook}
+                        onSelect={handleSelectResourceBook}
+                        placeholder="Kaynak seçin"
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            ) : null}
+
+            {isSchoolHomework ? (
+              <div className="flex flex-col gap-2 rounded-2xl border border-panel-border bg-panel-surface-soft/60 p-3">
+                <span className="text-sm font-semibold text-panel-text">Okul kaynağı (isteğe bağlı)</span>
+
+                {schoolResourceGroupsError ? (
+                  <p className="rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">
+                    {schoolResourceGroupsError}
+                  </p>
+                ) : schoolResourceGroups === null ? (
+                  <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">Okul kaynakları yükleniyor...</p>
+                ) : schoolResourceGroups.length === 0 ? (
+                  <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">
+                    Öğrencinin okuluna/sınıfına tanımlı okul kaynağı yok. Görevi başlıkla ekleyebilirsiniz.
+                  </p>
+                ) : (
+                  <>
+                    <select
+                      aria-label="Ders"
+                      value={effectiveSchoolSubjectId}
+                      onChange={handleSchoolSubjectChange}
+                      className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                    >
+                      <option value="">Ders seçin</option>
+                      {schoolResourceGroups.map((group) => (
+                        <option key={group.subjectId} value={group.subjectId}>
+                          {group.subjectName}
+                        </option>
+                      ))}
+                    </select>
+
+                    {!effectiveSchoolSubjectId ? (
+                      <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">
+                        Kaynakları görmek için ders seçin.
+                      </p>
+                    ) : (
                       <div className="flex flex-col gap-1.5">
-                        <ResourceBookDropdown
-                          books={filteredResourceBooks}
-                          selectedBook={selectedBook}
-                          onSelect={handleSelectResourceBook}
-                          placeholder={isSchoolHomework ? 'Kaynak seçin (isteğe bağlı)' : 'Kaynak seçin'}
+                        <SchoolResourceDropdown
+                          resources={schoolResourcesForSubject}
+                          selectedResource={selectedSchoolResource}
+                          onSelect={handleSelectSchoolResource}
+                          placeholder="Kaynak seçin (isteğe bağlı)"
                         />
-                        {selectedBook && isSchoolHomework ? (
+                        {selectedSchoolResource ? (
                           <button
                             type="button"
-                            onClick={handleClearResourceSelection}
+                            onClick={handleClearSchoolResource}
                             className="self-start text-xs font-semibold text-panel-blue hover:underline"
                           >
                             Seçimi kaldır

@@ -93,6 +93,7 @@ export default function WeeklyPlanPage() {
   const [dayStatusByDate, setDayStatusByDate] = useState({})
   const [lessonSchedule, setLessonSchedule] = useState([])
   const [schoolSchedule, setSchoolSchedule] = useState([])
+  const [schoolHolidays, setSchoolHolidays] = useState([])
   const [loadedWeekStart, setLoadedWeekStart] = useState('')
   const [loadError, setLoadError] = useState('')
 
@@ -103,15 +104,16 @@ export default function WeeklyPlanPage() {
     Promise.all([
       getTasksForDateRange(weekStart, weekEnd),
       getTeacherLessonSchedule().catch(() => []),
-      getSchoolSchedule().catch(() => []),
+      getSchoolSchedule().catch(() => ({ entries: [], holidays: [] })),
     ])
-      .then(([tasks, teacherLessons, schoolLessons]) => {
+      .then(([tasks, teacherLessons, school]) => {
         if (ignore) return
         const nextTasksByDate = groupTasksByDate(tasks, weekDates)
         setTasksByDate(nextTasksByDate)
         setDayStatusByDate(getDayStatusByDate(nextTasksByDate, weekDates))
         setLessonSchedule(teacherLessons)
-        setSchoolSchedule(schoolLessons)
+        setSchoolSchedule(school.entries || [])
+        setSchoolHolidays(school.holidays || [])
         setLoadError('')
         setLoadedWeekStart(weekStart)
       })
@@ -193,6 +195,7 @@ export default function WeeklyPlanPage() {
             dayStatusByDate={dayStatusByDate}
             lessonSchedule={lessonSchedule}
             schoolSchedule={schoolSchedule}
+            schoolHolidays={schoolHolidays}
           />
         </>
       )}

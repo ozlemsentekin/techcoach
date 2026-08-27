@@ -15,18 +15,6 @@ const {
   exitStudentHandler,
   listStudentResourceBooksHandler,
   updateStudentResourceBooksHandler,
-  listLibraryResourceBooksForParentHandler,
-  createLibraryResourceBookForParentHandler,
-  getLibraryResourceBookDetailForParentHandler,
-  deleteLibraryResourceBookForParentHandler,
-  addLibraryResourceBookTopicsForParentHandler,
-  extractLibraryTocForParentHandler,
-  extractLibraryCoverForParentHandler,
-  extractLibraryAnswerKeyForParentHandler,
-  getLibraryExtractionJobForParentHandler,
-  listAssignableStudentsForLibraryResourceHandler,
-  assignLibraryResourceBookHandler,
-  unassignLibraryResourceBookHandler,
   listStudentTeachersForParentHandler,
   listParentTeachersHandler,
   createStudentTeacherHandler,
@@ -41,7 +29,17 @@ const {
   getSchoolClassScheduleHandler,
   saveSchoolClassScheduleHandler,
   getPanelSchoolScheduleHandler,
+  listSchoolCalendarHandler,
+  createSchoolCalendarEntryHandler,
+  deleteSchoolCalendarEntryHandler,
 } = require('./schoolSchedule')
+const {
+  listSchoolResourcesHandler,
+  createSchoolResourceHandler,
+  updateSchoolResourceHandler,
+  deleteSchoolResourceHandler,
+  getPanelSchoolResourcesHandler,
+} = require('./schoolResources')
 const {
   listTeacherStudentsHandler,
   getTeacherStudentHandler,
@@ -66,17 +64,6 @@ const {
   unmarkTeacherResourceBookTopicTestCompletionHandler,
   submitTeacherManualOpticalAnswersHandler,
   saveTeacherManualWrongQuestionPhotoHandler,
-  listLibraryResourceBooksForTeacherHandler,
-  createLibraryResourceBookForTeacherHandler,
-  getLibraryResourceBookDetailForTeacherHandler,
-  deleteLibraryResourceBookForTeacherHandler,
-  addLibraryResourceBookTopicsForTeacherHandler,
-  extractLibraryTocForTeacherHandler,
-  extractLibraryCoverForTeacherHandler,
-  extractLibraryAnswerKeyForTeacherHandler,
-  getLibraryExtractionJobForTeacherHandler,
-  listAssignableStudentsForLibraryResourceHandler: listAssignableStudentsForTeacherLibraryResourceHandler,
-  assignLibraryResourceBookHandler: assignTeacherLibraryResourceBookHandler,
   listTeacherStudentHomeworksHandler,
   createTeacherHomeworkHandler,
   assignTeacherHomeworkTaskHandler,
@@ -93,9 +80,6 @@ const {
   getTeacherEntitlementHandler,
   updateTeacherProfileHandler,
   createTeacherStudentHandler,
-  listTeacherLibraryGradesHandler,
-  addTeacherLibraryGradeHandler,
-  removeTeacherLibraryGradeHandler,
 } = require('./teacher')
 const { listProvincesHandler, listDistrictsHandler, listSchoolsHandler } = require('./geo')
 const {
@@ -359,90 +343,6 @@ app.http('parent-student-resource-books-update', {
   handler: updateStudentResourceBooksHandler,
 })
 
-app.http('parent-library-resource-books-list', {
-  authLevel: 'anonymous',
-  methods: ['GET'],
-  route: 'parent/library/resource-books',
-  handler: listLibraryResourceBooksForParentHandler,
-})
-
-app.http('parent-library-resource-books-create', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'parent/library/resource-books',
-  handler: createLibraryResourceBookForParentHandler,
-})
-
-app.http('parent-library-resource-books-extract-toc', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'parent/library/resource-books/extract-toc',
-  handler: extractLibraryTocForParentHandler,
-})
-
-app.http('parent-library-resource-books-extract-cover', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'parent/library/resource-books/extract-cover',
-  handler: extractLibraryCoverForParentHandler,
-})
-
-app.http('parent-library-resource-books-extract-answer-key', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'parent/library/resource-books/extract-answer-key',
-  handler: extractLibraryAnswerKeyForParentHandler,
-})
-
-app.http('parent-library-extraction-job-detail', {
-  authLevel: 'anonymous',
-  methods: ['GET'],
-  route: 'parent/library/resource-books/extraction-jobs/{jobId}',
-  handler: getLibraryExtractionJobForParentHandler,
-})
-
-app.http('parent-library-resource-book-detail', {
-  authLevel: 'anonymous',
-  methods: ['GET'],
-  route: 'parent/library/resource-books/{resourceBookId}',
-  handler: getLibraryResourceBookDetailForParentHandler,
-})
-
-app.http('parent-library-resource-book-delete', {
-  authLevel: 'anonymous',
-  methods: ['DELETE'],
-  route: 'parent/library/resource-books/{resourceBookId}',
-  handler: deleteLibraryResourceBookForParentHandler,
-})
-
-app.http('parent-library-resource-book-topics-add', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'parent/library/resource-books/{resourceBookId}/topics',
-  handler: addLibraryResourceBookTopicsForParentHandler,
-})
-
-app.http('parent-library-resource-book-assignable-students', {
-  authLevel: 'anonymous',
-  methods: ['GET'],
-  route: 'parent/library/resource-books/{resourceBookId}/assignable-students',
-  handler: listAssignableStudentsForLibraryResourceHandler,
-})
-
-app.http('parent-student-library-resource-book-assign', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'parent/students/{studentId}/library/resource-books/{resourceBookId}',
-  handler: assignLibraryResourceBookHandler,
-})
-
-app.http('parent-student-library-resource-book-unassign', {
-  authLevel: 'anonymous',
-  methods: ['DELETE'],
-  route: 'parent/students/{studentId}/library/resource-books/{resourceBookId}',
-  handler: unassignLibraryResourceBookHandler,
-})
-
 app.http('parent-student-teachers-list', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -569,27 +469,6 @@ app.http('panel-teacher-profile-update', {
   handler: updateTeacherProfileHandler,
 })
 
-app.http('panel-teacher-library-grades-list', {
-  authLevel: 'anonymous',
-  methods: ['GET'],
-  route: 'panel-teacher/library-grades',
-  handler: listTeacherLibraryGradesHandler,
-})
-
-app.http('panel-teacher-library-grades-create', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'panel-teacher/library-grades',
-  handler: addTeacherLibraryGradeHandler,
-})
-
-app.http('panel-teacher-library-grades-delete', {
-  authLevel: 'anonymous',
-  methods: ['DELETE'],
-  route: 'panel-teacher/library-grades/{grade}',
-  handler: removeTeacherLibraryGradeHandler,
-})
-
 app.http('panel-teacher-parents-list', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -700,83 +579,6 @@ app.http('panel-teacher-resource-book-topic-test-mistake-photo-save', {
   methods: ['PUT'],
   route: 'panel-teacher/students/{studentTeacherId}/resource-book-topic-tests/{testId}/mistakes/{orderNo}',
   handler: saveTeacherManualWrongQuestionPhotoHandler,
-})
-
-app.http('panel-teacher-library-resource-books-list', {
-  authLevel: 'anonymous',
-  methods: ['GET'],
-  route: 'panel-teacher/library/resource-books',
-  handler: listLibraryResourceBooksForTeacherHandler,
-})
-
-app.http('panel-teacher-library-resource-books-create', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'panel-teacher/library/resource-books',
-  handler: createLibraryResourceBookForTeacherHandler,
-})
-
-app.http('panel-teacher-library-resource-books-extract-toc', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'panel-teacher/library/resource-books/extract-toc',
-  handler: extractLibraryTocForTeacherHandler,
-})
-
-app.http('panel-teacher-library-resource-books-extract-cover', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'panel-teacher/library/resource-books/extract-cover',
-  handler: extractLibraryCoverForTeacherHandler,
-})
-
-app.http('panel-teacher-library-resource-books-extract-answer-key', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'panel-teacher/library/resource-books/extract-answer-key',
-  handler: extractLibraryAnswerKeyForTeacherHandler,
-})
-
-app.http('panel-teacher-library-extraction-job-detail', {
-  authLevel: 'anonymous',
-  methods: ['GET'],
-  route: 'panel-teacher/library/resource-books/extraction-jobs/{jobId}',
-  handler: getLibraryExtractionJobForTeacherHandler,
-})
-
-app.http('panel-teacher-library-resource-book-detail', {
-  authLevel: 'anonymous',
-  methods: ['GET'],
-  route: 'panel-teacher/library/resource-books/{resourceBookId}',
-  handler: getLibraryResourceBookDetailForTeacherHandler,
-})
-
-app.http('panel-teacher-library-resource-book-delete', {
-  authLevel: 'anonymous',
-  methods: ['DELETE'],
-  route: 'panel-teacher/library/resource-books/{resourceBookId}',
-  handler: deleteLibraryResourceBookForTeacherHandler,
-})
-
-app.http('panel-teacher-library-resource-book-topics-add', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'panel-teacher/library/resource-books/{resourceBookId}/topics',
-  handler: addLibraryResourceBookTopicsForTeacherHandler,
-})
-
-app.http('panel-teacher-library-resource-book-assignable-students', {
-  authLevel: 'anonymous',
-  methods: ['GET'],
-  route: 'panel-teacher/library/resource-books/{resourceBookId}/assignable-students',
-  handler: listAssignableStudentsForTeacherLibraryResourceHandler,
-})
-
-app.http('panel-teacher-student-library-resource-book-assign', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'panel-teacher/students/{studentTeacherId}/library/resource-books/{resourceBookId}',
-  handler: assignTeacherLibraryResourceBookHandler,
 })
 
 app.http('panel-teacher-homeworks-list', {
@@ -945,6 +747,55 @@ app.http('panel-admin-school-class-schedule-save', {
   methods: ['PUT'],
   route: 'panel-admin/schools/{schoolId}/class-schedules',
   handler: saveSchoolClassScheduleHandler,
+})
+
+app.http('panel-admin-school-resources-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-admin/schools/{schoolId}/resources',
+  handler: listSchoolResourcesHandler,
+})
+
+app.http('panel-admin-school-resources-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-admin/schools/{schoolId}/resources',
+  handler: createSchoolResourceHandler,
+})
+
+app.http('panel-admin-school-resources-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-admin/schools/{schoolId}/resources/{resourceId}',
+  handler: updateSchoolResourceHandler,
+})
+
+app.http('panel-admin-school-resources-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-admin/schools/{schoolId}/resources/{resourceId}',
+  handler: deleteSchoolResourceHandler,
+})
+
+app.http('panel-admin-school-calendar-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-admin/schools/{schoolId}/calendar',
+  handler: listSchoolCalendarHandler,
+})
+
+app.http('panel-admin-school-calendar-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-admin/schools/{schoolId}/calendar',
+  handler: createSchoolCalendarEntryHandler,
+})
+
+app.http('panel-admin-school-calendar-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-admin/schools/{schoolId}/calendar/{entryId}',
+  handler: deleteSchoolCalendarEntryHandler,
 })
 
 app.http('panel-admin-subjects', {
@@ -1330,6 +1181,13 @@ app.http('panel-school-schedule-get', {
   methods: ['GET'],
   route: 'panel/school-schedule',
   handler: getPanelSchoolScheduleHandler,
+})
+
+app.http('panel-school-resources-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/school-resources',
+  handler: getPanelSchoolResourcesHandler,
 })
 
 app.http('panel-weekly-plan-status-get', {

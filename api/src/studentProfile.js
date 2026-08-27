@@ -455,4 +455,5 @@ module.exports = {
   getStudentProfileHandler,
   updateStudentProfileHandler,
   fetchStudentProfile,
+  validateGeoSelection,
 }

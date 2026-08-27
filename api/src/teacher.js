@@ -10,11 +10,7 @@ const {
 const { requireTeacherSession, requireTeacherStudentContext } = require('./teacherScope')
 const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
 const { fetchTeacherResourceBooks, verifySubjectExists } = require('./students')
-const { fetchStudentProfile } = require('./studentProfile')
-const { extractLibraryTocFromImages } = require('./libraryTocExtraction')
-const { extractLibraryCoverInfo } = require('./libraryCoverExtraction')
-const { extractLibraryAnswerKeyFromImages } = require('./libraryAnswerKeyExtraction')
-const { createExtractionJob, getExtractionJob, runExtractionJobInBackground } = require('./libraryExtractionJobs')
+const { fetchStudentProfile, validateGeoSelection } = require('./studentProfile')
 const { getTeacherQuota, hasActiveParentEntitlement } = require('./entitlements')
 const {
   SELECT_HOMEWORK,
@@ -45,13 +41,7 @@ const { SELECT_TASK, sanitizeTask, fetchTaskAnswerSheetData } = require('./tasks
 const {
   fetchResourceBookTopicsWithTests,
   LIBRARY_GRADES,
-  RESOURCE_SOURCES,
   fetchLibraryResourceBooks,
-  createLibraryResourceBookSubmission,
-  deleteLibraryResourceBookSubmission,
-  addLibraryResourceBookTopicsSubmission,
-  fetchResourceBookById,
-  fetchLibraryResourceBookDetail,
 } = require('./catalog')
 const {
   sanitizeProgressResourceBook,
@@ -546,6 +536,19 @@ async function updateTeacherStudentProfileHandler(request) {
       }
     }
 
+    const provinceId = payload.provinceId || null
+    const districtId = payload.districtId || null
+    const schoolId = payload.schoolId || null
+    const geoValidation = await validateGeoSelection({ provinceId, districtId, schoolId })
+    if (geoValidation.error) {
+      return json(400, { error: geoValidation.error })
+    }
+
+    // Öğrenci telefonu Users.phone_number'da da tutulur (liste/detay uçları buradan okur,
+    // giriş şifresi de telefonun son 6 hanesinden türetilir) — studentProfile.js'teki veli
+    // akışıyla aynı senkron burada da yapılır.
+    const passwordHash = phone ? await hashPassword(defaultPasswordForPhone(phone)) : null
+
     const updateDb = await withRequest({
       studentId: { type: sql.UniqueIdentifier, value: studentId },
       fullName: { type: sql.NVarChar(120), value: fullName },
@@ -553,9 +556,20 @@ async function updateTeacherStudentProfileHandler(request) {
       birthDate: { type: sql.Date, value: birthDate },
       gender: { type: sql.NVarChar(20), value: gender },
       phone: { type: sql.NVarChar(30), value: phone },
+      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
+      provinceId: { type: sql.UniqueIdentifier, value: provinceId },
+      districtId: { type: sql.UniqueIdentifier, value: districtId },
+      schoolId: { type: sql.UniqueIdentifier, value: schoolId },
     })
     await updateDb.query(`
-      UPDATE dbo.Users SET full_name = @fullName WHERE id = @studentId;
+      UPDATE dbo.Users
+      SET full_name = @fullName,
+          phone_number = @phone,
+          password_hash = CASE
+            WHEN @phone IS NOT NULL AND (phone_number IS NULL OR phone_number <> @phone) THEN @passwordHash
+            ELSE password_hash
+          END
+      WHERE id = @studentId;
 
       MERGE dbo.StudentProfiles AS target
       USING (SELECT @studentId AS student_id) AS src
@@ -564,9 +578,12 @@ async function updateTeacherStudentProfileHandler(request) {
         grade = @grade,
         birth_date = @birthDate,
         gender = @gender,
-        phone = @phone
-      WHEN NOT MATCHED THEN INSERT (student_id, grade, birth_date, gender, phone)
-        VALUES (@studentId, @grade, @birthDate, @gender, @phone);
+        phone = @phone,
+        province_id = @provinceId,
+        district_id = @districtId,
+        school_id = @schoolId
+      WHEN NOT MATCHED THEN INSERT (student_id, grade, birth_date, gender, phone, province_id, district_id, school_id)
+        VALUES (@studentId, @grade, @birthDate, @gender, @phone, @provinceId, @districtId, @schoolId);
     `)
 
     const profile = await fetchStudentProfile(studentId)
@@ -895,98 +912,6 @@ async function updateTeacherProfileHandler(request) {
   }
 }
 
-const LIBRARY_GRADE_ORDER = ['5', '6', '7', '8', '9', '10', '11', '12']
-
-function sortLibraryGrades(grades) {
-  return LIBRARY_GRADE_ORDER.filter((grade) => grades.has(grade))
-}
-
-// Kütüphanede gösterilecek sınıflar iki kaynaktan gelir: öğretmenin öğrencilerinin sınıfları
-// (otomatik) ve öğretmenin elle eklediği sınıflar (TeacherLibraryGrades). manualGrades, hangi
-// sınıfların elle eklendiğini (dolayısıyla kaldırılabilir olduğunu) belirtmek için ayrıca döner.
-async function fetchTeacherLibraryGrades(teacherUserId) {
-  const requestDb = await withRequest({ teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId } })
-  const result = await requestDb.query(`
-    SELECT sp.grade FROM dbo.StudentTeachers st
-    INNER JOIN dbo.StudentProfiles sp ON sp.student_id = st.student_id
-    WHERE st.teacher_user_id = @teacherUserId AND st.is_active = 1 AND sp.grade IS NOT NULL;
-
-    SELECT grade FROM dbo.TeacherLibraryGrades WHERE teacher_user_id = @teacherUserId;
-  `)
-
-  const [studentGradeRows, manualGradeRows] = result.recordsets
-  const manualGrades = new Set(manualGradeRows.map((row) => row.grade).filter((grade) => LIBRARY_GRADES.has(grade)))
-  const allGrades = new Set([
-    ...studentGradeRows.map((row) => row.grade).filter((grade) => LIBRARY_GRADES.has(grade)),
-    ...manualGrades,
-  ])
-
-  return { grades: sortLibraryGrades(allGrades), manualGrades: sortLibraryGrades(manualGrades) }
-}
-
-async function listTeacherLibraryGradesHandler(request) {
-  try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
-    if (error) return error
-
-    const data = await fetchTeacherLibraryGrades(teacherUserId)
-    return json(200, data)
-  } catch (error) {
-    return handleError(error, 'listTeacherLibraryGradesHandler', 'Kütüphane sınıfları yüklenemedi.')
-  }
-}
-
-async function addTeacherLibraryGradeHandler(request) {
-  try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
-    if (error) return error
-
-    const payload = await request.json().catch(() => ({}))
-    const grade = String(payload?.grade || '').trim()
-    if (!LIBRARY_GRADES.has(grade)) {
-      return json(400, { error: 'Geçersiz sınıf.' })
-    }
-
-    const requestDb = await withRequest({
-      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
-      grade: { type: sql.NVarChar(20), value: grade },
-    })
-    await requestDb.query(`
-      IF NOT EXISTS (SELECT 1 FROM dbo.TeacherLibraryGrades WHERE teacher_user_id = @teacherUserId AND grade = @grade)
-        INSERT INTO dbo.TeacherLibraryGrades (teacher_user_id, grade) VALUES (@teacherUserId, @grade);
-    `)
-
-    const data = await fetchTeacherLibraryGrades(teacherUserId)
-    return json(200, data)
-  } catch (error) {
-    return handleError(error, 'addTeacherLibraryGradeHandler', 'Sınıf eklenemedi.')
-  }
-}
-
-async function removeTeacherLibraryGradeHandler(request) {
-  try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
-    if (error) return error
-
-    const grade = String(request.params.grade || '').trim()
-    if (!LIBRARY_GRADES.has(grade)) {
-      return json(400, { error: 'Geçersiz sınıf.' })
-    }
-
-    const requestDb = await withRequest({
-      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
-      grade: { type: sql.NVarChar(20), value: grade },
-    })
-    await requestDb.query(`
-      DELETE FROM dbo.TeacherLibraryGrades WHERE teacher_user_id = @teacherUserId AND grade = @grade;
-    `)
-
-    const data = await fetchTeacherLibraryGrades(teacherUserId)
-    return json(200, data)
-  } catch (error) {
-    return handleError(error, 'removeTeacherLibraryGradeHandler', 'Sınıf kaldırılamadı.')
-  }
-}
 
 // Öğretmenin kendi panel kotasından doğrudan bir öğrenci eklemesini sağlar. Veli telefon
 // numarasıyla aranır: zaten kendi (aktif) planı olan bir veli bulunursa öğretmenin kotası
@@ -2076,302 +2001,6 @@ async function saveTeacherManualWrongQuestionPhotoHandler(request) {
   }
 }
 
-async function listLibraryResourceBooksForTeacherHandler(request) {
-  try {
-    const { error, teacherUserId, isAdmin } = await requireTeacherSession(request)
-    if (error) return error
-
-    const grade = request.query.get('grade')
-    const subjectId = request.query.get('subjectId')
-    const source = request.query.get('source')
-    if (!LIBRARY_GRADES.has(grade)) {
-      return json(400, { error: 'Geçersiz sınıf.' })
-    }
-    if (!subjectId) {
-      return json(400, { error: 'Ders belirtilmeli.' })
-    }
-    if (source && !RESOURCE_SOURCES.includes(source)) {
-      return json(400, { error: 'Geçersiz kaynak türü.' })
-    }
-
-    const resourceBooks = await fetchLibraryResourceBooks({ grade, subjectId, actorUserId: teacherUserId, source, isAdmin })
-    return json(200, { resourceBooks })
-  } catch (error) {
-    return handleError(error, 'listLibraryResourceBooksForTeacherHandler', 'Kütüphane kaynakları yüklenemedi.')
-  }
-}
-
-async function createLibraryResourceBookForTeacherHandler(request) {
-  try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
-    if (error) return error
-
-    const payload = await request.json().catch(() => null)
-    const result = await createLibraryResourceBookSubmission({ actorUserId: teacherUserId, role: 'ogretmen', payload })
-    if (result.error) {
-      return json(400, { error: result.error })
-    }
-
-    return json(201, { resourceBook: result.resourceBook })
-  } catch (error) {
-    if (error.number === 547) {
-      return json(400, { error: 'Seçilen yayın evi veya ders bulunamadı.' })
-    }
-    return handleError(error, 'createLibraryResourceBookForTeacherHandler', 'Kaynak gönderilemedi.')
-  }
-}
-
-async function getLibraryResourceBookDetailForTeacherHandler(request) {
-  try {
-    const { error, teacherUserId, isAdmin } = await requireTeacherSession(request)
-    if (error) return error
-
-    const resourceBookId = request.params.resourceBookId
-    const detail = await fetchLibraryResourceBookDetail({ resourceBookId, actorUserId: teacherUserId, isAdmin })
-    if (!detail) {
-      return json(404, { error: 'Kaynak bulunamadı.' })
-    }
-
-    return json(200, detail)
-  } catch (error) {
-    return handleError(error, 'getLibraryResourceBookDetailForTeacherHandler', 'Kaynak detayı yüklenemedi.')
-  }
-}
-
-async function deleteLibraryResourceBookForTeacherHandler(request) {
-  try {
-    const { error, teacherUserId, isAdmin } = await requireTeacherSession(request)
-    if (error) return error
-
-    const resourceBookId = request.params.resourceBookId
-    const result = await deleteLibraryResourceBookSubmission({
-      actorUserId: teacherUserId,
-      role: 'ogretmen',
-      resourceBookId,
-      isAdmin,
-    })
-    if (result.error) {
-      return json(404, { error: result.error })
-    }
-
-    return json(200, { success: true })
-  } catch (error) {
-    return handleError(error, 'deleteLibraryResourceBookForTeacherHandler', 'Kaynak silinemedi.')
-  }
-}
-
-async function addLibraryResourceBookTopicsForTeacherHandler(request) {
-  try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
-    if (error) return error
-
-    const resourceBookId = request.params.resourceBookId
-    const payload = await request.json().catch(() => null)
-    const result = await addLibraryResourceBookTopicsSubmission({
-      actorUserId: teacherUserId,
-      role: 'ogretmen',
-      resourceBookId,
-      payload,
-    })
-    if (result.error) {
-      return json(400, { error: result.error })
-    }
-
-    return json(200, result.detail)
-  } catch (error) {
-    return handleError(error, 'addLibraryResourceBookTopicsForTeacherHandler', 'İçerik kaydedilemedi.')
-  }
-}
-
-async function extractLibraryTocForTeacherHandler(request) {
-  try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
-    if (error) return error
-
-    const payload = await request.json().catch(() => null)
-    const images = payload?.images
-    if (!Array.isArray(images) || !images.length) {
-      return json(400, { error: 'En az bir içindekiler fotoğrafı yükleyin.' })
-    }
-
-    const jobId = await createExtractionJob({ jobType: 'toc', actorUserId: teacherUserId })
-    runExtractionJobInBackground(jobId, async () => {
-      const result = await extractLibraryTocFromImages(images)
-      if (result.error) throw new Error(result.error)
-      return { topics: result.topics }
-    })
-
-    return json(202, { jobId })
-  } catch (error) {
-    if (isConfigError(error)) {
-      return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
-    }
-    return handleError(error, 'extractLibraryTocForTeacherHandler', 'İçindekiler okunamadı.')
-  }
-}
-
-async function extractLibraryCoverForTeacherHandler(request) {
-  try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
-    if (error) return error
-
-    const payload = await request.json().catch(() => null)
-    const image = payload?.image
-    if (!image) {
-      return json(400, { error: 'Kapak fotoğrafı yükleyin.' })
-    }
-
-    const jobId = await createExtractionJob({ jobType: 'cover', actorUserId: teacherUserId })
-    runExtractionJobInBackground(jobId, async () => {
-      const result = await extractLibraryCoverInfo(image)
-      if (result.error) throw new Error(result.error)
-      return result
-    })
-
-    return json(202, { jobId })
-  } catch (error) {
-    if (isConfigError(error)) {
-      return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
-    }
-    return handleError(error, 'extractLibraryCoverForTeacherHandler', 'Kapak okunamadı.')
-  }
-}
-
-async function extractLibraryAnswerKeyForTeacherHandler(request) {
-  try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
-    if (error) return error
-
-    const payload = await request.json().catch(() => null)
-    const images = payload?.images
-    if (!Array.isArray(images) || !images.length) {
-      return json(400, { error: 'En az bir cevap anahtarı fotoğrafı yükleyin.' })
-    }
-
-    const jobId = await createExtractionJob({ jobType: 'answer_key', actorUserId: teacherUserId })
-    runExtractionJobInBackground(jobId, async () => {
-      const result = await extractLibraryAnswerKeyFromImages(images)
-      if (result.error) throw new Error(result.error)
-      return { tests: result.tests }
-    })
-
-    return json(202, { jobId })
-  } catch (error) {
-    if (isConfigError(error)) {
-      return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
-    }
-    return handleError(error, 'extractLibraryAnswerKeyForTeacherHandler', 'Cevap anahtarı okunamadı.')
-  }
-}
-
-async function getLibraryExtractionJobForTeacherHandler(request) {
-  try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
-    if (error) return error
-
-    const jobId = request.params.jobId
-    const job = await getExtractionJob(jobId, teacherUserId)
-    if (!job) {
-      return json(404, { error: 'İş bulunamadı.' })
-    }
-    if (job.status === 'pending') {
-      return json(200, { status: 'pending' })
-    }
-    if (job.status === 'error') {
-      return json(200, { status: 'error', error: job.error_message })
-    }
-    return json(200, { status: 'done', ...JSON.parse(job.result_json) })
-  } catch (error) {
-    if (isConfigError(error)) {
-      return json(503, { error: 'Yapay zeka servisi yapılandırması eksik.' })
-    }
-    return handleError(error, 'getLibraryExtractionJobForTeacherHandler', 'İş durumu okunamadı.')
-  }
-}
-
-async function listAssignableStudentsForLibraryResourceHandler(request) {
-  try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
-    if (error) return error
-
-    const resourceBookId = request.params.resourceBookId
-    const resourceBook = await fetchResourceBookById(resourceBookId)
-    if (!resourceBook) {
-      return json(404, { error: 'Kaynak bulunamadı.' })
-    }
-
-    const requestDb = await withRequest({
-      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
-      subjectId: { type: sql.UniqueIdentifier, value: resourceBook.subjectId },
-      grade: { type: sql.NVarChar(20), value: resourceBook.grade },
-      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
-    })
-    const result = await requestDb.query(`
-      SELECT st.id AS student_teacher_id, st.student_id, u.full_name AS student_full_name,
-             CASE WHEN srb.resource_book_id IS NULL THEN 0 ELSE 1 END AS assigned
-      FROM dbo.StudentTeachers st
-      INNER JOIN dbo.Users u ON u.id = st.student_id
-      INNER JOIN dbo.StudentProfiles sp ON sp.student_id = st.student_id
-      LEFT JOIN dbo.StudentResourceBooks srb ON srb.student_id = st.student_id AND srb.resource_book_id = @resourceBookId
-      WHERE st.teacher_user_id = @teacherUserId AND st.is_active = 1 AND st.subject_id = @subjectId AND sp.grade = @grade
-      ORDER BY u.full_name ASC;
-    `)
-
-    return json(200, {
-      students: result.recordset.map((record) => ({
-        studentTeacherId: record.student_teacher_id,
-        studentId: record.student_id,
-        fullName: record.student_full_name,
-        assigned: Boolean(record.assigned),
-      })),
-    })
-  } catch (error) {
-    return handleError(error, 'listAssignableStudentsForLibraryResourceHandler', 'Öğrenciler yüklenemedi.')
-  }
-}
-
-async function assignLibraryResourceBookHandler(request) {
-  try {
-    const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
-    if (error) return error
-
-    const resourceBookId = request.params.resourceBookId
-    const resourceBook = await fetchResourceBookById(resourceBookId)
-    if (!resourceBook) {
-      return json(404, { error: 'Kaynak bulunamadı.' })
-    }
-    if (resourceBook.subjectId !== subjectId) {
-      return json(400, { error: 'Bu kaynak, bu öğrenciyle olan dersinize ait değil.' })
-    }
-
-    const requestDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
-      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
-    })
-    await requestDb.query(`
-      INSERT INTO dbo.StudentResourceBooks (student_id, resource_book_id)
-      SELECT @studentId, @resourceBookId
-      WHERE NOT EXISTS (
-        SELECT 1 FROM dbo.StudentResourceBooks WHERE student_id = @studentId AND resource_book_id = @resourceBookId
-      );
-
-      INSERT INTO dbo.StudentTeacherResourceBooks (teacher_id, student_id, resource_book_id)
-      SELECT @studentTeacherId, @studentId, @resourceBookId
-      WHERE NOT EXISTS (
-        SELECT 1 FROM dbo.StudentTeacherResourceBooks WHERE teacher_id = @studentTeacherId AND resource_book_id = @resourceBookId
-      );
-    `)
-
-    return json(200, { success: true })
-  } catch (error) {
-    if (error.number === 547) {
-      return json(400, { error: 'Kaynak bulunamadı.' })
-    }
-    return handleError(error, 'assignLibraryResourceBookHandler', 'Kaynak atanamadı.')
-  }
-}
-
 async function listTeacherStudentHomeworksHandler(request) {
   try {
     const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
@@ -3210,17 +2839,6 @@ module.exports = {
   unmarkTeacherResourceBookTopicTestCompletionHandler,
   submitTeacherManualOpticalAnswersHandler,
   saveTeacherManualWrongQuestionPhotoHandler,
-  listLibraryResourceBooksForTeacherHandler,
-  createLibraryResourceBookForTeacherHandler,
-  getLibraryResourceBookDetailForTeacherHandler,
-  deleteLibraryResourceBookForTeacherHandler,
-  addLibraryResourceBookTopicsForTeacherHandler,
-  extractLibraryTocForTeacherHandler,
-  extractLibraryCoverForTeacherHandler,
-  extractLibraryAnswerKeyForTeacherHandler,
-  getLibraryExtractionJobForTeacherHandler,
-  listAssignableStudentsForLibraryResourceHandler,
-  assignLibraryResourceBookHandler,
   listTeacherStudentHomeworksHandler,
   createTeacherHomeworkHandler,
   assignTeacherHomeworkTaskHandler,
@@ -3237,7 +2855,4 @@ module.exports = {
   getTeacherEntitlementHandler,
   updateTeacherProfileHandler,
   createTeacherStudentHandler,
-  listTeacherLibraryGradesHandler,
-  addTeacherLibraryGradeHandler,
-  removeTeacherLibraryGradeHandler,
 }

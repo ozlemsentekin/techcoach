@@ -437,12 +437,21 @@ function AddStudentModal({ onCreated, onClose }) {
 
           {step === 3 ? (
             <div className="flex flex-col gap-3">
-              <p className="text-sm text-panel-text-muted">
-                Çocuğunuzun okul ders saatlerini girin (hafta sonu kurs programı varsa cumartesi/pazar da
-                eklenebilir). Bu saatler haftalık planda "Okulda" olarak görünür ve bu saatlere ödev eklenemez. Şu an
-                bilmiyorsanız bu adımı atlayıp daha sonra "Detay" ekranından ekleyebilirsiniz.
-              </p>
-              <SchoolScheduleEditor entries={schoolSchedule} onChange={setSchoolSchedule} />
+              {school?.id && form.grade ? (
+                <p className="rounded-xl bg-panel-blue-soft/50 px-3 py-2.5 text-sm text-panel-text">
+                  Okul ders saatleri, seçtiğiniz okul ve sınıf bilgisinden otomatik alınır ve haftalık planda "Okulda"
+                  olarak görünür. Bu adımı geçebilirsiniz.
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-panel-text-muted">
+                    Okul sistemde tanımlı değilse çocuğunuzun okul ders saatlerini elle girin (hafta sonu kurs programı
+                    varsa cumartesi/pazar da eklenebilir). Bu saatler haftalık planda "Okulda" olarak görünür ve bu
+                    saatlere ödev eklenemez. Şu an bilmiyorsanız bu adımı atlayabilirsiniz.
+                  </p>
+                  <SchoolScheduleEditor entries={schoolSchedule} onChange={setSchoolSchedule} />
+                </>
+              )}
             </div>
           ) : null}
 

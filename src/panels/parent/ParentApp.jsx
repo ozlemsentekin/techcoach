@@ -23,7 +23,6 @@ const AdminMissingAnswerKeysPage = lazy(() => import('./pages/AdminMissingAnswer
 const StudentsPage = lazy(() => import('./pages/StudentsPage'))
 const TeachersPage = lazy(() => import('./pages/TeachersPage'))
 const LibraryPage = lazy(() => import('./pages/LibraryPage'))
-const LibraryGradePage = lazy(() => import('./pages/LibraryGradePage'))
 const HomeworkPage = lazy(() => import('./pages/HomeworkPage'))
 const TestsPage = lazy(() => import('./pages/TestsPage'))
 const MistakesPage = lazy(() => import('./pages/MistakesPage'))
@@ -119,10 +118,6 @@ export default function ParentApp() {
             <Route
               path="library"
               element={<RequireStudents>{pageElement(LibraryPage)}</RequireStudents>}
-            />
-            <Route
-              path="library/:grade"
-              element={<RequireStudents>{pageElement(LibraryGradePage)}</RequireStudents>}
             />
             <Route path="settings" element={pageElement(SettingsPage)} />
             <Route

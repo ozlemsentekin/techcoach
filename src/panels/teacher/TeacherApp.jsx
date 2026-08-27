@@ -9,7 +9,6 @@ const StudentDetailPage = lazy(() => import('./pages/StudentDetailPage'))
 const ParentsPage = lazy(() => import('./pages/ParentsPage'))
 const LessonPlanPage = lazy(() => import('./pages/LessonPlanPage'))
 const LibraryPage = lazy(() => import('./pages/LibraryPage'))
-const LibraryGradePage = lazy(() => import('./pages/LibraryGradePage'))
 
 function pageElement(Page) {
   return (
@@ -30,7 +29,6 @@ export default function TeacherApp() {
           <Route path="parents" element={pageElement(ParentsPage)} />
           <Route path="lesson-plan" element={pageElement(LessonPlanPage)} />
           <Route path="library" element={pageElement(LibraryPage)} />
-          <Route path="library/:grade" element={pageElement(LibraryGradePage)} />
           <Route path="*" element={<Navigate to="students" replace />} />
         </Route>
       </Routes>

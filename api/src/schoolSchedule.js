@@ -211,6 +211,130 @@ async function saveSchoolClassScheduleHandler(request) {
   }
 }
 
+function sanitizeCalendarEntry(record) {
+  return {
+    id: record.id,
+    entryType: record.entry_type,
+    startDate: typeof record.start_date === 'string' ? record.start_date : record.start_date?.toISOString().slice(0, 10),
+    endDate: typeof record.end_date === 'string' ? record.end_date : record.end_date?.toISOString().slice(0, 10),
+    name: record.name || null,
+  }
+}
+
+/** Bir okulun tatil/kapalı gün takvimi girdilerini döner (bkz. dbo.SchoolCalendarEntries). */
+async function getSchoolCalendarEntries(schoolId) {
+  if (!isGuid(schoolId)) return []
+  const requestDb = await withRequest({
+    schoolId: { type: sql.UniqueIdentifier, value: schoolId },
+  })
+  const result = await requestDb.query(`
+    SELECT id, entry_type, start_date, end_date, name
+    FROM dbo.SchoolCalendarEntries
+    WHERE school_id = @schoolId
+    ORDER BY start_date ASC;
+  `)
+  return result.recordset.map(sanitizeCalendarEntry)
+}
+
+async function listSchoolCalendarHandler(request) {
+  try {
+    const { error } = await requireAdmin(request)
+    if (error) return error
+
+    const schoolId = request.params.schoolId
+    if (!isGuid(schoolId)) {
+      return json(400, { error: 'Geçerli bir okul seçin.' })
+    }
+
+    return json(200, { entries: await getSchoolCalendarEntries(schoolId) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+    console.error('listSchoolCalendarHandler failed', error)
+    return json(500, { error: 'Okul takvimi yüklenemedi.' })
+  }
+}
+
+async function createSchoolCalendarEntryHandler(request) {
+  try {
+    const { error } = await requireAdmin(request)
+    if (error) return error
+
+    const schoolId = request.params.schoolId
+    if (!isGuid(schoolId)) {
+      return json(400, { error: 'Geçerli bir okul seçin.' })
+    }
+
+    const payload = await request.json().catch(() => null)
+    const startDate = typeof payload?.startDate === 'string' ? payload.startDate.trim() : ''
+    const endDate = typeof payload?.endDate === 'string' ? payload.endDate.trim() : startDate
+    const name = typeof payload?.name === 'string' ? payload.name.trim() : ''
+
+    if (!DATE_PATTERN.test(startDate) || !DATE_PATTERN.test(endDate)) {
+      return json(400, { error: 'Geçerli bir tarih girin.' })
+    }
+    if (startDate > endDate) {
+      return json(400, { error: 'Bitiş tarihi başlangıç tarihinden önce olamaz.' })
+    }
+    if (name.length > 200) {
+      return json(400, { error: 'Tatil adı en fazla 200 karakter olabilir.' })
+    }
+
+    const requestDb = await withRequest({
+      schoolId: { type: sql.UniqueIdentifier, value: schoolId },
+      startDate: { type: sql.Date, value: startDate },
+      endDate: { type: sql.Date, value: endDate },
+      name: { type: sql.NVarChar(200), value: name || null },
+    })
+    const result = await requestDb.query(`
+      INSERT INTO dbo.SchoolCalendarEntries (school_id, entry_type, start_date, end_date, name)
+      OUTPUT inserted.id, inserted.entry_type, inserted.start_date, inserted.end_date, inserted.name
+      VALUES (@schoolId, 'tatil', @startDate, @endDate, @name);
+    `)
+
+    return json(201, { entry: sanitizeCalendarEntry(result.recordset[0]) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+    console.error('createSchoolCalendarEntryHandler failed', error)
+    return json(500, { error: 'Tatil eklenemedi.' })
+  }
+}
+
+async function deleteSchoolCalendarEntryHandler(request) {
+  try {
+    const { error } = await requireAdmin(request)
+    if (error) return error
+
+    const { schoolId, entryId } = request.params
+    if (!isGuid(schoolId) || !isGuid(entryId)) {
+      return json(400, { error: 'Geçerli bir kayıt seçin.' })
+    }
+
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: entryId },
+      schoolId: { type: sql.UniqueIdentifier, value: schoolId },
+    })
+    const result = await requestDb.query(`
+      DELETE FROM dbo.SchoolCalendarEntries WHERE id = @id AND school_id = @schoolId;
+      SELECT @@ROWCOUNT AS affected;
+    `)
+    if (!result.recordset?.[0]?.affected) {
+      return json(404, { error: 'Kayıt bulunamadı.' })
+    }
+
+    return json(200, { ok: true })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+    console.error('deleteSchoolCalendarEntryHandler failed', error)
+    return json(500, { error: 'Kayıt silinemedi.' })
+  }
+}
+
 async function getStudentSchoolScheduleTemplate(schoolId, grade) {
   if (!isGuid(schoolId) || !GRADE_OPTIONS.has(grade)) {
     return []
@@ -236,10 +360,24 @@ async function getPanelSchoolScheduleHandler(request) {
       studentId: { type: sql.UniqueIdentifier, value: studentId },
     })
     const result = await requestDb.query(`
-      SELECT school_schedule_json FROM dbo.StudentProfiles WHERE student_id = @studentId;
+      SELECT school_id, grade, school_schedule_json FROM dbo.StudentProfiles WHERE student_id = @studentId;
     `)
+    const profile = result.recordset[0]
 
-    return json(200, { entries: parseJsonEntries(result.recordset[0]?.school_schedule_json) })
+    // Okul + sınıf biliniyorsa okul saatlerini canlı olarak admin şablonundan türetiriz
+    // (bkz. dbo.SchoolClassSchedules); admin değişikliği anında öğrencilere yansır. Aksi
+    // halde (okul sistemde değil) öğrenciye kaydedilmiş manuel programa düşeriz.
+    let entries = []
+    if (profile?.school_id && profile?.grade) {
+      entries = await getStudentSchoolScheduleTemplate(profile.school_id, profile.grade)
+    }
+    if (entries.length === 0) {
+      entries = parseJsonEntries(profile?.school_schedule_json)
+    }
+
+    const holidays = profile?.school_id ? await getSchoolCalendarEntries(profile.school_id) : []
+
+    return json(200, { entries, holidays })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -258,7 +396,11 @@ module.exports = {
   validateScheduleEntries,
   parseJsonEntries,
   getStudentSchoolScheduleTemplate,
+  getSchoolCalendarEntries,
   getSchoolClassScheduleHandler,
   saveSchoolClassScheduleHandler,
   getPanelSchoolScheduleHandler,
+  listSchoolCalendarHandler,
+  createSchoolCalendarEntryHandler,
+  deleteSchoolCalendarEntryHandler,
 }

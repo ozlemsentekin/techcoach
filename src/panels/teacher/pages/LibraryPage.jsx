@@ -1,5 +1,5 @@
-import LibraryGradesPage from '../../shared/library/LibraryGradesPage'
+import LibraryCatalogPage from '../../shared/library/LibraryCatalogPage'
 
 export default function LibraryPage() {
-  return <LibraryGradesPage role="teacher" />
+  return <LibraryCatalogPage role="teacher" />
 }

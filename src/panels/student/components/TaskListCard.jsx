@@ -197,7 +197,14 @@ export default function TaskListCard({
   const details = parseAssignmentDetails(task)
   const overdueDays = daysLate(task.date)
   const isActive = task.status === 'bekliyor' || task.status === 'devam-ediyor' || task.status === 'yardim-bekliyor'
-  const isOverdueIncomplete = !isTeacherLessonSlot && overdueDays > 0 && !['tamamlandi', 'yeniden-planlandi'].includes(task.status)
+  // "Diğer" kategorisi görevleri (mola/yemek + serbest zaman/spor/sosyal aktivite) süresi
+  // geçince sunucuda otomatik tamamlanır; "Gecikti" olarak işaretlenmezler.
+  const isOverdueIncomplete =
+    !isTeacherLessonSlot &&
+    !isBreakTask &&
+    !isActivityTask &&
+    overdueDays > 0 &&
+    !['tamamlandi', 'yeniden-planlandi'].includes(task.status)
 
   // Bugüne ait, henüz başlanmamış ve saat aralığı olan görevlerde anlık saatle görevin
   // start-end aralığı karşılaştırılır: aralık şu anı kapsıyorsa "Şimdi", aralık geçtiyse

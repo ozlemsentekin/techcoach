@@ -1,8 +1,9 @@
 import { daysLate } from './time'
+import { AUTO_COMPLETE_TASK_TYPES } from '../data/taskTypes'
 
-// Mola/serbest zaman gibi türlerde "tamamlanma" kavramı anlamlı olmadığından biriken
+// Mola/serbest zaman/spor gibi türlerde "tamamlanma" kavramı anlamlı olmadığından biriken
 // görev sayılmazlar (bkz. WeeklyPlannerGrid.jsx getHomeworkStatusIcon ile aynı ayrım).
-const NON_BACKLOG_TASK_TYPES = new Set(['mola', 'dinlenme', 'yemek', 'yemek-dinlenme', 'serbest-zaman'])
+const NON_BACKLOG_TASK_TYPES = AUTO_COMPLETE_TASK_TYPES
 
 /**
  * Görev, atandığı tarihte tamamlanmadan geride kaldıysa ("biriken görev") true döner.

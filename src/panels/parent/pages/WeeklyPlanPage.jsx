@@ -36,6 +36,7 @@ export default function WeeklyPlanPage() {
   const [dayStatusByDate, setDayStatusByDate] = useState({})
   const [lessonSchedule, setLessonSchedule] = useState([])
   const [schoolSchedule, setSchoolSchedule] = useState([])
+  const [schoolHolidays, setSchoolHolidays] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [drawerState, setDrawerState] = useState(null)
@@ -77,10 +78,11 @@ export default function WeeklyPlanPage() {
   useEffect(() => {
     Promise.all([
       getTeacherLessonSchedule().catch(() => []),
-      getSchoolSchedule().catch(() => []),
-    ]).then(([teacherLessons, schoolLessons]) => {
+      getSchoolSchedule().catch(() => ({ entries: [], holidays: [] })),
+    ]).then(([teacherLessons, school]) => {
       setLessonSchedule(teacherLessons)
-      setSchoolSchedule(schoolLessons)
+      setSchoolSchedule(school.entries || [])
+      setSchoolHolidays(school.holidays || [])
     })
   }, [])
 
@@ -237,6 +239,7 @@ export default function WeeklyPlanPage() {
             dayStatusByDate={dayStatusByDate}
             lessonSchedule={lessonSchedule}
             schoolSchedule={schoolSchedule}
+            schoolHolidays={schoolHolidays}
             onAddHomework={restricted ? undefined : (date) => setHomeworkModalDate(date)}
             onAddTask={restricted ? undefined : (date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}
             onEditTask={(task) => setDrawerState({ initialTask: task })}
@@ -258,6 +261,7 @@ export default function WeeklyPlanPage() {
               defaultDate={drawerState.defaultDate}
               getExistingTasksForDate={getExistingTasksForDrawer}
               schoolSchedule={schoolSchedule}
+              schoolHolidays={schoolHolidays}
               onSave={handleSaveDrawerTask}
               onDelete={handleDeleteTask}
               onClose={() => setDrawerState(null)}
@@ -268,6 +272,7 @@ export default function WeeklyPlanPage() {
             <AssignHomeworkModal
               defaultTaskDate={homeworkModalDate}
               schoolSchedule={schoolSchedule}
+              schoolHolidays={schoolHolidays}
               onSave={handleSaveHomework}
               onClose={() => setHomeworkModalDate('')}
             />

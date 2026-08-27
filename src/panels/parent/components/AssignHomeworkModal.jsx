@@ -95,7 +95,7 @@ function hasResourceBookRates(book) {
   return book.completionRate !== undefined || book.successRate !== undefined
 }
 
-export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, onSave, onClose }) {
+export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, schoolHolidays, onSave, onClose }) {
   const [step, setStep] = useState('source')
   const [resourceBookId, setResourceBookId] = useState('')
   const [note, setNote] = useState('')
@@ -230,7 +230,7 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, o
 
     if (trimmedTime) {
       const effectiveEndTime = addMinutesToTime(trimmedTime, effectiveDuration)
-      const schoolConflict = getSchoolScheduleConflict(schoolSchedule, defaultTaskDate, trimmedTime, effectiveEndTime)
+      const schoolConflict = getSchoolScheduleConflict(schoolSchedule, defaultTaskDate, trimmedTime, effectiveEndTime, schoolHolidays)
       if (schoolConflict) {
         setSaveError(
           `Bu saatte öğrenci okulda (${schoolConflict.startTime}-${schoolConflict.endTime}${schoolConflict.lessonName ? ` · ${schoolConflict.lessonName}` : ''}). Bu saate ödev eklenemez.`,

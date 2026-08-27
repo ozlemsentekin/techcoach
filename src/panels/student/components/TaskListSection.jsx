@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { BookOpen, CheckCircle2, Circle, Clock, ListChecks, SlidersHorizontal } from 'lucide-react'
 import { getSortedTasks } from '../../../utils/taskSelectors'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
-import { TASK_TYPES, BREAK_TASK_TYPES } from '../../../data/taskTypes'
+import { TASK_TYPES, BREAK_TASK_TYPES, AUTO_COMPLETE_TASK_TYPES } from '../../../data/taskTypes'
 import { addDaysISO, daysLate, formatDateLong, todayISODate } from '../../../utils/time'
 import TaskGroupSection from './TaskGroupSection'
 import TaskDetailsDrawer from './TaskDetailsDrawer'
@@ -35,6 +35,9 @@ function lessonLabelFor(task) {
 }
 
 function isOverdueIncomplete(task) {
+  // "Diğer" kategorisi görevleri (mola/yemek/serbest zaman/spor) süresi geçince sunucuda
+  // otomatik tamamlanır; biriken görev olarak gösterilmezler.
+  if (AUTO_COMPLETE_TASK_TYPES.has(task.taskType)) return false
   return daysLate(task.date) > 0 && !['tamamlandi', 'yeniden-planlandi'].includes(task.status)
 }
 

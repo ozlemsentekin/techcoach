@@ -54,6 +54,9 @@ function sanitizeTask(record) {
     completedSubGoals: record.completed_sub_goals_json ? JSON.parse(record.completed_sub_goals_json) : [],
     resourceBookId: record.resource_book_id || undefined,
     resourceBookName: record.resource_book_name || undefined,
+    schoolResourceId: record.school_resource_id || undefined,
+    schoolResourceName: record.school_resource_name || undefined,
+    schoolResourceImageUrl: record.school_resource_image_url || undefined,
     studentTeacherId: record.student_teacher_id || undefined,
     teacherFullName: record.teacher_full_name || undefined,
     resourceType: record.resource_type || undefined,
@@ -114,11 +117,13 @@ const SELECT_TASK = `
          t.notes, t.completed_at, t.rescheduled_from, t.rescheduled_to, t.reschedule_reason, t.correct_count, t.wrong_count,
          t.blank_count, t.difficulty, t.emotion, t.reflection_answers_json, t.completed_sub_goals_json,
          t.resource_book_id, t.selected_test_ids_json, t.answers_json, t.test_results_json, rb.name AS resource_book_name, rb.resource_type, rb.has_answer_key, p.name AS publisher_name,
+         t.school_resource_id, scr.name AS school_resource_name, scr.image_url AS school_resource_image_url,
          t.student_teacher_id, st.teacher_full_name,
          t.created_at, t.updated_at
   FROM dbo.Tasks t
   LEFT JOIN dbo.ResourceBooks rb ON rb.id = t.resource_book_id
   LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+  LEFT JOIN dbo.SchoolClassResources scr ON scr.id = t.school_resource_id
   LEFT JOIN dbo.StudentTeachers st ON st.id = t.student_teacher_id
 `
 
@@ -159,6 +164,7 @@ const FIELD_MAP = {
   completedSubGoals: (v) => ({ column: 'completed_sub_goals_json', type: sql.NVarChar(sql.MAX), value: v ? JSON.stringify(v) : null }),
   isDraft: (v) => ({ column: 'is_draft', type: sql.Bit, value: Boolean(v) }),
   resourceBookId: (v) => ({ column: 'resource_book_id', type: sql.UniqueIdentifier, value: v || null }),
+  schoolResourceId: (v) => ({ column: 'school_resource_id', type: sql.UniqueIdentifier, value: v || null }),
   studentTeacherId: (v) => ({ column: 'student_teacher_id', type: sql.UniqueIdentifier, value: v || null }),
   selectedTestIds: (v) => ({ column: 'selected_test_ids_json', type: sql.NVarChar(sql.MAX), value: v && v.length ? JSON.stringify(v) : null }),
   answers: (v) => ({ column: 'answers_json', type: sql.NVarChar(sql.MAX), value: v ? JSON.stringify(v) : null }),
@@ -169,6 +175,16 @@ const STUDENT_ACTIVITY_ACTOR_ROLE = 'ogrenci'
 const SYSTEM_ACTIVITY_ACTOR_ROLE = 'sistem'
 const DONE_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
 const BREAK_TASK_TYPES = new Set(['mola', 'dinlenme', 'yemek', 'yemek-dinlenme'])
+// "Diğer" kategorisindeki (ders dışı) görev türleri: mola/yemek + serbest zaman/spor/sosyal
+// aktivite. Bu türlerde "tamamlama" kavramı anlamlı olmadığından, süresi geçince otomatik
+// 'tamamlandi' yapılır ve biriken ("Gecikti") görev olarak sayılmazlar.
+const AUTO_COMPLETE_TASK_TYPES = new Set([
+  ...BREAK_TASK_TYPES,
+  'serbest-zaman',
+  'spor',
+  'sosyal-aktivite',
+])
+const AUTO_COMPLETE_TASK_TYPE_LIST = [...AUTO_COMPLETE_TASK_TYPES]
 const PRIVATE_LESSON_TASK_TYPE = 'ozel-ders'
 
 // Ebeveynin "Özel Ders" görevi için gönderdiği student_teacher_id'nin gerçekten bu öğrenciye
@@ -194,23 +210,30 @@ async function resolveActiveParentPrivateTeacher(studentId, studentTeacherId) {
 // TR, 2016'dan beri yaz saati uygulamıyor, bu yüzden sabit +3 saatlik ofset güvenli.
 const TR_UTC_OFFSET_MS = 3 * 60 * 60 * 1000
 
-// Süresi (date + end_time) geçmiş ama hâlâ 'bekliyor' durumundaki mola/dinlenme/yemek
-// görevlerini otomatik 'tamamlandi' yapar ve bunu 'sistem' aktörüyle loglar; böylece
-// "İşlem Logları" panelinde öğrencinin kendisinin mi yoksa sürenin dolmasıyla sistemin mi
-// bitirdiği ayırt edilebilir. Öğrencinin "Bitir" butonuyla yaptığı manuel tamamlama zaten
+// Süresi (date + end_time) geçmiş ama hâlâ 'bekliyor' durumundaki "Diğer" kategorisi
+// görevlerini (mola/dinlenme/yemek + serbest zaman/spor/sosyal aktivite) otomatik
+// 'tamamlandi' yapar ve bunu 'sistem' aktörüyle loglar; böylece "İşlem Logları" panelinde
+// öğrencinin kendisinin mi yoksa sürenin dolmasıyla sistemin mi bitirdiği ayırt edilebilir.
+// Öğrencinin "Bitir" butonuyla yaptığı manuel tamamlama zaten
 // recordStudentTaskUpdateActivities üzerinden 'ogrenci' aktörüyle loglanıyor.
 async function autoCompleteExpiredBreaks({ studentId, date, isDraft }) {
   if (isDraft) return
 
-  const selectDb = await withRequest({
+  const selectBindings = {
     studentId: { type: sql.UniqueIdentifier, value: studentId },
     date: { type: sql.Date, value: date },
+  }
+  const taskTypeParamNames = AUTO_COMPLETE_TASK_TYPE_LIST.map((taskType, index) => {
+    const paramName = `autoType${index}`
+    selectBindings[paramName] = { type: sql.NVarChar(40), value: taskType }
+    return `@${paramName}`
   })
+  const selectDb = await withRequest(selectBindings)
   const pending = await selectDb.query(`
     SELECT id, title, subject, task_type, date, start_time, end_time
     FROM dbo.Tasks
     WHERE student_id = @studentId AND date = @date AND is_draft = 0
-      AND task_type IN ('mola', 'dinlenme', 'yemek', 'yemek-dinlenme')
+      AND task_type IN (${taskTypeParamNames.join(', ')})
       AND status = 'bekliyor';
   `)
 
@@ -221,7 +244,7 @@ async function autoCompleteExpiredBreaks({ studentId, date, isDraft }) {
   const nowLocalTime = nowLocal.toISOString().slice(11, 16)
 
   const expired = pending.recordset.filter((row) => {
-    if (!BREAK_TASK_TYPES.has(row.task_type)) return false
+    if (!AUTO_COMPLETE_TASK_TYPES.has(row.task_type)) return false
     const rowDate = toISODate(row.date)
     if (rowDate < todayLocalDate) return true
     if (rowDate === todayLocalDate) return row.end_time <= nowLocalTime

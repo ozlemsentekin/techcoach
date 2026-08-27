@@ -32,6 +32,19 @@ export const TASK_TYPES = {
 /** Mola/yemek gibi ders dışı ara türler; tamamlanan akışta bunlar listelenmez. */
 export const BREAK_TASK_TYPES = new Set(['mola', 'dinlenme', 'yemek', 'yemek-dinlenme'])
 
+/**
+ * "Diğer" kategorisindeki (ders dışı) görev türleri: mola/yemek + serbest zaman/spor/sosyal
+ * aktivite. Bu türlerde "tamamlama" kavramı anlamlı olmadığından süresi geçince sunucu
+ * tarafında otomatik `tamamlandi` yapılır (bkz. api/src/tasks.js autoCompleteExpiredBreaks)
+ * ve biriken ("Gecikti") görev olarak sayılmazlar.
+ */
+export const AUTO_COMPLETE_TASK_TYPES = new Set([
+  ...BREAK_TASK_TYPES,
+  'serbest-zaman',
+  'spor',
+  'sosyal-aktivite',
+])
+
 /** Ödev davranışı gösteren görev türleri; `odev` Homeworks bağlantılı eski/genel türdür. */
 export const HOMEWORK_TASK_TYPES = new Set(['odev', 'soru-bankasi-odevi', 'okul-odevi', 'etkinlik-odevi'])
 

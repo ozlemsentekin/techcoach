@@ -23,11 +23,24 @@ export async function getTeacherStudentProfile(studentTeacherId) {
   return authRequest(`/api/panel-teacher/students/${studentTeacherId}/profile`, { method: 'GET' })
 }
 
-/** Öğretmenin bizzat eklediği bir öğrencinin Temel Bilgiler alanlarını günceller. */
-export async function updateTeacherStudentProfile(studentTeacherId, { firstName, lastName, grade, birthDate, gender, phone }) {
+/** Öğretmenin bizzat eklediği bir öğrencinin Temel Bilgiler/Okul Bilgileri alanlarını günceller. */
+export async function updateTeacherStudentProfile(
+  studentTeacherId,
+  { firstName, lastName, grade, birthDate, gender, phone, provinceId, districtId, schoolId },
+) {
   const result = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/profile`, {
     method: 'PUT',
-    body: JSON.stringify({ firstName, lastName, grade, birthDate: birthDate || null, gender: gender || null, phone: phone || null }),
+    body: JSON.stringify({
+      firstName,
+      lastName,
+      grade,
+      birthDate: birthDate || null,
+      gender: gender || null,
+      phone: phone || null,
+      provinceId: provinceId || null,
+      districtId: districtId || null,
+      schoolId: schoolId || null,
+    }),
   })
   invalidateCache('/api/panel-teacher/students')
   return result
@@ -94,24 +107,6 @@ export async function deleteTeacherStudent(studentTeacherId) {
   const result = await authRequest(`/api/panel-teacher/students/${studentTeacherId}`, { method: 'DELETE' })
   invalidateCache('/api/panel-teacher/students')
   return result
-}
-
-/** Kütüphanede gösterilen sınıflar (öğrencilerden otomatik + elle eklenenler). @returns {Promise<{grades: string[], manualGrades: string[]}>} */
-export async function getTeacherLibraryGrades() {
-  return authRequest('/api/panel-teacher/library-grades', { method: 'GET' })
-}
-
-/** Öğretmenin kütüphanesine, öğrenci eklemeden elle bir sınıf ekler. @returns {Promise<{grades: string[], manualGrades: string[]}>} */
-export async function addTeacherLibraryGrade(grade) {
-  return authRequest('/api/panel-teacher/library-grades', {
-    method: 'POST',
-    body: JSON.stringify({ grade }),
-  })
-}
-
-/** Elle eklenmiş bir sınıfı kütüphaneden kaldırır. @returns {Promise<{grades: string[], manualGrades: string[]}>} */
-export async function removeTeacherLibraryGrade(grade) {
-  return authRequest(`/api/panel-teacher/library-grades/${grade}`, { method: 'DELETE' })
 }
 
 /** @returns {Promise<{recurringEntries: Array, oneTimeEntries: Array}>} */

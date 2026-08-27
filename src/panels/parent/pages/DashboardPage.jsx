@@ -198,6 +198,7 @@ export default function DashboardPage() {
   const [deletingTask, setDeletingTask] = useState(null)
   const [answerSheetTask, setAnswerSheetTask] = useState(null)
   const [schoolSchedule, setSchoolSchedule] = useState([])
+  const [schoolHolidays, setSchoolHolidays] = useState([])
   const [teacherLessonSchedule, setTeacherLessonSchedule] = useState([])
   const [banner, setBanner] = useState('')
   const bannerTimeoutRef = useRef(null)
@@ -272,8 +273,14 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!selectedStudentId) return
     getSchoolSchedule({ studentId: selectedStudentId })
-      .then(setSchoolSchedule)
-      .catch(() => setSchoolSchedule([]))
+      .then((school) => {
+        setSchoolSchedule(school.entries || [])
+        setSchoolHolidays(school.holidays || [])
+      })
+      .catch(() => {
+        setSchoolSchedule([])
+        setSchoolHolidays([])
+      })
   }, [selectedStudentId])
 
   useEffect(() => () => {
@@ -440,6 +447,7 @@ export default function DashboardPage() {
           defaultDate={drawerState.defaultDate}
           getExistingTasksForDate={getExistingTasksForDrawer}
           schoolSchedule={schoolSchedule}
+          schoolHolidays={schoolHolidays}
           onSave={handleSaveDrawerTask}
           onClose={() => setDrawerState(null)}
         />

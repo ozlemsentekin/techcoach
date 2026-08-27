@@ -27,6 +27,7 @@ import { HOMEWORK_TASK_TYPES, TASK_TYPES } from '../../../data/taskTypes'
 import { parseTimeToMinutes, todayISODate, WEEKDAY_KEYS as DAY_KEYS } from '../../../utils/time'
 import { isBacklogTask } from '../../../utils/backlogTasks'
 import Badge from '../../ui/Badge'
+import { isSchoolHoliday } from '../../../services/weeklyPlanService'
 
 const BREAK_DURATION_OPTIONS = [15, 30, 45, 60]
 
@@ -231,7 +232,7 @@ function getFallbackDetail(task) {
 // Yayın evi zaten üstteki etikette (bkz. getTaskTag) gösterildiğinden burada tekrar
 // edilmiyor, sadece kaynağın kendi adı gösterilir.
 function getTaskSource(task) {
-  return task.resourceBookName || null
+  return task.resourceBookName || task.schoolResourceName || null
 }
 
 function getQuestionProgress(task) {
@@ -490,6 +491,19 @@ function ScheduleSlotCard({ task, muted = false, onManage }) {
 // Gerçek bir Tasks satırı değildir; o saatin okulda geçtiğini göstermek ve o saate ödev
 // eklenmesini engellemek (bkz. AddTaskDrawer/AssignHomeworkModal) için kullanılır.
 function SchoolSlotCard({ task, muted = false }) {
+  if (task.isHoliday) {
+    return (
+      <div
+        className={`flex items-center gap-1.5 rounded-xl border border-dashed px-3 py-2.5 text-xs font-semibold ${
+          muted ? 'border-slate-200 bg-white/75 text-slate-400' : 'border-slate-300 bg-slate-50 text-slate-500'
+        }`}
+      >
+        <School size={12} aria-hidden="true" />
+        <span className="truncate">{task.lessonName || 'Resmi Tatil'} · okul yok</span>
+      </div>
+    )
+  }
+
   return (
     <div
       className={`flex flex-col gap-1 rounded-xl border px-3 py-2.5 ${
@@ -652,7 +666,15 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onMana
               title={source}
               className="flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-snug text-panel-text-muted"
             >
-              <Library size={11} className="shrink-0" aria-hidden="true" />
+              {task.schoolResourceImageUrl ? (
+                <img
+                  src={task.schoolResourceImageUrl}
+                  alt=""
+                  className="h-4 w-4 shrink-0 rounded-full border border-panel-border object-cover"
+                />
+              ) : (
+                <Library size={11} className="shrink-0" aria-hidden="true" />
+              )}
               <span className="truncate">{source}</span>
             </span>
           ) : null}
@@ -748,6 +770,7 @@ export default function WeeklyPlannerGrid({
   lessonSchedule,
   lessonScheduleExceptions,
   schoolSchedule,
+  schoolHolidays,
   onAddHomework,
   onAddTask,
   onEditTask,
@@ -824,7 +847,8 @@ export default function WeeklyPlannerGrid({
         endTime: slot.endTime,
         date,
       }))
-    const schoolSlots = (schoolSchedule || [])
+    const isHoliday = isSchoolHoliday(date, schoolHolidays)
+    const schoolSlots = (isHoliday ? [] : schoolSchedule || [])
       .filter((slot) => slot.dayOfWeek === DAY_KEYS[index] && slot.startTime)
       .filter((slot) => (!slot.startDate || date >= slot.startDate) && (!slot.endDate || date <= slot.endDate))
       .map((slot, slotIndex) => ({
@@ -834,7 +858,20 @@ export default function WeeklyPlannerGrid({
         endTime: slot.endTime,
         lessonName: slot.lessonName,
       }))
-    const tasks = [...(tasksByDate?.[date] || []), ...scheduleSlots, ...schoolSlots].sort((a, b) =>
+    const holidaySlots =
+      isHoliday && (schoolSchedule || []).some((slot) => slot.dayOfWeek === DAY_KEYS[index])
+        ? [
+            {
+              id: `holiday-${date}`,
+              isSchoolSlot: true,
+              isHoliday: true,
+              lessonName:
+                (schoolHolidays || []).find((entry) => date >= entry.startDate && date <= entry.endDate)?.name ||
+                'Resmi Tatil',
+            },
+          ]
+        : []
+    const tasks = [...(tasksByDate?.[date] || []), ...scheduleSlots, ...schoolSlots, ...holidaySlots].sort((a, b) =>
       (a.startTime || '').localeCompare(b.startTime || ''),
     )
     const isPastDay = date < currentDate
