@@ -1801,6 +1801,34 @@ async function assignTeacherLibraryResourceBookHandler(request) {
   }
 }
 
+// Öğretmenin bir kaynağı öğrenciden geri almasını sağlar: yalnızca öğretmen–öğrenci atama
+// bağını (StudentTeacherResourceBooks) siler; öğrencinin takip listesindeki (StudentResourceBooks)
+// kaydına ve varsa ilerleme verisine dokunmaz. İşlem idempotenttir.
+async function unassignTeacherLibraryResourceBookHandler(request) {
+  try {
+    const { error, studentTeacherId } = await requireTeacherStudentContext(request, { includeInactive: true })
+    if (error) return error
+
+    const resourceBookId = request.params.resourceBookId
+    if (!resourceBookId) {
+      return json(400, { error: 'Kaynak belirtilmeli.' })
+    }
+
+    const deleteDb = await withRequest({
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+    })
+    await deleteDb.query(`
+      DELETE FROM dbo.StudentTeacherResourceBooks
+      WHERE teacher_id = @studentTeacherId AND resource_book_id = @resourceBookId;
+    `)
+
+    return json(200, { success: true })
+  } catch (error) {
+    return handleError(error, 'unassignTeacherLibraryResourceBookHandler', 'Kaynak ataması kaldırılamadı.')
+  }
+}
+
 async function listTeacherResourceBookTopicsHandler(request) {
   try {
     const { error, studentId, studentTeacherId } = await requireTeacherStudentContext(request)
@@ -2934,6 +2962,7 @@ module.exports = {
   updateTeacherStudentProfileHandler,
   listTeacherStudentPrivateResourceBooksHandler,
   assignTeacherLibraryResourceBookHandler,
+  unassignTeacherLibraryResourceBookHandler,
   updateTeacherStudentStatusHandler,
   updateTeacherStudentGradeHandler,
   deleteTeacherStudentHandler,

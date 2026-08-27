@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, Check, ChevronDown, GraduationCap, Library, MapPin, Phone, School, Search, Users, X } from 'lucide-react'
+import { BookOpen, Check, ChevronDown, GraduationCap, Library, MapPin, Phone, School, Search, Trash2, Users, X } from 'lucide-react'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
@@ -13,6 +13,7 @@ import { authRequest } from '../../../services/authClient'
 import {
   addTeacherStudent,
   assignTeacherLibraryResourceBook,
+  unassignTeacherLibraryResourceBook,
   getTeacherEntitlement,
   getTeacherStudentPrivateResourceBooks,
   getTeacherStudentProfile,
@@ -73,6 +74,8 @@ export default function TeacherStudentProfileModal({ student, onClose, onChanged
   const [openPublishers, setOpenPublishers] = useState(() => new Set())
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [saving, setSaving] = useState(false)
+  const [confirmingUnassignId, setConfirmingUnassignId] = useState(null)
+  const [unassigningId, setUnassigningId] = useState(null)
 
   const [basicsFirstName, setBasicsFirstName] = useState('')
   const [basicsLastName, setBasicsLastName] = useState('')
@@ -338,6 +341,22 @@ export default function TeacherStudentProfileModal({ student, onClose, onChanged
       setResourceError(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleUnassign = async (book) => {
+    if (!activeStudent) return
+    setUnassigningId(book.id)
+    setResourceError('')
+    try {
+      await unassignTeacherLibraryResourceBook(activeStudent.studentTeacherId, book.id)
+      setConfirmingUnassignId(null)
+      await loadResourceBooks()
+      onChanged?.()
+    } catch (err) {
+      setResourceError(err.message)
+    } finally {
+      setUnassigningId(null)
     }
   }
 
@@ -793,14 +812,17 @@ export default function TeacherStudentProfileModal({ student, onClose, onChanged
                       <div className="grid grid-cols-1 gap-3 border-t border-panel-border p-3 sm:grid-cols-2 xl:grid-cols-3">
                         {groupBooks.map((book) => {
                           const selected = selectedIds.has(book.id)
+                          const canUnassign = !showLibrary && book.assigned
                           return (
+                            <div key={book.id} className="relative">
                             <button
-                              key={book.id}
                               type="button"
                               aria-pressed={book.assigned || selected}
                               onClick={() => toggleResource(book)}
                               disabled={book.assigned}
-                              className={`flex min-h-[118px] items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
+                              className={`flex min-h-[118px] w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
+                                canUnassign ? 'pr-10' : ''
+                              } ${
                                 book.assigned
                                   ? 'cursor-default border-panel-blue bg-panel-blue-soft'
                                   : selected
@@ -834,6 +856,43 @@ export default function TeacherStudentProfileModal({ student, onClose, onChanged
                                 </span>
                               </span>
                             </button>
+                            {canUnassign ? (
+                              confirmingUnassignId === book.id ? (
+                                <div className="absolute inset-0 z-10 flex flex-wrap items-center justify-end gap-2 rounded-xl bg-white/95 p-3">
+                                  <span className="mr-auto text-xs font-medium text-panel-text">
+                                    Kaynak öğrenciden kaldırılsın mı?
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    disabled={unassigningId === book.id}
+                                    onClick={() => setConfirmingUnassignId(null)}
+                                  >
+                                    Vazgeç
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={unassigningId === book.id}
+                                    onClick={() => handleUnassign(book)}
+                                  >
+                                    {unassigningId === book.id ? 'Kaldırılıyor...' : 'Kaldır'}
+                                  </Button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  aria-label="Kaynağı öğrenciden kaldır"
+                                  title="Kaynağı öğrenciden kaldır"
+                                  onClick={() => setConfirmingUnassignId(book.id)}
+                                  className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg bg-white/70 text-panel-text-muted hover:bg-panel-accent-soft hover:text-panel-warm"
+                                >
+                                  <Trash2 size={15} aria-hidden="true" />
+                                </button>
+                              )
+                            ) : null}
+                            </div>
                           )
                         })}
                       </div>

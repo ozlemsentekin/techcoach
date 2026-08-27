@@ -199,6 +199,13 @@ export async function assignTeacherLibraryResourceBook(studentTeacherId, resourc
   })
 }
 
+/** Bir kaynağın öğrenciye atamasını geri alır (idempotent). */
+export async function unassignTeacherLibraryResourceBook(studentTeacherId, resourceBookId) {
+  return authRequest(`/api/panel-teacher/students/${studentTeacherId}/library/resource-books/${resourceBookId}`, {
+    method: 'DELETE',
+  })
+}
+
 /** @returns {Promise<Array>} */
 export async function getTeacherResourceBookTopics(studentTeacherId, resourceBookId) {
   const data = await authRequest(

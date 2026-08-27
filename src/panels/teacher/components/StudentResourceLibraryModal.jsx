@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ImageOff, Pencil, Search, X } from 'lucide-react'
+import { ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, ImageOff, Pencil, Search, Trash2, X } from 'lucide-react'
 import Badge from '../../ui/Badge'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
@@ -9,6 +9,7 @@ import ManualOpticalAnswerModal from '../../shared/ManualOpticalAnswerModal'
 import { RESOURCE_TYPE_LABELS } from '../../shared/library/libraryConstants'
 import {
   assignTeacherLibraryResourceBook,
+  unassignTeacherLibraryResourceBook,
   getTeacherResourceBooks,
   getTeacherResourceBookTopics,
   getTeacherStudentPrivateResourceBooks,
@@ -508,6 +509,8 @@ export default function StudentResourceLibraryModal({ student, onClose, onAssign
   const [libraryQuery, setLibraryQuery] = useState('')
   const [selectedLibraryIds, setSelectedLibraryIds] = useState(new Set())
   const [assigning, setAssigning] = useState(false)
+  const [confirmingUnassignId, setConfirmingUnassignId] = useState(null)
+  const [unassigningId, setUnassigningId] = useState(null)
 
   const loadAssignedBooks = () =>
     getTeacherResourceBooks(student.studentTeacherId)
@@ -590,6 +593,21 @@ export default function StudentResourceLibraryModal({ student, onClose, onAssign
       setLibraryError(err.message)
     } finally {
       setAssigning(false)
+    }
+  }
+
+  const handleUnassign = async (book) => {
+    setUnassigningId(book.id)
+    setError('')
+    try {
+      await unassignTeacherLibraryResourceBook(student.studentTeacherId, book.id)
+      setConfirmingUnassignId(null)
+      await Promise.all([loadAssignedBooks(), libraryBooks !== null ? loadLibraryBooks() : Promise.resolve()])
+      onAssigned?.()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUnassigningId(null)
     }
   }
 
@@ -800,7 +818,7 @@ export default function StudentResourceLibraryModal({ student, onClose, onAssign
                           event.preventDefault()
                           setSelectedBook(book)
                         }}
-                        className="group grid min-w-0 cursor-pointer grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-3 rounded-xl border border-panel-border bg-white p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-panel-blue hover:shadow-panel-2 sm:grid-cols-[4rem_minmax(0,1fr)]"
+                        className="group relative grid min-w-0 cursor-pointer grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-3 rounded-xl border border-panel-border bg-white p-3 pr-10 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-panel-blue hover:shadow-panel-2 sm:grid-cols-[4rem_minmax(0,1fr)]"
                       >
                         <ResourceBookAvatar
                           book={book}
@@ -822,6 +840,47 @@ export default function StudentResourceLibraryModal({ student, onClose, onAssign
                             className="grid-cols-2"
                           />
                         </div>
+                        <button
+                          type="button"
+                          aria-label="Kaynağı öğrenciden kaldır"
+                          title="Kaynağı öğrenciden kaldır"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setConfirmingUnassignId(book.id)
+                          }}
+                          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg text-panel-text-muted opacity-100 transition-opacity hover:bg-panel-accent-soft hover:text-panel-warm focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                        >
+                          <Trash2 size={15} aria-hidden="true" />
+                        </button>
+                        {confirmingUnassignId === book.id ? (
+                          <div
+                            role="presentation"
+                            onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => event.stopPropagation()}
+                            className="absolute inset-0 z-10 flex flex-wrap items-center justify-end gap-2 rounded-xl bg-white/95 px-3 py-2"
+                          >
+                            <span className="mr-auto text-xs font-medium text-panel-text">
+                              Kaynak öğrenciden kaldırılsın mı?
+                            </span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              disabled={unassigningId === book.id}
+                              onClick={() => setConfirmingUnassignId(null)}
+                            >
+                              Vazgeç
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={unassigningId === book.id}
+                              onClick={() => handleUnassign(book)}
+                            >
+                              {unassigningId === book.id ? 'Kaldırılıyor...' : 'Kaldır'}
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
