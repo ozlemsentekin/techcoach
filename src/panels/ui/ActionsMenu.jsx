@@ -24,13 +24,24 @@ export default function ActionsMenu({ items, isOpen, onToggle, onClose, triggerL
   const buttonRef = useRef(null)
   const menuRef = useRef(null)
   const [menuPosition, setMenuPosition] = useState(null)
+  // Aynı satır için hem mobil kart hem masaüstü tablo ayrı bir ActionsMenu render eder ve
+  // ikisi genelde tek bir "açık menü" state'ini paylaşır. O an CSS ile gizli (display:none
+  // ata üzerinden) olan kopya, ekranın sol üstünde bir hayalet menü çizmesin ve görünür
+  // kopyadaki tıklamayı dış-tıklama sayıp kapatmasın diye tamamen pasifleştiriyoruz.
+  // offsetParent, display:none bir ata varsa null olur (buton position:fixed değil).
+  const [hidden, setHidden] = useState(false)
 
   useLayoutEffect(() => {
     if (!isOpen) return undefined
 
     const updateMenuPosition = () => {
-      const buttonRect = buttonRef.current?.getBoundingClientRect()
+      const button = buttonRef.current
+      const buttonRect = button?.getBoundingClientRect()
       if (!buttonRect) return
+
+      const isHidden = button.offsetParent === null
+      setHidden(isHidden)
+      if (isHidden) return
 
       const menuHeight = menuRef.current?.offsetHeight || ACTION_MENU_ESTIMATED_HEIGHT
       setMenuPosition(getActionMenuPosition(buttonRect, menuHeight))
@@ -47,7 +58,7 @@ export default function ActionsMenu({ items, isOpen, onToggle, onClose, triggerL
   }, [isOpen])
 
   useEffect(() => {
-    if (!isOpen) return undefined
+    if (!isOpen || hidden) return undefined
 
     function handlePointerDown(event) {
       if (buttonRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return
@@ -64,7 +75,7 @@ export default function ActionsMenu({ items, isOpen, onToggle, onClose, triggerL
       document.removeEventListener('pointerdown', handlePointerDown)
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isOpen, onClose])
+  }, [isOpen, hidden, onClose])
 
   return (
     <div className="relative inline-block text-left">
@@ -91,7 +102,7 @@ export default function ActionsMenu({ items, isOpen, onToggle, onClose, triggerL
         <MoreHorizontal size={18} aria-hidden="true" />
       </button>
 
-      {isOpen && typeof document !== 'undefined'
+      {isOpen && !hidden && typeof document !== 'undefined'
         ? createPortal(
             <div
               ref={menuRef}

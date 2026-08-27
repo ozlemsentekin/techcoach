@@ -18,11 +18,9 @@ const ROLE_TONE = {
   ogretmen: 'blue',
 }
 
-const ROLE_FILTERS = [
-  { value: 'all', label: 'Tümü' },
-  { value: 'ebeveyn', label: 'Ebeveyn' },
-  { value: 'ogrenci', label: 'Öğrenci' },
-  { value: 'ogretmen', label: 'Öğretmen' },
+const TABS = [
+  { value: 'veliler', label: 'Veliler' },
+  { value: 'ogretmenler', label: 'Öğretmenler' },
 ]
 
 const PANEL_PATH_BY_ROLE = {
@@ -330,8 +328,8 @@ function UserMobileCard({ user, indent = false, isSelf, impersonating, onEdit, o
   )
 }
 
-function ParentRow({ user, students, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
-  const [expanded, setExpanded] = useState(true)
+function GroupRow({ user, students, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
+  const [expanded, setExpanded] = useState(false)
   const hasStudents = students.length > 0
 
   return (
@@ -402,8 +400,8 @@ function ParentRow({ user, students, isSelf, impersonating, onEdit, onImpersonat
   )
 }
 
-function ParentMobileCard({ user, students, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
-  const [expanded, setExpanded] = useState(true)
+function GroupMobileCard({ user, students, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
+  const [expanded, setExpanded] = useState(false)
   const hasStudents = students.length > 0
 
   return (
@@ -489,11 +487,12 @@ export default function AdminUsersPage() {
   const { authUser, impersonateUser } = useAuth()
   const navigate = useNavigate()
   const [users, setUsers] = useState(null)
+  const [teacherLinks, setTeacherLinks] = useState([])
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
   const [impersonatingId, setImpersonatingId] = useState('')
   const [query, setQuery] = useState('')
-  const [roleFilter, setRoleFilter] = useState('all')
+  const [tab, setTab] = useState('veliler')
   const [editingUser, setEditingUser] = useState(null)
   const [deletingUser, setDeletingUser] = useState(null)
   const [deletingUserError, setDeletingUserError] = useState('')
@@ -504,7 +503,10 @@ export default function AdminUsersPage() {
 
     authRequest('/api/panel-admin/users', { method: 'GET' })
       .then((data) => {
-        if (!ignore) setUsers(data.users)
+        if (!ignore) {
+          setUsers(data.users)
+          setTeacherLinks(data.teacherLinks || [])
+        }
       })
       .catch((err) => {
         if (!ignore) setError(err.message)
@@ -553,31 +555,56 @@ export default function AdminUsersPage() {
   const filteredUsers = useMemo(() => {
     if (!users) return null
     const q = query.trim().toLowerCase()
-    return users.filter((user) => {
-      const matchesQuery =
-        !q ||
+    if (!q) return users
+    return users.filter(
+      (user) =>
         user.fullName.toLowerCase().includes(q) ||
         (user.email || '').toLowerCase().includes(q) ||
-        (user.phone || '').toLowerCase().includes(q)
-      const matchesRole = roleFilter === 'all' || user.role === roleFilter
-      return matchesQuery && matchesRole
+        (user.phone || '').toLowerCase().includes(q),
+    )
+  }, [users, query])
+
+  const parentCount = useMemo(() => (users || []).filter((u) => u.role === 'ebeveyn').length, [users])
+  const teacherCount = useMemo(() => (users || []).filter((u) => u.role === 'ogretmen').length, [users])
+
+  // Aktif sekmeye göre üst seviye üyeleri ve altlarında girintili gösterilecek
+  // öğrencileri hesapla. Veliler sekmesi: veli + parentId ile bağlı çocuklar.
+  // Öğretmenler sekmesi: öğretmen + StudentTeachers ile bağlı öğrenciler.
+  const { groups, orphans } = useMemo(() => {
+    if (!filteredUsers) return { groups: [], orphans: [] }
+    const byId = new Map(filteredUsers.map((u) => [u.id, u]))
+
+    if (tab === 'ogretmenler') {
+      const studentsByTeacher = new Map()
+      teacherLinks.forEach(({ teacherId, studentId }) => {
+        if (!byId.has(teacherId) || !byId.has(studentId)) return
+        const list = studentsByTeacher.get(teacherId) || []
+        if (!list.some((s) => s.id === studentId)) list.push(byId.get(studentId))
+        studentsByTeacher.set(teacherId, list)
+      })
+      const teacherGroups = filteredUsers
+        .filter((u) => u.role === 'ogretmen')
+        .map((teacher) => ({ user: teacher, students: studentsByTeacher.get(teacher.id) || [] }))
+      return { groups: teacherGroups, orphans: [] }
+    }
+
+    const studentsByParent = new Map()
+    filteredUsers.forEach((u) => {
+      if (u.role !== 'ogrenci' || !u.parentId || !byId.has(u.parentId)) return
+      const list = studentsByParent.get(u.parentId) || []
+      list.push(u)
+      studentsByParent.set(u.parentId, list)
     })
-  }, [users, query, roleFilter])
+    const parentGroups = filteredUsers
+      .filter((u) => u.role === 'ebeveyn')
+      .map((parent) => ({ user: parent, students: studentsByParent.get(parent.id) || [] }))
+    const orphanStudents = filteredUsers.filter(
+      (u) => u.role === 'ogrenci' && !(u.parentId && byId.has(u.parentId)),
+    )
+    return { groups: parentGroups, orphans: orphanStudents }
+  }, [filteredUsers, teacherLinks, tab])
 
-  const studentsByParentId = new Map()
-  filteredUsers?.forEach((user) => {
-    if (!user.parentId) return
-    const siblings = studentsByParentId.get(user.parentId) || []
-    siblings.push(user)
-    studentsByParentId.set(user.parentId, siblings)
-  })
-
-  const parentedStudentIds = new Set(
-    filteredUsers
-      ?.filter((user) => user.parentId && filteredUsers.some((candidate) => candidate.id === user.parentId))
-      .map((user) => user.id) || [],
-  )
-  const topLevelUsers = filteredUsers?.filter((user) => !parentedStudentIds.has(user.id)) || []
+  const isEmpty = groups.length === 0 && orphans.length === 0
 
   return (
     <div className="flex flex-col gap-5">
@@ -585,32 +612,19 @@ export default function AdminUsersPage() {
         title="Üyeler"
         actions={
           users && users.length > 0 ? (
-            <>
-              <div className="relative">
-                <Search
-                  size={14}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#87a3a5]"
-                  aria-hidden="true"
-                />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Ad, e-posta veya telefon ara..."
-                  className="w-48 rounded-lg border border-[#dfe4e5] bg-white py-1.5 pl-8 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#1c2b5e]/20 sm:w-56"
-                />
-              </div>
-              <select
-                value={roleFilter}
-                onChange={(event) => setRoleFilter(event.target.value)}
-                className="rounded-lg border border-[#dfe4e5] bg-white px-3 py-1.5 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#1c2b5e]/20"
-              >
-                {ROLE_FILTERS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </>
+            <div className="relative">
+              <Search
+                size={14}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#87a3a5]"
+                aria-hidden="true"
+              />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Ad, e-posta veya telefon ara..."
+                className="w-48 rounded-lg border border-[#dfe4e5] bg-white py-1.5 pl-8 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#1c2b5e]/20 sm:w-56"
+              />
+            </div>
           ) : null
         }
       />
@@ -626,20 +640,57 @@ export default function AdminUsersPage() {
       ) : users.length === 0 ? (
         <EmptyState icon={ShieldCheck} title="Henüz kullanıcı yok" />
       ) : (
-        <div className="fade-slide-in">
-          {topLevelUsers.length === 0 ? (
+        <div className="fade-slide-in flex flex-col gap-4">
+          <div className="flex gap-1 border-b border-panel-border">
+            {TABS.map((option) => {
+              const count = option.value === 'veliler' ? parentCount : teacherCount
+              const active = tab === option.value
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setTab(option.value)}
+                  className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
+                    active
+                      ? 'border-[#1c2b5e] text-[#1c2b5e]'
+                      : 'border-transparent text-[#667475] hover:text-[#253d3e]'
+                  }`}
+                >
+                  {option.label}
+                  <span className="ml-1.5 text-xs font-medium text-[#87a3a5]">{count}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {isEmpty ? (
             <p className="rounded-xl border border-dashed border-panel-border bg-white px-4 py-6 text-sm text-[#667475]">
-              Aramayla eşleşen kullanıcı yok.
+              {query.trim()
+                ? 'Aramayla eşleşen kayıt yok.'
+                : tab === 'veliler'
+                  ? 'Henüz veli kaydı yok.'
+                  : 'Henüz öğretmen kaydı yok.'}
             </p>
           ) : (
             <>
               <div className="grid gap-3 md:hidden">
-                {topLevelUsers.map((user) => (
-                  <ParentMobileCard
+                {groups.map(({ user, students }) => (
+                  <GroupMobileCard
                     key={user.id}
                     user={user}
-                    students={studentsByParentId.get(user.id) || []}
+                    students={students}
                     isSelf={user.id === authUser?.id}
+                    impersonating={Boolean(impersonatingId)}
+                    onEdit={setEditingUser}
+                    onImpersonate={handleImpersonate}
+                    onDelete={setDeletingUser}
+                  />
+                ))}
+                {orphans.map((student) => (
+                  <UserMobileCard
+                    key={student.id}
+                    user={student}
+                    isSelf={student.id === authUser?.id}
                     impersonating={Boolean(impersonatingId)}
                     onEdit={setEditingUser}
                     onImpersonate={handleImpersonate}
@@ -661,12 +712,23 @@ export default function AdminUsersPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#edf0f1]">
-                  {topLevelUsers.map((user) => (
-                    <ParentRow
+                  {groups.map(({ user, students }) => (
+                    <GroupRow
                       key={user.id}
                       user={user}
-                      students={studentsByParentId.get(user.id) || []}
+                      students={students}
                       isSelf={user.id === authUser?.id}
+                      impersonating={Boolean(impersonatingId)}
+                      onEdit={setEditingUser}
+                      onImpersonate={handleImpersonate}
+                      onDelete={setDeletingUser}
+                    />
+                  ))}
+                  {orphans.map((student) => (
+                    <UserRow
+                      key={student.id}
+                      user={student}
+                      isSelf={student.id === authUser?.id}
                       impersonating={Boolean(impersonatingId)}
                       onEdit={setEditingUser}
                       onImpersonate={handleImpersonate}

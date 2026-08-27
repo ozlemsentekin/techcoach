@@ -99,7 +99,20 @@ async function listUsersHandler(request) {
       ORDER BY u.created_at ASC;
     `)
 
-    return json(200, { users: result.recordset.map(sanitizeUser) })
+    // Öğretmen hesabına bağlanmış öğrenci-öğretmen ilişkileri (Üyeler ekranında
+    // "Öğretmenler" sekmesinde bağlı öğrencileri girintili göstermek için).
+    const linksDb = await withRequest({})
+    const linksResult = await linksDb.query(`
+      SELECT DISTINCT st.teacher_user_id, st.student_id
+      FROM dbo.StudentTeachers st
+      WHERE st.teacher_user_id IS NOT NULL;
+    `)
+    const teacherLinks = linksResult.recordset.map((row) => ({
+      teacherId: row.teacher_user_id,
+      studentId: row.student_id,
+    }))
+
+    return json(200, { users: result.recordset.map(sanitizeUser), teacherLinks })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
