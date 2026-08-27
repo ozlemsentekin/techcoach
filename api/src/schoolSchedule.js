@@ -349,6 +349,34 @@ async function getStudentSchoolScheduleTemplate(schoolId, grade) {
   return parseJsonEntries(result.recordset[0]?.schedule_json)
 }
 
+/**
+ * Bir öğrencinin haftalık plan için okul ders saatlerini ve tatil takvimini döner.
+ * Okul + sınıf biliniyorsa saatler canlı olarak admin şablonundan (SchoolClassSchedules)
+ * türetilir; aksi halde öğrenciye kaydedilmiş manuel programa düşülür. Hem veli hem
+ * öğretmen panelleri bu ortak çözümleyiciyi kullanır.
+ */
+async function resolveStudentSchoolSchedule(studentId) {
+  const requestDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+  })
+  const result = await requestDb.query(`
+    SELECT school_id, grade, school_schedule_json FROM dbo.StudentProfiles WHERE student_id = @studentId;
+  `)
+  const profile = result.recordset[0]
+
+  let entries = []
+  if (profile?.school_id && profile?.grade) {
+    entries = await getStudentSchoolScheduleTemplate(profile.school_id, profile.grade)
+  }
+  if (entries.length === 0) {
+    entries = parseJsonEntries(profile?.school_schedule_json)
+  }
+
+  const holidays = profile?.school_id ? await getSchoolCalendarEntries(profile.school_id) : []
+
+  return { entries, holidays }
+}
+
 async function getPanelSchoolScheduleHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
@@ -356,28 +384,7 @@ async function getPanelSchoolScheduleHandler(request) {
       return error
     }
 
-    const requestDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-    })
-    const result = await requestDb.query(`
-      SELECT school_id, grade, school_schedule_json FROM dbo.StudentProfiles WHERE student_id = @studentId;
-    `)
-    const profile = result.recordset[0]
-
-    // Okul + sınıf biliniyorsa okul saatlerini canlı olarak admin şablonundan türetiriz
-    // (bkz. dbo.SchoolClassSchedules); admin değişikliği anında öğrencilere yansır. Aksi
-    // halde (okul sistemde değil) öğrenciye kaydedilmiş manuel programa düşeriz.
-    let entries = []
-    if (profile?.school_id && profile?.grade) {
-      entries = await getStudentSchoolScheduleTemplate(profile.school_id, profile.grade)
-    }
-    if (entries.length === 0) {
-      entries = parseJsonEntries(profile?.school_schedule_json)
-    }
-
-    const holidays = profile?.school_id ? await getSchoolCalendarEntries(profile.school_id) : []
-
-    return json(200, { entries, holidays })
+    return json(200, await resolveStudentSchoolSchedule(studentId))
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -397,6 +404,7 @@ module.exports = {
   parseJsonEntries,
   getStudentSchoolScheduleTemplate,
   getSchoolCalendarEntries,
+  resolveStudentSchoolSchedule,
   getSchoolClassScheduleHandler,
   saveSchoolClassScheduleHandler,
   getPanelSchoolScheduleHandler,

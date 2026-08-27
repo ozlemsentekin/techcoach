@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
   BookOpen,
-  Calendar,
   GraduationCap,
   Palette,
   Phone,
@@ -30,7 +29,7 @@ import SchoolScheduleEditor from '../components/SchoolScheduleEditor'
 import SubjectPicker from '../components/SubjectPicker'
 import ResourceImageField from '../components/ResourceImageField'
 import { COMMON_ARTS, COMMON_SPORTS } from '../components/studentInterestCatalog'
-import { FieldIcon, WizardSteps } from '../components/StudentWizardShared'
+import { BirthDateField, FieldIcon, WizardSteps } from '../components/StudentWizardShared'
 import { GENDER_OPTIONS, GRADE_OPTIONS, WIZARD_STEPS, getGradeBirthYearRange } from '../components/studentWizardConstants'
 
 const INITIAL_FORM = {
@@ -348,19 +347,13 @@ function AddStudentModal({ onCreated, onClose }) {
                   </div>
 
                   <div className="flex flex-col gap-1">
-                    <div className="relative">
-                      <FieldIcon icon={Calendar} />
-                      <input
-                        type="date"
-                        name="birthDate"
-                        value={form.birthDate}
-                        onChange={handleChange}
-                        min={gradeBirthYearRange ? `${gradeBirthYearRange.min}-01-01` : undefined}
-                        max={gradeBirthYearRange ? `${gradeBirthYearRange.max}-12-31` : undefined}
-                        aria-label="Doğum Tarihi"
-                        className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
-                      />
-                    </div>
+                    <BirthDateField
+                      name="birthDate"
+                      value={form.birthDate}
+                      onChange={handleChange}
+                      min={gradeBirthYearRange ? `${gradeBirthYearRange.min}-01-01` : undefined}
+                      max={gradeBirthYearRange ? `${gradeBirthYearRange.max}-12-31` : undefined}
+                    />
                     {gradeBirthYearRange ? (
                       <span className="text-xs text-panel-text-muted">
                         {form.grade}. sınıf için beklenen doğum yılı: {gradeBirthYearRange.min}–{gradeBirthYearRange.max}

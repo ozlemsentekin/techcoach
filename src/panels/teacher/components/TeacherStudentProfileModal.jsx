@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, Calendar, Check, ChevronDown, GraduationCap, Library, MapPin, Phone, School, Search, Users, X } from 'lucide-react'
+import { BookOpen, Check, ChevronDown, GraduationCap, Library, MapPin, Phone, School, Search, Users, X } from 'lucide-react'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
-import { FieldIcon, WizardSteps } from '../../parent/components/StudentWizardShared'
+import { BirthDateField, FieldIcon, WizardSteps } from '../../parent/components/StudentWizardShared'
 import SchoolPicker from '../../parent/components/SchoolPicker'
+import ResourceImageField from '../../parent/components/ResourceImageField'
 import { GENDER_OPTIONS } from '../../parent/components/studentWizardConstants'
 import { LIBRARY_GRADES, RESOURCE_TYPE_LABELS } from '../../shared/library/libraryConstants'
 import { useAuth } from '../../../context/useAuth'
@@ -79,6 +80,7 @@ export default function TeacherStudentProfileModal({ student, onClose, onChanged
   const [basicsBirthDate, setBasicsBirthDate] = useState('')
   const [basicsGender, setBasicsGender] = useState('')
   const [basicsPhone, setBasicsPhone] = useState('')
+  const [basicsPhotoUrl, setBasicsPhotoUrl] = useState('')
   const [basicsError, setBasicsError] = useState('')
   const [basicsSaving, setBasicsSaving] = useState(false)
 
@@ -194,6 +196,7 @@ export default function TeacherStudentProfileModal({ student, onClose, onChanged
         setBasicsBirthDate(loadedProfile?.birthDate ? String(loadedProfile.birthDate).slice(0, 10) : '')
         setBasicsGender(loadedProfile?.gender || '')
         setBasicsPhone(loadedProfile?.phone || activeStudent.studentPhone || '')
+        setBasicsPhotoUrl(loadedProfile?.photoUrl || '')
         setSchoolProvinceId(loadedProfile?.provinceId || null)
         setSchoolDistrictId(loadedProfile?.districtId || null)
         setSchool(
@@ -222,6 +225,7 @@ export default function TeacherStudentProfileModal({ student, onClose, onChanged
         birthDate: basicsBirthDate,
         gender: basicsGender,
         phone: basicsPhone,
+        photoUrl: basicsPhotoUrl,
       })
       setProfile(savedProfile)
       onChanged?.()
@@ -470,7 +474,15 @@ export default function TeacherStudentProfileModal({ student, onClose, onChanged
             ) : (
               <div className="flex flex-col gap-3 sm:flex-row sm:gap-5">
                 <div className="flex justify-center sm:w-2/5 sm:items-start">
-                  {photoUrl ? (
+                  {canEditBasics ? (
+                    <ResourceImageField
+                      value={basicsPhotoUrl}
+                      onChange={setBasicsPhotoUrl}
+                      shape="circle"
+                      compact
+                      size={160}
+                    />
+                  ) : photoUrl ? (
                     <img loading="lazy" decoding="async"
                       src={photoUrl}
                       alt={`${activeStudent.studentFullName} fotoğrafı`}
@@ -520,19 +532,10 @@ export default function TeacherStudentProfileModal({ student, onClose, onChanged
                           ))}
                         </select>
                       </div>
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-panel-text-muted">Doğum Tarihi</label>
-                        <div className="relative">
-                          <FieldIcon icon={Calendar} />
-                          <input
-                            type="date"
-                            value={basicsBirthDate}
-                            onChange={(event) => setBasicsBirthDate(event.target.value)}
-                            aria-label="Doğum Tarihi"
-                            className={EDITABLE_FIELD_CLASS}
-                          />
-                        </div>
-                      </div>
+                      <BirthDateField
+                        value={basicsBirthDate}
+                        onChange={(event) => setBasicsBirthDate(event.target.value)}
+                      />
                       <div className="relative">
                         <FieldIcon icon={Users} />
                         <select
@@ -565,12 +568,11 @@ export default function TeacherStudentProfileModal({ student, onClose, onChanged
                       <p className="text-xs text-panel-text-muted">
                         Bu öğrenciyi siz eklediğiniz için temel bilgilerini düzenleyebilirsiniz.
                       </p>
-                      <div className="flex gap-3">
+                      <div className="flex flex-wrap gap-2 pt-1">
                         <Button
                           type="button"
                           variant="secondary"
                           size="md"
-                          className="flex-1"
                           onClick={() => handleSaveBasics()}
                           disabled={basicsSaving}
                         >
@@ -579,7 +581,6 @@ export default function TeacherStudentProfileModal({ student, onClose, onChanged
                         <Button
                           type="button"
                           size="md"
-                          className="flex-1"
                           onClick={() => handleSaveBasics({ advance: true })}
                           disabled={basicsSaving}
                         >
@@ -606,19 +607,7 @@ export default function TeacherStudentProfileModal({ student, onClose, onChanged
                           className={LOCKED_FIELD_CLASS}
                         />
                       </div>
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-panel-text-muted">Doğum Tarihi</label>
-                        <div className="relative">
-                          <FieldIcon icon={Calendar} />
-                          <input
-                            type="date"
-                            value={basicsBirthDate}
-                            disabled
-                            aria-label="Doğum Tarihi"
-                            className={LOCKED_FIELD_CLASS}
-                          />
-                        </div>
-                      </div>
+                      <BirthDateField value={basicsBirthDate} disabled />
                       <div className="relative">
                         <FieldIcon icon={Users} />
                         <input value={basicsGenderLabel} disabled aria-label="Cinsiyet" className={LOCKED_FIELD_CLASS} />
@@ -655,12 +644,11 @@ export default function TeacherStudentProfileModal({ student, onClose, onChanged
                 {schoolError ? (
                   <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{schoolError}</div>
                 ) : null}
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-2 pt-1">
                   <Button
                     type="button"
                     variant="secondary"
                     size="md"
-                    className="flex-1"
                     onClick={() => handleSaveSchool()}
                     disabled={schoolSaving}
                   >
@@ -669,7 +657,6 @@ export default function TeacherStudentProfileModal({ student, onClose, onChanged
                   <Button
                     type="button"
                     size="md"
-                    className="flex-1"
                     onClick={() => handleSaveSchool({ advance: true })}
                     disabled={schoolSaving}
                   >

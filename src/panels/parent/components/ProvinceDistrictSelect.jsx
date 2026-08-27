@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { MapPin } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
+import Combobox from '../../ui/Combobox'
 
 export default function ProvinceDistrictSelect({ provinceId, districtId, onProvinceChange, onDistrictChange }) {
   const [provinces, setProvinces] = useState(null)
@@ -23,15 +25,13 @@ export default function ProvinceDistrictSelect({ provinceId, districtId, onProvi
   }, [])
 
   useEffect(() => {
-    if (!provinceId) {
-      return undefined
-    }
+    if (!provinceId) return undefined
 
     let ignore = false
 
     authRequest(`/api/panel/geo/districts?provinceId=${provinceId}`, { method: 'GET' })
       .then((data) => {
-        if (!ignore) setDistricts(data.districts)
+        if (!ignore) setDistricts({ provinceId, items: data.districts })
       })
       .catch((err) => {
         if (!ignore) setError(err.message)
@@ -42,44 +42,42 @@ export default function ProvinceDistrictSelect({ provinceId, districtId, onProvi
     }
   }, [provinceId])
 
+  // Yeni il seçildiğinde eski ilin ilçelerini gösterme (yeni liste yüklenene kadar boş).
+  const districtItems = districts && districts.provinceId === provinceId ? districts.items : null
+
   return (
     <div className="flex flex-col gap-3 sm:flex-row">
-      <label className="flex flex-1 flex-col gap-1.5">
+      <div className="flex flex-1 flex-col gap-1.5">
         <span className="text-sm font-medium text-panel-text-muted">İl</span>
-        <select
+        <Combobox
           value={provinceId || ''}
-          onChange={(event) => {
-            const value = event.target.value || null
-            onProvinceChange(value)
+          onChange={(value) => {
+            onProvinceChange(value || null)
             onDistrictChange(null)
           }}
-          className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-        >
-          <option value="">İl seçin</option>
-          {(provinces || []).map((province) => (
-            <option key={province.id} value={province.id}>
-              {province.name}
-            </option>
-          ))}
-        </select>
-      </label>
+          options={provinces || []}
+          loading={provinces === null}
+          icon={MapPin}
+          placeholder="İl seçin"
+          searchPlaceholder="İl ara..."
+          emptyLabel="İl bulunamadı"
+        />
+      </div>
 
-      <label className="flex flex-1 flex-col gap-1.5">
+      <div className="flex flex-1 flex-col gap-1.5">
         <span className="text-sm font-medium text-panel-text-muted">İlçe</span>
-        <select
+        <Combobox
           value={districtId || ''}
-          onChange={(event) => onDistrictChange(event.target.value || null)}
+          onChange={(value) => onDistrictChange(value || null)}
+          options={districtItems || []}
           disabled={!provinceId}
-          className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text disabled:cursor-not-allowed disabled:bg-[#f5f6f7] disabled:text-panel-text-muted"
-        >
-          <option value="">{provinceId ? 'İlçe seçin' : 'Önce il seçin'}</option>
-          {(districts || []).map((district) => (
-            <option key={district.id} value={district.id}>
-              {district.name}
-            </option>
-          ))}
-        </select>
-      </label>
+          loading={Boolean(provinceId) && districtItems === null}
+          icon={MapPin}
+          placeholder={provinceId ? 'İlçe seçin' : 'Önce il seçin'}
+          searchPlaceholder="İlçe ara..."
+          emptyLabel="İlçe bulunamadı"
+        />
+      </div>
 
       {error ? <p className="text-xs text-panel-warm">{error}</p> : null}
     </div>

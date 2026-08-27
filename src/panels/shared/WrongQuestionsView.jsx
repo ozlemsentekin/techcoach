@@ -29,6 +29,11 @@ function sourceStatsKey(subject, topic, bookName) {
   return `${topicStatsKey(subject, topic)}::${bookName || ''}`
 }
 
+// Bir kaynağın (kitabın) tüm konularındaki çözülmüş soruları toplamak için ders + kitap kimliği.
+function sourceBookKey(subject, bookName) {
+  return `${(subject || '').trim()}::${bookName || ''}`
+}
+
 function groupBySubjectAndTopic(wrongQuestions) {
   const bySubject = new Map()
   wrongQuestions.forEach((item) => {
@@ -207,7 +212,10 @@ function GroupModeToggle({ mode, onChange }) {
   )
 }
 
-function SourceProfileCard({ bookName, publisherName, bookImageUrl, wrongCount, onClick }) {
+function SourceProfileCard({ bookName, publisherName, bookImageUrl, wrongCount, stats, onClick }) {
+  const solvedCount = stats?.totalAnswered ?? null
+  const successPercent = stats?.successRate != null ? Math.round(stats.successRate * 100) : null
+  const colors = RATE_TONES[successRateTone(stats?.successRate)]
   return (
     <button
       type="button"
@@ -224,9 +232,16 @@ function SourceProfileCard({ bookName, publisherName, bookImageUrl, wrongCount, 
           {bookName || 'Kaynak belirtilmemiş'}
         </h3>
       </div>
-      <Badge tone="warm" className="w-fit">
-        {wrongCount} yanlış
-      </Badge>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Badge tone="warm" className="w-fit">
+          {solvedCount != null ? `${solvedCount} / ${wrongCount}` : wrongCount} yanlış
+        </Badge>
+        {successPercent != null ? (
+          <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', colors.chip)}>
+            (%{successPercent} başarı)
+          </span>
+        ) : null}
+      </div>
     </button>
   )
 }
@@ -545,6 +560,30 @@ export default function WrongQuestionsView({
     return map
   }, [sourceTopicStats])
 
+  // "Kaynağa Göre" kartlarında, o kaynağın tüm konularından çözülen toplam soru sayısını ve
+  // birleşik başarı oranını göstermek için (ders, konu, kitap) kırılımını kitap düzeyinde toplar.
+  const sourceBookStatsMap = useMemo(() => {
+    const map = new Map()
+    sourceTopicStats.forEach((stat) => {
+      const key = sourceBookKey(stat.subject, stat.bookName)
+      if (!map.has(key)) map.set(key, { totalAnswered: 0, correct: 0 })
+      const entry = map.get(key)
+      entry.totalAnswered += stat.totalAnswered || 0
+      if (stat.successRate != null && stat.totalAnswered) {
+        entry.correct += stat.successRate * stat.totalAnswered
+      }
+    })
+    return new Map(
+      Array.from(map.entries()).map(([key, entry]) => [
+        key,
+        {
+          totalAnswered: entry.totalAnswered,
+          successRate: entry.totalAnswered > 0 ? entry.correct / entry.totalAnswered : null,
+        },
+      ]),
+    )
+  }, [sourceTopicStats])
+
   const activeTopics = !activeSource && groupMode === 'topic' ? selectedContentGroup?.topics : null
   const galleryTopicGroup = activeTopics?.find(
     (topicGroup) => topicStatsKey(effectiveSelectedSubject, topicGroup.topic) === galleryTopicKey,
@@ -645,6 +684,7 @@ export default function WrongQuestionsView({
                   publisherName={source.publisherName}
                   bookImageUrl={source.bookImageUrl}
                   wrongCount={source.items.length}
+                  stats={sourceBookStatsMap.get(sourceBookKey(effectiveSelectedSubject, source.bookName))}
                   onClick={() => setSelectedSourceKey(sourceKeyFor(source.bookName))}
                 />
               ))}

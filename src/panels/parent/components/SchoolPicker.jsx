@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Search, School, X } from 'lucide-react'
+import { School } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import Badge from '../../ui/Badge'
+import Combobox from '../../ui/Combobox'
 import ProvinceDistrictSelect from './ProvinceDistrictSelect'
 
 const SCHOOL_TYPE_LABELS = {
@@ -27,9 +28,7 @@ export default function SchoolPicker({
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!districtId || school) {
-      return undefined
-    }
+    if (!districtId) return undefined
 
     let ignore = false
     const timer = setTimeout(() => {
@@ -39,7 +38,7 @@ export default function SchoolPicker({
         { method: 'GET' },
       )
         .then((data) => {
-          if (!ignore) setSchools(data.schools)
+          if (!ignore) setSchools({ districtId, items: data.schools })
         })
         .catch((err) => {
           if (!ignore) setError(err.message)
@@ -50,7 +49,10 @@ export default function SchoolPicker({
       ignore = true
       clearTimeout(timer)
     }
-  }, [districtId, query, school])
+  }, [districtId, query])
+
+  // İlçe değişince eski ilçenin okullarını gösterme.
+  const schoolItems = schools && schools.districtId === districtId ? schools.items : null
 
   const handleDistrictChange = (nextDistrictId) => {
     onSchoolChange(null)
@@ -74,72 +76,30 @@ export default function SchoolPicker({
 
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-panel-text-muted">Okul</span>
-
-        {school ? (
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-panel-border bg-[#f7f8fc] p-2.5">
+        <Combobox
+          value={school?.id || ''}
+          selectedOption={school}
+          onChange={(_value, option) => onSchoolChange(option || null)}
+          options={schoolItems || []}
+          disabled={!districtId}
+          loading={Boolean(districtId) && schoolItems === null}
+          filter={false}
+          onSearchChange={setQuery}
+          clearable
+          icon={School}
+          placeholder={districtId ? 'Okul ara ve seç' : 'Önce il ve ilçe seçin'}
+          searchPlaceholder="Okul adı ara..."
+          emptyLabel="Bu ilçede okul bulunamadı"
+          renderOption={(item) => (
             <span className="flex min-w-0 items-center gap-2">
-              <School size={16} className="shrink-0 text-[#1c2b5e]" aria-hidden="true" />
-              <span className="truncate text-sm font-medium text-panel-text">{school.name}</span>
-              {school.type ? (
-                <Badge tone={SCHOOL_TYPE_TONES[school.type] || 'neutral'}>
-                  {SCHOOL_TYPE_LABELS[school.type] || school.type}
-                </Badge>
-              ) : null}
+              <span className="truncate text-panel-text">{item.name}</span>
+              <Badge tone={SCHOOL_TYPE_TONES[item.type] || 'neutral'}>
+                {SCHOOL_TYPE_LABELS[item.type] || item.type}
+              </Badge>
             </span>
-            <button
-              type="button"
-              aria-label="Okul seçimini kaldır"
-              onClick={() => onSchoolChange(null)}
-              className="shrink-0 text-panel-text-muted hover:text-panel-warm"
-            >
-              <X size={16} aria-hidden="true" />
-            </button>
-          </div>
-        ) : !districtId ? (
-          <p className="rounded-xl border border-dashed border-panel-border p-2.5 text-sm text-panel-text-muted">
-            Okul aramak için önce il ve ilçe seçin.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <div className="relative">
-              <Search
-                size={14}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#87a3a5]"
-                aria-hidden="true"
-              />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Okul adı ara..."
-                className="w-full rounded-xl border border-[#dfe4e5] bg-white py-2 pl-9 pr-3 text-sm text-[#253d3e] focus:outline-none focus:ring-2 focus:ring-[#1c2b5e]/20"
-              />
-            </div>
-
-            {error ? <p className="text-xs text-panel-warm">{error}</p> : null}
-
-            <div className="max-h-52 overflow-y-auto rounded-xl border border-panel-border">
-              {schools === null ? (
-                <p className="p-3 text-sm text-panel-text-muted">Okullar yükleniyor...</p>
-              ) : schools.length === 0 ? (
-                <p className="p-3 text-sm text-panel-text-muted">Bu ilçede henüz okul eklenmemiş.</p>
-              ) : (
-                schools.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => onSchoolChange(item)}
-                    className="flex w-full items-center justify-between gap-2 border-b border-panel-border/60 px-3 py-2 text-left text-sm last:border-b-0 hover:bg-[#f8f7fb]"
-                  >
-                    <span className="truncate text-panel-text">{item.name}</span>
-                    <Badge tone={SCHOOL_TYPE_TONES[item.type] || 'neutral'}>
-                      {SCHOOL_TYPE_LABELS[item.type] || item.type}
-                    </Badge>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        )}
+          )}
+        />
+        {error ? <p className="text-xs text-panel-warm">{error}</p> : null}
       </div>
     </div>
   )

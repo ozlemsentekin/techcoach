@@ -10,7 +10,7 @@ const {
 const { requireTeacherSession, requireTeacherStudentContext } = require('./teacherScope')
 const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
 const { fetchTeacherResourceBooks, verifySubjectExists } = require('./students')
-const { fetchStudentProfile, validateGeoSelection } = require('./studentProfile')
+const { fetchStudentProfile, validateGeoSelection, sanitizePhotoUrl } = require('./studentProfile')
 const { getTeacherQuota, hasActiveParentEntitlement } = require('./entitlements')
 const {
   SELECT_HOMEWORK,
@@ -38,6 +38,7 @@ function addDaysISO(dateISO, days) {
   return date.toISOString().slice(0, 10)
 }
 const { SELECT_TASK, sanitizeTask, fetchTaskAnswerSheetData } = require('./tasks')
+const { resolveStudentSchoolSchedule } = require('./schoolSchedule')
 const {
   fetchResourceBookTopicsWithTests,
   LIBRARY_GRADES,
@@ -536,6 +537,18 @@ async function updateTeacherStudentProfileHandler(request) {
       }
     }
 
+    // Fotoğraf yalnızca istekte gönderildiyse güncellenir (Okul Bilgileri adımı photoUrl
+    // göndermez); aksi halde MERGE mevcut fotoğrafı korur.
+    const updatePhoto = Object.prototype.hasOwnProperty.call(payload, 'photoUrl')
+    let photoUrl = null
+    if (updatePhoto) {
+      const photoResult = sanitizePhotoUrl(payload.photoUrl)
+      if (photoResult.error) {
+        return json(400, { error: photoResult.error })
+      }
+      photoUrl = photoResult.value
+    }
+
     const provinceId = payload.provinceId || null
     const districtId = payload.districtId || null
     const schoolId = payload.schoolId || null
@@ -560,6 +573,8 @@ async function updateTeacherStudentProfileHandler(request) {
       provinceId: { type: sql.UniqueIdentifier, value: provinceId },
       districtId: { type: sql.UniqueIdentifier, value: districtId },
       schoolId: { type: sql.UniqueIdentifier, value: schoolId },
+      updatePhoto: { type: sql.Bit, value: updatePhoto ? 1 : 0 },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoUrl },
     })
     await updateDb.query(`
       UPDATE dbo.Users
@@ -581,9 +596,10 @@ async function updateTeacherStudentProfileHandler(request) {
         phone = @phone,
         province_id = @provinceId,
         district_id = @districtId,
-        school_id = @schoolId
-      WHEN NOT MATCHED THEN INSERT (student_id, grade, birth_date, gender, phone, province_id, district_id, school_id)
-        VALUES (@studentId, @grade, @birthDate, @gender, @phone, @provinceId, @districtId, @schoolId);
+        school_id = @schoolId,
+        photo_url = CASE WHEN @updatePhoto = 1 THEN @photoUrl ELSE photo_url END
+      WHEN NOT MATCHED THEN INSERT (student_id, grade, birth_date, gender, phone, province_id, district_id, school_id, photo_url)
+        VALUES (@studentId, @grade, @birthDate, @gender, @phone, @provinceId, @districtId, @schoolId, @photoUrl);
     `)
 
     const profile = await fetchStudentProfile(studentId)
@@ -2423,13 +2439,41 @@ async function listTeacherStudentTasksHandler(request) {
               WHERE strb.teacher_id = @studentTeacherId AND strb.resource_book_id = t.resource_book_id
             ))
           )
+          -- Branştan bağımsız plan öğeleri: öğrencinin spor ve (başka öğretmenlerden gelen)
+          -- özel ders görevleri öğretmenin takviminde bağlam olarak görünür.
+          OR t.task_type IN ('spor', 'ozel-ders')
         )
       ORDER BY t.start_time ASC;
     `)
 
-    return json(200, { tasks: result.recordset.map(sanitizeTask) })
+    const normalizedStudentTeacherId = String(studentTeacherId).toLowerCase()
+    const tasks = result.recordset.map(sanitizeTask).map((task) => {
+      // Başka öğretmenin özel dersi ise öğretmen adını gizle — sadece ders adıyla göster.
+      if (
+        task.taskType === 'ozel-ders' &&
+        String(task.studentTeacherId || '').toLowerCase() !== normalizedStudentTeacherId
+      ) {
+        return { ...task, teacherFullName: undefined, studentTeacherId: undefined }
+      }
+      return task
+    })
+
+    return json(200, { tasks })
   } catch (error) {
     return handleError(error, 'listTeacherStudentTasksHandler', 'Görevler yüklenemedi.')
+  }
+}
+
+// Öğrencinin okul ders saatleri + tatil takvimi — öğretmenin haftalık takviminde "Okulda"
+// kartlarını göstermek için (veli panelindeki ile aynı ortak çözümleyici).
+async function getTeacherStudentSchoolScheduleHandler(request) {
+  try {
+    const { error, studentId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    return json(200, await resolveStudentSchoolSchedule(studentId))
+  } catch (error) {
+    return handleError(error, 'getTeacherStudentSchoolScheduleHandler', 'Ders programı yüklenemedi.')
   }
 }
 
@@ -2845,6 +2889,7 @@ module.exports = {
   updateTeacherHomeworkHandler,
   deleteTeacherHomeworkHandler,
   listTeacherStudentTasksHandler,
+  getTeacherStudentSchoolScheduleHandler,
   getTeacherTaskAnswerSheetHandler,
   getTeacherStudentProgressOverviewHandler,
   listTeacherStudentWrongQuestionsHandler,

@@ -1,4 +1,4 @@
-import { Check } from 'lucide-react'
+import { Calendar, Check } from 'lucide-react'
 
 export function FieldIcon({ icon }) {
   const Icon = icon
@@ -8,6 +8,41 @@ export function FieldIcon({ icon }) {
       className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-panel-blue"
       aria-hidden="true"
     />
+  )
+}
+
+// Doğum tarihi alanı: boşken kutunun içinde "Doğum Tarihi" etiketi görünür (native
+// "gg.aa.yyyy" metni şeffaflaştırılır); tıklanınca takvim açılır. min/max/name gibi
+// ek nitelikler `rest` ile geçirilir.
+export function BirthDateField({ value, onChange, disabled = false, className, ...rest }) {
+  const hasValue = Boolean(value)
+  return (
+    <div className="relative">
+      <FieldIcon icon={Calendar} />
+      <input
+        type="date"
+        value={value || ''}
+        onChange={onChange}
+        disabled={disabled}
+        aria-label="Doğum Tarihi"
+        className={[
+          'w-full rounded-xl border p-2 pl-9 text-base focus:border-panel-blue focus:outline-none',
+          disabled
+            ? 'cursor-not-allowed border-panel-border bg-[#f4f5f6] text-panel-text-muted'
+            : 'border-panel-border text-panel-text',
+          hasValue ? '' : 'text-transparent',
+          className || '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        {...rest}
+      />
+      {hasValue ? null : (
+        <span className="pointer-events-none absolute left-9 top-1/2 -translate-y-1/2 text-base text-panel-text-muted">
+          Doğum Tarihi
+        </span>
+      )}
+    </div>
   )
 }
 

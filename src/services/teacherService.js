@@ -26,7 +26,7 @@ export async function getTeacherStudentProfile(studentTeacherId) {
 /** Öğretmenin bizzat eklediği bir öğrencinin Temel Bilgiler/Okul Bilgileri alanlarını günceller. */
 export async function updateTeacherStudentProfile(
   studentTeacherId,
-  { firstName, lastName, grade, birthDate, gender, phone, provinceId, districtId, schoolId },
+  { firstName, lastName, grade, birthDate, gender, phone, photoUrl, provinceId, districtId, schoolId },
 ) {
   const result = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/profile`, {
     method: 'PUT',
@@ -37,6 +37,9 @@ export async function updateTeacherStudentProfile(
       birthDate: birthDate || null,
       gender: gender || null,
       phone: phone || null,
+      // photoUrl yalnızca Temel Bilgiler adımından gönderilir; undefined ise sunucu mevcut
+      // fotoğrafı korur (bkz. updateTeacherStudentProfileHandler).
+      ...(photoUrl === undefined ? {} : { photoUrl: photoUrl || null }),
       provinceId: provinceId || null,
       districtId: districtId || null,
       schoolId: schoolId || null,
@@ -275,6 +278,14 @@ export async function getTeacherStudentTasksForDate(studentTeacherId, date) {
     method: 'GET',
   })
   return data.tasks
+}
+
+/** Öğrencinin okul ders saatleri + tatil takvimi — öğretmen takviminde "Okulda" kartları için. */
+export async function getTeacherStudentSchoolSchedule(studentTeacherId) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/school-schedule`, {
+    method: 'GET',
+  })
+  return { entries: data.entries || [], holidays: data.holidays || [] }
 }
 
 /** @returns {Promise<Object>} */

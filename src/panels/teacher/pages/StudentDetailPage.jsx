@@ -17,6 +17,7 @@ import {
   getTeacherStudent,
   getTeacherStudentHomeworks,
   getTeacherStudentTasksForDate,
+  getTeacherStudentSchoolSchedule,
   addTeacherHomework,
   assignTeacherHomeworkTask,
   updateTeacherHomework,
@@ -48,6 +49,8 @@ export default function StudentDetailPage() {
   const weekStart = addDaysISO(currentWeekStart, weekOffset * 7)
   const weekDates = getWeekDates(weekStart)
   const [tasksByDate, setTasksByDate] = useState({})
+  const [schoolSchedule, setSchoolSchedule] = useState([])
+  const [schoolHolidays, setSchoolHolidays] = useState([])
   const [homeworks, setHomeworks] = useState([])
   const [loadingWeek, setLoadingWeek] = useState(true)
   const [weekError, setWeekError] = useState('')
@@ -75,6 +78,18 @@ export default function StudentDetailPage() {
       })
       .catch((err) => {
         if (!ignore) setStudentError(err.message)
+      })
+
+    getTeacherStudentSchoolSchedule(studentTeacherId)
+      .then((data) => {
+        if (ignore) return
+        setSchoolSchedule(data.entries)
+        setSchoolHolidays(data.holidays)
+      })
+      .catch(() => {
+        if (ignore) return
+        setSchoolSchedule([])
+        setSchoolHolidays([])
       })
 
     return () => {
@@ -323,6 +338,8 @@ export default function StudentDetailPage() {
               tasksByDate={tasksByDate}
               lessonSchedule={student.schedule}
               lessonScheduleExceptions={student.scheduleExceptions}
+              schoolSchedule={schoolSchedule}
+              schoolHolidays={schoolHolidays}
               onAddHomework={(date) => setHomeworkModalDate(date)}
               onEditTask={handleEditTask}
               onViewAnswerSheet={setAnswerSheetTask}

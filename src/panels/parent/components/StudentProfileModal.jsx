@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Calendar, Check, GraduationCap, Palette, Phone, Plus, Trophy, UserRound, Users, X } from 'lucide-react'
+import { Check, GraduationCap, Palette, Phone, Plus, Trophy, UserRound, Users, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { THEMES } from '../../../theme/themes'
 import LoadingState from '../../shared/LoadingState'
@@ -9,7 +9,7 @@ import SchoolPicker from './SchoolPicker'
 import SchoolScheduleEditor from './SchoolScheduleEditor'
 import SubjectPicker from './SubjectPicker'
 import { COMMON_ARTS, COMMON_SPORTS } from './studentInterestCatalog'
-import { FieldIcon, WizardSteps } from './StudentWizardShared'
+import { BirthDateField, FieldIcon, WizardSteps } from './StudentWizardShared'
 import { GENDER_OPTIONS, WIZARD_STEPS } from './studentWizardConstants'
 
 const LOCKED_FIELD_CLASS =
@@ -240,16 +240,7 @@ export default function StudentProfileModal({ student, onClose }) {
                   />
                 </div>
 
-                <div className="relative">
-                  <FieldIcon icon={Calendar} />
-                  <input
-                    type="date"
-                    value={birthDate}
-                    disabled
-                    aria-label="Doğum Tarihi"
-                    className={LOCKED_FIELD_CLASS}
-                  />
-                </div>
+                <BirthDateField value={birthDate} disabled />
 
                 <div className="relative">
                   <FieldIcon icon={Users} />

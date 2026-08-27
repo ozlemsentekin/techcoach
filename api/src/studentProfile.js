@@ -456,4 +456,5 @@ module.exports = {
   updateStudentProfileHandler,
   fetchStudentProfile,
   validateGeoSelection,
+  sanitizePhotoUrl,
 }
