@@ -549,7 +549,8 @@ export default function StudentResourceLibraryModal({ student, onClose, onAssign
   const publisherGroups = useMemo(() => (resourceBooks ? groupResourceBooksByPublisher(resourceBooks) : []), [resourceBooks])
 
   const filteredLibraryBooks = useMemo(() => {
-    const source = libraryBooks || []
+    // Zaten atanmış kaynaklar burada gösterilmez — onlar "Kaynaklarım" sekmesinde görünür.
+    const source = (libraryBooks || []).filter((book) => !book.assigned)
     const query = libraryQuery.trim().toLocaleLowerCase('tr-TR')
     if (!query) return source
     return source.filter((book) =>
@@ -693,7 +694,11 @@ export default function StudentResourceLibraryModal({ student, onClose, onAssign
                 />
               ) : libraryPublisherGroups.length === 0 ? (
                 <p className="p-2 text-sm text-panel-text-muted">
-                  {libraryQuery.trim() ? 'Aramayla eşleşen kaynak yok.' : 'Bu derse ait onaylı özel kaynak bulunamadı.'}
+                  {libraryQuery.trim()
+                    ? 'Aramayla eşleşen kaynak yok.'
+                    : (libraryBooks || []).length
+                      ? 'Bu derse ait tüm kaynaklar zaten atanmış.'
+                      : 'Bu derse ait onaylı özel kaynak bulunamadı.'}
                 </p>
               ) : (
                 <div className="flex min-w-0 flex-col gap-5">
