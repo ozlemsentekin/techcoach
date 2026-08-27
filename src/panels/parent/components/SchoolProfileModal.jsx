@@ -11,6 +11,10 @@ import { GRADE_OPTIONS } from './studentWizardConstants'
 
 const SCHOOL_TYPE_LABELS = { devlet: 'Devlet', ozel: 'Özel' }
 
+// Sınıf seçici 8 → 1 sıralı; varsayılan seçili sınıf 8.
+const GRADES_DESC = [...GRADE_OPTIONS].reverse()
+const DEFAULT_GRADE = GRADES_DESC[0]
+
 const TABS = [
   { id: 'schedule', label: 'Ders Saatleri' },
   { id: 'calendar', label: 'Tatil Takvimi' },
@@ -20,7 +24,7 @@ const TABS = [
 function GradePills({ grade, onChange }) {
   return (
     <div className="flex flex-wrap gap-1.5">
-      {GRADE_OPTIONS.map((option) => (
+      {GRADES_DESC.map((option) => (
         <button
           key={option}
           type="button"
@@ -40,7 +44,7 @@ function GradePills({ grade, onChange }) {
 }
 
 function ScheduleTab({ schoolId }) {
-  const [grade, setGrade] = useState(GRADE_OPTIONS[0])
+  const [grade, setGrade] = useState(DEFAULT_GRADE)
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -294,7 +298,7 @@ function ResourceForm({ initial, onSubmit, onCancel, saving }) {
 }
 
 function ResourcesTab({ schoolId }) {
-  const [grade, setGrade] = useState(GRADE_OPTIONS[0])
+  const [grade, setGrade] = useState(DEFAULT_GRADE)
   const [subjects, setSubjects] = useState(null)
   const [subjectId, setSubjectId] = useState('')
   const [resources, setResources] = useState(null)
@@ -512,7 +516,7 @@ export default function SchoolProfileModal({ school, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
-      <div className="flex h-full w-full flex-col bg-white shadow-panel-2 sm:h-auto sm:max-h-[92vh] sm:max-w-2xl sm:rounded-2xl">
+      <div className="flex h-full w-full flex-col bg-white shadow-panel-2 sm:h-[88vh] sm:w-full sm:max-w-4xl sm:rounded-2xl">
         <div className="flex items-start justify-between gap-4 px-4 py-3 sm:px-5 sm:py-4">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-panel-text">{school.name}</h2>
