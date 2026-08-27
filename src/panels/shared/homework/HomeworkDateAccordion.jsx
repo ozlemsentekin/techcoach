@@ -10,7 +10,6 @@ export default function HomeworkDateAccordion({
   onDeleteRequest,
   onEditRequest,
   onAssignTaskRequest,
-  onViewAnswerSheet,
   isPast = false,
 }) {
   const isUnassigned = !dateGroup.dueDate
@@ -78,7 +77,6 @@ export default function HomeworkDateAccordion({
               onDeleteRequest={onDeleteRequest}
               onEditRequest={onEditRequest}
               onAssignTaskRequest={onAssignTaskRequest}
-              onViewAnswerSheet={onViewAnswerSheet}
             />
           ))}
         </div>

@@ -3,14 +3,7 @@ import { getSubjectTone } from '../../../utils/subjectStyles'
 import { SUBJECT_ICONS, DEFAULT_SUBJECT_ICON, SUBJECT_ICON_TONE_CLASSES } from './homeworkDisplay'
 import HomeworkItemCard from './HomeworkItemCard'
 
-export default function HomeworkSubjectGroup({
-  subject,
-  items,
-  onDeleteRequest,
-  onEditRequest,
-  onAssignTaskRequest,
-  onViewAnswerSheet,
-}) {
+export default function HomeworkSubjectGroup({ subject, items, onDeleteRequest, onEditRequest, onAssignTaskRequest }) {
   const tone = getSubjectTone(subject)
   const Icon = SUBJECT_ICONS[subject] || DEFAULT_SUBJECT_ICON
 
@@ -46,7 +39,6 @@ export default function HomeworkSubjectGroup({
               onDeleteRequest={onDeleteRequest}
               onEditRequest={onEditRequest}
               onAssignTaskRequest={onAssignTaskRequest}
-              onViewAnswerSheet={onViewAnswerSheet}
             />
           </div>
         ))}

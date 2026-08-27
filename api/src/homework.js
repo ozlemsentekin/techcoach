@@ -38,11 +38,6 @@ function sanitizeHomework(record) {
     taskStartTime: record.task_start_time || null,
     taskEndTime: record.task_end_time || null,
     taskDurationMinutes: record.task_duration_minutes ?? null,
-    taskStatus: record.task_status || null,
-    taskCorrectCount: record.task_correct_count ?? null,
-    taskWrongCount: record.task_wrong_count ?? null,
-    taskBlankCount: record.task_blank_count ?? null,
-    taskHasAnswerSheet: Boolean(record.task_has_answer_sheet),
   }
 }
 
@@ -160,17 +155,13 @@ const SELECT_HOMEWORK = `
          h.total_page_count,
          h.priority, h.status, h.is_split, h.day_plans_json, h.created_at, h.updated_at,
          t.id AS task_id, t.date AS task_date, t.start_time AS task_start_time, t.end_time AS task_end_time,
-         t.duration_minutes AS task_duration_minutes,
-         t.task_status, t.task_correct_count, t.task_wrong_count, t.task_blank_count, t.task_has_answer_sheet
+         t.duration_minutes AS task_duration_minutes
   FROM dbo.Homeworks h
   INNER JOIN dbo.Subjects s ON s.id = h.subject_id
   LEFT JOIN dbo.ResourceBooks rb ON rb.id = h.resource_book_id
   LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
   OUTER APPLY (
-    SELECT TOP 1 tk.id, tk.date, tk.start_time, tk.end_time, tk.duration_minutes,
-           tk.status AS task_status, tk.correct_count AS task_correct_count,
-           tk.wrong_count AS task_wrong_count, tk.blank_count AS task_blank_count,
-           CAST(CASE WHEN tk.selected_test_ids_json IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS task_has_answer_sheet
+    SELECT TOP 1 tk.id, tk.date, tk.start_time, tk.end_time, tk.duration_minutes
     FROM dbo.Tasks tk
     WHERE tk.homework_id = h.id
     ORDER BY tk.created_at DESC

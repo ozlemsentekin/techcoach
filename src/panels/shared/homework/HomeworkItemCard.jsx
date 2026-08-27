@@ -1,4 +1,4 @@
-import { CalendarPlus, ClipboardCheck, Clock, Pencil, Trash2 } from 'lucide-react'
+import { CalendarPlus, Clock, Pencil, Trash2 } from 'lucide-react'
 import { cn } from '../../ui/utils'
 import { isHomeworkCompleted, isHomeworkOverdue } from './homeworkDisplay'
 import PublisherBadge from './PublisherBadge'
@@ -8,18 +8,9 @@ function formatShortDate(dateISO) {
   return new Date(dateISO).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })
 }
 
-export default function HomeworkItemCard({
-  homework,
-  onDeleteRequest,
-  onEditRequest,
-  onAssignTaskRequest,
-  onViewAnswerSheet,
-}) {
+export default function HomeworkItemCard({ homework, onDeleteRequest, onEditRequest, onAssignTaskRequest }) {
   const completed = isHomeworkCompleted(homework)
   const overdue = isHomeworkOverdue(homework)
-  const canViewAnswerSheet = typeof onViewAnswerSheet === 'function' && homework.taskHasAnswerSheet
-  const hasGrade =
-    homework.taskCorrectCount != null || homework.taskWrongCount != null || homework.taskBlankCount != null
 
   return (
     <div
@@ -54,29 +45,10 @@ export default function HomeworkItemCard({
             {homework.dayPlans.map((plan) => `${plan.date}: ${plan.questionCount} soru`).join(' · ')}
           </p>
         ) : null}
-        {canViewAnswerSheet && hasGrade ? (
-          <p className="w-full text-[11px] font-semibold text-panel-text-muted">
-            <span className="text-emerald-600">{homework.taskCorrectCount ?? 0} D</span>
-            {' · '}
-            <span className="text-panel-red">{homework.taskWrongCount ?? 0} Y</span>
-            {' · '}
-            <span>{homework.taskBlankCount ?? 0} B</span>
-          </p>
-        ) : null}
       </div>
 
       <div className="flex shrink-0 items-center justify-between gap-2.5 sm:justify-end">
         <HomeworkProgress homework={homework} completed={completed} />
-        {canViewAnswerSheet ? (
-          <button
-            type="button"
-            onClick={() => onViewAnswerSheet(homework)}
-            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-panel-blue-soft px-2.5 py-1 text-[11px] font-semibold text-panel-blue hover:bg-panel-blue hover:text-white"
-          >
-            <ClipboardCheck size={12} aria-hidden="true" />
-            Cevap Kağıdı
-          </button>
-        ) : null}
         {onAssignTaskRequest && !homework.isTaskOnly ? (
           homework.hasTask ? (
             <button

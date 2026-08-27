@@ -1,13 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { AlertCircle, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, GraduationCap, NotebookPen, Phone, TrendingUp } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, GraduationCap, Phone, TrendingUp } from 'lucide-react'
 import LoadingState from '../../shared/LoadingState'
-import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
 import WeeklyPlannerGrid from '../../parent/components/WeeklyPlannerGrid'
 import AssignTaskModal from '../../shared/homework/AssignTaskModal'
-import HomeworkDateAccordion from '../../shared/homework/HomeworkDateAccordion'
-import { groupHomeworksByDate } from '../../shared/homework/homeworkDisplay'
 import StudentProgressView from '../../shared/StudentProgressView'
 import WrongQuestionsView from '../../shared/WrongQuestionsView'
 import AssignHomeworkModal from '../components/AssignHomeworkModal'
@@ -66,22 +63,6 @@ export default function StudentDetailPage() {
   const [answerSheetTask, setAnswerSheetTask] = useState(null)
   const [managingSlot, setManagingSlot] = useState(null)
   const [banner, setBanner] = useState('')
-  const [expandedHomeworkDates, setExpandedHomeworkDates] = useState({})
-
-  const homeworkGroups = useMemo(() => groupHomeworksByDate(homeworks), [homeworks])
-
-  const isHomeworkDateOpen = (dueDate, index) => {
-    const key = dueDate || 'unassigned'
-    if (Object.prototype.hasOwnProperty.call(expandedHomeworkDates, key)) {
-      return expandedHomeworkDates[key]
-    }
-    return index === 0
-  }
-
-  const toggleHomeworkDate = (dueDate, index) => {
-    const key = dueDate || 'unassigned'
-    setExpandedHomeworkDates((prev) => ({ ...prev, [key]: !isHomeworkDateOpen(dueDate, index) }))
-  }
 
   const refreshStudent = async () => {
     setStudent(await getTeacherStudent(studentTeacherId))
@@ -365,42 +346,6 @@ export default function StudentDetailPage() {
               onManageLessonSlot={(slot) => setManagingSlot(slot)}
             />
           )}
-
-          {!loadingWeek ? (
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <NotebookPen size={18} className="text-panel-blue" aria-hidden="true" />
-                <h2 className="text-lg font-bold text-panel-text">Ödevler</h2>
-              </div>
-              <p className="text-sm text-panel-text-muted">
-                Bu öğrenciyle takip ettiğin kaynaklara ait tüm ödevler — sen atamamış olsan bile — ve sonuçları.
-              </p>
-              {homeworkGroups.length === 0 ? (
-                <EmptyState
-                  icon={NotebookPen}
-                  title="Ödev yok"
-                  description="Takip ettiğin kaynaklara henüz ödev tanımlanmamış."
-                />
-              ) : (
-                <div className="flex flex-col gap-4">
-                  {homeworkGroups.map((dateGroup, index) => (
-                    <HomeworkDateAccordion
-                      key={dateGroup.dueDate || 'unassigned'}
-                      dateGroup={dateGroup}
-                      isOpen={isHomeworkDateOpen(dateGroup.dueDate, index)}
-                      onToggle={() => toggleHomeworkDate(dateGroup.dueDate, index)}
-                      onDeleteRequest={setDeletingHomework}
-                      onEditRequest={setEditingHomework}
-                      onAssignTaskRequest={setRescheduleHomework}
-                      onViewAnswerSheet={(hw) =>
-                        setAnswerSheetTask({ id: hw.taskId, title: hw.title, description: hw.title })
-                      }
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : null}
         </div>
       ) : activeTab === 'analysis' ? (
         <StudentProgressView
