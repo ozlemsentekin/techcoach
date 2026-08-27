@@ -413,23 +413,31 @@ function ResourcesTab({ schoolId }) {
         Bu okul + sınıf + ders için tanımlanan kaynaklar, veli "Okul Ödevi" eklerken resim + ad olarak listelenir.
       </p>
       <GradePills grade={grade} onChange={setGrade} />
-      <select
-        aria-label="Ders"
-        value={subjectId}
-        onChange={(e) => {
-          setSubjectId(e.target.value)
-          setAdding(false)
-          setEditingId(null)
-        }}
-        className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text"
-      >
-        <option value="">Ders seçin</option>
-        {(subjects || []).map((subject) => (
-          <option key={subject.id} value={subject.id}>
-            {subject.name}
-          </option>
-        ))}
-      </select>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <select
+          aria-label="Ders"
+          value={subjectId}
+          onChange={(e) => {
+            setSubjectId(e.target.value)
+            setAdding(false)
+            setEditingId(null)
+          }}
+          className="w-full rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text sm:flex-1"
+        >
+          <option value="">Ders seçin</option>
+          {(subjects || []).map((subject) => (
+            <option key={subject.id} value={subject.id}>
+              {subject.name}
+            </option>
+          ))}
+        </select>
+        {canLoad ? (
+          <Button type="button" size="md" onClick={() => setAdding(true)} className="shrink-0 sm:self-auto">
+            <Plus size={15} className="mr-1.5 inline" aria-hidden="true" />
+            Kaynak Ekle
+          </Button>
+        ) : null}
+      </div>
 
       {error ? <div className="rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div> : null}
 
@@ -447,7 +455,9 @@ function ResourcesTab({ schoolId }) {
             </p>
           ) : (
             <ul className="flex flex-col gap-1.5">
-              {resources.map((resource) => (
+              {[...resources]
+                .sort((a, b) => a.name.localeCompare(b.name, 'tr', { numeric: true }))
+                .map((resource) => (
                   <li
                     key={resource.id}
                     className="flex items-center justify-between gap-3 rounded-xl border border-panel-border bg-white px-3 py-2.5"
@@ -493,14 +503,9 @@ function ResourcesTab({ schoolId }) {
                       </button>
                     </span>
                   </li>
-              ))}
+                ))}
             </ul>
           )}
-
-          <Button type="button" size="sm" variant="secondary" onClick={() => setAdding(true)} className="self-start">
-            <Plus size={14} className="mr-1 inline" aria-hidden="true" />
-            Kaynak Ekle
-          </Button>
         </div>
       )}
 
@@ -584,12 +589,6 @@ export default function SchoolProfileModal({ school, onClose }) {
           {tab === 'schedule' ? <ScheduleTab schoolId={school.id} /> : null}
           {tab === 'calendar' ? <CalendarTab schoolId={school.id} /> : null}
           {tab === 'resources' ? <ResourcesTab schoolId={school.id} /> : null}
-        </div>
-
-        <div className="flex justify-end border-t border-[#edf0f1] px-4 py-3 sm:px-5">
-          <Button type="button" variant="secondary" size="md" onClick={onClose}>
-            Kapat
-          </Button>
         </div>
       </div>
     </div>
