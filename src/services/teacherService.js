@@ -287,6 +287,19 @@ export async function getTeacherStudentTasksForDate(studentTeacherId, date) {
   return data.tasks
 }
 
+/** Ödev kaydına bağlı olmayan (öğrenci/veli eklemiş) bir plan görevini öğretmenin yeniden planlaması. */
+export async function updateTeacherStudentTask(studentTeacherId, taskId, { date, startTime, durationMinutes }) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/tasks/${taskId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ date, startTime, durationMinutes }),
+  })
+  return data.task
+}
+
+export async function deleteTeacherStudentTask(studentTeacherId, taskId) {
+  await authRequest(`/api/panel-teacher/students/${studentTeacherId}/tasks/${taskId}`, { method: 'DELETE' })
+}
+
 /** Öğrencinin okul ders saatleri + tatil takvimi — öğretmen takviminde "Okulda" kartları için. */
 export async function getTeacherStudentSchoolSchedule(studentTeacherId) {
   const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/school-schedule`, {

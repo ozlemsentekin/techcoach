@@ -27,9 +27,12 @@ import {
   getTeacherStudentWrongQuestionTopicStats,
   getTeacherStudentWrongQuestionPhoto,
   updateTeacherStudentWrongQuestion,
+  updateTeacherStudentTask,
+  deleteTeacherStudentTask,
 } from '../../../services/teacherService'
 import { addDaysISO, getMondayOfWeek, todayISODate } from '../../../utils/time'
 import { getWeekDates } from '../../../services/weeklyPlanService'
+import { HOMEWORK_TASK_TYPES } from '../../../data/taskTypes'
 
 const currentWeekStart = getMondayOfWeek(todayISODate())
 
@@ -59,6 +62,8 @@ export default function StudentDetailPage() {
   const [rescheduleHomework, setRescheduleHomework] = useState(null)
   const [editingHomework, setEditingHomework] = useState(null)
   const [deletingHomework, setDeletingHomework] = useState(null)
+  const [reschedulingTask, setReschedulingTask] = useState(null)
+  const [deletingTask, setDeletingTask] = useState(null)
   const [detailTask, setDetailTask] = useState(null)
   const [answerSheetTask, setAnswerSheetTask] = useState(null)
   const [managingSlot, setManagingSlot] = useState(null)
@@ -146,6 +151,30 @@ export default function StudentDetailPage() {
 
   const handleEditTask = (task) => {
     setDetailTask(task)
+  }
+
+  // Ödev kaydına bağlı olmayan (homeworkId yok) ama öğretmenin takip ettiği kaynağa ait,
+  // öğrenci/veli eklemiş plan görevleri: görev tabanlı uçlarla yeniden planlanır/silinir.
+  const isManageableStandaloneTask = (task) =>
+    Boolean(task) && !task.homeworkId && HOMEWORK_TASK_TYPES.has(task.taskType)
+
+  const handleTaskReschedule = async ({ date, startTime, durationMinutes }) => {
+    await updateTeacherStudentTask(studentTeacherId, reschedulingTask.id, { date, startTime, durationMinutes })
+    await refreshWeek()
+    setReschedulingTask(null)
+    showBanner('Görev yeniden planlandı.')
+  }
+
+  const handleTaskDeleteConfirmed = async () => {
+    const taskId = deletingTask?.id
+    setDeletingTask(null)
+    try {
+      await deleteTeacherStudentTask(studentTeacherId, taskId)
+      await refreshWeek()
+      showBanner('Görev silindi.')
+    } catch (err) {
+      setWeekError(err.message)
+    }
   }
 
   const openRescheduleForTask = (task) => {
@@ -378,9 +407,27 @@ export default function StudentDetailPage() {
       {detailTask ? (
         <TaskDetailModal
           task={detailTask}
-          onReschedule={detailTask.homeworkId ? () => openRescheduleForTask(detailTask) : undefined}
+          onReschedule={
+            detailTask.homeworkId
+              ? () => openRescheduleForTask(detailTask)
+              : isManageableStandaloneTask(detailTask)
+                ? () => {
+                    setReschedulingTask(detailTask)
+                    setDetailTask(null)
+                  }
+                : undefined
+          }
           onEdit={detailTask.homeworkId ? () => openEditForTask(detailTask) : undefined}
-          onDelete={detailTask.homeworkId ? () => openDeleteForTask(detailTask) : undefined}
+          onDelete={
+            detailTask.homeworkId
+              ? () => openDeleteForTask(detailTask)
+              : isManageableStandaloneTask(detailTask)
+                ? () => {
+                    setDeletingTask(detailTask)
+                    setDetailTask(null)
+                  }
+                : undefined
+          }
           onClose={() => setDetailTask(null)}
         />
       ) : null}
@@ -390,6 +437,31 @@ export default function StudentDetailPage() {
           homework={rescheduleHomework}
           onSave={handleReschedule}
           onClose={() => setRescheduleHomework(null)}
+        />
+      ) : null}
+
+      {reschedulingTask ? (
+        <AssignTaskModal
+          homework={{
+            title: reschedulingTask.description || reschedulingTask.title,
+            hasTask: true,
+            taskDate: reschedulingTask.date,
+            taskStartTime: reschedulingTask.startTime,
+            taskDurationMinutes: reschedulingTask.durationMinutes,
+          }}
+          onSave={handleTaskReschedule}
+          onClose={() => setReschedulingTask(null)}
+        />
+      ) : null}
+
+      {deletingTask ? (
+        <ConfirmationDialog
+          title="Görevi sil"
+          description={`"${deletingTask.description || deletingTask.title}" görevini plandan silmek istediğine emin misin?`}
+          confirmLabel="Sil"
+          cancelLabel="Vazgeç"
+          onConfirm={handleTaskDeleteConfirmed}
+          onCancel={() => setDeletingTask(null)}
         />
       ) : null}
 

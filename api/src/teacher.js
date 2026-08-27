@@ -67,6 +67,26 @@ const TEACHER_TYPE_LABELS = {
 
 const STUDENT_STATUS_FILTERS = new Set(['active', 'inactive', 'all'])
 
+// Bir görevin (dbo.Tasks t) bu öğretmenin (öğrenci, ders) kapsamına girip girmediğini
+// belirleyen ortak SQL koşulu. @studentId, @subjectId, @studentTeacherId bind edilmiş olmalı.
+// Kapsam:
+//  - Öğretmenin kendi oluşturduğu görevler (student_teacher_id eşleşir)
+//  - Öğretmenin takip ettiği bir kaynağa ait her görev — ödev kaydına (homework_id) bağlı
+//    olsun ya da olmasın; öğrenci/veli "Bugün planı"ndan eklediği soru bankası ödevleri de
+//    dahil (bkz. AddTaskDrawer 'soru-bankasi-odevi')
+//  - Öğretmenin dersine ait bir ödeve bağlı, kaynağı olmayan görevler (örn. okuma kitabı)
+const TEACHER_TASK_IN_SCOPE = `(
+  t.student_teacher_id = @studentTeacherId
+  OR EXISTS (
+    SELECT 1 FROM dbo.StudentTeacherResourceBooks strb
+    WHERE strb.teacher_id = @studentTeacherId AND strb.resource_book_id = t.resource_book_id
+  )
+  OR (
+    t.resource_book_id IS NULL
+    AND t.homework_id IN (SELECT id FROM dbo.Homeworks WHERE student_id = @studentId AND subject_id = @subjectId)
+  )
+)`
+
 function parseScheduleJson(value) {
   if (!value) return []
   try {
@@ -2527,14 +2547,7 @@ async function listTeacherStudentTasksHandler(request) {
       ${SELECT_TASK}
       WHERE t.student_id = @studentId AND t.date = @date AND t.is_draft = 0
         AND (
-          t.student_teacher_id = @studentTeacherId
-          OR (
-            t.homework_id IN (SELECT id FROM dbo.Homeworks WHERE student_id = @studentId AND subject_id = @subjectId)
-            AND (t.resource_book_id IS NULL OR EXISTS (
-              SELECT 1 FROM dbo.StudentTeacherResourceBooks strb
-              WHERE strb.teacher_id = @studentTeacherId AND strb.resource_book_id = t.resource_book_id
-            ))
-          )
+          ${TEACHER_TASK_IN_SCOPE}
           -- Branştan bağımsız plan öğeleri: öğrencinin spor ve (başka öğretmenlerden gelen)
           -- özel ders görevleri öğretmenin takviminde bağlam olarak görünür.
           OR t.task_type IN ('spor', 'ozel-ders')
@@ -2592,12 +2605,7 @@ async function getTeacherTaskAnswerSheetHandler(request) {
     const scopeResult = await scopeDb.query(`
       SELECT TOP 1 t.id
       FROM dbo.Tasks t
-      WHERE t.id = @id AND t.student_id = @studentId
-        AND t.homework_id IN (SELECT id FROM dbo.Homeworks WHERE student_id = @studentId AND subject_id = @subjectId)
-        AND (t.resource_book_id IS NULL OR EXISTS (
-          SELECT 1 FROM dbo.StudentTeacherResourceBooks strb
-          WHERE strb.teacher_id = @studentTeacherId AND strb.resource_book_id = t.resource_book_id
-        ));
+      WHERE t.id = @id AND t.student_id = @studentId AND ${TEACHER_TASK_IN_SCOPE};
     `)
     if (!scopeResult.recordset[0]) {
       return json(404, { error: 'Görev bulunamadı.' })
@@ -2611,6 +2619,131 @@ async function getTeacherTaskAnswerSheetHandler(request) {
     return json(200, data)
   } catch (error) {
     return handleError(error, 'getTeacherTaskAnswerSheetHandler', 'Cevap kağıdı yüklenemedi.')
+  }
+}
+
+// Öğretmenin, takviminde gördüğü (kendi kapsamındaki) bir görevi yeniden planlaması —
+// ödev kaydına bağlı olsun ya da olmasın. Öğrenci/veli "Bugün planı"ndan eklenmiş, ödev
+// kaydı olmayan soru bankası görevleri için homework tabanlı uçlar çalışmadığından bu
+// görev tabanlı uç gerekli. Kapsam kontrolü listTeacherStudentTasksHandler ile aynı.
+async function updateTeacherStudentTaskHandler(request) {
+  try {
+    const taskId = request.params.taskId
+    const payload = await request.json().catch(() => null)
+    const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    const date = payload?.date
+    const startTime = payload?.startTime || null
+    const durationMinutes = Number(payload?.durationMinutes)
+
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return json(400, { error: 'Geçerli bir tarih seçilmeli.' })
+    }
+    if (startTime && !isValidTime(startTime)) {
+      return json(400, { error: 'Geçerli bir başlangıç saati seçilmeli.' })
+    }
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
+      return json(400, { error: 'Süre 5 ile 480 dakika arasında olmalı.' })
+    }
+
+    const scopeDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+    })
+    const scopeResult = await scopeDb.query(`
+      SELECT TOP 1 t.id, t.homework_id
+      FROM dbo.Tasks t
+      WHERE t.id = @id AND t.student_id = @studentId AND ${TEACHER_TASK_IN_SCOPE};
+    `)
+    const scoped = scopeResult.recordset[0]
+    if (!scoped) {
+      return json(404, { error: 'Görev bulunamadı.' })
+    }
+
+    const endTime = startTime ? computeEndTime(startTime, durationMinutes) : null
+    const updateDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      date: { type: sql.Date, value: date },
+      startTime: { type: sql.Char(5), value: startTime },
+      endTime: { type: sql.Char(5), value: endTime },
+      durationMinutes: { type: sql.Int, value: durationMinutes },
+    })
+    await updateDb.query(`
+      UPDATE dbo.Tasks
+      SET date = @date, start_time = @startTime, end_time = @endTime, duration_minutes = @durationMinutes
+      WHERE id = @id AND student_id = @studentId;
+    `)
+
+    // Bağlı ödev kaydı varsa Ödevlerim'de aynı günün altında görünsün diye due_date'i eşitle.
+    if (scoped.homework_id) {
+      const hwDb = await withRequest({
+        id: { type: sql.UniqueIdentifier, value: scoped.homework_id },
+        date: { type: sql.Date, value: date },
+      })
+      await hwDb.query(`UPDATE dbo.Homeworks SET due_date = @date WHERE id = @id;`)
+    }
+
+    const fetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: taskId } })
+    const fetchResult = await fetchDb.query(`${SELECT_TASK} WHERE t.id = @id;`)
+    return json(200, { task: sanitizeTask(fetchResult.recordset[0]) })
+  } catch (error) {
+    return handleError(error, 'updateTeacherStudentTaskHandler', 'Görev güncellenemedi.')
+  }
+}
+
+// Öğretmenin, takviminde gördüğü (kendi kapsamındaki) bir görevi silmesi. Görev bir ödev
+// kaydına bağlıysa (homework_id) arkada kalan dbo.Homeworks satırı da temizlenir — aksi
+// halde aynı kaynak/test için yeni ödev eklemek "zaten eklenmiş" hatasıyla engellenirdi.
+async function deleteTeacherStudentTaskHandler(request) {
+  try {
+    const taskId = request.params.taskId
+    const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    const scopeDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+    })
+    const scopeResult = await scopeDb.query(`
+      SELECT TOP 1 t.id
+      FROM dbo.Tasks t
+      WHERE t.id = @id AND t.student_id = @studentId AND ${TEACHER_TASK_IN_SCOPE};
+    `)
+    if (!scopeResult.recordset[0]) {
+      return json(404, { error: 'Görev bulunamadı.' })
+    }
+
+    const deleteDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const deleteResult = await deleteDb.query(`
+      DELETE FROM dbo.Tasks
+      OUTPUT deleted.homework_id
+      WHERE id = @id AND student_id = @studentId;
+    `)
+    if (!deleteResult.recordset.length) {
+      return json(404, { error: 'Görev bulunamadı.' })
+    }
+
+    const homeworkId = deleteResult.recordset[0].homework_id
+    if (homeworkId) {
+      const homeworkDb = await withRequest({
+        id: { type: sql.UniqueIdentifier, value: homeworkId },
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+      })
+      await homeworkDb.query(`DELETE FROM dbo.Homeworks WHERE id = @id AND student_id = @studentId;`)
+    }
+
+    return json(200, { success: true })
+  } catch (error) {
+    return handleError(error, 'deleteTeacherStudentTaskHandler', 'Görev silinemedi.')
   }
 }
 
@@ -2987,6 +3120,8 @@ module.exports = {
   updateTeacherHomeworkHandler,
   deleteTeacherHomeworkHandler,
   listTeacherStudentTasksHandler,
+  updateTeacherStudentTaskHandler,
+  deleteTeacherStudentTaskHandler,
   getTeacherStudentSchoolScheduleHandler,
   getTeacherTaskAnswerSheetHandler,
   getTeacherStudentProgressOverviewHandler,
