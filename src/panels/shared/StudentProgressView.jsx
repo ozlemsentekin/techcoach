@@ -536,15 +536,12 @@ function BreakdownRows({ rows, emptyLabel, showResourceAvatar, onPreviewImage })
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-4 gap-2 text-center text-xs">
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
             <span className="rounded-lg bg-panel-sage-soft px-2 py-1 font-semibold text-panel-sage">
               {formatNumber(row.correct)} D
             </span>
             <span className="rounded-lg bg-panel-red-soft px-2 py-1 font-semibold text-panel-red">
               {formatNumber(row.wrong)} Y
-            </span>
-            <span className="rounded-lg bg-panel-surface-soft px-2 py-1 font-semibold text-panel-text-muted">
-              {formatNumber(row.minutes)} dk
             </span>
             <span className="rounded-lg bg-student-theme-soft px-2 py-1 font-semibold text-student-theme-text">
               {Number.isFinite(row.accuracy) ? formatPercent(row.accuracy) : `${formatNet(row.net)} net`}
