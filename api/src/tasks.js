@@ -483,8 +483,8 @@ async function listTasksHandler(request) {
       })
       const result = await requestDb.query(`
         ${SELECT_TASK}
-        WHERE student_id = @studentId AND date BETWEEN @from AND @to AND is_draft = @isDraft
-        ORDER BY date ASC, start_time ASC, created_at ASC;
+        WHERE t.student_id = @studentId AND t.date BETWEEN @from AND @to AND t.is_draft = @isDraft
+        ORDER BY t.date ASC, t.start_time ASC, t.created_at ASC;
       `)
 
       return json(200, { tasks: result.recordset.map(sanitizeTask) })
@@ -503,8 +503,8 @@ async function listTasksHandler(request) {
     })
     const result = await requestDb.query(`
       ${SELECT_TASK}
-      WHERE student_id = @studentId AND date = @date AND is_draft = @isDraft
-      ORDER BY start_time ASC, created_at ASC;
+      WHERE t.student_id = @studentId AND t.date = @date AND t.is_draft = @isDraft
+      ORDER BY t.start_time ASC, t.created_at ASC;
     `)
 
     return json(200, { tasks: result.recordset.map(sanitizeTask) })
