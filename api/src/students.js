@@ -794,7 +794,7 @@ async function exitStudentHandler(request) {
     })
     const result = await requestDb.query(`
       SELECT TOP 1
-        u.id, u.full_name, u.email, u.role, u.is_admin, u.last_login_at, u.created_at,
+        u.id, u.full_name, u.email, u.role, u.is_admin, u.can_manage_library, u.last_login_at, u.created_at,
         u.aydinlatma_accepted_at, u.kvkk_accepted_at,
         e.status AS entitlement_status, e.source AS entitlement_source,
         e.current_period_end AS entitlement_current_period_end

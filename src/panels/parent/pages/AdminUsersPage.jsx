@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronRight, LogIn, Pencil, Search, ShieldCheck, Trash2, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Library, LogIn, Pencil, Search, ShieldCheck, Trash2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { useAuth } from '../../../context/useAuth'
 import PageHeader from '../../layout/PageHeader'
@@ -50,6 +50,17 @@ function RoleBadge({ user }) {
   return <Badge tone={ROLE_TONE[user.role] || 'neutral'}>{user.role}</Badge>
 }
 
+// Admin olmayıp kütüphane düzenleme yetkisi verilmiş kullanıcılar için rozet.
+function LibraryBadge({ user }) {
+  if (user.isAdmin || !user.canManageLibrary) return null
+  return (
+    <Badge tone="sage">
+      <Library size={12} aria-hidden="true" />
+      Kütüphane
+    </Badge>
+  )
+}
+
 function ContactCell({ user }) {
   if (!user.email && !user.phone) {
     return <span className="text-sm text-[#667475]">—</span>
@@ -67,6 +78,7 @@ function EditUserModal({ user, isSelf, onSaved, onClose }) {
   const [email, setEmail] = useState(user.email || '')
   const [phone, setPhone] = useState(user.phone || '')
   const [isAdmin, setIsAdmin] = useState(user.isAdmin)
+  const [canManageLibrary, setCanManageLibrary] = useState(Boolean(user.canManageLibrary))
   const [subjectIds, setSubjectIds] = useState(user.teacherSubjectIds || [])
   const [allSubjects, setAllSubjects] = useState(null)
   const [error, setError] = useState('')
@@ -110,6 +122,7 @@ function EditUserModal({ user, isSelf, onSaved, onClose }) {
           email: email.trim() || null,
           phone: phone.trim() || null,
           isAdmin,
+          canManageLibrary,
           ...(isTeacher ? { subjectIds } : {}),
         }),
       })
@@ -204,6 +217,22 @@ function EditUserModal({ user, isSelf, onSaved, onClose }) {
             <p className="-mt-2 text-xs text-panel-text-muted">Kendi admin yetkinizi buradan kaldıramazsınız.</p>
           ) : null}
 
+          <label className="flex items-center gap-2.5">
+            <input
+              type="checkbox"
+              checked={isAdmin || canManageLibrary}
+              disabled={isAdmin}
+              onChange={(event) => setCanManageLibrary(event.target.checked)}
+              className="h-4 w-4"
+            />
+            <span className="text-sm font-medium text-panel-text">Kütüphane düzenleme yetkisi</span>
+          </label>
+          <p className="-mt-2 text-xs text-panel-text-muted">
+            {isAdmin
+              ? 'Admin kullanıcılar kütüphaneyi zaten düzenleyebilir.'
+              : 'Bu yetki verilen kullanıcı; yayın evi, kaynak, içerik, test ve cevap anahtarı ekleyip düzenleyebilir. Verilmeyenler kütüphaneyi yalnızca görüntüler.'}
+          </p>
+
           <Button type="submit" disabled={loading} size="md" className="w-full">
             {loading ? 'Kaydediliyor...' : 'Kaydet'}
           </Button>
@@ -263,6 +292,7 @@ function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpers
               Admin
             </Badge>
           ) : null}
+          <LibraryBadge user={user} />
         </div>
       </td>
       <td className="px-4 py-3">
@@ -300,6 +330,7 @@ function UserMobileCard({ user, indent = false, isSelf, impersonating, onEdit, o
                 Admin
               </Badge>
             ) : null}
+            <LibraryBadge user={user} />
           </div>
           <div className="mt-1">
             <ContactCell user={user} />
@@ -356,6 +387,7 @@ function GroupRow({ user, students, isSelf, impersonating, onEdit, onImpersonate
                 Admin
               </Badge>
             ) : null}
+            <LibraryBadge user={user} />
             {hasStudents ? (
               <span className="inline-flex items-center rounded-full bg-[#f8f7fb] px-2.5 py-1 text-xs font-medium text-[#1c2b5e]">
                 {students.length} öğrenci
@@ -432,6 +464,7 @@ function GroupMobileCard({ user, students, isSelf, impersonating, onEdit, onImpe
                     Admin
                   </Badge>
                 ) : null}
+                <LibraryBadge user={user} />
                 {hasStudents ? (
                   <span className="inline-flex items-center rounded-full bg-[#f8f7fb] px-2.5 py-1 text-xs font-medium text-[#1c2b5e]">
                     {students.length} öğrenci

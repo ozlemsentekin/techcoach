@@ -9,6 +9,7 @@ import PublisherCatalogScreen from './PublisherCatalogScreen'
 
 export default function LibraryCatalogPage({ role }) {
   const { authUser } = useAuth()
+  const canEdit = Boolean(authUser?.isAdmin || authUser?.canManageLibrary)
   const [subjects, setSubjects] = useState(null)
   const [activeSubjectId, setActiveSubjectId] = useState(null)
   const [error, setError] = useState('')
@@ -46,7 +47,14 @@ export default function LibraryCatalogPage({ role }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Kütüphane" subtitle="Bir ders seçip mevcut kaynaklara göz atın veya yeni kaynak ekleyin." />
+      <PageHeader
+        title="Kütüphane"
+        subtitle={
+          canEdit
+            ? 'Bir ders seçip mevcut kaynaklara göz atın veya yeni kaynak ekleyin.'
+            : 'Bir ders seçip mevcut kaynaklara göz atın.'
+        }
+      />
 
       {error ? <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div> : null}
 

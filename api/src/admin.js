@@ -67,6 +67,35 @@ async function requireCatalogStaff(request) {
   return { session }
 }
 
+// Kütüphane kataloğunda veri işlemi (yayın evi/kaynak/içerik/test/cevap anahtarı ekleme,
+// düzenleme, silme). Admin her zaman yetkili; diğer kullanıcılar yalnızca admin panelinden
+// can_manage_library bayrağı verilmişse. Yetkisi olmayan öğretmen/veli sadece görüntüler.
+async function requireLibraryEditor(request) {
+  const token = readSessionToken(request)
+  if (!token) {
+    return { error: json(401, { error: 'Oturum bulunamadı.' }) }
+  }
+
+  const session = verifySessionToken(token)
+  const requestDb = await withRequest({
+    id: { type: sql.UniqueIdentifier, value: session.sub },
+  })
+  const result = await requestDb.query(`
+    SELECT TOP 1 is_admin, can_manage_library FROM dbo.Users WHERE id = @id;
+  `)
+  const record = result.recordset[0]
+
+  if (!record) {
+    return { error: json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders()) }
+  }
+
+  if (!record.is_admin && !record.can_manage_library) {
+    return { error: json(403, { error: 'Kütüphane düzenleme yetkiniz yok.' }) }
+  }
+
+  return { session }
+}
+
 function sanitizeUser(record) {
   return {
     id: record.id,
@@ -75,6 +104,7 @@ function sanitizeUser(record) {
     phone: record.phone_number,
     role: record.role,
     isAdmin: Boolean(record.is_admin),
+    canManageLibrary: Boolean(record.can_manage_library),
     parentId: record.parent_id,
     parentName: record.parent_full_name,
     lastLoginAt: record.last_login_at,
@@ -92,7 +122,7 @@ async function listUsersHandler(request) {
 
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
-      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.parent_id,
+      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.parent_id,
              p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json
       FROM dbo.Users u
       LEFT JOIN dbo.Users p ON p.id = u.parent_id
@@ -138,6 +168,9 @@ async function updateUserHandler(request) {
     const payload = await request.json().catch(() => null)
     const fullName = payload?.fullName?.trim()
     const isAdmin = payload?.isAdmin
+    // Alan gönderilmezse mevcut değeri koru (geriye dönük uyumluluk); admin ise zaten yetkili.
+    const canManageLibraryProvided = typeof payload?.canManageLibrary === 'boolean'
+    const canManageLibrary = payload?.canManageLibrary === true
 
     if (!fullName || fullName.length < 2) {
       return json(400, { error: 'Ad soyad en az 2 karakter olmalı.' })
@@ -184,6 +217,8 @@ async function updateUserHandler(request) {
       phone: { type: sql.NVarChar(20), value: phone },
       passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       isAdmin: { type: sql.Bit, value: isAdmin },
+      canManageLibraryProvided: { type: sql.Bit, value: canManageLibraryProvided },
+      canManageLibrary: { type: sql.Bit, value: canManageLibrary },
       subjectIdsProvided: { type: sql.Bit, value: subjectIdsProvided },
       teacherSubjectIdsJson: {
         type: sql.NVarChar(sql.MAX),
@@ -194,11 +229,12 @@ async function updateUserHandler(request) {
     const result = await requestDb.query(`
       UPDATE dbo.Users
       SET full_name = @fullName, email = @email, phone_number = @phone, is_admin = @isAdmin,
+          can_manage_library = CASE WHEN @canManageLibraryProvided = 1 THEN @canManageLibrary ELSE can_manage_library END,
           password_hash = CASE WHEN @phone IS NOT NULL THEN @passwordHash ELSE password_hash END,
           teacher_subject_ids_json = CASE WHEN @subjectIdsProvided = 1 THEN @teacherSubjectIdsJson ELSE teacher_subject_ids_json END
       WHERE id = @id;
 
-      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.parent_id,
+      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.parent_id,
              p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json
       FROM dbo.Users u
       LEFT JOIN dbo.Users p ON p.id = u.parent_id
@@ -314,7 +350,7 @@ async function impersonateUserHandler(request) {
 
     const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: targetId } })
     const result = await requestDb.query(`
-      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.parent_id,
+      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.parent_id,
              p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json,
              sp.theme_id,
              e.status AS entitlement_status, e.source AS entitlement_source,
@@ -441,7 +477,7 @@ async function returnToAdminHandler(request) {
 
     const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: session.actingAdminId } })
     const result = await requestDb.query(`
-      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.parent_id,
+      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.parent_id,
              p.full_name AS parent_full_name, u.last_login_at, u.created_at,
              e.status AS entitlement_status, e.source AS entitlement_source,
              e.current_period_end AS entitlement_current_period_end
@@ -482,6 +518,7 @@ module.exports = {
   listUsersHandler,
   requireAdmin,
   requireCatalogStaff,
+  requireLibraryEditor,
   updateUserHandler,
   deleteUserHandler,
   impersonateUserHandler,

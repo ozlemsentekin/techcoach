@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { BookOpen, Building2, ChevronDown, ChevronRight, Copy, Dot, FileText, HelpCircle, KeyRound, ListTree, Pencil, Search, Trash2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
+import { useAuth } from '../../../context/useAuth'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../LoadingState'
 import EmptyState from '../EmptyState'
@@ -477,6 +478,7 @@ function EditTestModal({ topic, test, onSaved, onClose }) {
   const [topicName, setTopicName] = useState(test.topicName || '')
   const [name, setName] = useState(test.name || '')
   const [pageStart, setPageStart] = useState(test.pageStart ? String(test.pageStart) : '')
+  const [questionCount, setQuestionCount] = useState(test.questionCount ? String(test.questionCount) : '')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -496,6 +498,12 @@ function EditTestModal({ topic, test, onSaved, onClose }) {
       setError('Sayfa numarası pozitif bir tam sayı olmalı.')
       return
     }
+    const trimmedQuestionCount = questionCount.trim()
+    const questionCountNumber = trimmedQuestionCount === '' ? null : Number(trimmedQuestionCount)
+    if (questionCountNumber !== null && (!Number.isInteger(questionCountNumber) || questionCountNumber <= 0)) {
+      setError('Soru sayısı pozitif bir tam sayı olmalı.')
+      return
+    }
 
     setError('')
     setLoading(true)
@@ -507,6 +515,7 @@ function EditTestModal({ topic, test, onSaved, onClose }) {
           name: name.trim(),
           pageStart: pageStartNumber,
           pageEnd: pageStartNumber,
+          questionCount: questionCountNumber,
         }),
       })
       onSaved(data.test)
@@ -571,6 +580,23 @@ function EditTestModal({ topic, test, onSaved, onClose }) {
               placeholder="Örn. 8"
               className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
             />
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-panel-text-muted">Soru Sayısı</span>
+            <input
+              type="number"
+              min="1"
+              value={questionCount}
+              onChange={(event) => setQuestionCount(event.target.value)}
+              placeholder="Örn. 10 (boş bırakılabilir)"
+              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+            />
+            {test.hasAnswerKey ? (
+              <span className="text-xs text-panel-text-muted">
+                Soru sayısını değiştirirseniz cevap anahtarını yeniden kontrol etmeniz gerekebilir.
+              </span>
+            ) : null}
           </label>
 
           <Button type="submit" disabled={loading} size="md" className="w-full">
@@ -1048,6 +1074,7 @@ function TopicBlock({
   tests,
   resourceBookType,
   expanded,
+  canEdit,
   onToggle,
   onAddTest,
   onEditTopic,
@@ -1077,17 +1104,19 @@ function TopicBlock({
           <FileText size={15} className="shrink-0 text-[#b85f22]" aria-hidden="true" />
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-[#253d3e]">{topic.name}</span>
-            <button
-              type="button"
-              aria-label="İçeriği düzenle"
-              className="text-[#87a3a5] hover:text-[#253d3e]"
-              onClick={(event) => {
-                event.stopPropagation()
-                onEditTopic(topic)
-              }}
-            >
-              <Pencil size={13} aria-hidden="true" />
-            </button>
+            {canEdit ? (
+              <button
+                type="button"
+                aria-label="İçeriği düzenle"
+                className="text-[#87a3a5] hover:text-[#253d3e]"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onEditTopic(topic)
+                }}
+              >
+                <Pencil size={13} aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
@@ -1096,17 +1125,19 @@ function TopicBlock({
             <StatBadge icon={FileText} value={`${totalPages} sayfa`} />
             <StatBadge icon={HelpCircle} value={`${totalQuestions} soru`} />
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="h-[34px] shrink-0 rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#faf3ec]"
-            onClick={(event) => {
-              event.stopPropagation()
-              onAddTest(topic)
-            }}
-          >
-            + Test Ekle
-          </Button>
+          {canEdit ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-[34px] shrink-0 rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#faf3ec]"
+              onClick={(event) => {
+                event.stopPropagation()
+                onAddTest(topic)
+              }}
+            >
+              + Test Ekle
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -1128,44 +1159,46 @@ function TopicBlock({
                       <p className="line-clamp-1 text-sm font-semibold text-[#253d3e]">{test.name}</p>
                       <p className="mt-1 line-clamp-2 text-xs text-[#667475]">{test.topicName}</p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {showAnswerKeyAction ? (
+                    {canEdit ? (
+                      <div className="flex shrink-0 items-center gap-2">
+                        {showAnswerKeyAction ? (
+                          <button
+                            type="button"
+                            aria-label="Cevap anahtarı"
+                            title={test.hasAnswerKey ? 'Cevap anahtarı tam' : 'Cevap anahtarı eksik'}
+                            className={`hover:text-[#253d3e] ${test.hasAnswerKey ? 'text-[#87a3a5]' : 'text-panel-warm'}`}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              onManageAnswerKey(test)
+                            }}
+                          >
+                            <KeyRound size={14} aria-hidden="true" />
+                          </button>
+                        ) : null}
                         <button
                           type="button"
-                          aria-label="Cevap anahtarı"
-                          title={test.hasAnswerKey ? 'Cevap anahtarı tam' : 'Cevap anahtarı eksik'}
-                          className={`hover:text-[#253d3e] ${test.hasAnswerKey ? 'text-[#87a3a5]' : 'text-panel-warm'}`}
+                          aria-label="Testi düzenle"
+                          className="text-[#87a3a5] hover:text-[#253d3e]"
                           onClick={(event) => {
                             event.stopPropagation()
-                            onManageAnswerKey(test)
+                            onEditTest(test)
                           }}
                         >
-                          <KeyRound size={14} aria-hidden="true" />
+                          <Pencil size={14} aria-hidden="true" />
                         </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        aria-label="Testi düzenle"
-                        className="text-[#87a3a5] hover:text-[#253d3e]"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onEditTest(test)
-                        }}
-                      >
-                        <Pencil size={14} aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Testi sil"
-                        className="text-[#87a3a5] hover:text-panel-warm"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onDeleteTest(test)
-                        }}
-                      >
-                        <Trash2 size={14} aria-hidden="true" />
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          aria-label="Testi sil"
+                          className="text-[#87a3a5] hover:text-panel-warm"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onDeleteTest(test)
+                          }}
+                        >
+                          <Trash2 size={14} aria-hidden="true" />
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-[#667475]">
                     <span className="rounded-full bg-[#faf3ec] px-2 py-1">{test.pageStart}. sayfa</span>
@@ -1185,7 +1218,7 @@ function TopicBlock({
                   <th className="px-3 py-1.5">Test Adı</th>
                   <th className="px-3 py-1.5">Sayfa Sayısı</th>
                   <th className="px-3 py-1.5">Soru Sayısı</th>
-                  <th className="w-20 px-3 py-1.5">İşlem</th>
+                  {canEdit ? <th className="w-20 px-3 py-1.5">İşlem</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -1205,46 +1238,48 @@ function TopicBlock({
                     <td className="px-3 py-1.5 text-[#667475]">
                       {test.questionCount ? `${test.questionCount} soru` : 'Soru sayısı yok'}
                     </td>
-                    <td className="px-3 py-1.5 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {showAnswerKeyAction ? (
+                    {canEdit ? (
+                      <td className="px-3 py-1.5 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {showAnswerKeyAction ? (
+                            <button
+                              type="button"
+                              aria-label="Cevap anahtarı"
+                              title={test.hasAnswerKey ? 'Cevap anahtarı tam' : 'Cevap anahtarı eksik'}
+                              className={`hover:text-[#253d3e] ${test.hasAnswerKey ? 'text-[#87a3a5]' : 'text-panel-warm'}`}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                onManageAnswerKey(test)
+                              }}
+                            >
+                              <KeyRound size={13} aria-hidden="true" />
+                            </button>
+                          ) : null}
                           <button
                             type="button"
-                            aria-label="Cevap anahtarı"
-                            title={test.hasAnswerKey ? 'Cevap anahtarı tam' : 'Cevap anahtarı eksik'}
-                            className={`hover:text-[#253d3e] ${test.hasAnswerKey ? 'text-[#87a3a5]' : 'text-panel-warm'}`}
+                            aria-label="Testi düzenle"
+                            className="text-[#87a3a5] hover:text-[#253d3e]"
                             onClick={(event) => {
                               event.stopPropagation()
-                              onManageAnswerKey(test)
+                              onEditTest(test)
                             }}
                           >
-                            <KeyRound size={13} aria-hidden="true" />
+                            <Pencil size={13} aria-hidden="true" />
                           </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          aria-label="Testi düzenle"
-                          className="text-[#87a3a5] hover:text-[#253d3e]"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            onEditTest(test)
-                          }}
-                        >
-                          <Pencil size={13} aria-hidden="true" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="Testi sil"
-                          className="text-[#87a3a5] hover:text-panel-warm"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            onDeleteTest(test)
-                          }}
-                        >
-                          <Trash2 size={13} aria-hidden="true" />
-                        </button>
-                      </div>
-                    </td>
+                          <button
+                            type="button"
+                            aria-label="Testi sil"
+                            className="text-[#87a3a5] hover:text-panel-warm"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              onDeleteTest(test)
+                            }}
+                          >
+                            <Trash2 size={13} aria-hidden="true" />
+                          </button>
+                        </div>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -1268,6 +1303,7 @@ function BookBlock({
   topics,
   tests,
   isFocused,
+  canEdit,
   missingAnswerKeyInfo,
   onlyMissingAnswerKey,
   onAddTopic,
@@ -1370,17 +1406,19 @@ function BookBlock({
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-[15px] font-bold text-[#263a39]">{book.name}</span>
-              <button
-                type="button"
-                aria-label="Kaynağı düzenle"
-                className="shrink-0 rounded-full p-0.5 text-[#e3b98a] hover:bg-[#f8e3d0] hover:text-[#c9772f]"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onEditBook(book)
-                }}
-              >
-                <Pencil size={12} aria-hidden="true" />
-              </button>
+              {canEdit ? (
+                <button
+                  type="button"
+                  aria-label="Kaynağı düzenle"
+                  className="shrink-0 rounded-full p-0.5 text-[#e3b98a] hover:bg-[#f8e3d0] hover:text-[#c9772f]"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onEditBook(book)
+                  }}
+                >
+                  <Pencil size={12} aria-hidden="true" />
+                </button>
+              ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-2.5 text-xs text-[#667475]">
               <span>
@@ -1416,22 +1454,32 @@ function BookBlock({
                   Reddedildi
                 </span>
               ) : null}
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onToggleActive(book)
-                }}
-                className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                  book.isActive ? 'bg-[#e5f3ea] text-[#34845a]' : 'bg-[#f1f1f3] text-[#8a8a92]'
-                }`}
-              >
-                {book.isActive ? 'Aktif' : 'Pasif'}
-              </button>
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onToggleActive(book)
+                  }}
+                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                    book.isActive ? 'bg-[#e5f3ea] text-[#34845a]' : 'bg-[#f1f1f3] text-[#8a8a92]'
+                  }`}
+                >
+                  {book.isActive ? 'Aktif' : 'Pasif'}
+                </button>
+              ) : (
+                <span
+                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                    book.isActive ? 'bg-[#e5f3ea] text-[#34845a]' : 'bg-[#f1f1f3] text-[#8a8a92]'
+                  }`}
+                >
+                  {book.isActive ? 'Aktif' : 'Pasif'}
+                </span>
+              )}
             </div>
           </div>
         </div>
-        {book.status === 'pending' ? (
+        {!canEdit ? null : book.status === 'pending' ? (
           <div className="flex w-full shrink-0 gap-2 sm:w-auto" onClick={(event) => event.stopPropagation()}>
             <Button
               variant="secondary"
@@ -1480,6 +1528,7 @@ function BookBlock({
                 onToggle={() =>
                   setExpandedTopicId((current) => (current === representative.id ? null : representative.id))
                 }
+                canEdit={canEdit}
                 onAddTest={onAddTest}
                 onEditTopic={onEditTopic}
                 onEditTest={onEditTest}
@@ -1503,6 +1552,7 @@ function PublisherRow({
   tests,
   focusBookId,
   isFocusPublisher,
+  canEdit,
   missingAnswerKeyInfoById,
   onlyMissingAnswerKey,
   onAddBook,
@@ -1542,14 +1592,16 @@ function PublisherRow({
           <span className="inline-flex items-center rounded-full bg-[#f8e3d0] px-2.5 py-1 text-[11px] font-medium text-[#c9772f]">
             {books.length} kitap
           </span>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="h-[34px] rounded-[10px] border-[#e1e4ea] bg-white text-[#253d3e] hover:bg-[#f7f8fa]"
-            onClick={() => onAddBook(publisher)}
-          >
-            + Kaynak Kitap
-          </Button>
+          {canEdit ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-[34px] rounded-[10px] border-[#e1e4ea] bg-white text-[#253d3e] hover:bg-[#f7f8fa]"
+              onClick={() => onAddBook(publisher)}
+            >
+              + Kaynak Kitap
+            </Button>
+          ) : null}
         </div>
       </div>
       {isExpanded ? (
@@ -1566,6 +1618,7 @@ function PublisherRow({
                   topics={topics.filter((topic) => topic.resourceBookId === book.id)}
                   tests={tests}
                   isFocused={book.id === focusBookId}
+                  canEdit={canEdit}
                   missingAnswerKeyInfo={missingAnswerKeyInfoById[book.id]}
                   onlyMissingAnswerKey={onlyMissingAnswerKey}
                   onAddTopic={onAddTopic}
@@ -1590,6 +1643,10 @@ function PublisherRow({
 }
 
 export default function PublisherCatalogScreen({ subjectId } = {}) {
+  const { authUser } = useAuth()
+  // Kütüphane veri işlemleri (ekle/düzenle/sil) yalnızca admin veya "Kütüphane düzenleme
+  // yetkisi" verilmiş kullanıcılara açık; diğerleri katalogu yalnızca görüntüler.
+  const canEdit = Boolean(authUser?.isAdmin || authUser?.canManageLibrary)
   const [searchParams] = useSearchParams()
   const focusBookId = searchParams.get('resourceBookId')
   const [publishers, setPublishers] = useState(null)
@@ -1842,12 +1899,14 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
               />
               Eksik cevap anahtarı
             </label>
-            <Button
-              onClick={() => setShowPublisherModal(true)}
-              className="h-10 rounded-[10px] bg-[#b85f22] px-4 text-sm font-medium text-white hover:opacity-90"
-            >
-              + Yayın Evi Ekle
-            </Button>
+            {canEdit ? (
+              <Button
+                onClick={() => setShowPublisherModal(true)}
+                className="h-10 rounded-[10px] bg-[#b85f22] px-4 text-sm font-medium text-white hover:opacity-90"
+              >
+                + Yayın Evi Ekle
+              </Button>
+            ) : null}
           </>
         )
 
@@ -1866,7 +1925,11 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
         <EmptyState
           icon={Building2}
           title="Henüz yayın evi yok"
-          description="Yukarıdaki butonla ilk yayın evini oluşturabilirsiniz."
+          description={
+            canEdit
+              ? 'Yukarıdaki butonla ilk yayın evini oluşturabilirsiniz.'
+              : 'Kütüphaneye henüz yayın evi eklenmemiş.'
+          }
         />
       ) : (
         <div className="fade-slide-in">
@@ -1897,6 +1960,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
                   tests={tests}
                   focusBookId={focusBookId}
                   isFocusPublisher={publisher.id === focusPublisherId}
+                  canEdit={canEdit}
                   missingAnswerKeyInfoById={missingAnswerKeyInfoById}
                   onlyMissingAnswerKey={onlyMissingAnswerKey}
                   onAddBook={setBookModalPublisher}
@@ -1918,11 +1982,11 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
         </div>
       )}
 
-      {showPublisherModal ? (
+      {canEdit && showPublisherModal ? (
         <AddPublisherModal onCreated={handlePublisherCreated} onClose={() => setShowPublisherModal(false)} />
       ) : null}
 
-      {bookModalPublisher ? (
+      {canEdit && bookModalPublisher ? (
         <ResourceBookModal
           publisher={bookModalPublisher}
           subjects={subjects}
@@ -1932,7 +1996,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
         />
       ) : null}
 
-      {editingBook ? (
+      {canEdit && editingBook ? (
         <ResourceBookModal
           book={editingBook}
           publisher={publishers?.find((publisher) => publisher.id === editingBook.publisherId)}
@@ -1942,7 +2006,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
         />
       ) : null}
 
-      {rejectingBook ? (
+      {canEdit && rejectingBook ? (
         <RejectResourceBookModal
           book={rejectingBook}
           onConfirm={handleRejectBook}
@@ -1950,7 +2014,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
         />
       ) : null}
 
-      {topicModalBook ? (
+      {canEdit && topicModalBook ? (
         <TopicModal
           book={topicModalBook}
           onSaved={handleTopicCreated}
@@ -1958,7 +2022,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
         />
       ) : null}
 
-      {testModalTopic ? (
+      {canEdit && testModalTopic ? (
         <TestModal
           topic={testModalTopic}
           onSaved={handleTestCreated}
@@ -1966,7 +2030,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
         />
       ) : null}
 
-      {editingTopic ? (
+      {canEdit && editingTopic ? (
         <TopicModal
           topic={editingTopic}
           book={resourceBooks?.find((book) => book.id === editingTopic.resourceBookId)}
@@ -1975,7 +2039,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
         />
       ) : null}
 
-      {editingTest ? (
+      {canEdit && editingTest ? (
         <TestModal
           test={editingTest}
           topic={topics?.find((topic) => topic.id === editingTest.topicId)}
@@ -1984,7 +2048,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
         />
       ) : null}
 
-      {answerKeyTest ? (
+      {canEdit && answerKeyTest ? (
         <AnswerKeyFlow
           test={answerKeyTest}
           onTestUpdated={handleAnswerKeyTestUpdated}
@@ -2002,7 +2066,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
         />
       ) : null}
 
-      {deletingTest ? (
+      {canEdit && deletingTest ? (
         <ConfirmationDialog
           title="Testi Sil"
           description={

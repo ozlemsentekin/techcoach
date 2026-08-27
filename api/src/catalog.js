@@ -1,7 +1,7 @@
 const { sql, withRequest } = require('./db')
 const { isConfigError } = require('./config')
 const { clearSessionHeaders, json } = require('./http')
-const { requireAdmin, requireCatalogStaff } = require('./admin')
+const { requireAdmin, requireCatalogStaff, requireLibraryEditor } = require('./admin')
 const { isSessionError, readSessionToken, verifySessionToken } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
 const { gradeTestAnswers } = require('./testGrading')
@@ -351,7 +351,7 @@ async function listPublishersForPanelHandler(request) {
 
 async function createPublisherHandler(request) {
   try {
-    const { error } = await requireCatalogStaff(request)
+    const { error } = await requireLibraryEditor(request)
     if (error) {
       return error
     }
@@ -541,7 +541,7 @@ async function listResourceBooksForPanelHandler(request) {
 
 async function createResourceBookHandler(request) {
   try {
-    const { error } = await requireCatalogStaff(request)
+    const { error } = await requireLibraryEditor(request)
     if (error) {
       return error
     }
@@ -625,7 +625,7 @@ async function createResourceBookHandler(request) {
 
 async function updateResourceBookHandler(request) {
   try {
-    const { error } = await requireCatalogStaff(request)
+    const { error } = await requireLibraryEditor(request)
     if (error) {
       return error
     }
@@ -763,7 +763,7 @@ async function fetchResourceBookById(resourceBookId) {
 
 async function reviewResourceBookHandler(request) {
   try {
-    const { error, session } = await requireCatalogStaff(request)
+    const { error, session } = await requireLibraryEditor(request)
     if (error) {
       return error
     }
@@ -840,7 +840,7 @@ async function listResourceBookTopicsHandler(request) {
 
 async function createResourceBookTopicHandler(request) {
   try {
-    const { error } = await requireCatalogStaff(request)
+    const { error } = await requireLibraryEditor(request)
     if (error) {
       return error
     }
@@ -884,7 +884,7 @@ async function createResourceBookTopicHandler(request) {
 
 async function updateResourceBookTopicHandler(request) {
   try {
-    const { error } = await requireCatalogStaff(request)
+    const { error } = await requireLibraryEditor(request)
     if (error) {
       return error
     }
@@ -1634,7 +1634,7 @@ async function listQuestionsForTestHandler(request) {
 
 async function createQuestionHandler(request) {
   try {
-    const { error } = await requireAdmin(request)
+    const { error } = await requireLibraryEditor(request)
     if (error) {
       return error
     }
@@ -1759,7 +1759,7 @@ async function listResourceBookTopicTestsHandler(request) {
 
 async function createResourceBookTopicTestHandler(request) {
   try {
-    const { error } = await requireCatalogStaff(request)
+    const { error } = await requireLibraryEditor(request)
     if (error) {
       return error
     }
@@ -1834,7 +1834,7 @@ async function createResourceBookTopicTestHandler(request) {
 
 async function updateResourceBookTopicTestHandler(request) {
   try {
-    const { error } = await requireCatalogStaff(request)
+    const { error } = await requireLibraryEditor(request)
     if (error) {
       return error
     }
@@ -1913,7 +1913,7 @@ async function updateResourceBookTopicTestHandler(request) {
 
 async function deleteResourceBookTopicTestHandler(request) {
   try {
-    const { error } = await requireCatalogStaff(request)
+    const { error } = await requireLibraryEditor(request)
     if (error) {
       return error
     }
@@ -1980,7 +1980,7 @@ async function listTestAnswerKeyHandler(request) {
 
 async function setTestAnswerKeyHandler(request) {
   try {
-    const { error } = await requireCatalogStaff(request)
+    const { error } = await requireLibraryEditor(request)
     if (error) {
       return error
     }

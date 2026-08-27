@@ -46,7 +46,7 @@ async function findUserByPhone(phone) {
     phone: { type: sql.NVarChar(20), value: phone },
   })
   const result = await requestDb.query(`
-    SELECT TOP 1 id, full_name, email, phone_number, role, is_admin, last_login_at, created_at
+    SELECT TOP 1 id, full_name, email, phone_number, role, is_admin, can_manage_library, last_login_at, created_at
     FROM dbo.Users
     WHERE phone_number = @phone;
   `)
@@ -226,7 +226,7 @@ async function verifyOtpHandler(request) {
       const insertResult = await insertUserDb.query(`
         INSERT INTO dbo.Users (full_name, email, phone_number, role, aydinlatma_accepted_at, kvkk_accepted_at)
         OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
-               inserted.is_admin, inserted.last_login_at, inserted.created_at
+               inserted.is_admin, inserted.can_manage_library, inserted.last_login_at, inserted.created_at
         VALUES (@fullName, @email, @phone, @role, @consentAt, @consentAt);
       `)
       userRecord = insertResult.recordset[0]
