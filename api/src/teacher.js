@@ -1733,6 +1733,74 @@ async function listTeacherStudentPrivateResourceBooksHandler(request) {
   }
 }
 
+// Profil Kartı > Kütüphane sekmesinden öğretmenin, öğrenciyle paylaştığı derse ait bir "özel"
+// kütüphane kaynağını öğrenciye atamasını sağlar. Kaynak öğrencinin takip listesinde
+// (StudentResourceBooks) yoksa oraya da eklenir — StudentTeacherResourceBooks'un FK'si bunu
+// zorunlu kılar. İşlem idempotenttir: zaten atanmış kaynak için de 200 döner.
+async function assignTeacherLibraryResourceBookHandler(request) {
+  try {
+    const { error, studentId, subjectId, studentTeacherId, actorId: teacherUserId } =
+      await requireTeacherStudentContext(request, { includeInactive: true })
+    if (error) return error
+
+    const resourceBookId = request.params.resourceBookId
+    if (!resourceBookId) {
+      return json(400, { error: 'Kaynak belirtilmeli.' })
+    }
+
+    const gradeDb = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
+    const gradeResult = await gradeDb.query(`
+      SELECT grade FROM dbo.StudentProfiles WHERE student_id = @studentId;
+    `)
+    const grade = gradeResult.recordset[0]?.grade || null
+    if (!grade) {
+      return json(400, { error: 'Önce bu öğrencinin sınıfını tanımlayın.' })
+    }
+
+    // Yalnızca Kütüphane sekmesinde gösterilen kaynaklar atanabilir (aynı sınıf/ders, "özel" tür,
+    // öğretmenin görebildiği görünürlük) — liste ucuyla birebir aynı filtre.
+    const libraryBooks = await fetchLibraryResourceBooks({
+      grade,
+      subjectId,
+      actorUserId: teacherUserId,
+      source: 'ozel',
+    })
+    const allowed = libraryBooks.some(
+      (book) => String(book.id).toLowerCase() === String(resourceBookId).toLowerCase(),
+    )
+    if (!allowed) {
+      return json(404, { error: 'Kaynak bulunamadı.' })
+    }
+
+    await withTransaction(async (requestInTransaction) => {
+      const assignDb = await requestInTransaction({
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+        resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+      })
+      await assignDb.query(`
+        INSERT INTO dbo.StudentResourceBooks (student_id, resource_book_id)
+        SELECT @studentId, @resourceBookId
+        WHERE NOT EXISTS (
+          SELECT 1 FROM dbo.StudentResourceBooks
+          WHERE student_id = @studentId AND resource_book_id = @resourceBookId
+        );
+
+        INSERT INTO dbo.StudentTeacherResourceBooks (teacher_id, student_id, resource_book_id)
+        SELECT @studentTeacherId, @studentId, @resourceBookId
+        WHERE NOT EXISTS (
+          SELECT 1 FROM dbo.StudentTeacherResourceBooks
+          WHERE teacher_id = @studentTeacherId AND resource_book_id = @resourceBookId
+        );
+      `)
+    })
+
+    return json(200, { success: true })
+  } catch (error) {
+    return handleError(error, 'assignTeacherLibraryResourceBookHandler', 'Kaynak atanamadı.')
+  }
+}
+
 async function listTeacherResourceBookTopicsHandler(request) {
   try {
     const { error, studentId, studentTeacherId } = await requireTeacherStudentContext(request)
@@ -2865,6 +2933,7 @@ module.exports = {
   getTeacherStudentProfileHandler,
   updateTeacherStudentProfileHandler,
   listTeacherStudentPrivateResourceBooksHandler,
+  assignTeacherLibraryResourceBookHandler,
   updateTeacherStudentStatusHandler,
   updateTeacherStudentGradeHandler,
   deleteTeacherStudentHandler,

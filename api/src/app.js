@@ -46,6 +46,7 @@ const {
   getTeacherStudentProfileHandler,
   updateTeacherStudentProfileHandler,
   listTeacherStudentPrivateResourceBooksHandler,
+  assignTeacherLibraryResourceBookHandler,
   updateTeacherStudentStatusHandler,
   updateTeacherStudentGradeHandler,
   deleteTeacherStudentHandler,
@@ -427,6 +428,13 @@ app.http('panel-teacher-student-private-resource-books-list', {
   methods: ['GET'],
   route: 'panel-teacher/students/{studentTeacherId}/private-resource-books',
   handler: listTeacherStudentPrivateResourceBooksHandler,
+})
+
+app.http('panel-teacher-student-library-resource-book-assign', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/students/{studentTeacherId}/library/resource-books/{resourceBookId}',
+  handler: assignTeacherLibraryResourceBookHandler,
 })
 
 app.http('panel-teacher-student-status-update', {
