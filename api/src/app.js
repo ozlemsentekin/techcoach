@@ -84,6 +84,7 @@ const {
 const { listProvincesHandler, listDistrictsHandler, listSchoolsHandler } = require('./geo')
 const {
   listSubjectsHandler,
+  createSubjectHandler,
   listSubjectsForPanelHandler,
   listSubjectsForRegistrationHandler,
   listPublishersHandler,
@@ -803,6 +804,13 @@ app.http('panel-admin-subjects', {
   methods: ['GET'],
   route: 'panel-admin/subjects',
   handler: listSubjectsHandler,
+})
+
+app.http('panel-admin-subjects-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-admin/subjects',
+  handler: createSubjectHandler,
 })
 
 app.http('panel-subjects', {

@@ -322,6 +322,52 @@ function ResourceFormDialog({ title, initial, onSubmit, onCancel, saving }) {
   )
 }
 
+// Küçük "ad gir" dialog'u (yeni ders eklemek için).
+function NameDialog({ title, label, placeholder, saving, onSubmit, onCancel }) {
+  const [value, setValue] = useState('')
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSubmit(value.trim())
+        }}
+        className="w-full rounded-t-2xl bg-white p-4 shadow-lg sm:max-w-sm sm:rounded-2xl sm:p-5"
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-base font-semibold text-panel-text">{title}</h3>
+          <button type="button" aria-label="Kapat" onClick={onCancel} className="shrink-0">
+            <X size={18} />
+          </button>
+        </div>
+        <label className="flex flex-col gap-1 text-xs font-medium text-panel-text-muted">
+          {label}
+          <input
+            autoFocus
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={placeholder}
+            className="rounded-lg border border-panel-border bg-white p-2 text-sm text-panel-text"
+          />
+        </label>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button type="button" size="sm" variant="secondary" onClick={onCancel} disabled={saving}>
+            Vazgeç
+          </Button>
+          <Button type="submit" size="sm" disabled={saving || value.trim().length < 2}>
+            {saving ? 'Ekleniyor...' : 'Ekle'}
+          </Button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 function ResourcesTab({ schoolId }) {
   const [grade, setGrade] = useState(DEFAULT_GRADE)
   const [subjects, setSubjects] = useState(null)
@@ -332,12 +378,38 @@ function ResourcesTab({ schoolId }) {
   const [editingId, setEditingId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [subjectDialogOpen, setSubjectDialogOpen] = useState(false)
+  const [subjectSaving, setSubjectSaving] = useState(false)
 
   useEffect(() => {
     authRequest('/api/panel-admin/subjects', { method: 'GET' })
       .then((data) => setSubjects(data.subjects || []))
       .catch((err) => setError(err.message))
   }, [])
+
+  const handleCreateSubject = async (name) => {
+    setSubjectSaving(true)
+    setError('')
+    try {
+      const data = await authRequest('/api/panel-admin/subjects', {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      })
+      const created = data.subject
+      setSubjects((current) => {
+        const rest = (current || []).filter((s) => s.id !== created.id)
+        return [...rest, created].sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+      })
+      setSubjectId(created.id)
+      setAdding(false)
+      setEditingId(null)
+      setSubjectDialogOpen(false)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSubjectSaving(false)
+    }
+  }
 
   const canLoad = Boolean(grade && subjectId)
   const editingResource = editingId ? (resources || []).find((r) => r.id === editingId) || null : null
@@ -414,23 +486,35 @@ function ResourcesTab({ schoolId }) {
       </p>
       <GradePills grade={grade} onChange={setGrade} />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <select
-          aria-label="Ders"
-          value={subjectId}
-          onChange={(e) => {
-            setSubjectId(e.target.value)
-            setAdding(false)
-            setEditingId(null)
-          }}
-          className="w-full rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text sm:flex-1"
-        >
-          <option value="">Ders seçin</option>
-          {(subjects || []).map((subject) => (
-            <option key={subject.id} value={subject.id}>
-              {subject.name}
-            </option>
-          ))}
-        </select>
+        <div className="flex w-full items-center gap-2 sm:flex-1">
+          <select
+            aria-label="Ders"
+            value={subjectId}
+            onChange={(e) => {
+              setSubjectId(e.target.value)
+              setAdding(false)
+              setEditingId(null)
+            }}
+            className="w-full rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text"
+          >
+            <option value="">Ders seçin</option>
+            {(subjects || []).map((subject) => (
+              <option key={subject.id} value={subject.id}>
+                {subject.name}
+              </option>
+            ))}
+          </select>
+          <Button
+            type="button"
+            size="md"
+            variant="secondary"
+            onClick={() => setSubjectDialogOpen(true)}
+            className="shrink-0"
+          >
+            <Plus size={15} className="mr-1 inline" aria-hidden="true" />
+            Ders
+          </Button>
+        </div>
         {canLoad ? (
           <Button type="button" size="md" onClick={() => setAdding(true)} className="shrink-0 sm:self-auto">
             <Plus size={15} className="mr-1.5 inline" aria-hidden="true" />
@@ -536,6 +620,17 @@ function ResourcesTab({ schoolId }) {
           confirmLabel="Sil"
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
+        />
+      ) : null}
+
+      {subjectDialogOpen ? (
+        <NameDialog
+          title="Yeni Ders Ekle"
+          label="Ders adı"
+          placeholder="Örn. Geometri"
+          saving={subjectSaving}
+          onSubmit={(name) => handleCreateSubject(name)}
+          onCancel={() => setSubjectDialogOpen(false)}
         />
       ) : null}
     </div>

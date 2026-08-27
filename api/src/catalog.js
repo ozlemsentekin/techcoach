@@ -211,6 +211,43 @@ async function listSubjectsHandler(request) {
   }
 }
 
+// Yeni bir ders (branş) ekler. Dersler tüm uygulamada ortaktır (dbo.Subjects). Aynı adlı
+// ders zaten varsa (büyük/küçük harf duyarsız) mevcut kayıt döner — idempotent.
+async function createSubjectHandler(request) {
+  try {
+    const { error } = await requireAdmin(request)
+    if (error) {
+      return error
+    }
+
+    const payload = await request.json().catch(() => null)
+    const name = typeof payload?.name === 'string' ? payload.name.trim() : ''
+    if (name.length < 2 || name.length > 100) {
+      return json(400, { error: 'Ders adı 2-100 karakter olmalı.' })
+    }
+
+    const requestDb = await withRequest({ name: { type: sql.NVarChar(100), value: name } })
+    const result = await requestDb.query(`
+      IF NOT EXISTS (SELECT 1 FROM dbo.Subjects WHERE name = @name)
+        INSERT INTO dbo.Subjects (name) VALUES (@name);
+      SELECT id, name, created_at FROM dbo.Subjects WHERE name = @name;
+    `)
+
+    return json(201, { subject: sanitizeSubject(result.recordset[0]) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('createSubjectHandler failed', error)
+    return json(500, { error: 'Ders eklenemedi.' })
+  }
+}
+
 async function listSubjectsForPanelHandler(request) {
   try {
     const token = readSessionToken(request)
@@ -2282,6 +2319,7 @@ async function bulkImportSchoolsHandler(request) {
 
 module.exports = {
   listSubjectsHandler,
+  createSubjectHandler,
   listSubjectsForPanelHandler,
   listSubjectsForRegistrationHandler,
   listPublishersHandler,
