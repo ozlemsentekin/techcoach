@@ -8,7 +8,6 @@ import {
   getWeekPlans,
   getSchoolSchedule,
   getTeacherLessonSchedule,
-  cleanupUnlinkedHomeworkTasksForWeek,
   saveTaskForDay,
   publishDay,
 } from '../../../services/weeklyPlanService'
@@ -43,10 +42,7 @@ export default function WeeklyPlanPage() {
   const [homeworkModalDate, setHomeworkModalDate] = useState('')
   const [banner, setBanner] = useState('')
 
-  const loadWeekPlans = useCallback(async (nextWeekStart) => {
-    await cleanupUnlinkedHomeworkTasksForWeek(nextWeekStart)
-    return getWeekPlans(nextWeekStart)
-  }, [])
+  const loadWeekPlans = useCallback((nextWeekStart) => getWeekPlans(nextWeekStart), [])
 
   const applyWeekPlans = useCallback((plans) => {
     setTasksByDate(plans.tasksByDate)
