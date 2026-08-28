@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowRight,
   BookOpen,
@@ -15,6 +15,7 @@ import {
   Utensils,
   XCircle,
   StickyNote,
+  Loader2,
 } from 'lucide-react'
 import { calculateNet } from '../../../utils/netCalculator'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
@@ -251,6 +252,27 @@ export default function TaskListCard({
   const [nowMs, setNowMs] = useState(0)
   const elapsedSeconds = getElapsedSeconds(task, nowMs)
 
+  // Buton bazlı işlem durumu: 'complete' | 'undo' | 'timer'. onCompleteTask/onUndoComplete/
+  // onStartTimer bir Promise döndürdüğü sürece, istek tamamlanana kadar ilgili buton
+  // "yükleniyor" gösterir ve tüm aksiyon butonları devre dışı kalır (çift tıklama önlenir).
+  const [pendingAction, setPendingAction] = useState(null)
+  const isMountedRef = useRef(true)
+  useEffect(() => () => {
+    isMountedRef.current = false
+  }, [])
+
+  const runAction = async (kind, action) => {
+    if (pendingAction) return
+    setPendingAction(kind)
+    try {
+      await action()
+    } finally {
+      if (isMountedRef.current) setPendingAction(null)
+    }
+  }
+
+  const isActionPending = pendingAction === 'complete' || pendingAction === 'undo'
+
   useEffect(() => {
     if (!timerRunning) return undefined
 
@@ -277,17 +299,17 @@ export default function TaskListCard({
       return
     }
 
-    onCompleteTask(task)
+    runAction('complete', () => onCompleteTask(task))
   }
 
   const handleUndoComplete = (event) => {
     event.stopPropagation()
-    onUndoComplete(task)
+    runAction('undo', () => onUndoComplete(task))
   }
 
   const handleQuickFinish = (event) => {
     event.stopPropagation()
-    onCompleteTask(task)
+    runAction('complete', () => onCompleteTask(task))
   }
 
   const cardGridClass =
@@ -347,18 +369,26 @@ export default function TaskListCard({
           type="button"
           onClick={(event) => {
             event.stopPropagation()
-            if (!timerRunning && onStartTimer) onStartTimer(task)
+            if (!timerRunning && onStartTimer) runAction('timer', () => onStartTimer(task))
           }}
           aria-label={`${task.title} - Sayaç Başlat`}
-          disabled={timerRunning || !onStartTimer}
-          className={`inline-flex h-9 w-full items-center justify-center gap-2 rounded-[12px] border px-2.5 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary sm:h-11 sm:px-3 sm:text-xs ${
+          disabled={timerRunning || !onStartTimer || Boolean(pendingAction)}
+          className={`inline-flex h-9 w-full items-center justify-center gap-2 rounded-[12px] border px-2.5 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary disabled:cursor-not-allowed disabled:opacity-70 sm:h-11 sm:px-3 sm:text-xs ${
             timerRunning
               ? 'border-student-theme-primary/30 bg-student-theme-soft text-student-theme-text'
               : 'border-student-theme-primary/30 bg-panel-surface text-student-theme-text hover:bg-student-theme-soft'
           }`}
         >
-          <Timer size={14} aria-hidden="true" />
-          {timerRunning ? formatSecondsAsTimer(elapsedSeconds) : 'Sayaç Başlat'}
+          {pendingAction === 'timer' ? (
+            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Timer size={14} aria-hidden="true" />
+          )}
+          {pendingAction === 'timer'
+            ? 'Başlatılıyor...'
+            : timerRunning
+              ? formatSecondsAsTimer(elapsedSeconds)
+              : 'Sayaç Başlat'}
         </button>
       ) : task.timerElapsedSeconds ? (
         <span className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-[12px] bg-panel-surface-soft px-2.5 text-[11px] font-semibold text-panel-text-muted sm:h-11 sm:px-3 sm:text-xs">
@@ -375,15 +405,26 @@ export default function TaskListCard({
           else handlePrimaryAction()
         }}
         aria-label={`${task.title} - ${showUndoButton ? 'Geri Al' : 'Tamamla'}`}
-        className={`inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-[12px] border px-3 text-sm font-semibold shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.98] sm:h-11 sm:px-4 ${
+        aria-busy={isActionPending}
+        disabled={Boolean(pendingAction)}
+        className={`inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-[12px] border px-3 text-sm font-semibold shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 disabled:active:scale-100 sm:h-11 sm:px-4 ${
           showUndoButton
             ? 'border-panel-red/25 bg-panel-surface text-panel-red hover:bg-panel-red-soft focus-visible:outline-panel-red'
             : 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text hover:border-student-theme-hover hover:bg-student-theme-hover focus-visible:outline-student-theme-primary'
         }`}
       >
-        {showUndoButton ? <RotateCcw size={16} aria-hidden="true" /> : null}
-        {showUndoButton ? 'Geri Al' : 'Tamamla'}
-        {!showUndoButton ? <ArrowRight size={16} aria-hidden="true" /> : null}
+        {isActionPending ? (
+          <>
+            <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+            {showUndoButton ? 'Geri alınıyor...' : 'Tamamlanıyor...'}
+          </>
+        ) : (
+          <>
+            {showUndoButton ? <RotateCcw size={16} aria-hidden="true" /> : null}
+            {showUndoButton ? 'Geri Al' : 'Tamamla'}
+            {!showUndoButton ? <ArrowRight size={16} aria-hidden="true" /> : null}
+          </>
+        )}
       </button>
     </div>
   ) : null
@@ -393,14 +434,20 @@ export default function TaskListCard({
       type="button"
       onClick={handleQuickFinish}
       aria-label={`${task.title} - Bitir`}
-      className={`inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-[12px] border px-3 text-sm font-semibold shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.98] sm:h-11 sm:px-4 lg:w-[156px] ${
+      aria-busy={isActionPending}
+      disabled={Boolean(pendingAction)}
+      className={`inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-[12px] border px-3 text-sm font-semibold shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 disabled:active:scale-100 sm:h-11 sm:px-4 lg:w-[156px] ${
         isBreakTask || isActivityTask
           ? 'border-panel-accent/30 bg-panel-accent-soft text-panel-warm hover:border-panel-accent/45 hover:bg-panel-accent-soft/80 focus-visible:outline-panel-accent'
           : 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text hover:border-student-theme-hover hover:bg-student-theme-hover focus-visible:outline-student-theme-primary'
       }`}
     >
-      <CheckCircle2 size={16} aria-hidden="true" />
-      Bitir
+      {isActionPending ? (
+        <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+      ) : (
+        <CheckCircle2 size={16} aria-hidden="true" />
+      )}
+      {isActionPending ? 'Bitiriliyor...' : 'Bitir'}
     </button>
   ) : null
 

@@ -234,7 +234,11 @@ export default function TodayPage() {
   }
 
   const handleCompleteInline = async (task) => {
-    applyDayResult(task.date, await updateTask(task.date, task.id, buildCompletionUpdates(task, { status: 'tamamlandi' })))
+    try {
+      applyDayResult(task.date, await updateTask(task.date, task.id, buildCompletionUpdates(task, { status: 'tamamlandi' })))
+    } catch (err) {
+      setLoadError(err.message || 'Görev tamamlanamadı.')
+    }
   }
 
   const handleUndoComplete = async (task) => {
@@ -256,12 +260,20 @@ export default function TodayPage() {
   }
 
   const handlePartialComplete = async (task) => {
-    applyDayResult(task.date, await updateTask(task.date, task.id, buildCompletionUpdates(task, { status: 'kismen-tamamlandi' })))
+    try {
+      applyDayResult(task.date, await updateTask(task.date, task.id, buildCompletionUpdates(task, { status: 'kismen-tamamlandi' })))
+    } catch (err) {
+      setLoadError(err.message || 'Görev güncellenemedi.')
+    }
   }
 
   const handleHelp = async (task) => {
-    applyDayResult(task.date, await updateTask(task.date, task.id, { status: 'yardim-bekliyor' }))
-    setShowStressModal(true)
+    try {
+      applyDayResult(task.date, await updateTask(task.date, task.id, { status: 'yardim-bekliyor' }))
+      setShowStressModal(true)
+    } catch (err) {
+      setLoadError(err.message || 'Görev güncellenemedi.')
+    }
   }
 
   const handleAnswerSheetSaved = async (updatedTask) => {
@@ -289,24 +301,32 @@ export default function TodayPage() {
   }
 
   const handleSaveReadingProgress = async (task, payload) => {
-    applyDayResult(
-      task.date,
-      await updateTask(task.date, task.id, buildCompletionUpdates(task, {
-        completedPageCount: payload.completedPageCount,
-        currentPageNumber: payload.currentPageNumber,
-        status: payload.status,
-      })),
-    )
+    try {
+      applyDayResult(
+        task.date,
+        await updateTask(task.date, task.id, buildCompletionUpdates(task, {
+          completedPageCount: payload.completedPageCount,
+          currentPageNumber: payload.currentPageNumber,
+          status: payload.status,
+        })),
+      )
+    } catch (err) {
+      setLoadError(err.message || 'İlerleme kaydedilemedi.')
+    }
   }
 
   const handleSaveQuestionCount = async (task, payload) => {
-    applyDayResult(
-      task.date,
-      await updateTask(task.date, task.id, buildCompletionUpdates(task, {
-        completedQuestionCount: payload.completedQuestionCount,
-        status: payload.status,
-      })),
-    )
+    try {
+      applyDayResult(
+        task.date,
+        await updateTask(task.date, task.id, buildCompletionUpdates(task, {
+          completedQuestionCount: payload.completedQuestionCount,
+          status: payload.status,
+        })),
+      )
+    } catch (err) {
+      setLoadError(err.message || 'İlerleme kaydedilemedi.')
+    }
   }
 
   const handleSaveNotes = async (task, notes) => {
