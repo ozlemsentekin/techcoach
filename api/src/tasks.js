@@ -13,16 +13,26 @@ function toISODate(value) {
   return value instanceof Date ? value.toISOString().slice(0, 10) : value
 }
 
+const HOMEWORK_TASK_TYPE_SET = new Set(['odev', 'soru-bankasi-odevi', 'okul-odevi', 'etkinlik-odevi'])
+
 function sanitizeTask(record) {
   return {
     id: record.id,
     studentId: record.student_id,
     isDraft: Boolean(record.is_draft),
+    isUnscheduled: Boolean(record.is_unscheduled),
     date: toISODate(record.date),
+    assignedDate: toISODate(record.assigned_date) || undefined,
     title: record.title,
     taskType: record.task_type,
-    homeworkId: record.homework_id || undefined,
+    // Ödev/görev tekilleştirme: ödev-tipi her görev kendi başına bir "ödev"dir; bağlı eski
+    // Homeworks satırı olmasa bile homeworkId = görevin kendi id'si (böylece Ödevlerim /
+    // öğretmen paneli ödev makinesi tek yoldan çalışır).
+    homeworkId: HOMEWORK_TASK_TYPE_SET.has(record.task_type)
+      ? record.id
+      : record.homework_id || undefined,
     subject: record.subject || undefined,
+    subjectId: record.subject_id || undefined,
     topic: record.topic || undefined,
     startTime: record.start_time,
     endTime: record.end_time,
@@ -70,47 +80,15 @@ function sanitizeTask(record) {
   }
 }
 
-// Ödevden oluşturulmuş bir görevin (bkz. homework.js createTaskForHomework) ilerleme/durumu
-// değiştiğinde, aynı bilgiyi bağlı olduğu dbo.Homeworks satırına da yazar; aksi halde Ödevler
-// sayfası hep atama anındaki (genelde 0/bekliyor) donuk değerleri gösterir. due_date'i de
-// senkronize ediyoruz çünkü RescheduleTaskModal görevi başka bir güne taşıdığında sadece
-// dbo.Tasks.date güncelleniyordu; bu da ödevin Ödevlerim'de hâlâ eski günün altında görünüp
-// Bugün planındaki yeni günden kopmasına yol açıyordu.
-async function syncHomeworkCompletion(taskRecord) {
-  if (!taskRecord?.homework_id) return
-
-  const homeworkDb = await withRequest({
-    id: { type: sql.UniqueIdentifier, value: taskRecord.homework_id },
-    completedQuestionCount: { type: sql.Int, value: taskRecord.completed_question_count ?? 0 },
-    status: { type: sql.NVarChar(20), value: taskRecord.status },
-    dueDate: { type: sql.Date, value: taskRecord.date },
-  })
-  await homeworkDb.query(`
-    UPDATE dbo.Homeworks
-    SET completed_question_count = @completedQuestionCount, status = @status, due_date = @dueDate
-    WHERE id = @id;
-  `)
-}
-
-// Bir görevin soru bankası test seçimi (dolayısıyla target_question_count'u) değiştiğinde,
-// bağlı olduğu dbo.Homeworks.total_question_count'u da senkron tutar; aksi halde Ödevlerim
-// sayfası testi kaldırılmadan önceki eski soru toplamını göstermeye devam eder.
-async function syncHomeworkQuestionTotal(taskRecord) {
-  if (!taskRecord?.homework_id) return
-
-  const homeworkDb = await withRequest({
-    id: { type: sql.UniqueIdentifier, value: taskRecord.homework_id },
-    totalQuestionCount: { type: sql.Int, value: taskRecord.target_question_count ?? 0 },
-  })
-  await homeworkDb.query(`
-    UPDATE dbo.Homeworks
-    SET total_question_count = @totalQuestionCount
-    WHERE id = @id;
-  `)
-}
+// Ödev/görev tekilleştirme (Faz 1): "Ödev" artık ayrı bir dbo.Homeworks satırı değil, ders-tipi
+// dbo.Tasks satırının kendisi. Görev ilerlemesi/durumu/tarihi zaten Tasks üzerinde tutulduğundan
+// senkronlanacak ikinci kayıt yok — bu fonksiyonlar geriye dönük çağrı uyumluluğu için no-op.
+async function syncHomeworkCompletion() {}
+async function syncHomeworkQuestionTotal() {}
 
 const SELECT_TASK = `
-  SELECT t.id, t.student_id, t.is_draft, t.date, t.title, t.task_type, t.homework_id, t.subject, t.topic, t.start_time, t.end_time, t.duration_minutes,
+  SELECT t.id, t.student_id, t.is_draft, t.is_unscheduled, t.date, t.assigned_date, t.title, t.task_type, t.homework_id,
+         t.subject, t.subject_id, t.topic, t.start_time, t.end_time, t.duration_minutes,
          t.timer_started_at, t.timer_stopped_at, t.timer_elapsed_seconds,
          t.target_question_count, t.completed_question_count, t.target_page_count, t.completed_page_count,
          t.current_page_number, t.priority, t.status, t.description, t.parent_note, t.created_by,
@@ -132,8 +110,11 @@ const FIELD_MAP = {
   title: (v) => ({ column: 'title', type: sql.NVarChar(200), value: v }),
   taskType: (v) => ({ column: 'task_type', type: sql.NVarChar(40), value: v }),
   subject: (v) => ({ column: 'subject', type: sql.NVarChar(100), value: v || null }),
+  subjectId: (v) => ({ column: 'subject_id', type: sql.UniqueIdentifier, value: v || null }),
   topic: (v) => ({ column: 'topic', type: sql.NVarChar(200), value: v || null }),
   date: (v) => ({ column: 'date', type: sql.Date, value: v }),
+  assignedDate: (v) => ({ column: 'assigned_date', type: sql.Date, value: v || null }),
+  isUnscheduled: (v) => ({ column: 'is_unscheduled', type: sql.Bit, value: Boolean(v) }),
   startTime: (v) => ({ column: 'start_time', type: sql.Char(5), value: v || null }),
   endTime: (v) => ({ column: 'end_time', type: sql.Char(5), value: v || null }),
   durationMinutes: (v) => ({ column: 'duration_minutes', type: sql.Int, value: Number(v) || 0 }),
@@ -527,6 +508,7 @@ async function listTasksHandler(request) {
     const result = await requestDb.query(`
       ${SELECT_TASK}
       WHERE t.student_id = @studentId AND t.date = @date AND t.is_draft = @isDraft
+        AND t.is_unscheduled = 0
       ORDER BY t.start_time ASC, t.created_at ASC;
     `)
 
@@ -606,6 +588,18 @@ async function createTaskHandler(request) {
         return json(400, { error: 'Geçersiz öğretmen seçimi.' })
       }
       payload.subject = teacherRecord.subject_name || null
+    }
+
+    // Ödev-tipi görevde subject_id yoksa ders adından çöz (AddTaskDrawer subjectId göndermeyebilir):
+    // öğretmen paneli ve Gelişim Analizi ders kapsamını bununla belirliyor.
+    if (
+      HOMEWORK_TASK_TYPE_SET.has(payload.taskType) &&
+      !payload.subjectId &&
+      payload.subject
+    ) {
+      const subjDb = await withRequest({ name: { type: sql.NVarChar(100), value: payload.subject } })
+      const subjResult = await subjDb.query(`SELECT TOP 1 id FROM dbo.Subjects WHERE name = @name;`)
+      if (subjResult.recordset[0]) payload.subjectId = subjResult.recordset[0].id
     }
 
     const columns = ['student_id']
@@ -738,27 +732,12 @@ async function deleteTaskHandler(request) {
     })
     const result = await requestDb.query(`
       DELETE FROM dbo.Tasks
-      OUTPUT deleted.homework_id
+      OUTPUT deleted.id
       WHERE id = @id AND student_id = @studentId;
     `)
 
     if (!result.recordset.length) {
       return json(404, { error: 'Görev bulunamadı.' })
-    }
-
-    // Görev bir ödeve bağlıysa (homework_id dolu), arkasında kalan dbo.Homeworks satırı
-    // görünmeden dururdu ve aynı kaynak/test/tarih için yeni ödev eklemeyi "zaten eklenmiş"
-    // diyerek engellerdi (bkz. homework.js createHomeworkHandler'daki tekrar kontrolü).
-    // Bu yüzden bağlı ödev kaydını da burada temizliyoruz.
-    const homeworkId = result.recordset[0].homework_id
-    if (homeworkId) {
-      const homeworkDb = await withRequest({
-        id: { type: sql.UniqueIdentifier, value: homeworkId },
-        studentId: { type: sql.UniqueIdentifier, value: studentId },
-      })
-      await homeworkDb.query(`
-        DELETE FROM dbo.Homeworks WHERE id = @id AND student_id = @studentId;
-      `)
     }
 
     return json(200, { success: true })

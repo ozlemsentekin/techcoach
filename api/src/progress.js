@@ -102,13 +102,19 @@ function sanitizeProgressTest(record) {
   }
 }
 
+const PROGRESS_HOMEWORK_TASK_TYPES = new Set(['odev', 'soru-bankasi-odevi', 'okul-odevi', 'etkinlik-odevi'])
+
 function sanitizeProgressTask(record) {
   return {
     id: record.id,
     date: toISODate(record.date),
     title: record.title,
     taskType: record.task_type,
-    homeworkId: record.homework_id || undefined,
+    // Ödev/görev tekilleştirme: ödev-tipi görev kendi başına bir "ödev"; bağlı eski Homeworks
+    // satırı olmasa da homeworkId = görevin id'si (StudentProgressView dedup'u için).
+    homeworkId: PROGRESS_HOMEWORK_TASK_TYPES.has(record.task_type)
+      ? record.id
+      : record.homework_id || undefined,
     subject: record.subject || undefined,
     topic: record.topic || undefined,
     durationMinutes: record.duration_minutes,
@@ -144,7 +150,9 @@ function sanitizeProgressSession(record) {
     taskDate: toISODate(record.task_date),
     taskTitle: record.task_title || undefined,
     taskType: record.task_type || undefined,
-    homeworkId: record.homework_id || undefined,
+    homeworkId: PROGRESS_HOMEWORK_TASK_TYPES.has(record.task_type)
+      ? record.task_id || undefined
+      : record.homework_id || undefined,
     taskDurationMinutes: record.task_duration_minutes ?? undefined,
     subject: record.subject || undefined,
     topic: record.topic || undefined,
@@ -840,7 +848,7 @@ async function getProgressOverviewHandler(request) {
           LEFT JOIN dbo.ResourceBooks rb ON rb.id = t.resource_book_id
           LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
           LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
-          WHERE t.student_id = @studentId AND t.is_draft = 0
+          WHERE t.student_id = @studentId AND t.is_draft = 0 AND t.is_unscheduled = 0
           ORDER BY t.date DESC, t.start_time ASC;
         `),
       ),
@@ -867,15 +875,18 @@ async function getProgressOverviewHandler(request) {
         requestDb.query(`
           SELECT h.id, h.subject_id, s.name AS subject_name, h.resource_book_id,
                  rb.name AS resource_book_name, rb.resource_type, p.name AS publisher_name,
-                 h.title, h.description, h.assigned_date, h.due_date,
-                 h.total_question_count, h.completed_question_count, h.total_page_count,
+                 COALESCE(NULLIF(h.description, ''), h.title) AS title, h.description,
+                 h.assigned_date, h.date AS due_date,
+                 h.target_question_count AS total_question_count, h.completed_question_count,
+                 h.target_page_count AS total_page_count,
                  h.status, h.created_at, h.updated_at
-          FROM dbo.Homeworks h
-          INNER JOIN dbo.Subjects s ON s.id = h.subject_id
+          FROM dbo.Tasks h
+          LEFT JOIN dbo.Subjects s ON s.id = h.subject_id
           LEFT JOIN dbo.ResourceBooks rb ON rb.id = h.resource_book_id
           LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
-          WHERE h.student_id = @studentId
-          ORDER BY h.due_date DESC;
+          WHERE h.student_id = @studentId AND h.is_draft = 0
+            AND h.task_type IN ('odev', 'soru-bankasi-odevi', 'okul-odevi', 'etkinlik-odevi')
+          ORDER BY h.date DESC;
         `),
       ),
       withRequest(bindings).then((requestDb) =>

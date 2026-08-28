@@ -4,45 +4,18 @@ const { json } = require('./http')
 const { isSessionError } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
 
+// ── Ödev/Görev tekilleştirme (Faz 1) ──────────────────────────────────────────
+// "Ödev" artık ayrı bir tablo değil, ders-tipi bir dbo.Tasks satırıdır.
+//  - is_unscheduled = 1  → henüz bir güne/saate atanmamış ("Atama yapılmadı"); takvimde
+//    görünmez, sadece "Ödevlerim"de. Bir güne atanınca is_unscheduled = 0 olur.
+//  - Tasks.title genel kalıp ("{ders} Ödevi"), gerçek başlık Tasks.description'da.
+// Bu modül eski /api/panel/homeworks* cevap şeklini koruyarak dbo.Tasks üzerinde çalışır.
+const HOMEWORK_TASK_TYPES = ['odev', 'soru-bankasi-odevi', 'okul-odevi', 'etkinlik-odevi']
+const HOMEWORK_TASK_TYPES_SQL = HOMEWORK_TASK_TYPES.map((type) => `'${type}'`).join(', ')
+
 function toISODate(value) {
   if (!value) return null
   return value instanceof Date ? value.toISOString().slice(0, 10) : value
-}
-
-function sanitizeHomework(record) {
-  return {
-    id: record.id,
-    studentId: record.student_id,
-    subjectId: record.subject_id,
-    subject: record.subject_name,
-    resourceBookId: record.resource_book_id,
-    resourceBookName: record.resource_book_name || null,
-    resourceType: record.resource_book_type || null,
-    publisherName: record.publisher_name || null,
-    schoolResourceId: record.school_resource_id || null,
-    schoolResourceName: record.school_resource_name || null,
-    schoolResourceImageUrl: record.school_resource_image_url || null,
-    homeworkType: record.school_resource_id ? 'okul-odevi' : 'soru-bankasi-odevi',
-    title: record.title,
-    description: record.description || '',
-    assignedDate: toISODate(record.assigned_date),
-    dueDate: record.task_id ? toISODate(record.due_date) : null,
-    totalQuestionCount: record.total_question_count,
-    completedQuestionCount: record.completed_question_count,
-    totalPageCount: record.total_page_count,
-    priority: record.priority,
-    status: record.status,
-    isSplit: Boolean(record.is_split),
-    dayPlans: record.day_plans_json ? JSON.parse(record.day_plans_json) : [],
-    createdAt: record.created_at,
-    updatedAt: record.updated_at,
-    hasTask: Boolean(record.task_id),
-    taskId: record.task_id || null,
-    taskDate: toISODate(record.task_date),
-    taskStartTime: record.task_start_time || null,
-    taskEndTime: record.task_end_time || null,
-    taskDurationMinutes: record.task_duration_minutes ?? null,
-  }
 }
 
 function isValidTime(value) {
@@ -54,6 +27,82 @@ function computeEndTime(startTime, durationMinutes) {
   const startMinutes = startHour * 60 + startMinute
   const endMinutes = (startMinutes + durationMinutes) % (24 * 60)
   return `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`
+}
+
+// Tasks.title genel kalıba ("{ders} Ödevi") denk geliyorsa asıl başlığı description'dan al.
+function resolveHomeworkTitle(record, subject) {
+  const genericTitle = subject ? `${subject} Ödevi` : null
+  const isGeneric = genericTitle && record.title === genericTitle && record.description
+  return {
+    title: isGeneric ? record.description : record.title,
+    description: isGeneric ? '' : record.description || '',
+  }
+}
+
+function sanitizeHomework(record) {
+  const subject = record.subject_name || record.task_subject || null
+  const { title, description } = resolveHomeworkTitle(record, subject)
+  const scheduled = !record.is_unscheduled
+
+  return {
+    id: record.id,
+    studentId: record.student_id,
+    subjectId: record.subject_id || null,
+    subject,
+    resourceBookId: record.resource_book_id || null,
+    resourceBookName: record.resource_book_name || null,
+    resourceType: record.resource_book_type || null,
+    publisherName: record.publisher_name || null,
+    schoolResourceId: record.school_resource_id || null,
+    schoolResourceName: record.school_resource_name || null,
+    schoolResourceImageUrl: record.school_resource_image_url || null,
+    homeworkType: record.school_resource_id ? 'okul-odevi' : 'soru-bankasi-odevi',
+    title,
+    description,
+    assignedDate: toISODate(record.assigned_date),
+    dueDate: scheduled ? toISODate(record.date) : null,
+    totalQuestionCount: record.total_question_count ?? 0,
+    completedQuestionCount: record.completed_question_count ?? 0,
+    totalPageCount: record.total_page_count ?? null,
+    priority: record.priority,
+    status: record.status,
+    isSplit: false,
+    dayPlans: [],
+    createdAt: record.created_at,
+    updatedAt: record.updated_at,
+    hasTask: scheduled,
+    taskId: record.id,
+    taskDate: scheduled ? toISODate(record.date) : null,
+    taskStartTime: record.start_time || null,
+    taskEndTime: record.end_time || null,
+    taskDurationMinutes: record.duration_minutes ?? null,
+  }
+}
+
+// Alias `h` = dbo.Tasks (eski dbo.Homeworks yerine). Ödev-tipi + taslak-olmayan filtre
+// buraya gömülü; çağıranlar `AND h.<...>` ile devam eder.
+const SELECT_HOMEWORK = `
+  SELECT h.id, h.student_id, h.subject_id, s.name AS subject_name, h.subject AS task_subject,
+         h.resource_book_id, rb.name AS resource_book_name, rb.resource_type AS resource_book_type,
+         p.name AS publisher_name,
+         h.school_resource_id, scr.name AS school_resource_name, scr.image_url AS school_resource_image_url,
+         h.title, h.description, h.assigned_date, h.date, h.is_unscheduled,
+         h.target_question_count AS total_question_count, h.completed_question_count,
+         h.target_page_count AS total_page_count,
+         h.start_time, h.end_time, h.duration_minutes,
+         h.priority, h.status, h.created_at, h.updated_at
+  FROM dbo.Tasks h
+  LEFT JOIN dbo.Subjects s ON s.id = h.subject_id
+  LEFT JOIN dbo.ResourceBooks rb ON rb.id = h.resource_book_id
+  LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+  LEFT JOIN dbo.SchoolClassResources scr ON scr.id = h.school_resource_id
+  WHERE h.task_type IN (${HOMEWORK_TASK_TYPES_SQL}) AND h.is_draft = 0
+`
+
+async function fetchHomeworkById(taskId) {
+  const db = await withRequest({ id: { type: sql.UniqueIdentifier, value: taskId } })
+  const result = await db.query(`${SELECT_HOMEWORK} AND h.id = @id;`)
+  return result.recordset[0] ? sanitizeHomework(result.recordset[0]) : null
 }
 
 // studentTeacherId verilirse (öğretmen tarafı çağrısı), kaynak ayrıca öğretmenin
@@ -117,152 +166,145 @@ async function getAssignedSchoolResource(studentId, subjectId, schoolResourceId)
   return { id: record.id, name: record.name }
 }
 
-// Parent bir tarih seçtiyse, öğrencinin o güne ait canlı plan görev listesinde de görünmesi için
-// dbo.Homeworks satırına eşlik eden bir dbo.Tasks satırı oluşturur (taslak değil, canlı).
-// resourceBookId + testIds burada aktarılır ki soru bankası görevlerinde dijital cevap kağıdı
-// (bkz. tasks.js getTaskAnswerSheetHandler) gerçek test/soru sayısına ve cevap anahtarına erişebilsin.
-async function createTaskForHomework(
-  studentId,
-  homework,
-  taskDate,
-  resourceBookId,
-  testIds,
-  taskTime,
-  durationMinutesOverride,
-  { schoolResourceId = null } = {},
-) {
-  try {
-    const isSchoolHomework = Boolean(schoolResourceId)
-    const durationMinutes = Number.isFinite(durationMinutesOverride) && durationMinutesOverride > 0
-      ? durationMinutesOverride
-      : Math.min(60, Math.max(20, homework.totalQuestionCount || 20))
-    const startTime = isValidTime(taskTime) ? taskTime : null
-    let endTime = null
-    if (startTime) {
-      const [startHour, startMinute] = startTime.split(':').map(Number)
-      const startMinutes = startHour * 60 + startMinute
-      const endMinutes = (startMinutes + durationMinutes) % (24 * 60)
-      endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`
-    }
-    const sanitizedTestIds = Array.isArray(testIds) ? testIds.filter((id) => typeof id === 'string' && id) : []
-
-    const requestDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-      date: { type: sql.Date, value: taskDate },
-      title: { type: sql.NVarChar(200), value: `${homework.subject} Ödevi` },
-      description: { type: sql.NVarChar(1000), value: homework.title },
-      subject: { type: sql.NVarChar(100), value: homework.subject },
-      taskType: { type: sql.NVarChar(40), value: isSchoolHomework ? 'okul-odevi' : 'odev' },
-      startTime: { type: sql.Char(5), value: startTime },
-      endTime: { type: sql.Char(5), value: endTime },
-      durationMinutes: { type: sql.Int, value: durationMinutes },
-      targetQuestionCount: { type: sql.Int, value: homework.totalQuestionCount || null },
-      resourceBookId: { type: sql.UniqueIdentifier, value: isSchoolHomework ? null : resourceBookId || null },
-      schoolResourceId: { type: sql.UniqueIdentifier, value: schoolResourceId || null },
-      selectedTestIdsJson: { type: sql.NVarChar(sql.MAX), value: sanitizedTestIds.length ? JSON.stringify(sanitizedTestIds) : null },
-      targetPageCount: { type: sql.Int, value: homework.resourceType === 'okuma_kitabi' ? homework.totalPageCount || null : null },
-      homeworkId: { type: sql.UniqueIdentifier, value: homework.id },
-    })
-
-    await requestDb.query(`
-      INSERT INTO dbo.Tasks (
-        student_id, date, title, description, subject, task_type, start_time, end_time,
-        duration_minutes, target_question_count, completed_question_count, is_draft,
-        resource_book_id, school_resource_id, selected_test_ids_json, target_page_count, completed_page_count, homework_id
-      )
-      VALUES (
-        @studentId, @date, @title, @description, @subject, @taskType, @startTime, @endTime,
-        @durationMinutes, @targetQuestionCount, 0, 0,
-        @resourceBookId, @schoolResourceId, @selectedTestIdsJson, @targetPageCount, 0, @homeworkId
-      );
-    `)
-  } catch (error) {
-    console.error('createTaskForHomework failed', error)
-  }
+async function resolveSubjectName(subjectId) {
+  const db = await withRequest({ subjectId: { type: sql.UniqueIdentifier, value: subjectId } })
+  const result = await db.query(`SELECT TOP 1 name FROM dbo.Subjects WHERE id = @subjectId;`)
+  return result.recordset[0]?.name || null
 }
 
-// h.due_date is always populated (falls back to assigned_date when the parent
-// doesn't pick a day), so it alone can't tell an actually-scheduled homework
-// apart from one that only lives in this list. Whether a dbo.Tasks row is
-// linked back via homework_id is the real signal of "assigned to a day"; the
-// OUTER APPLY also surfaces that task's own date/time/duration so the UI can
-// show and edit the actual schedule instead of just a yes/no flag.
-const SELECT_HOMEWORK = `
-  SELECT h.id, h.student_id, h.subject_id, s.name AS subject_name, h.resource_book_id, rb.name AS resource_book_name,
-         rb.resource_type AS resource_book_type, p.name AS publisher_name,
-         h.school_resource_id, scr.name AS school_resource_name, scr.image_url AS school_resource_image_url,
-         h.title, h.description, h.assigned_date, h.due_date, h.total_question_count, h.completed_question_count,
-         h.total_page_count,
-         h.priority, h.status, h.is_split, h.day_plans_json, h.created_at, h.updated_at,
-         t.id AS task_id, t.date AS task_date, t.start_time AS task_start_time, t.end_time AS task_end_time,
-         t.duration_minutes AS task_duration_minutes
-  FROM dbo.Homeworks h
-  INNER JOIN dbo.Subjects s ON s.id = h.subject_id
-  LEFT JOIN dbo.ResourceBooks rb ON rb.id = h.resource_book_id
-  LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
-  LEFT JOIN dbo.SchoolClassResources scr ON scr.id = h.school_resource_id
-  OUTER APPLY (
-    SELECT TOP 1 tk.id, tk.date, tk.start_time, tk.end_time, tk.duration_minutes
-    FROM dbo.Tasks tk
-    WHERE tk.homework_id = h.id
-    ORDER BY tk.created_at DESC
-  ) t
-`
-
-// task_type = 'odev' olup hiçbir Homeworks kaydına bağlı olmayan (homework_id NULL) canlı
-// görevler: örn. "Geçen Haftayı Kopyala" ile çoğaltılmış bir görev, kopyalama sırasında
-// homework_id alanını taşımadığı için sahipsiz kalır (bkz. weeklyPlanService.js
-// copyPreviousWeek); benzer şekilde resource_book_id de kopyalanan görevde zaten boşsa
-// (örn. zincirleme kopyalarda) sahipsiz kalmaya devam eder. Bu yüzden resource_book_id
-// şartı aranmıyor: task_type = 'odev' tek başına yeterli sinyal. Bu görevler öğrencinin
-// Bugün planında görünmeye devam eder ama aksi halde Ödevlerim listesinde hiç görünmez;
-// burada onları ödev benzeri bir kayıt olarak listeye ekliyoruz.
-const SELECT_ORPHAN_TASK_HOMEWORK = `
-  SELECT t.id, t.student_id, t.subject, rb.name AS resource_book_name, rb.resource_type AS resource_book_type,
-         p.name AS publisher_name, t.title, t.description, t.date, t.target_question_count,
-         t.completed_question_count, t.target_page_count, t.priority, t.status, t.created_at, t.updated_at
-  FROM dbo.Tasks t
-  LEFT JOIN dbo.ResourceBooks rb ON rb.id = t.resource_book_id
-  LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
-  WHERE t.student_id = @studentId AND t.task_type = 'odev' AND t.homework_id IS NULL AND t.is_draft = 0
-`
-
-// createTaskForHomework, görev listesinde kısa görünsün diye Tasks.title alanına hep
-// "{ders} Ödevi" gibi genel bir başlık yazar; asıl ödev başlığı (kaynak/test adları) ise
-// Tasks.description'a konur. homework_id bağlantısı koptuğunda (bkz. yukarıdaki sorgu)
-// h.title artık okunamadığı için, bu genel kalıba denk gelen görevlerde description'ı
-// başlık olarak kullanıyoruz; aksi halde Ödevlerim'de anlamsız "Fen Bilimleri Ödevi" gibi
-// bir satır görünür. Elle eklenmiş (AddTaskDrawer) 'odev' görevlerinde başlık zaten
-// anlamlı olduğundan bu kalıba denk gelmez ve dokunulmaz.
-function sanitizeOrphanTaskAsHomework(record) {
-  const genericTaskTitle = record.subject ? `${record.subject} Ödevi` : null
-  const isGenericTitle = genericTaskTitle && record.title === genericTaskTitle && record.description
-  const title = isGenericTitle ? record.description : record.title
-
-  return {
-    id: record.id,
-    studentId: record.student_id,
-    subjectId: null,
-    subject: record.subject,
-    resourceBookId: null,
-    resourceBookName: record.resource_book_name || null,
-    resourceType: record.resource_book_type || null,
-    publisherName: record.publisher_name || null,
+/**
+ * Ödev = tek bir dbo.Tasks satırı. `taskDate` verilmezse "atanmamış" (is_unscheduled = 1)
+ * olarak oluşturulur: takvimde görünmez, "Ödevlerim"de "Atama yapılmadı" grubunda durur.
+ * Döner: eklenen görevin id'si.
+ */
+async function createHomeworkTask(
+  studentId,
+  {
+    subjectId,
+    subjectName,
+    resourceBookId = null,
+    schoolResourceId = null,
+    resourceType = null,
     title,
-    description: isGenericTitle ? '' : record.description || '',
-    assignedDate: toISODate(record.date),
-    dueDate: toISODate(record.date),
-    totalQuestionCount: record.target_question_count || 0,
-    completedQuestionCount: record.completed_question_count || 0,
-    totalPageCount: record.target_page_count,
-    priority: record.priority,
-    status: record.status,
-    isSplit: false,
-    dayPlans: [],
-    createdAt: record.created_at,
-    updatedAt: record.updated_at,
-    isTaskOnly: true,
-  }
+    assignedDate = null,
+    dueDate = null,
+    totalQuestionCount = 0,
+    totalPageCount = null,
+    priority = 'orta',
+    testIds = [],
+    taskDate = null,
+    taskTime = null,
+    taskDurationMinutes = null,
+    createdBy = 'ebeveyn',
+  },
+) {
+  const resolvedSubjectName = subjectName || (subjectId ? await resolveSubjectName(subjectId) : null)
+  const isSchoolHomework = Boolean(schoolResourceId)
+  const scheduled = Boolean(taskDate)
+  const date = taskDate || dueDate || assignedDate
+  const durationMinutes =
+    Number.isFinite(taskDurationMinutes) && taskDurationMinutes > 0
+      ? taskDurationMinutes
+      : Math.min(60, Math.max(20, totalQuestionCount || 20))
+  const startTime = scheduled && isValidTime(taskTime) ? taskTime : null
+  const endTime = startTime ? computeEndTime(startTime, durationMinutes) : null
+  const sanitizedTestIds = Array.isArray(testIds) ? testIds.filter((id) => typeof id === 'string' && id) : []
+  const taskType = isSchoolHomework ? 'okul-odevi' : resourceBookId ? 'soru-bankasi-odevi' : 'odev'
+  const isReading = resourceType === 'okuma_kitabi'
+
+  const requestDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    isUnscheduled: { type: sql.Bit, value: !scheduled },
+    date: { type: sql.Date, value: date },
+    assignedDate: { type: sql.Date, value: assignedDate || null },
+    title: { type: sql.NVarChar(200), value: resolvedSubjectName ? `${resolvedSubjectName} Ödevi` : 'Ödev' },
+    description: { type: sql.NVarChar(1000), value: title },
+    subject: { type: sql.NVarChar(100), value: resolvedSubjectName || null },
+    subjectId: { type: sql.UniqueIdentifier, value: subjectId || null },
+    taskType: { type: sql.NVarChar(40), value: taskType },
+    startTime: { type: sql.Char(5), value: startTime },
+    endTime: { type: sql.Char(5), value: endTime },
+    durationMinutes: { type: sql.Int, value: durationMinutes },
+    targetQuestionCount: { type: sql.Int, value: totalQuestionCount || null },
+    targetPageCount: { type: sql.Int, value: isReading ? totalPageCount || null : null },
+    priority: { type: sql.NVarChar(20), value: priority || 'orta' },
+    createdBy: { type: sql.NVarChar(20), value: createdBy },
+    resourceBookId: { type: sql.UniqueIdentifier, value: isSchoolHomework ? null : resourceBookId || null },
+    schoolResourceId: { type: sql.UniqueIdentifier, value: schoolResourceId || null },
+    selectedTestIdsJson: {
+      type: sql.NVarChar(sql.MAX),
+      value: sanitizedTestIds.length ? JSON.stringify(sanitizedTestIds) : null,
+    },
+  })
+
+  const result = await requestDb.query(`
+    INSERT INTO dbo.Tasks (
+      student_id, is_draft, is_unscheduled, date, assigned_date, title, description, subject, subject_id,
+      task_type, start_time, end_time, duration_minutes, target_question_count, completed_question_count,
+      target_page_count, completed_page_count, priority, status, created_by,
+      resource_book_id, school_resource_id, selected_test_ids_json
+    )
+    OUTPUT inserted.id
+    VALUES (
+      @studentId, 0, @isUnscheduled, @date, @assignedDate, @title, @description, @subject, @subjectId,
+      @taskType, @startTime, @endTime, @durationMinutes, @targetQuestionCount, 0,
+      @targetPageCount, 0, @priority, N'bekliyor', @createdBy,
+      @resourceBookId, @schoolResourceId, @selectedTestIdsJson
+    );
+  `)
+
+  return result.recordset[0].id
+}
+
+// Aynı kaynak/okul-kaynağı + aynı açıklama + aynı gün için zaten bir ödev-görevi var mı?
+async function checkDuplicateHomework({ studentId, subjectId, resourceBookId, schoolResourceId, description, dueDate }) {
+  const db = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+    resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId || null },
+    schoolResourceId: { type: sql.UniqueIdentifier, value: schoolResourceId || null },
+    description: { type: sql.NVarChar(1000), value: description || null },
+    dueDate: { type: sql.Date, value: dueDate },
+  })
+  const result = await db.query(`
+    SELECT TOP 1 h.id
+    FROM dbo.Tasks h
+    WHERE h.student_id = @studentId AND h.subject_id = @subjectId
+      AND h.task_type IN (${HOMEWORK_TASK_TYPES_SQL}) AND h.is_draft = 0
+      AND ISNULL(h.description, '') = ISNULL(@description, '')
+      AND h.date = @dueDate
+      AND (
+        (@schoolResourceId IS NOT NULL AND h.school_resource_id = @schoolResourceId)
+        OR (@resourceBookId IS NOT NULL AND h.resource_book_id = @resourceBookId)
+      );
+  `)
+  return result.recordset.length > 0
+}
+
+// Bir ödev-görevini siler; ona referans veren yanlış soru / çalışma seansı / motivasyon
+// mesajı satırlarını da temizler (FK ihlali olmasın diye).
+async function deleteHomeworkTask(taskId, studentId) {
+  const db = await withRequest({
+    id: { type: sql.UniqueIdentifier, value: taskId },
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+  })
+  const result = await db.query(`
+    DECLARE @exists BIT = 0;
+    IF EXISTS (
+      SELECT 1 FROM dbo.Tasks
+      WHERE id = @id AND student_id = @studentId
+        AND task_type IN (${HOMEWORK_TASK_TYPES_SQL}) AND is_draft = 0
+    )
+    BEGIN
+      SET @exists = 1;
+      UPDATE dbo.WrongQuestions SET task_id = NULL WHERE task_id = @id;
+      UPDATE dbo.StudySessions SET task_id = NULL WHERE task_id = @id;
+      UPDATE dbo.ParentMotivationMessages SET linked_task_id = NULL WHERE linked_task_id = @id;
+      DELETE FROM dbo.Tasks WHERE id = @id AND student_id = @studentId;
+    END
+    SELECT @exists AS affected;
+  `)
+  return Boolean(result.recordset[0]?.affected)
 }
 
 async function listHomeworksHandler(request) {
@@ -272,23 +314,16 @@ async function listHomeworksHandler(request) {
       return error
     }
 
-    const [result, orphanTaskResult] = await Promise.all([
-      withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } }).then((requestDb) =>
-        requestDb.query(`
-          ${SELECT_HOMEWORK}
-          WHERE h.student_id = @studentId
-          ORDER BY h.due_date ASC;
-        `),
-      ),
-      withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } }).then((requestDb) =>
-        requestDb.query(SELECT_ORPHAN_TASK_HOMEWORK),
-      ),
-    ])
+    const requestDb = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
+    const result = await requestDb.query(`
+      ${SELECT_HOMEWORK}
+        AND h.student_id = @studentId
+      ORDER BY h.date ASC;
+    `)
 
-    const homeworks = [
-      ...result.recordset.map(sanitizeHomework),
-      ...orphanTaskResult.recordset.map(sanitizeOrphanTaskAsHomework),
-    ].sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''))
+    const homeworks = result.recordset
+      .map(sanitizeHomework)
+      .sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''))
 
     return json(200, { homeworks })
   } catch (error) {
@@ -307,7 +342,7 @@ async function listHomeworksHandler(request) {
 async function createHomeworkHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
+    const { error, studentId, actorRole } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
     }
@@ -324,7 +359,6 @@ async function createHomeworkHandler(request) {
     const totalQuestionCount = Number(payload?.totalQuestionCount) || 0
     const totalPageCount = payload?.totalPageCount != null ? Number(payload.totalPageCount) || 0 : null
     const priority = payload?.priority || 'orta'
-    const dayPlans = Array.isArray(payload?.dayPlans) ? payload.dayPlans : []
     const taskDate = payload?.taskDate || null
     const taskTime = payload?.taskTime || null
     const taskDurationMinutes = Number(payload?.taskDurationMinutes) || null
@@ -346,107 +380,57 @@ async function createHomeworkHandler(request) {
       return json(400, { error: 'Tarih bilgileri zorunludur.' })
     }
 
-    let assignedResource = null
+    let resourceType = null
     if (isSchoolHomework) {
       const schoolResource = await getAssignedSchoolResource(studentId, subjectId, schoolResourceId)
       if (!schoolResource) {
         return json(400, { error: 'Seçilen okul kaynağı bu öğrencinin okulu/sınıfı için tanımlı değil.' })
       }
     } else {
-      assignedResource = await getAssignedResourceBook(studentId, subjectId, resourceBookId)
+      const assignedResource = await getAssignedResourceBook(studentId, subjectId, resourceBookId)
       if (!assignedResource) {
         return json(400, { error: 'Seçilen kaynak bu öğrenciye bu ders için atanmamış.' })
       }
+      resourceType = assignedResource.resourceType
     }
 
-    if (isSchoolHomework) {
-      const duplicateCheckDb = await withRequest({
-        studentId: { type: sql.UniqueIdentifier, value: studentId },
-        subjectId: { type: sql.UniqueIdentifier, value: subjectId },
-        schoolResourceId: { type: sql.UniqueIdentifier, value: schoolResourceId },
-        description: { type: sql.NVarChar(1000), value: description },
-        dueDate: { type: sql.Date, value: dueDate },
-      })
-      const duplicateResult = await duplicateCheckDb.query(`
-        SELECT TOP 1 h.id
-        FROM dbo.Homeworks h
-        WHERE h.student_id = @studentId
-          AND h.subject_id = @subjectId
-          AND h.school_resource_id = @schoolResourceId
-          AND h.description = @description
-          AND h.due_date = @dueDate;
-      `)
-      if (duplicateResult.recordset.length) {
-        return json(409, { error: 'Bu okul kaynağı için o güne zaten bir ödev eklenmiş.' })
-      }
-    } else if (assignedResource.resourceType !== 'okuma_kitabi') {
-      const duplicateCheckDb = await withRequest({
-        studentId: { type: sql.UniqueIdentifier, value: studentId },
-        subjectId: { type: sql.UniqueIdentifier, value: subjectId },
-        resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
-        description: { type: sql.NVarChar(1000), value: description },
-        dueDate: { type: sql.Date, value: dueDate },
-      })
-      const duplicateResult = await duplicateCheckDb.query(`
-        SELECT TOP 1 h.id
-        FROM dbo.Homeworks h
-        WHERE h.student_id = @studentId
-          AND h.subject_id = @subjectId
-          AND h.resource_book_id = @resourceBookId
-          AND h.description = @description
-          AND h.due_date = @dueDate;
-      `)
-      if (duplicateResult.recordset.length) {
-        return json(409, { error: 'Bu kaynak ve test için zaten bir ödev eklenmiş.' })
-      }
-    }
-
-    const requestDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-      subjectId: { type: sql.UniqueIdentifier, value: subjectId },
-      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
-      schoolResourceId: { type: sql.UniqueIdentifier, value: schoolResourceId },
-      title: { type: sql.NVarChar(200), value: title },
-      description: { type: sql.NVarChar(1000), value: description },
-      assignedDate: { type: sql.Date, value: assignedDate },
-      dueDate: { type: sql.Date, value: dueDate },
-      totalQuestionCount: { type: sql.Int, value: totalQuestionCount },
-      totalPageCount: { type: sql.Int, value: totalPageCount },
-      priority: { type: sql.NVarChar(20), value: priority },
-      isSplit: { type: sql.Bit, value: dayPlans.length > 1 },
-      dayPlansJson: { type: sql.NVarChar(sql.MAX), value: dayPlans.length ? JSON.stringify(dayPlans) : null },
-    })
-
-    const result = await requestDb.query(`
-      INSERT INTO dbo.Homeworks (
-        student_id, subject_id, resource_book_id, school_resource_id, title, description, assigned_date, due_date,
-        total_question_count, total_page_count, priority, is_split, day_plans_json
-      )
-      OUTPUT inserted.id
-      VALUES (
-        @studentId, @subjectId, @resourceBookId, @schoolResourceId, @title, @description, @assignedDate, @dueDate,
-        @totalQuestionCount, @totalPageCount, @priority, @isSplit, @dayPlansJson
-      );
-    `)
-
-    const insertedId = result.recordset[0].id
-
-    const fetchDb = await withRequest({
-      id: { type: sql.UniqueIdentifier, value: insertedId },
-    })
-    const fetchResult = await fetchDb.query(`
-      ${SELECT_HOMEWORK}
-      WHERE h.id = @id;
-    `)
-
-    const homework = sanitizeHomework(fetchResult.recordset[0])
-    if (taskDate) {
-      await createTaskForHomework(studentId, homework, taskDate, resourceBookId, testIds, taskTime, taskDurationMinutes, {
+    if (isSchoolHomework || resourceType !== 'okuma_kitabi') {
+      const isDuplicate = await checkDuplicateHomework({
+        studentId,
+        subjectId,
+        resourceBookId,
         schoolResourceId,
+        description,
+        dueDate: taskDate || dueDate,
       })
+      if (isDuplicate) {
+        return json(409, {
+          error: isSchoolHomework
+            ? 'Bu okul kaynağı için o güne zaten bir ödev eklenmiş.'
+            : 'Bu kaynak ve test için zaten bir ödev eklenmiş.',
+        })
+      }
     }
 
-    return json(201, { homework })
+    const homeworkId = await createHomeworkTask(studentId, {
+      subjectId,
+      resourceBookId,
+      schoolResourceId,
+      resourceType,
+      title,
+      assignedDate,
+      dueDate,
+      totalQuestionCount,
+      totalPageCount,
+      priority,
+      testIds,
+      taskDate,
+      taskTime,
+      taskDurationMinutes,
+      createdBy: actorRole === 'ogrenci' ? 'ogrenci' : 'ebeveyn',
+    })
+
+    return json(201, { homework: await fetchHomeworkById(homeworkId) })
   } catch (error) {
     if (error.number === 547) {
       return json(400, { error: 'Seçilen ders veya kaynak bulunamadı.' })
@@ -482,22 +466,23 @@ async function updateHomeworkHandler(request) {
     }
     if (payload?.status !== undefined) {
       updates.push('status = @status')
-      bindings.status = { type: sql.NVarChar(20), value: payload.status }
+      bindings.status = { type: sql.NVarChar(30), value: payload.status }
     }
     if (payload?.title !== undefined) {
-      updates.push('title = @title')
-      bindings.title = { type: sql.NVarChar(200), value: payload.title.trim() }
+      // Gerçek ödev başlığı Tasks.description'da (Tasks.title genel kalıp).
+      updates.push('description = @description')
+      bindings.description = { type: sql.NVarChar(1000), value: payload.title.trim() }
     }
     if (payload?.dueDate !== undefined) {
-      updates.push('due_date = @dueDate')
+      updates.push('date = @dueDate')
       bindings.dueDate = { type: sql.Date, value: payload.dueDate }
     }
     if (payload?.totalQuestionCount !== undefined) {
-      updates.push('total_question_count = @totalQuestionCount')
+      updates.push('target_question_count = @totalQuestionCount')
       bindings.totalQuestionCount = { type: sql.Int, value: Number(payload.totalQuestionCount) || 0 }
     }
     if (payload?.totalPageCount !== undefined) {
-      updates.push('total_page_count = @totalPageCount')
+      updates.push('target_page_count = @totalPageCount')
       bindings.totalPageCount = { type: sql.Int, value: Number(payload.totalPageCount) || 0 }
     }
     if (payload?.schoolResourceId !== undefined) {
@@ -508,7 +493,12 @@ async function updateHomeworkHandler(request) {
       if (!schoolResource) {
         return json(400, { error: 'Seçilen okul kaynağı bu öğrencinin okulu/sınıfı için tanımlı değil.' })
       }
-      updates.push('subject_id = @subjectId', 'school_resource_id = @schoolResourceId', 'resource_book_id = NULL')
+      updates.push(
+        'subject_id = @subjectId',
+        'school_resource_id = @schoolResourceId',
+        'resource_book_id = NULL',
+        "task_type = 'okul-odevi'",
+      )
       bindings.subjectId = { type: sql.UniqueIdentifier, value: payload.subjectId }
       bindings.schoolResourceId = { type: sql.UniqueIdentifier, value: payload.schoolResourceId }
     } else if (payload?.subjectId !== undefined || payload?.resourceBookId !== undefined) {
@@ -519,7 +509,12 @@ async function updateHomeworkHandler(request) {
       if (!assignedResource) {
         return json(400, { error: 'Seçilen kaynak bu öğrenciye bu ders için atanmamış.' })
       }
-      updates.push('subject_id = @subjectId', 'resource_book_id = @resourceBookId', 'school_resource_id = NULL')
+      updates.push(
+        'subject_id = @subjectId',
+        'resource_book_id = @resourceBookId',
+        'school_resource_id = NULL',
+        "task_type = 'soru-bankasi-odevi'",
+      )
       bindings.subjectId = { type: sql.UniqueIdentifier, value: payload.subjectId }
       bindings.resourceBookId = { type: sql.UniqueIdentifier, value: payload.resourceBookId }
     }
@@ -530,24 +525,17 @@ async function updateHomeworkHandler(request) {
 
     const requestDb = await withRequest(bindings)
     const result = await requestDb.query(`
-      UPDATE dbo.Homeworks
+      UPDATE dbo.Tasks
       SET ${updates.join(', ')}
-      WHERE id = @id AND student_id = @studentId;
+      WHERE id = @id AND student_id = @studentId
+        AND task_type IN (${HOMEWORK_TASK_TYPES_SQL}) AND is_draft = 0;
     `)
 
     if (!result.rowsAffected[0]) {
       return json(404, { error: 'Ödev bulunamadı.' })
     }
 
-    const fetchDb = await withRequest({
-      id: { type: sql.UniqueIdentifier, value: homeworkId },
-    })
-    const fetchResult = await fetchDb.query(`
-      ${SELECT_HOMEWORK}
-      WHERE h.id = @id;
-    `)
-
-    return json(200, { homework: sanitizeHomework(fetchResult.recordset[0]) })
+    return json(200, { homework: await fetchHomeworkById(homeworkId) })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -558,12 +546,7 @@ async function updateHomeworkHandler(request) {
   }
 }
 
-// Ödevlerim listesinde "Atama yapılmadı" altında kalan (henüz Tasks satırı
-// olmayan) ödevlere sonradan bir gün/saat/süre atamak veya var olan görevin
-// zamanlamasını düzenlemek için kullanılır. createTaskForHomework'ten farklı
-// olarak burada testIds bilgisi yok (ödev oluşturulduğunda seçilmemiş olabilir),
-// bu yüzden selected_test_ids_json boş bırakılır; bu sadece takvime yerleştirme
-// içindir, dijital cevap kağıdı testId eşlemesine dokunmaz.
+// "Atama yapılmadı" bir ödeve gün/saat/süre atar ya da var olan planı düzenler.
 async function assignHomeworkTaskHandler(request) {
   try {
     const homeworkId = request.params.homeworkId
@@ -587,92 +570,29 @@ async function assignHomeworkTaskHandler(request) {
       return json(400, { error: 'Süre 5 ile 480 dakika arasında olmalı.' })
     }
 
-    const hwDb = await withRequest({
+    const endTime = startTime ? computeEndTime(startTime, durationMinutes) : null
+
+    const requestDb = await withRequest({
       id: { type: sql.UniqueIdentifier, value: homeworkId },
       studentId: { type: sql.UniqueIdentifier, value: studentId },
+      date: { type: sql.Date, value: date },
+      startTime: { type: sql.Char(5), value: startTime || null },
+      endTime: { type: sql.Char(5), value: endTime || null },
+      durationMinutes: { type: sql.Int, value: durationMinutes },
     })
-    const hwResult = await hwDb.query(`
-      SELECT h.id, h.resource_book_id, h.school_resource_id, rb.resource_type, s.name AS subject_name,
-             h.title, h.total_question_count, h.completed_question_count, h.total_page_count, h.status
-      FROM dbo.Homeworks h
-      INNER JOIN dbo.Subjects s ON s.id = h.subject_id
-      LEFT JOIN dbo.ResourceBooks rb ON rb.id = h.resource_book_id
-      WHERE h.id = @id AND h.student_id = @studentId;
+    const result = await requestDb.query(`
+      UPDATE dbo.Tasks
+      SET date = @date, start_time = @startTime, end_time = @endTime, duration_minutes = @durationMinutes,
+          is_unscheduled = 0
+      WHERE id = @id AND student_id = @studentId
+        AND task_type IN (${HOMEWORK_TASK_TYPES_SQL}) AND is_draft = 0;
     `)
-    const homework = hwResult.recordset[0]
-    if (!homework) {
+
+    if (!result.rowsAffected[0]) {
       return json(404, { error: 'Ödev bulunamadı.' })
     }
 
-    const endTime = startTime ? computeEndTime(startTime, durationMinutes) : null
-
-    const existingDb = await withRequest({
-      homeworkId: { type: sql.UniqueIdentifier, value: homeworkId },
-    })
-    const existingResult = await existingDb.query(`
-      SELECT TOP 1 id FROM dbo.Tasks WHERE homework_id = @homeworkId ORDER BY created_at DESC;
-    `)
-    const existingTaskId = existingResult.recordset[0]?.id
-
-    if (existingTaskId) {
-      const updateDb = await withRequest({
-        id: { type: sql.UniqueIdentifier, value: existingTaskId },
-        studentId: { type: sql.UniqueIdentifier, value: studentId },
-        date: { type: sql.Date, value: date },
-        startTime: { type: sql.Char(5), value: startTime || null },
-        endTime: { type: sql.Char(5), value: endTime || null },
-        durationMinutes: { type: sql.Int, value: durationMinutes },
-      })
-      await updateDb.query(`
-        UPDATE dbo.Tasks
-        SET date = @date, start_time = @startTime, end_time = @endTime, duration_minutes = @durationMinutes
-        WHERE id = @id AND student_id = @studentId;
-      `)
-    } else {
-      const insertDb = await withRequest({
-        studentId: { type: sql.UniqueIdentifier, value: studentId },
-        date: { type: sql.Date, value: date },
-        title: { type: sql.NVarChar(200), value: `${homework.subject_name} Ödevi` },
-        description: { type: sql.NVarChar(1000), value: homework.title },
-        subject: { type: sql.NVarChar(100), value: homework.subject_name },
-        taskType: { type: sql.NVarChar(40), value: homework.school_resource_id ? 'okul-odevi' : 'odev' },
-        startTime: { type: sql.Char(5), value: startTime || null },
-        endTime: { type: sql.Char(5), value: endTime || null },
-        durationMinutes: { type: sql.Int, value: durationMinutes },
-        targetQuestionCount: { type: sql.Int, value: homework.total_question_count || null },
-        completedQuestionCount: { type: sql.Int, value: homework.completed_question_count || 0 },
-        status: { type: sql.NVarChar(30), value: homework.status || 'bekliyor' },
-        resourceBookId: { type: sql.UniqueIdentifier, value: homework.school_resource_id ? null : homework.resource_book_id || null },
-        schoolResourceId: { type: sql.UniqueIdentifier, value: homework.school_resource_id || null },
-        targetPageCount: {
-          type: sql.Int,
-          value: homework.resource_type === 'okuma_kitabi' ? homework.total_page_count || null : null,
-        },
-        homeworkId: { type: sql.UniqueIdentifier, value: homeworkId },
-      })
-      await insertDb.query(`
-        INSERT INTO dbo.Tasks (
-          student_id, date, title, description, subject, task_type, start_time, end_time,
-          duration_minutes, target_question_count, completed_question_count, status,
-          is_draft, resource_book_id, school_resource_id, target_page_count, completed_page_count, homework_id
-        )
-        VALUES (
-          @studentId, @date, @title, @description, @subject, @taskType, @startTime, @endTime,
-          @durationMinutes, @targetQuestionCount, @completedQuestionCount, @status,
-          0, @resourceBookId, @schoolResourceId, @targetPageCount, 0, @homeworkId
-        );
-      `)
-    }
-
-    const fetchDb = await withRequest({
-      id: { type: sql.UniqueIdentifier, value: homeworkId },
-    })
-    const fetchResult = await fetchDb.query(`
-      ${SELECT_HOMEWORK}
-      WHERE h.id = @id;
-    `)
-
-    return json(200, { homework: sanitizeHomework(fetchResult.recordset[0]) })
+    return json(200, { homework: await fetchHomeworkById(homeworkId) })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -694,36 +614,8 @@ async function deleteHomeworkHandler(request) {
       return error
     }
 
-    // Ödev silindiğinde eşlik eden dbo.Tasks satırı FK_Tasks_Homeworks (ON DELETE SET NULL)
-    // yüzünden otomatik silinmiyor, sadece homework_id NULL'a çekiliyor; bu da görevin öğrenci
-    // panelinde ödev silinmiş olsa bile görünmeye devam etmesine yol açıyordu. Bu yüzden bağlı
-    // görevi (ve ona referans veren yanlış soru/çalışma kaydı gibi satırları) burada elle temizliyoruz.
-    const cleanupDb = await withRequest({
-      id: { type: sql.UniqueIdentifier, value: homeworkId },
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-    })
-    await cleanupDb.query(`
-      DECLARE @taskId UNIQUEIDENTIFIER;
-      SELECT @taskId = id FROM dbo.Tasks WHERE homework_id = @id AND student_id = @studentId;
-
-      IF @taskId IS NOT NULL
-      BEGIN
-        UPDATE dbo.WrongQuestions SET task_id = NULL WHERE task_id = @taskId;
-        UPDATE dbo.StudySessions SET task_id = NULL WHERE task_id = @taskId;
-        UPDATE dbo.ParentMotivationMessages SET linked_task_id = NULL WHERE linked_task_id = @taskId;
-        DELETE FROM dbo.Tasks WHERE id = @taskId;
-      END
-    `)
-
-    const requestDb = await withRequest({
-      id: { type: sql.UniqueIdentifier, value: homeworkId },
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-    })
-    const result = await requestDb.query(`
-      DELETE FROM dbo.Homeworks WHERE id = @id AND student_id = @studentId;
-    `)
-
-    if (!result.rowsAffected[0]) {
+    const deleted = await deleteHomeworkTask(homeworkId, studentId)
+    if (!deleted) {
       return json(404, { error: 'Ödev bulunamadı.' })
     }
 
@@ -745,10 +637,15 @@ module.exports = {
   assignHomeworkTaskHandler,
   deleteHomeworkHandler,
   SELECT_HOMEWORK,
+  HOMEWORK_TASK_TYPES,
+  HOMEWORK_TASK_TYPES_SQL,
   sanitizeHomework,
+  fetchHomeworkById,
+  checkDuplicateHomework,
   getAssignedResourceBook,
   getAssignedSchoolResource,
-  createTaskForHomework,
+  createHomeworkTask,
+  deleteHomeworkTask,
   isValidTime,
   computeEndTime,
 }

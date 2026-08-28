@@ -139,13 +139,6 @@ export async function getDayPlan(date) {
   return { tasks: [...liveTasks, ...draftTasks], status }
 }
 
-export async function cleanupUnlinkedHomeworkTasksForWeek(weekStartDateISO) {
-  const { draftTasks, liveTasks } = await fetchWeekTaskLists(weekStartDateISO)
-  const unlinkedHomeworkTasks = [...draftTasks, ...liveTasks].filter((task) => task.taskType === 'odev' && !task.homeworkId)
-
-  await Promise.all(unlinkedHomeworkTasks.map((task) => removeTask(task.id)))
-}
-
 /**
  * Bir günün taslak görevlerini canlıya taşır. Var olan canlı görevlere DOKUNMAZ, silmez —
  * sadece taslakları canlıya ekleyerek senkronize eder (taslak yoksa hiçbir şey yapmaz).
