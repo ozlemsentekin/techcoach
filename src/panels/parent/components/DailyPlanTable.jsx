@@ -353,7 +353,10 @@ function TimelineDot({ status, isFirst, isLast, visual }) {
 function TaskKindBadge({ task, visual }) {
   const kind = getTaskKind(task)
   const Icon = TASK_TYPE_ICONS[task.taskType] || visual.icon
-  const label = kind === 'study' ? TASK_TYPES[task.taskType]?.label || visual.label : visual.label
+  const label =
+    kind === 'study' || task.taskType === 'okul-odevi'
+      ? TASK_TYPES[task.taskType]?.label || visual.label
+      : visual.label
 
   return (
     <span className={`inline-flex max-w-full items-center overflow-hidden rounded-lg border text-xs font-extrabold ${visual.typeBadge}`}>
