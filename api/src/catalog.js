@@ -67,7 +67,6 @@ function sanitizeResourceBook(record) {
     type: record.resource_type,
     hasAnswerKey: Boolean(record.has_answer_key),
     imageUrl: record.image_url || null,
-    barcode: record.barcode || null,
     publishYear: record.publish_year || null,
     publishMonthYear: record.publish_month_year || null,
     grade: record.grade || null,
@@ -94,29 +93,6 @@ function sanitizeResourceBookPublishMonthYear(value) {
   }
 
   return { value: publishMonthYear }
-}
-
-const RESOURCE_BOOK_BARCODE_MIN_LENGTH = 4
-const RESOURCE_BOOK_BARCODE_MAX_LENGTH = 50
-
-function sanitizeResourceBookBarcode(value, { required = true } = {}) {
-  const barcode = value?.trim() || ''
-  if (!barcode) {
-    if (!required) {
-      return { value: null }
-    }
-    return { error: 'Barkod kodu girilmeli.' }
-  }
-  if (barcode.length < RESOURCE_BOOK_BARCODE_MIN_LENGTH || barcode.length > RESOURCE_BOOK_BARCODE_MAX_LENGTH) {
-    return {
-      error: `Barkod kodu ${RESOURCE_BOOK_BARCODE_MIN_LENGTH}-${RESOURCE_BOOK_BARCODE_MAX_LENGTH} karakter arasında olmalı.`,
-    }
-  }
-  if (!/^\d+$/.test(barcode)) {
-    return { error: 'Barkod kodu sadece rakamlardan oluşmalı.' }
-  }
-
-  return { value: barcode }
 }
 
 function sanitizeResourceBookPublishYear(value) {
@@ -397,7 +373,7 @@ async function listResourceBooksHandler(request) {
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
       SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.barcode, rb.publish_year, rb.publish_month_year, rb.grade, rb.resource_source, rb.created_at,
+             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.publish_year, rb.publish_month_year, rb.grade, rb.resource_source, rb.created_at,
              rb.status, rb.created_by_role, rb.created_by_user_id, rb.rejection_reason, u.full_name AS created_by_name
       FROM dbo.ResourceBooks rb
       LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
@@ -557,7 +533,6 @@ async function createResourceBookHandler(request) {
     const imageResult = sanitizeResourceBookImageUrl(payload?.imageUrl)
     const publishMonthYearResult = sanitizeResourceBookPublishMonthYear(payload?.publishMonthYear)
     const grade = payload?.grade || null
-    const barcodeResult = sanitizeResourceBookBarcode(payload?.barcode, { required: false })
     // Kaynak türü (okul/özel) artık UI'da seçtirilmiyor — tüm yeni kaynaklar 'ozel' olarak eklenir.
     // Kolon ileride tekrar kullanılabilir diye tabloda bırakıldı.
     const resourceSource = 'ozel'
@@ -583,9 +558,6 @@ async function createResourceBookHandler(request) {
     if (!RESOURCE_BOOK_GRADES.has(grade)) {
       return json(400, { error: 'Sınıf seçilmeli.' })
     }
-    if (barcodeResult.error) {
-      return json(400, { error: barcodeResult.error })
-    }
 
     const requestDb = await withRequest({
       publisherId: { type: sql.UniqueIdentifier, value: publisherId },
@@ -598,14 +570,13 @@ async function createResourceBookHandler(request) {
       imageUrl: { type: sql.NVarChar(sql.MAX), value: imageResult.value },
       publishMonthYear: { type: sql.NVarChar(20), value: publishMonthYearResult.value },
       grade: { type: sql.NVarChar(20), value: grade },
-      barcode: { type: sql.NVarChar(50), value: barcodeResult.value },
       resourceSource: { type: sql.NVarChar(20), value: resourceSource },
     })
 
     const result = await requestDb.query(`
-      INSERT INTO dbo.ResourceBooks (publisher_id, subject_id, name, page_count, is_active, resource_type, has_answer_key, image_url, publish_month_year, grade, barcode, resource_source)
-      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.page_count, inserted.is_active, inserted.resource_type, inserted.has_answer_key, inserted.image_url, inserted.publish_month_year, inserted.grade, inserted.barcode, inserted.resource_source, inserted.created_at
-      VALUES (@publisherId, @subjectId, @name, @pageCount, @isActive, @resourceType, @hasAnswerKey, @imageUrl, @publishMonthYear, @grade, @barcode, @resourceSource);
+      INSERT INTO dbo.ResourceBooks (publisher_id, subject_id, name, page_count, is_active, resource_type, has_answer_key, image_url, publish_month_year, grade, resource_source)
+      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.page_count, inserted.is_active, inserted.resource_type, inserted.has_answer_key, inserted.image_url, inserted.publish_month_year, inserted.grade, inserted.resource_source, inserted.created_at
+      VALUES (@publisherId, @subjectId, @name, @pageCount, @isActive, @resourceType, @hasAnswerKey, @imageUrl, @publishMonthYear, @grade, @resourceSource);
     `)
 
     return json(201, { resourceBook: sanitizeResourceBook(result.recordset[0]) })
@@ -642,7 +613,6 @@ async function updateResourceBookHandler(request) {
     const imageResult = sanitizeResourceBookImageUrl(payload?.imageUrl)
     const publishMonthYearResult = sanitizeResourceBookPublishMonthYear(payload?.publishMonthYear)
     const grade = payload?.grade || null
-    const barcodeResult = sanitizeResourceBookBarcode(payload?.barcode, { required: false })
     // Kaynak türü (okul/özel) artık UI'da seçtirilmiyor — tüm kaynaklar 'ozel' olarak kalır.
     // Kolon ileride tekrar kullanılabilir diye tabloda bırakıldı.
     const resourceSource = 'ozel'
@@ -668,9 +638,6 @@ async function updateResourceBookHandler(request) {
     if (!RESOURCE_BOOK_GRADES.has(grade)) {
       return json(400, { error: 'Sınıf seçilmeli.' })
     }
-    if (barcodeResult.error) {
-      return json(400, { error: barcodeResult.error })
-    }
 
     const requestDb = await withRequest({
       id: { type: sql.UniqueIdentifier, value: resourceBookId },
@@ -684,14 +651,13 @@ async function updateResourceBookHandler(request) {
       imageUrl: { type: sql.NVarChar(sql.MAX), value: imageResult.value },
       publishMonthYear: { type: sql.NVarChar(20), value: publishMonthYearResult.value },
       grade: { type: sql.NVarChar(20), value: grade },
-      barcode: { type: sql.NVarChar(50), value: barcodeResult.value },
       resourceSource: { type: sql.NVarChar(20), value: resourceSource },
     })
 
     const result = await requestDb.query(`
       UPDATE dbo.ResourceBooks
-      SET publisher_id = @publisherId, subject_id = @subjectId, name = @name, page_count = @pageCount, is_active = @isActive, resource_type = @resourceType, has_answer_key = @hasAnswerKey, image_url = @imageUrl, publish_month_year = @publishMonthYear, grade = @grade, barcode = @barcode, resource_source = @resourceSource
-      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.page_count, inserted.is_active, inserted.resource_type, inserted.has_answer_key, inserted.image_url, inserted.publish_month_year, inserted.grade, inserted.barcode, inserted.resource_source, inserted.created_at
+      SET publisher_id = @publisherId, subject_id = @subjectId, name = @name, page_count = @pageCount, is_active = @isActive, resource_type = @resourceType, has_answer_key = @hasAnswerKey, image_url = @imageUrl, publish_month_year = @publishMonthYear, grade = @grade, resource_source = @resourceSource
+      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.page_count, inserted.is_active, inserted.resource_type, inserted.has_answer_key, inserted.image_url, inserted.publish_month_year, inserted.grade, inserted.resource_source, inserted.created_at
       WHERE id = @id;
     `)
 
@@ -718,7 +684,7 @@ async function updateResourceBookHandler(request) {
 const LIBRARY_RESOURCE_BOOK_SELECT = `
   SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
          rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url,
-         rb.barcode, rb.publish_year, rb.publish_month_year, rb.grade, rb.resource_source, rb.status,
+         rb.publish_year, rb.publish_month_year, rb.grade, rb.resource_source, rb.status,
          rb.created_by_role, rb.created_by_user_id, rb.rejection_reason, rb.created_at
   FROM dbo.ResourceBooks rb
   LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id

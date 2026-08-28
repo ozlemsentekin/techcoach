@@ -60,8 +60,8 @@ export async function getTaskActivityLogs(date, { limit = 50 } = {}) {
 }
 
 /** Soru bankası görevinin dijital cevap kağıdı: testler, soru sayıları, kayıtlı cevaplar/sonuçlar, yanlış soru fotoğrafları. */
-export async function getTaskAnswerSheet(taskId) {
-  const data = await authRequest(`/api/panel/tasks/${taskId}/answer-sheet`, { method: 'GET' })
+export async function getTaskAnswerSheet(taskId, studentId) {
+  const data = await authRequest(withStudentId(`/api/panel/tasks/${taskId}/answer-sheet`, studentId), { method: 'GET' })
   return { tests: data.tests, photos: data.photos || {} }
 }
 

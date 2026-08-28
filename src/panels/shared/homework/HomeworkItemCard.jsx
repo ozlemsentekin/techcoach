@@ -24,7 +24,13 @@ export default function HomeworkItemCard({ homework, onDeleteRequest, onEditRequ
       )}
     >
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-        {homework.publisherName ? <PublisherBadge name={homework.publisherName} /> : null}
+        {homework.publisherName ? (
+          <PublisherBadge name={homework.publisherName} />
+        ) : homework.schoolResourceName ? (
+          <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-panel-blue/20 bg-panel-blue-soft px-2.5 py-1 text-[11px] font-medium text-panel-blue">
+            Okul Ödevi
+          </span>
+        ) : null}
         <p
           className="min-w-0 flex-1 text-[13px] font-semibold leading-[1.4] text-panel-text line-clamp-2"
           title={homework.title}

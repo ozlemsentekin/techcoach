@@ -8,11 +8,32 @@ import {
   saveWrongQuestionPhoto,
 } from '../../../services/taskService'
 import { verifyMistakePhotoQuestionNumber } from '../../../services/mistakePhotoService'
-import { getWrongQuestionPhoto } from '../../../services/wrongQuestionService'
+import { getWrongQuestionPhoto, updateWrongQuestion } from '../../../services/wrongQuestionService'
 import LoadingState from '../../shared/LoadingState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
-import QuestionPhotoViewerModal from '../../shared/QuestionPhotoViewerModal'
+import WrongQuestionGalleryModal from '../../shared/WrongQuestionGalleryModal'
 import MistakePhotoCaptureModal from './MistakePhotoCaptureModal'
+
+// Bir testin fotoğraflı yanlış/boş sorularını WrongQuestionGalleryModal item şekline çevirir.
+function buildGalleryItems(test, photosMap) {
+  const testPhotos = photosMap?.[test.id] || {}
+  const items = []
+  for (let orderNo = 1; orderNo <= test.questionCount; orderNo += 1) {
+    const entry = getPhotoEntry(testPhotos[String(orderNo)])
+    if (!entry?.photoUrl && !entry?.id) continue
+    items.push({
+      id: entry.id,
+      questionNumber: orderNo,
+      testName: test.name,
+      topicName: test.topicName,
+      topic: entry.topic || test.topicName || test.name || '',
+      studentNote: entry.studentNote,
+      mistakeReason: entry.mistakeReason,
+      photoUrl: entry.photoUrl,
+    })
+  }
+  return items
+}
 
 const OPTIONS = ['A', 'B', 'C', 'D']
 // Backend'deki BLANK_ANSWER_LABEL ile eşleşmeli (api/src/tasks.js).
@@ -64,7 +85,7 @@ function ResultBadge({ result }) {
   )
 }
 
-function TestSection({ test, answers, result, photos, photoMode, onSelect, onRemove, onCapture, onViewPhoto }) {
+function TestSection({ test, answers, result, photos, photoMode, onSelect, onRemove, onCapture, onOpenGallery }) {
   const locked = Boolean(result)
   return (
     <div className="min-w-0 rounded-2xl border border-panel-border p-2.5">
@@ -178,14 +199,12 @@ function TestSection({ test, answers, result, photos, photoMode, onSelect, onRem
                     <button
                       type="button"
                       aria-label={
-                        photoMode === 'view'
-                          ? `${orderNo}. soru fotoğrafını görüntüle`
-                          : hasPhoto
-                            ? `${orderNo}. soru fotoğrafını değiştir`
-                            : `${orderNo}. soru için fotoğraf ekle`
+                        canViewPhoto
+                          ? `${orderNo}. soru fotoğrafını aç ve hata analizi yap`
+                          : `${orderNo}. soru için fotoğraf ekle`
                       }
-                      title={photoMode === 'view' ? 'Fotoğrafı görüntüle' : hasPhoto ? 'Fotoğraf eklendi' : 'Fotoğraf ekle'}
-                      onClick={() => (photoMode === 'view' ? onViewPhoto(orderNo, photoEntry) : onCapture(orderNo))}
+                      title={canViewPhoto ? 'Fotoğrafı aç ve hata analizi yap' : 'Fotoğraf ekle'}
+                      onClick={() => (canViewPhoto ? onOpenGallery(orderNo) : onCapture(orderNo))}
                       className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${
                         photoMode === 'view'
                           ? 'border border-panel-blue bg-white text-panel-blue hover:bg-panel-blue hover:text-white'
@@ -207,7 +226,7 @@ function TestSection({ test, answers, result, photos, photoMode, onSelect, onRem
   )
 }
 
-export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'edit', onClose, onSaved }) {
+export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'edit', studentId, onClose, onSaved }) {
   const [tests, setTests] = useState(null)
   const [error, setError] = useState('')
   const [answersByTest, setAnswersByTest] = useState({})
@@ -221,12 +240,13 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
   const [removeSaving, setRemoveSaving] = useState(false)
   const [photosByTest, setPhotosByTest] = useState({})
   const [capturingQuestion, setCapturingQuestion] = useState(null)
-  const [photoViewer, setPhotoViewer] = useState(null)
+  // { testId, items, index } — bir testin fotoğraflı yanlışları arasında gezinilen hata analizi galerisi.
+  const [gallery, setGallery] = useState(null)
 
   useEffect(() => {
     let ignore = false
 
-    getTaskAnswerSheet(task.id)
+    getTaskAnswerSheet(task.id, studentId)
       .then(({ tests: fetchedTests, photos }) => {
         if (ignore) return
         setTests(fetchedTests)
@@ -241,7 +261,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
     return () => {
       ignore = true
     }
-  }, [task.id])
+  }, [task.id, studentId])
 
   const totalQuestions = useMemo(() => (tests || []).reduce((sum, test) => sum + test.questionCount, 0), [tests])
   const allLocked = useMemo(
@@ -299,18 +319,82 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
     }
   }
 
+  const openGallery = (test, orderNo, photosMap) => {
+    const items = buildGalleryItems(test, photosMap || photosByTest)
+    if (!items.length) return
+    const idx = items.findIndex((entry) => entry.questionNumber === orderNo)
+    setGallery({ testId: test.id, items, index: idx < 0 ? 0 : idx })
+  }
+
+  // Modaldaki güncellemeyi hem galeri item'larına hem de cevap kağıdı foto haritasına yansıt.
+  const applyWrongQuestionUpdate = (wrongQuestionId, patch) => {
+    setGallery((prev) =>
+      prev
+        ? { ...prev, items: prev.items.map((entry) => (entry.id === wrongQuestionId ? { ...entry, ...patch } : entry)) }
+        : prev,
+    )
+    setPhotosByTest((prev) => {
+      const next = { ...prev }
+      for (const tId of Object.keys(next)) {
+        const testPhotos = next[tId]
+        for (const key of Object.keys(testPhotos)) {
+          const entry = getPhotoEntry(testPhotos[key])
+          if (entry?.id === wrongQuestionId) {
+            next[tId] = { ...testPhotos, [key]: { ...entry, ...patch } }
+          }
+        }
+      }
+      return next
+    })
+  }
+
+  const handleUpdateMistakeReason = async (wrongQuestionId, mistakeReason) => {
+    const updated = await updateWrongQuestion(wrongQuestionId, { mistakeReason }, studentId)
+    applyWrongQuestionUpdate(wrongQuestionId, { mistakeReason: updated.mistakeReason })
+  }
+
+  const handleUpdateMistakeMeta = async (wrongQuestionId, updates) => {
+    const updated = await updateWrongQuestion(wrongQuestionId, updates, studentId)
+    const patch = {}
+    if ('topic' in updates) patch.topic = updated.topic || ''
+    if ('studentNote' in updates) patch.studentNote = updated.studentNote || undefined
+    applyWrongQuestionUpdate(wrongQuestionId, patch)
+    return updated
+  }
+
   const handleSavePhoto = async (dataUrl) => {
     if (!capturingQuestion) return
-    const { testId, orderNo } = capturingQuestion
+    const { testId, orderNo, reopenGallery } = capturingQuestion
     const key = String(orderNo)
     const wrongQuestion = await saveWrongQuestionPhoto(task.id, testId, key, dataUrl)
-    setPhotosByTest((prev) => ({
-      ...prev,
+    const photoUrl = wrongQuestion.photoUrl || dataUrl
+    const nextPhotos = {
+      ...photosByTest,
       [testId]: {
-        ...prev[testId],
-        [key]: { id: wrongQuestion.id, hasPhoto: true, photoUrl: wrongQuestion.photoUrl || dataUrl },
+        ...photosByTest[testId],
+        [key]: {
+          ...(getPhotoEntry(photosByTest[testId]?.[key]) || {}),
+          id: wrongQuestion.id,
+          hasPhoto: true,
+          photoUrl,
+        },
       },
-    }))
+    }
+    setPhotosByTest(nextPhotos)
+    setGallery((prev) =>
+      prev && prev.testId === testId
+        ? {
+            ...prev,
+            items: prev.items.map((entry) =>
+              entry.questionNumber === orderNo ? { ...entry, id: wrongQuestion.id, photoUrl } : entry,
+            ),
+          }
+        : prev,
+    )
+    if (reopenGallery) {
+      const test = tests?.find((item) => item.id === testId)
+      if (test) openGallery(test, orderNo, nextPhotos)
+    }
   }
 
   const handleSaveNote = async () => {
@@ -361,16 +445,8 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
                   photoMode={photoMode}
                   onSelect={(orderNo, label) => handleSelect(test.id, orderNo, label)}
                   onRemove={setRemovingTest}
-                  onCapture={(orderNo) => setCapturingQuestion({ testId: test.id, orderNo })}
-                  onViewPhoto={(orderNo, photoEntry) =>
-                    setPhotoViewer({
-                      testId: test.id,
-                      orderNo,
-                      title: `${test.name} · ${orderNo}. soru`,
-                      subtitle: test.topicName,
-                      photo: photoEntry,
-                    })
-                  }
+                  onCapture={(orderNo) => setCapturingQuestion({ testId: test.id, orderNo, reopenGallery: true })}
+                  onOpenGallery={(orderNo) => openGallery(test, orderNo)}
                 />
               ))}
             </div>
@@ -443,26 +519,21 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
         />
       ) : null}
 
-      {photoViewer ? (
-        <QuestionPhotoViewerModal
-          title={photoViewer.title}
-          subtitle={photoViewer.subtitle}
-          photoId={photoViewer.photo?.id}
-          photoUrl={photoViewer.photo?.photoUrl}
-          fetchPhoto={getWrongQuestionPhoto}
-          onLoaded={(photoUrl) => {
-            setPhotosByTest((prev) => ({
-              ...prev,
-              [photoViewer.testId]: {
-                ...prev[photoViewer.testId],
-                [String(photoViewer.orderNo)]: { ...photoViewer.photo, photoUrl },
-              },
-            }))
-            setPhotoViewer((current) =>
-              current ? { ...current, photo: { ...current.photo, photoUrl } } : current,
-            )
-          }}
-          onClose={() => setPhotoViewer(null)}
+      {gallery && !capturingQuestion && gallery.items.length > 0 ? (
+        <WrongQuestionGalleryModal
+          title={tests?.find((test) => test.id === gallery.testId)?.name || 'Soru'}
+          items={gallery.items}
+          initialIndex={gallery.index}
+          fetchPhoto={(wrongQuestionId) => getWrongQuestionPhoto(wrongQuestionId, studentId)}
+          onUpdateMistakeReason={handleUpdateMistakeReason}
+          onUpdateMistakeMeta={handleUpdateMistakeMeta}
+          onCapturePhoto={
+            photoMode === 'view'
+              ? undefined
+              : (item) => setCapturingQuestion({ testId: gallery.testId, orderNo: item.questionNumber })
+          }
+          onIndexChange={(idx) => setGallery((prev) => (prev ? { ...prev, index: idx } : prev))}
+          onClose={() => setGallery(null)}
         />
       ) : null}
     </div>

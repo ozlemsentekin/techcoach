@@ -19,6 +19,10 @@ function sanitizeHomework(record) {
     resourceBookName: record.resource_book_name || null,
     resourceType: record.resource_book_type || null,
     publisherName: record.publisher_name || null,
+    schoolResourceId: record.school_resource_id || null,
+    schoolResourceName: record.school_resource_name || null,
+    schoolResourceImageUrl: record.school_resource_image_url || null,
+    homeworkType: record.school_resource_id ? 'okul-odevi' : 'soru-bankasi-odevi',
     title: record.title,
     description: record.description || '',
     assignedDate: toISODate(record.assigned_date),
@@ -89,12 +93,46 @@ async function getAssignedResourceBook(studentId, subjectId, resourceBookId, { s
   }
 }
 
+// Okul Ödevi için: seçilen okul kaynağı, öğrencinin okulu + sınıfı + bu ders için
+// tanımlı aktif bir SchoolClassResources kaydı olmalı (bkz. getPanelSchoolResourcesHandler).
+async function getAssignedSchoolResource(studentId, subjectId, schoolResourceId) {
+  const requestDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+    schoolResourceId: { type: sql.UniqueIdentifier, value: schoolResourceId },
+  })
+  const result = await requestDb.query(`
+    SELECT TOP 1 scr.id, scr.name
+    FROM dbo.SchoolClassResources scr
+    INNER JOIN dbo.StudentProfiles sp ON sp.school_id = scr.school_id AND sp.grade = scr.grade
+    WHERE sp.student_id = @studentId
+      AND scr.id = @schoolResourceId
+      AND scr.subject_id = @subjectId
+      AND scr.is_active = 1;
+  `)
+
+  const record = result.recordset[0]
+  if (!record) return null
+
+  return { id: record.id, name: record.name }
+}
+
 // Parent bir tarih seçtiyse, öğrencinin o güne ait canlı plan görev listesinde de görünmesi için
 // dbo.Homeworks satırına eşlik eden bir dbo.Tasks satırı oluşturur (taslak değil, canlı).
 // resourceBookId + testIds burada aktarılır ki soru bankası görevlerinde dijital cevap kağıdı
 // (bkz. tasks.js getTaskAnswerSheetHandler) gerçek test/soru sayısına ve cevap anahtarına erişebilsin.
-async function createTaskForHomework(studentId, homework, taskDate, resourceBookId, testIds, taskTime, durationMinutesOverride) {
+async function createTaskForHomework(
+  studentId,
+  homework,
+  taskDate,
+  resourceBookId,
+  testIds,
+  taskTime,
+  durationMinutesOverride,
+  { schoolResourceId = null } = {},
+) {
   try {
+    const isSchoolHomework = Boolean(schoolResourceId)
     const durationMinutes = Number.isFinite(durationMinutesOverride) && durationMinutesOverride > 0
       ? durationMinutesOverride
       : Math.min(60, Math.max(20, homework.totalQuestionCount || 20))
@@ -114,12 +152,13 @@ async function createTaskForHomework(studentId, homework, taskDate, resourceBook
       title: { type: sql.NVarChar(200), value: `${homework.subject} Ödevi` },
       description: { type: sql.NVarChar(1000), value: homework.title },
       subject: { type: sql.NVarChar(100), value: homework.subject },
-      taskType: { type: sql.NVarChar(40), value: 'odev' },
+      taskType: { type: sql.NVarChar(40), value: isSchoolHomework ? 'okul-odevi' : 'odev' },
       startTime: { type: sql.Char(5), value: startTime },
       endTime: { type: sql.Char(5), value: endTime },
       durationMinutes: { type: sql.Int, value: durationMinutes },
       targetQuestionCount: { type: sql.Int, value: homework.totalQuestionCount || null },
-      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId || null },
+      resourceBookId: { type: sql.UniqueIdentifier, value: isSchoolHomework ? null : resourceBookId || null },
+      schoolResourceId: { type: sql.UniqueIdentifier, value: schoolResourceId || null },
       selectedTestIdsJson: { type: sql.NVarChar(sql.MAX), value: sanitizedTestIds.length ? JSON.stringify(sanitizedTestIds) : null },
       targetPageCount: { type: sql.Int, value: homework.resourceType === 'okuma_kitabi' ? homework.totalPageCount || null : null },
       homeworkId: { type: sql.UniqueIdentifier, value: homework.id },
@@ -129,12 +168,12 @@ async function createTaskForHomework(studentId, homework, taskDate, resourceBook
       INSERT INTO dbo.Tasks (
         student_id, date, title, description, subject, task_type, start_time, end_time,
         duration_minutes, target_question_count, completed_question_count, is_draft,
-        resource_book_id, selected_test_ids_json, target_page_count, completed_page_count, homework_id
+        resource_book_id, school_resource_id, selected_test_ids_json, target_page_count, completed_page_count, homework_id
       )
       VALUES (
         @studentId, @date, @title, @description, @subject, @taskType, @startTime, @endTime,
         @durationMinutes, @targetQuestionCount, 0, 0,
-        @resourceBookId, @selectedTestIdsJson, @targetPageCount, 0, @homeworkId
+        @resourceBookId, @schoolResourceId, @selectedTestIdsJson, @targetPageCount, 0, @homeworkId
       );
     `)
   } catch (error) {
@@ -151,6 +190,7 @@ async function createTaskForHomework(studentId, homework, taskDate, resourceBook
 const SELECT_HOMEWORK = `
   SELECT h.id, h.student_id, h.subject_id, s.name AS subject_name, h.resource_book_id, rb.name AS resource_book_name,
          rb.resource_type AS resource_book_type, p.name AS publisher_name,
+         h.school_resource_id, scr.name AS school_resource_name, scr.image_url AS school_resource_image_url,
          h.title, h.description, h.assigned_date, h.due_date, h.total_question_count, h.completed_question_count,
          h.total_page_count,
          h.priority, h.status, h.is_split, h.day_plans_json, h.created_at, h.updated_at,
@@ -160,6 +200,7 @@ const SELECT_HOMEWORK = `
   INNER JOIN dbo.Subjects s ON s.id = h.subject_id
   LEFT JOIN dbo.ResourceBooks rb ON rb.id = h.resource_book_id
   LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+  LEFT JOIN dbo.SchoolClassResources scr ON scr.id = h.school_resource_id
   OUTER APPLY (
     SELECT TOP 1 tk.id, tk.date, tk.start_time, tk.end_time, tk.duration_minutes
     FROM dbo.Tasks tk
@@ -272,7 +313,9 @@ async function createHomeworkHandler(request) {
     }
 
     const subjectId = payload?.subjectId
-    const resourceBookId = payload?.resourceBookId || null
+    const isSchoolHomework = payload?.homeworkType === 'okul-odevi' || Boolean(payload?.schoolResourceId)
+    const resourceBookId = isSchoolHomework ? null : payload?.resourceBookId || null
+    const schoolResourceId = isSchoolHomework ? payload?.schoolResourceId || null : null
     const testIds = Array.isArray(payload?.testIds) ? payload.testIds : []
     const title = payload?.title?.trim()
     const description = payload?.description?.trim() || null
@@ -289,7 +332,11 @@ async function createHomeworkHandler(request) {
     if (!subjectId) {
       return json(400, { error: 'Ders seçilmeli.' })
     }
-    if (!resourceBookId) {
+    if (isSchoolHomework) {
+      if (!schoolResourceId) {
+        return json(400, { error: 'Okul ödevi için bir okul kaynağı seçilmeli.' })
+      }
+    } else if (!resourceBookId) {
       return json(400, { error: 'Ödev için öğrenciye atanmış bir kaynak seçilmeli.' })
     }
     if (!title || title.length < 2) {
@@ -299,12 +346,40 @@ async function createHomeworkHandler(request) {
       return json(400, { error: 'Tarih bilgileri zorunludur.' })
     }
 
-    const assignedResource = await getAssignedResourceBook(studentId, subjectId, resourceBookId)
-    if (!assignedResource) {
-      return json(400, { error: 'Seçilen kaynak bu öğrenciye bu ders için atanmamış.' })
+    let assignedResource = null
+    if (isSchoolHomework) {
+      const schoolResource = await getAssignedSchoolResource(studentId, subjectId, schoolResourceId)
+      if (!schoolResource) {
+        return json(400, { error: 'Seçilen okul kaynağı bu öğrencinin okulu/sınıfı için tanımlı değil.' })
+      }
+    } else {
+      assignedResource = await getAssignedResourceBook(studentId, subjectId, resourceBookId)
+      if (!assignedResource) {
+        return json(400, { error: 'Seçilen kaynak bu öğrenciye bu ders için atanmamış.' })
+      }
     }
 
-    if (assignedResource.resourceType !== 'okuma_kitabi') {
+    if (isSchoolHomework) {
+      const duplicateCheckDb = await withRequest({
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+        schoolResourceId: { type: sql.UniqueIdentifier, value: schoolResourceId },
+        description: { type: sql.NVarChar(1000), value: description },
+        dueDate: { type: sql.Date, value: dueDate },
+      })
+      const duplicateResult = await duplicateCheckDb.query(`
+        SELECT TOP 1 h.id
+        FROM dbo.Homeworks h
+        WHERE h.student_id = @studentId
+          AND h.subject_id = @subjectId
+          AND h.school_resource_id = @schoolResourceId
+          AND h.description = @description
+          AND h.due_date = @dueDate;
+      `)
+      if (duplicateResult.recordset.length) {
+        return json(409, { error: 'Bu okul kaynağı için o güne zaten bir ödev eklenmiş.' })
+      }
+    } else if (assignedResource.resourceType !== 'okuma_kitabi') {
       const duplicateCheckDb = await withRequest({
         studentId: { type: sql.UniqueIdentifier, value: studentId },
         subjectId: { type: sql.UniqueIdentifier, value: subjectId },
@@ -330,6 +405,7 @@ async function createHomeworkHandler(request) {
       studentId: { type: sql.UniqueIdentifier, value: studentId },
       subjectId: { type: sql.UniqueIdentifier, value: subjectId },
       resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+      schoolResourceId: { type: sql.UniqueIdentifier, value: schoolResourceId },
       title: { type: sql.NVarChar(200), value: title },
       description: { type: sql.NVarChar(1000), value: description },
       assignedDate: { type: sql.Date, value: assignedDate },
@@ -343,12 +419,12 @@ async function createHomeworkHandler(request) {
 
     const result = await requestDb.query(`
       INSERT INTO dbo.Homeworks (
-        student_id, subject_id, resource_book_id, title, description, assigned_date, due_date,
+        student_id, subject_id, resource_book_id, school_resource_id, title, description, assigned_date, due_date,
         total_question_count, total_page_count, priority, is_split, day_plans_json
       )
       OUTPUT inserted.id
       VALUES (
-        @studentId, @subjectId, @resourceBookId, @title, @description, @assignedDate, @dueDate,
+        @studentId, @subjectId, @resourceBookId, @schoolResourceId, @title, @description, @assignedDate, @dueDate,
         @totalQuestionCount, @totalPageCount, @priority, @isSplit, @dayPlansJson
       );
     `)
@@ -365,7 +441,9 @@ async function createHomeworkHandler(request) {
 
     const homework = sanitizeHomework(fetchResult.recordset[0])
     if (taskDate) {
-      await createTaskForHomework(studentId, homework, taskDate, resourceBookId, testIds, taskTime, taskDurationMinutes)
+      await createTaskForHomework(studentId, homework, taskDate, resourceBookId, testIds, taskTime, taskDurationMinutes, {
+        schoolResourceId,
+      })
     }
 
     return json(201, { homework })
@@ -422,7 +500,18 @@ async function updateHomeworkHandler(request) {
       updates.push('total_page_count = @totalPageCount')
       bindings.totalPageCount = { type: sql.Int, value: Number(payload.totalPageCount) || 0 }
     }
-    if (payload?.subjectId !== undefined || payload?.resourceBookId !== undefined) {
+    if (payload?.schoolResourceId !== undefined) {
+      if (!payload?.subjectId || !payload?.schoolResourceId) {
+        return json(400, { error: 'Ders ve okul kaynağı birlikte gönderilmeli.' })
+      }
+      const schoolResource = await getAssignedSchoolResource(studentId, payload.subjectId, payload.schoolResourceId)
+      if (!schoolResource) {
+        return json(400, { error: 'Seçilen okul kaynağı bu öğrencinin okulu/sınıfı için tanımlı değil.' })
+      }
+      updates.push('subject_id = @subjectId', 'school_resource_id = @schoolResourceId', 'resource_book_id = NULL')
+      bindings.subjectId = { type: sql.UniqueIdentifier, value: payload.subjectId }
+      bindings.schoolResourceId = { type: sql.UniqueIdentifier, value: payload.schoolResourceId }
+    } else if (payload?.subjectId !== undefined || payload?.resourceBookId !== undefined) {
       if (!payload?.subjectId || !payload?.resourceBookId) {
         return json(400, { error: 'Ders ve kaynak birlikte gönderilmeli.' })
       }
@@ -430,7 +519,7 @@ async function updateHomeworkHandler(request) {
       if (!assignedResource) {
         return json(400, { error: 'Seçilen kaynak bu öğrenciye bu ders için atanmamış.' })
       }
-      updates.push('subject_id = @subjectId', 'resource_book_id = @resourceBookId')
+      updates.push('subject_id = @subjectId', 'resource_book_id = @resourceBookId', 'school_resource_id = NULL')
       bindings.subjectId = { type: sql.UniqueIdentifier, value: payload.subjectId }
       bindings.resourceBookId = { type: sql.UniqueIdentifier, value: payload.resourceBookId }
     }
@@ -503,7 +592,7 @@ async function assignHomeworkTaskHandler(request) {
       studentId: { type: sql.UniqueIdentifier, value: studentId },
     })
     const hwResult = await hwDb.query(`
-      SELECT h.id, h.resource_book_id, rb.resource_type, s.name AS subject_name,
+      SELECT h.id, h.resource_book_id, h.school_resource_id, rb.resource_type, s.name AS subject_name,
              h.title, h.total_question_count, h.completed_question_count, h.total_page_count, h.status
       FROM dbo.Homeworks h
       INNER JOIN dbo.Subjects s ON s.id = h.subject_id
@@ -546,14 +635,15 @@ async function assignHomeworkTaskHandler(request) {
         title: { type: sql.NVarChar(200), value: `${homework.subject_name} Ödevi` },
         description: { type: sql.NVarChar(1000), value: homework.title },
         subject: { type: sql.NVarChar(100), value: homework.subject_name },
-        taskType: { type: sql.NVarChar(40), value: 'odev' },
+        taskType: { type: sql.NVarChar(40), value: homework.school_resource_id ? 'okul-odevi' : 'odev' },
         startTime: { type: sql.Char(5), value: startTime || null },
         endTime: { type: sql.Char(5), value: endTime || null },
         durationMinutes: { type: sql.Int, value: durationMinutes },
         targetQuestionCount: { type: sql.Int, value: homework.total_question_count || null },
         completedQuestionCount: { type: sql.Int, value: homework.completed_question_count || 0 },
         status: { type: sql.NVarChar(30), value: homework.status || 'bekliyor' },
-        resourceBookId: { type: sql.UniqueIdentifier, value: homework.resource_book_id || null },
+        resourceBookId: { type: sql.UniqueIdentifier, value: homework.school_resource_id ? null : homework.resource_book_id || null },
+        schoolResourceId: { type: sql.UniqueIdentifier, value: homework.school_resource_id || null },
         targetPageCount: {
           type: sql.Int,
           value: homework.resource_type === 'okuma_kitabi' ? homework.total_page_count || null : null,
@@ -564,12 +654,12 @@ async function assignHomeworkTaskHandler(request) {
         INSERT INTO dbo.Tasks (
           student_id, date, title, description, subject, task_type, start_time, end_time,
           duration_minutes, target_question_count, completed_question_count, status,
-          is_draft, resource_book_id, target_page_count, completed_page_count, homework_id
+          is_draft, resource_book_id, school_resource_id, target_page_count, completed_page_count, homework_id
         )
         VALUES (
           @studentId, @date, @title, @description, @subject, @taskType, @startTime, @endTime,
           @durationMinutes, @targetQuestionCount, @completedQuestionCount, @status,
-          0, @resourceBookId, @targetPageCount, 0, @homeworkId
+          0, @resourceBookId, @schoolResourceId, @targetPageCount, 0, @homeworkId
         );
       `)
     }
@@ -657,6 +747,7 @@ module.exports = {
   SELECT_HOMEWORK,
   sanitizeHomework,
   getAssignedResourceBook,
+  getAssignedSchoolResource,
   createTaskForHomework,
   isValidTime,
   computeEndTime,

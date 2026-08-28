@@ -83,6 +83,7 @@ export default function MistakesPage() {
       fetchTopicStats={() => getWrongQuestionTopicStats(selectedStudent.id)}
       fetchPhoto={(id) => getWrongQuestionPhoto(id, selectedStudent.id)}
       updateMistakeReason={(id, mistakeReason) => updateWrongQuestion(id, { mistakeReason }, selectedStudent.id)}
+      updateMistakeMeta={(id, updates) => updateWrongQuestion(id, updates, selectedStudent.id)}
       title="Hata Defteri"
       subtitle={`${selectedStudent.fullName} için fotoğraflanan yanlış sorular ders ders burada.`}
       headerActions={headerActions}

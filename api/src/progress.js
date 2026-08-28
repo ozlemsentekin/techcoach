@@ -486,6 +486,10 @@ async function updateWrongQuestionHandler(request) {
       setClauses.push('student_note = @studentNote')
       bindings.studentNote = { type: sql.NVarChar(1000), value: payload.studentNote || null }
     }
+    if (payload?.topic !== undefined) {
+      setClauses.push('topic = @topic')
+      bindings.topic = { type: sql.NVarChar(200), value: payload.topic || null }
+    }
     if (payload?.mistakeReason !== undefined) {
       if (!MISTAKE_REASONS.includes(payload.mistakeReason)) {
         return json(400, { error: 'Geçersiz hata nedeni.' })

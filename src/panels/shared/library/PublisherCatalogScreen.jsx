@@ -156,7 +156,6 @@ function ResourceBookModal({ publisher, book, subjects, presetSubjectId, onSaved
   const [grade, setGrade] = useState(book?.grade || '')
   const [type, setType] = useState(book?.type || '')
   const [publishMonthYear, setPublishMonthYear] = useState(book?.publishMonthYear || '')
-  const [barcode, setBarcode] = useState(book?.barcode || '')
   const [isActive, setIsActive] = useState(book ? book.isActive : true)
   const [hasAnswerKey, setHasAnswerKey] = useState(book ? book.hasAnswerKey : true)
   const [imageUrl, setImageUrl] = useState(book?.imageUrl || '')
@@ -187,11 +186,6 @@ function ResourceBookModal({ publisher, book, subjects, presetSubjectId, onSaved
       setError('Sınıf seçilmeli.')
       return
     }
-    if (barcode.trim() && !/^\d{4,50}$/.test(barcode.trim())) {
-      setError('Barkod kodu sadece rakamlardan oluşmalı ve 4-50 karakter olmalı.')
-      return
-    }
-
     setError('')
     setLoading(true)
     try {
@@ -206,7 +200,6 @@ function ResourceBookModal({ publisher, book, subjects, presetSubjectId, onSaved
         publishMonthYear: publishMonthYear.trim() || null,
         hasAnswerKey: type === 'soru_bankasi' ? hasAnswerKey : true,
         imageUrl: imageUrl.trim() || null,
-        barcode: barcode.trim() || null,
       }
       const data = isEdit
         ? await authRequest(`/api/panel-admin/resource-books/${book.id}`, {
@@ -354,17 +347,6 @@ function ResourceBookModal({ publisher, book, subjects, presetSubjectId, onSaved
                   </option>
                 ))}
               </select>
-            </label>
-
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-panel-text-muted">Barkod Kodu</span>
-              <input
-                value={barcode}
-                onChange={(event) => setBarcode(event.target.value)}
-                placeholder="Örn. 9789750000000"
-                inputMode="numeric"
-                className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-              />
             </label>
 
             <label className="flex items-center gap-2.5">

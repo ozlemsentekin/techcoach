@@ -13,6 +13,7 @@ export default function MistakesPage() {
       fetchTopicStats={getWrongQuestionTopicStats}
       fetchPhoto={getWrongQuestionPhoto}
       updateMistakeReason={(id, mistakeReason) => updateWrongQuestion(id, { mistakeReason })}
+      updateMistakeMeta={(id, updates) => updateWrongQuestion(id, updates)}
     />
   )
 }

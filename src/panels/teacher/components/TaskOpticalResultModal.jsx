@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
 import { X, CheckCircle2, XCircle, MinusCircle, Camera } from 'lucide-react'
-import { getTeacherStudentWrongQuestionPhoto, getTeacherTaskAnswerSheet } from '../../../services/teacherService'
+import {
+  getTeacherStudentWrongQuestionPhoto,
+  getTeacherTaskAnswerSheet,
+  updateTeacherStudentWrongQuestion,
+} from '../../../services/teacherService'
 import LoadingState from '../../shared/LoadingState'
-import QuestionPhotoViewerModal from '../../shared/QuestionPhotoViewerModal'
+import WrongQuestionGalleryModal from '../../shared/WrongQuestionGalleryModal'
 
 const OPTIONS = ['A', 'B', 'C', 'D']
 // Backend'deki BLANK_ANSWER_LABEL ile eşleşmeli (api/src/tasks.js).
@@ -17,6 +21,26 @@ function getPhotoEntry(photos, key) {
 
 function hasViewablePhoto(entry) {
   return Boolean(entry?.photoUrl || entry?.id)
+}
+
+// Bir testin fotoğraflı yanlış/boş sorularını, WrongQuestionGalleryModal'ın beklediği item
+// şekline çevirir. Konu alanı kayıtlı değilse testin içerik adıyla ön-dolu gelir.
+function buildGalleryItems(test, photos) {
+  const items = []
+  for (let orderNo = 1; orderNo <= test.questionCount; orderNo += 1) {
+    const entry = getPhotoEntry(photos, String(orderNo))
+    if (!entry?.id) continue
+    items.push({
+      id: entry.id,
+      questionNumber: orderNo,
+      testName: test.name,
+      topicName: test.topicName,
+      topic: entry.topic || test.topicName || test.name || '',
+      studentNote: entry.studentNote,
+      mistakeReason: entry.mistakeReason,
+    })
+  }
+  return items
 }
 
 function ResultBadge({ result }) {
@@ -38,7 +62,7 @@ function ResultBadge({ result }) {
 
 // Öğretmen görünümü salt okunur: öğrencinin kaydettiği cevaplar ve doğru/yanlış/boş
 // durumu gösterilir ama düzenlenemez, testler kaldırılamaz.
-function TestSection({ test, photos, onViewPhoto }) {
+function TestSection({ test, photos, onOpenGallery }) {
   const { result, answers } = test
   return (
     <div className="flex min-w-0 flex-col gap-1.5 rounded-2xl border border-panel-border p-2.5">
@@ -106,8 +130,8 @@ function TestSection({ test, photos, onViewPhoto }) {
                     <button
                       type="button"
                       aria-label={`${orderNo}. soru fotoğrafını görüntüle`}
-                      title="Fotoğrafı görüntüle"
-                      onClick={() => onViewPhoto(test, orderNo, photoEntry)}
+                      title="Fotoğrafı görüntüle ve hata analizi yap"
+                      onClick={() => onOpenGallery(test, orderNo)}
                       className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-panel-blue bg-white text-panel-blue transition-colors hover:bg-panel-blue hover:text-white"
                     >
                       <Camera size={13} aria-hidden="true" />
@@ -126,7 +150,8 @@ function TestSection({ test, photos, onViewPhoto }) {
 export default function TaskOpticalResultModal({ task, studentTeacherId, onClose }) {
   const [tests, setTests] = useState(null)
   const [photosByTest, setPhotosByTest] = useState({})
-  const [photoViewer, setPhotoViewer] = useState(null)
+  // { testId, items, index } — açılınca ilgili testin tüm fotoğraflı yanlışları gezilebilir.
+  const [gallery, setGallery] = useState(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -146,6 +171,51 @@ export default function TaskOpticalResultModal({ task, studentTeacherId, onClose
       ignore = true
     }
   }, [studentTeacherId, task.id])
+
+  const openGallery = (test, orderNo) => {
+    const items = buildGalleryItems(test, photosByTest[test.id])
+    const index = Math.max(
+      0,
+      items.findIndex((entry) => entry.questionNumber === orderNo),
+    )
+    setGallery({ testId: test.id, items, index })
+  }
+
+  // Modaldaki güncellemeyi hem galeri item'larına hem de cevap kağıdı foto haritasına yansıt.
+  const applyWrongQuestionUpdate = (wrongQuestionId, patch) => {
+    setGallery((prev) =>
+      prev
+        ? { ...prev, items: prev.items.map((entry) => (entry.id === wrongQuestionId ? { ...entry, ...patch } : entry)) }
+        : prev,
+    )
+    setPhotosByTest((prev) => {
+      const next = { ...prev }
+      for (const testId of Object.keys(next)) {
+        const testPhotos = next[testId]
+        for (const key of Object.keys(testPhotos)) {
+          const entry = getPhotoEntry(testPhotos, key)
+          if (entry?.id === wrongQuestionId) {
+            next[testId] = { ...testPhotos, [key]: { ...entry, ...patch } }
+          }
+        }
+      }
+      return next
+    })
+  }
+
+  const handleUpdateMistakeReason = async (wrongQuestionId, mistakeReason) => {
+    const updated = await updateTeacherStudentWrongQuestion(studentTeacherId, wrongQuestionId, { mistakeReason })
+    applyWrongQuestionUpdate(wrongQuestionId, { mistakeReason: updated.mistakeReason })
+  }
+
+  const handleUpdateMistakeMeta = async (wrongQuestionId, updates) => {
+    const updated = await updateTeacherStudentWrongQuestion(studentTeacherId, wrongQuestionId, updates)
+    const patch = {}
+    if ('topic' in updates) patch.topic = updated.topic || ''
+    if ('studentNote' in updates) patch.studentNote = updated.studentNote || undefined
+    applyWrongQuestionUpdate(wrongQuestionId, patch)
+    return updated
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-black/30 md:items-center md:p-4">
@@ -174,15 +244,7 @@ export default function TaskOpticalResultModal({ task, studentTeacherId, onClose
                   key={test.id}
                   test={test}
                   photos={photosByTest[test.id]}
-                  onViewPhoto={(selectedTest, orderNo, photoEntry) =>
-                    setPhotoViewer({
-                      testId: selectedTest.id,
-                      orderNo,
-                      title: `${selectedTest.name} · ${orderNo}. soru`,
-                      subtitle: selectedTest.topicName,
-                      photo: photoEntry,
-                    })
-                  }
+                  onOpenGallery={openGallery}
                 />
               ))}
             </div>
@@ -190,26 +252,15 @@ export default function TaskOpticalResultModal({ task, studentTeacherId, onClose
         </div>
       </div>
 
-      {photoViewer ? (
-        <QuestionPhotoViewerModal
-          title={photoViewer.title}
-          subtitle={photoViewer.subtitle}
-          photoId={photoViewer.photo?.id}
-          photoUrl={photoViewer.photo?.photoUrl}
+      {gallery && gallery.items.length > 0 ? (
+        <WrongQuestionGalleryModal
+          title={tests?.find((test) => test.id === gallery.testId)?.name || 'Soru'}
+          items={gallery.items}
+          initialIndex={gallery.index}
           fetchPhoto={(wrongQuestionId) => getTeacherStudentWrongQuestionPhoto(studentTeacherId, wrongQuestionId)}
-          onLoaded={(photoUrl) => {
-            setPhotosByTest((prev) => ({
-              ...prev,
-              [photoViewer.testId]: {
-                ...prev[photoViewer.testId],
-                [String(photoViewer.orderNo)]: { ...photoViewer.photo, photoUrl },
-              },
-            }))
-            setPhotoViewer((current) =>
-              current ? { ...current, photo: { ...current.photo, photoUrl } } : current,
-            )
-          }}
-          onClose={() => setPhotoViewer(null)}
+          onUpdateMistakeReason={handleUpdateMistakeReason}
+          onUpdateMistakeMeta={handleUpdateMistakeMeta}
+          onClose={() => setGallery(null)}
         />
       ) : null}
     </div>

@@ -481,6 +481,7 @@ export default function WrongQuestionsView({
   fetchTopicStats,
   fetchPhoto,
   updateMistakeReason,
+  updateMistakeMeta,
   title = 'Hata Defterim',
   subtitle = 'Fotoğrafını çektiğin yanlış sorular ders ders burada.',
   headerActions,
@@ -611,6 +612,23 @@ export default function WrongQuestionsView({
     )
   }
 
+  const handleUpdateMistakeMeta = updateMistakeMeta
+    ? async (wrongQuestionId, updates) => {
+        const updated = await updateMistakeMeta(wrongQuestionId, updates)
+        setWrongQuestions((prev) =>
+          prev
+            ? prev.map((item) => {
+                if (item.id !== wrongQuestionId) return item
+                const next = { ...item }
+                if ('topic' in updates) next.topic = updated.topic || undefined
+                if ('studentNote' in updates) next.studentNote = updated.studentNote || undefined
+                return next
+              })
+            : prev,
+        )
+      }
+    : undefined
+
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
       {activeSource ? (
@@ -729,6 +747,7 @@ export default function WrongQuestionsView({
           fetchPhoto={fetchPhoto}
           onClose={() => setGalleryTopicKey(null)}
           onUpdateMistakeReason={handleUpdateMistakeReason}
+          onUpdateMistakeMeta={handleUpdateMistakeMeta}
         />
       ) : null}
 
@@ -740,6 +759,7 @@ export default function WrongQuestionsView({
           fetchPhoto={fetchPhoto}
           onClose={() => setSourceGallerySelection(null)}
           onUpdateMistakeReason={handleUpdateMistakeReason}
+          onUpdateMistakeMeta={handleUpdateMistakeMeta}
         />
       ) : null}
     </div>

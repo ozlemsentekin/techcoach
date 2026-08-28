@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Loader2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
+import { getPanelSchoolResources } from '../../../services/schoolResourceService'
 import ResourceBookSelect from './ResourceBookSelect'
+import SchoolResourceDropdown from './SchoolResourceDropdown'
 
 export default function EditHomeworkModal({ homework, onSave, onClose }) {
+  const isSchoolHomework = homework.homeworkType === 'okul-odevi' || Boolean(homework.schoolResourceId)
   const [subjectId, setSubjectId] = useState(homework.subjectId || '')
   const [resourceBookId, setResourceBookId] = useState(homework.resourceBookId || '')
+  const [schoolResourceId, setSchoolResourceId] = useState(homework.schoolResourceId || '')
   const [title, setTitle] = useState(homework.title || '')
   const [totalQuestionCount, setTotalQuestionCount] = useState(homework.totalQuestionCount || 0)
   const [completedQuestionCount, setCompletedQuestionCount] = useState(homework.completedQuestionCount || 0)
@@ -14,6 +18,8 @@ export default function EditHomeworkModal({ homework, onSave, onClose }) {
   const [subjectsError, setSubjectsError] = useState('')
   const [resourceBooks, setResourceBooks] = useState(null)
   const [resourceBooksError, setResourceBooksError] = useState('')
+  const [schoolResourceGroups, setSchoolResourceGroups] = useState(null)
+  const [schoolResourceGroupsError, setSchoolResourceGroupsError] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -34,7 +40,7 @@ export default function EditHomeworkModal({ homework, onSave, onClose }) {
   }, [])
 
   useEffect(() => {
-    if (!subjectId) return undefined
+    if (isSchoolHomework || !subjectId) return undefined
 
     let ignore = false
     setResourceBooks(null)
@@ -51,7 +57,34 @@ export default function EditHomeworkModal({ homework, onSave, onClose }) {
     return () => {
       ignore = true
     }
-  }, [subjectId])
+  }, [isSchoolHomework, subjectId])
+
+  useEffect(() => {
+    if (!isSchoolHomework) return undefined
+
+    let ignore = false
+    getPanelSchoolResources()
+      .then((groups) => {
+        if (!ignore) setSchoolResourceGroups(groups)
+      })
+      .catch((err) => {
+        if (!ignore) setSchoolResourceGroupsError(err.message || 'Okul kaynakları yüklenemedi.')
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [isSchoolHomework])
+
+  const schoolResourcesForSubject = useMemo(
+    () => schoolResourceGroups?.find((group) => group.subjectId === subjectId)?.resources || [],
+    [schoolResourceGroups, subjectId],
+  )
+  const selectedSchoolResource =
+    schoolResourcesForSubject.find((resource) => resource.id === schoolResourceId) ||
+    (schoolResourceId
+      ? { id: schoolResourceId, name: homework.schoolResourceName || 'Seçili kaynak', imageUrl: homework.schoolResourceImageUrl }
+      : null)
 
   const resourceBookType = resourceBooks?.find((book) => book.id === resourceBookId)?.type
   const isReadingBook = resourceBookType ? resourceBookType === 'okuma_kitabi' : homework.resourceType === 'okuma_kitabi'
@@ -60,6 +93,7 @@ export default function EditHomeworkModal({ homework, onSave, onClose }) {
     const nextSubjectId = event.target.value
     setSubjectId(nextSubjectId)
     setResourceBookId(nextSubjectId === homework.subjectId ? homework.resourceBookId || '' : '')
+    setSchoolResourceId(nextSubjectId === homework.subjectId ? homework.schoolResourceId || '' : '')
     setResourceBooks(null)
   }
 
@@ -71,7 +105,12 @@ export default function EditHomeworkModal({ homework, onSave, onClose }) {
       setError('Ödev notu boş olamaz.')
       return
     }
-    if (!resourceBookId) {
+    if (isSchoolHomework) {
+      if (!schoolResourceId) {
+        setError('Okul ödevi için bir okul kaynağı seçmelisiniz.')
+        return
+      }
+    } else if (!resourceBookId) {
       setError('Ödev için öğrenciye atanmış bir kaynak seçmelisiniz.')
       return
     }
@@ -79,16 +118,19 @@ export default function EditHomeworkModal({ homework, onSave, onClose }) {
     setSaving(true)
     setError('')
     try {
-      const updates = {
-        title: trimmedTitle,
-        subjectId,
-        resourceBookId,
-      }
-      if (isReadingBook) {
-        updates.totalPageCount = Number(totalPageCount) || 0
-      } else {
+      const updates = { title: trimmedTitle, subjectId }
+      if (isSchoolHomework) {
+        updates.schoolResourceId = schoolResourceId
         updates.totalQuestionCount = Number(totalQuestionCount) || 0
         updates.completedQuestionCount = Number(completedQuestionCount) || 0
+      } else {
+        updates.resourceBookId = resourceBookId
+        if (isReadingBook) {
+          updates.totalPageCount = Number(totalPageCount) || 0
+        } else {
+          updates.totalQuestionCount = Number(totalQuestionCount) || 0
+          updates.completedQuestionCount = Number(completedQuestionCount) || 0
+        }
       }
       await onSave(updates)
     } catch (err) {
@@ -133,26 +175,47 @@ export default function EditHomeworkModal({ homework, onSave, onClose }) {
             {subjectsError ? <span className="text-xs text-panel-warm">{subjectsError}</span> : null}
           </label>
 
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-panel-text-muted">Kaynak</span>
-            <ResourceBookSelect
-              resourceBooks={resourceBooks}
-              value={resourceBookId}
-              onChange={setResourceBookId}
-              disabled={!subjectId || !resourceBooks?.length}
-              variant="panel"
-              placeholder={
-                !subjectId
-                  ? 'Önce ders seçin'
-                  : resourceBooks === null
-                    ? 'Kaynaklar yükleniyor...'
-                    : resourceBooks.length === 0
-                      ? 'Bu derse atanmış kaynak yok'
-                      : 'Kaynak seçin'
-              }
-            />
-            {resourceBooksError ? <span className="text-xs text-panel-warm">{resourceBooksError}</span> : null}
-          </label>
+          {isSchoolHomework ? (
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-panel-text-muted">Okul Kaynağı</span>
+              <SchoolResourceDropdown
+                resources={schoolResourcesForSubject}
+                selectedResource={selectedSchoolResource}
+                onSelect={(resource) => setSchoolResourceId(resource.id)}
+                placeholder={
+                  schoolResourceGroups === null
+                    ? 'Okul kaynakları yükleniyor...'
+                    : schoolResourcesForSubject.length === 0
+                      ? 'Bu derse tanımlı okul kaynağı yok'
+                      : 'Okul kaynağı seçin'
+                }
+              />
+              {schoolResourceGroupsError ? (
+                <span className="text-xs text-panel-warm">{schoolResourceGroupsError}</span>
+              ) : null}
+            </label>
+          ) : (
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-panel-text-muted">Kaynak</span>
+              <ResourceBookSelect
+                resourceBooks={resourceBooks}
+                value={resourceBookId}
+                onChange={setResourceBookId}
+                disabled={!subjectId || !resourceBooks?.length}
+                variant="panel"
+                placeholder={
+                  !subjectId
+                    ? 'Önce ders seçin'
+                    : resourceBooks === null
+                      ? 'Kaynaklar yükleniyor...'
+                      : resourceBooks.length === 0
+                        ? 'Bu derse atanmış kaynak yok'
+                        : 'Kaynak seçin'
+                }
+              />
+              {resourceBooksError ? <span className="text-xs text-panel-warm">{resourceBooksError}</span> : null}
+            </label>
+          )}
 
           <label className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-panel-text-muted">Ödev Notu</span>
@@ -165,7 +228,7 @@ export default function EditHomeworkModal({ homework, onSave, onClose }) {
             />
           </label>
 
-          {isReadingBook ? (
+          {!isSchoolHomework && isReadingBook ? (
             <label className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-panel-text-muted">Sayfa Sayısı</span>
               <input
@@ -205,7 +268,7 @@ export default function EditHomeworkModal({ homework, onSave, onClose }) {
 
           <button
             type="submit"
-            disabled={saving || !resourceBookId}
+            disabled={saving || (isSchoolHomework ? !schoolResourceId : !resourceBookId)}
             className="flex items-center justify-center gap-2 rounded-xl bg-panel-warm px-4 py-3 text-sm font-semibold text-white hover:bg-panel-warm/90 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {saving ? <Loader2 size={16} className="animate-spin" /> : null}

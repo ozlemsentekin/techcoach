@@ -230,6 +230,10 @@ export default function StudentDetailPage() {
     (id, mistakeReason) => updateTeacherStudentWrongQuestion(studentTeacherId, id, { mistakeReason }),
     [studentTeacherId],
   )
+  const updateMistakeMeta = useCallback(
+    (id, updates) => updateTeacherStudentWrongQuestion(studentTeacherId, id, updates),
+    [studentTeacherId],
+  )
 
   if (studentError) {
     return (
@@ -390,6 +394,7 @@ export default function StudentDetailPage() {
           fetchTopicStats={fetchTopicStats}
           fetchPhoto={fetchPhoto}
           updateMistakeReason={updateMistakeReason}
+          updateMistakeMeta={updateMistakeMeta}
           hideHeaderWhenUnselected
         />
       )}

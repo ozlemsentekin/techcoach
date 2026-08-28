@@ -8,6 +8,7 @@ import Badge from '../../ui/Badge'
 import { cn } from '../../ui/utils'
 import { ResourceBookRates } from '../../shared/ResourceBookCard'
 import { filterTopicsBySearch } from '../../shared/homework/topicSearch'
+import SchoolResourceDropdown from '../../shared/homework/SchoolResourceDropdown'
 
 const QUESTION_BANK_HOMEWORK_TASK_TYPE = 'soru-bankasi-odevi'
 const SCHOOL_HOMEWORK_TASK_TYPE = 'okul-odevi'
@@ -227,103 +228,6 @@ function ResourceBookDropdown({ books, selectedBook, onSelect, placeholder }) {
                     setOpen(false)
                   }}
                 />
-              ))}
-            </div>
-          )}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-function SchoolResourceAvatar({ resource, size = 'md' }) {
-  const dimClass = size === 'sm' ? 'h-9 w-9' : 'h-11 w-11'
-  if (resource?.imageUrl) {
-    return (
-      <img
-        loading="lazy"
-        decoding="async"
-        src={resource.imageUrl}
-        alt={`${resource.name} görseli`}
-        className={cn(dimClass, 'shrink-0 rounded-full border border-panel-border object-cover')}
-      />
-    )
-  }
-  return (
-    <span className={cn(dimClass, 'flex shrink-0 items-center justify-center rounded-full bg-panel-warm-soft text-panel-warm')}>
-      <BookOpen size={size === 'sm' ? 16 : 18} aria-hidden="true" />
-    </span>
-  )
-}
-
-// Okul Ödevi için okul+sınıf+ders bazlı okul kaynağı seçimi (bkz. api/src/schoolResources.js).
-// ResourceBookDropdown'un sadeleştirilmiş hâli: yuvarlak profil resmi + kaynak adı.
-function SchoolResourceDropdown({ resources, selectedResource, onSelect, placeholder }) {
-  const [open, setOpen] = useState(false)
-  const containerRef = useRef(null)
-
-  useEffect(() => {
-    if (!open) return undefined
-    const handlePointerDown = (event) => {
-      if (containerRef.current && !containerRef.current.contains(event.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handlePointerDown)
-    return () => document.removeEventListener('mousedown', handlePointerDown)
-  }, [open])
-
-  return (
-    <div ref={containerRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-3 rounded-xl border border-panel-border bg-white p-2.5 text-left shadow-sm outline-none transition-colors hover:border-panel-warm focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-      >
-        {selectedResource ? (
-          <>
-            <SchoolResourceAvatar resource={selectedResource} />
-            <span className="line-clamp-1 flex-1 text-sm font-semibold text-panel-text">{selectedResource.name}</span>
-          </>
-        ) : (
-          <span className="flex-1 py-1.5 text-sm text-panel-text-muted">{placeholder}</span>
-        )}
-        <ChevronDown
-          size={16}
-          className={cn('shrink-0 text-panel-text-muted transition-transform', open && 'rotate-180')}
-          aria-hidden="true"
-        />
-      </button>
-
-      {open ? (
-        <div className="absolute z-10 mt-2 max-h-72 w-full overflow-y-auto rounded-xl border border-panel-border bg-white p-2 shadow-lg">
-          {resources.length === 0 ? (
-            <p className="p-3 text-sm text-panel-text-muted">Bu derse tanımlı okul kaynağı yok.</p>
-          ) : (
-            <div className="flex flex-col gap-1">
-              {resources.map((resource) => (
-                <button
-                  key={resource.id}
-                  type="button"
-                  onClick={() => {
-                    onSelect(resource)
-                    setOpen(false)
-                  }}
-                  aria-pressed={selectedResource?.id === resource.id}
-                  className={cn(
-                    'flex items-center gap-3 rounded-lg border p-2 text-left transition-colors',
-                    selectedResource?.id === resource.id
-                      ? 'border-panel-blue bg-panel-blue-soft/45'
-                      : 'border-transparent hover:bg-panel-warm-soft/50',
-                  )}
-                >
-                  <SchoolResourceAvatar resource={resource} size="sm" />
-                  <span className="line-clamp-1 flex-1 text-sm font-medium text-panel-text">{resource.name}</span>
-                  {selectedResource?.id === resource.id ? (
-                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-panel-blue text-white">
-                      <Check size={12} strokeWidth={3} aria-hidden="true" />
-                    </span>
-                  ) : null}
-                </button>
               ))}
             </div>
           )}

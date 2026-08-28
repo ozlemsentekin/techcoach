@@ -39,6 +39,7 @@ const {
   updateSchoolResourceHandler,
   deleteSchoolResourceHandler,
   getPanelSchoolResourcesHandler,
+  getTeacherStudentSchoolResourcesHandler,
 } = require('./schoolResources')
 const {
   listTeacherStudentsHandler,
@@ -606,6 +607,13 @@ app.http('panel-teacher-homeworks-list', {
   methods: ['GET'],
   route: 'panel-teacher/students/{studentTeacherId}/homeworks',
   handler: listTeacherStudentHomeworksHandler,
+})
+
+app.http('panel-teacher-school-resources-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/school-resources',
+  handler: getTeacherStudentSchoolResourcesHandler,
 })
 
 app.http('panel-teacher-homeworks-create', {

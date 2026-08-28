@@ -831,14 +831,20 @@ async function fetchTaskAnswerSheetData(taskId, studentId) {
 
   const photosDb = await withRequest({ taskId: { type: sql.UniqueIdentifier, value: taskId } })
   const photosResult = await photosDb.query(`
-    SELECT id, test_id, question_number, 1 AS has_photo FROM dbo.WrongQuestions
+    SELECT id, test_id, question_number, topic, student_note, mistake_reason, 1 AS has_photo FROM dbo.WrongQuestions
     WHERE task_id = @taskId AND photo_url IS NOT NULL;
   `)
   const photos = {}
   photosResult.recordset.forEach((row) => {
     if (!row.test_id) return
     photos[row.test_id] = photos[row.test_id] || {}
-    photos[row.test_id][row.question_number] = { id: row.id, hasPhoto: Boolean(row.has_photo) }
+    photos[row.test_id][row.question_number] = {
+      id: row.id,
+      hasPhoto: Boolean(row.has_photo),
+      topic: row.topic || undefined,
+      studentNote: row.student_note || undefined,
+      mistakeReason: row.mistake_reason || undefined,
+    }
   })
 
   return { tests, photos }

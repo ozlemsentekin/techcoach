@@ -248,6 +248,12 @@ export async function getTeacherStudentHomeworks(studentTeacherId) {
   return data.homeworks
 }
 
+/** Okul Ödevi için: öğrencinin okulu/sınıfı ve öğretmenin dersi için tanımlı okul kaynakları. */
+export async function getTeacherStudentSchoolResources(studentTeacherId) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/school-resources`, { method: 'GET' })
+  return data.resources || []
+}
+
 /** @returns {Promise<Object>} */
 export async function addTeacherHomework(studentTeacherId, payload) {
   const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/homeworks`, {

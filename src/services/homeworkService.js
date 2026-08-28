@@ -39,7 +39,9 @@ export async function getHomeworks() {
 /** @returns {Promise<Homework>} */
 export async function addHomework({
   subjectId,
+  homeworkType,
   resourceBookId,
+  schoolResourceId,
   testIds,
   title,
   description,
@@ -56,7 +58,9 @@ export async function addHomework({
     method: 'POST',
     body: JSON.stringify({
       subjectId,
+      homeworkType,
       resourceBookId,
+      schoolResourceId,
       testIds,
       title,
       description,

@@ -5,7 +5,14 @@ import { todayISODate } from '../../../utils/time'
 import Badge from '../../ui/Badge'
 import { cn } from '../../ui/utils'
 import ResourceBookSelect from '../../shared/homework/ResourceBookSelect'
+import SchoolResourceDropdown from '../../shared/homework/SchoolResourceDropdown'
 import { filterTopicsBySearch } from '../../shared/homework/topicSearch'
+import { getPanelSchoolResources } from '../../../services/schoolResourceService'
+
+const HOMEWORK_TYPE_OPTIONS = [
+  { id: 'soru-bankasi-odevi', label: 'Soru Bankası Ödevi' },
+  { id: 'okul-odevi', label: 'Okul Ödevi' },
+]
 
 function buildNote(resourceBookName, topics, selectedTestIds) {
   const lines = []
@@ -31,9 +38,13 @@ function sumSelectedQuestions(topics, selectedTestIds) {
 }
 
 export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, panelRole = 'student' }) {
+  const [homeworkType, setHomeworkType] = useState('soru-bankasi-odevi')
   const [subject, setSubject] = useState('')
   const [subjectId, setSubjectId] = useState('')
   const [resourceBookId, setResourceBookId] = useState('')
+  const [schoolResourceId, setSchoolResourceId] = useState('')
+  const [schoolResourceGroups, setSchoolResourceGroups] = useState(null)
+  const [schoolResourceGroupsError, setSchoolResourceGroupsError] = useState('')
   const [note, setNote] = useState('')
   const [totalQuestionCount, setTotalQuestionCount] = useState(0)
   const [totalPageCount, setTotalPageCount] = useState(0)
@@ -92,8 +103,27 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
     }
   }, [subjectId])
 
+  const isSchoolHomework = homeworkType === 'okul-odevi'
+
   useEffect(() => {
-    if (!resourceBookId) return undefined
+    if (!isSchoolHomework || schoolResourceGroups !== null || schoolResourceGroupsError) return undefined
+
+    let ignore = false
+    getPanelSchoolResources()
+      .then((groups) => {
+        if (!ignore) setSchoolResourceGroups(groups)
+      })
+      .catch((err) => {
+        if (!ignore) setSchoolResourceGroupsError(err.message || 'Okul kaynakları yüklenemedi.')
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [isSchoolHomework, schoolResourceGroups, schoolResourceGroupsError])
+
+  useEffect(() => {
+    if (!resourceBookId || isSchoolHomework) return undefined
 
     let ignore = false
 
@@ -108,7 +138,7 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
     return () => {
       ignore = true
     }
-  }, [resourceBookId])
+  }, [resourceBookId, isSchoolHomework])
 
   const selectedBook = resourceBooks?.find((book) => book.id === resourceBookId) || null
   const resourceBookType = selectedBook?.type
@@ -134,23 +164,43 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
   const primaryButtonClass = isStudentPanel
     ? 'bg-student-theme-primary text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline-student-theme-primary'
     : 'bg-panel-warm text-white hover:bg-panel-warm/90 focus-visible:outline-panel-warm'
-  const needsContentWidth = Boolean(resourceBookId && !isReadingBook)
+  const needsContentWidth = Boolean(resourceBookId && !isReadingBook && !isSchoolHomework)
   const filteredTopics = useMemo(
     () => (topics ? filterTopicsBySearch(topics, searchQuery) : topics),
     [topics, searchQuery],
   )
 
+  const schoolResourcesForSubject =
+    schoolResourceGroups?.find((group) => group.subjectId === subjectId)?.resources || []
+  const selectedSchoolResource =
+    schoolResourcesForSubject.find((resource) => resource.id === schoolResourceId) || null
+
   useEffect(() => {
-    if (isReadingBook) return
+    if (isReadingBook || isSchoolHomework) return
     setNote(buildNote(selectedBook?.name || '', topics, selectedTestIds))
     setTotalQuestionCount(sumSelectedQuestions(topics, selectedTestIds))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTestIds, topics, isReadingBook])
+  }, [selectedTestIds, topics, isReadingBook, isSchoolHomework])
 
   useEffect(() => {
-    if (!isReadingBook) return
+    if (!isReadingBook || isSchoolHomework) return
     setNote(totalPageCount ? `${totalPageCount} Sayfa okunacak` : '')
-  }, [isReadingBook, totalPageCount])
+  }, [isReadingBook, isSchoolHomework, totalPageCount])
+
+  const handleHomeworkTypeChange = (nextType) => {
+    if (nextType === homeworkType) return
+    setHomeworkType(nextType)
+    setResourceBookId('')
+    setSchoolResourceId('')
+    setTopics(null)
+    setSelectedTestIds(new Set())
+    setCollapsedTopicIds(new Set())
+    setSearchQuery('')
+    setTotalPageCount(0)
+    setTotalQuestionCount(0)
+    setNote('')
+    setSaveError('')
+  }
 
   const handleSubjectChange = (event) => {
     const nextSubjectId = event.target.value
@@ -159,6 +209,7 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
     setSubject(nextSubject?.name || '')
     setResourceBookId('')
     setResourceBooks(null)
+    setSchoolResourceId('')
     setTopics(null)
     setSelectedTestIds(new Set())
     setCollapsedTopicIds(new Set())
@@ -196,7 +247,16 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
     event.preventDefault()
     if (saving) return
     const trimmedNote = note.trim()
-    if (!resourceBookId) {
+    if (isSchoolHomework) {
+      if (!subjectId) {
+        setSaveError('Okul ödevi için ders seçmelisiniz.')
+        return
+      }
+      if (!schoolResourceId) {
+        setSaveError('Okul ödevi için bir okul kaynağı seçmelisiniz.')
+        return
+      }
+    } else if (!resourceBookId) {
       setSaveError('Ödev için öğrenciye atanmış bir kaynak seçmelisiniz.')
       return
     }
@@ -210,14 +270,16 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
       await onSave({
         subject: subject.trim(),
         subjectId: subjectId || undefined,
-        resourceBookId: resourceBookId || undefined,
-        testIds: resourceBookId ? Array.from(selectedTestIds) : undefined,
+        homeworkType,
+        resourceBookId: isSchoolHomework ? undefined : resourceBookId || undefined,
+        schoolResourceId: isSchoolHomework ? schoolResourceId || undefined : undefined,
+        testIds: isSchoolHomework ? undefined : resourceBookId ? Array.from(selectedTestIds) : undefined,
         title: trimmedNote.slice(0, 200),
         description: trimmedNote,
         assignedDate,
         dueDate: taskDate || assignedDate,
         totalQuestionCount: Number(totalQuestionCount) || 0,
-        totalPageCount: isReadingBook ? Number(totalPageCount) || 0 : undefined,
+        totalPageCount: !isSchoolHomework && isReadingBook ? Number(totalPageCount) || 0 : undefined,
         taskDate: taskDate || undefined,
         taskTime: taskDate ? taskTime || '00:00' : undefined,
       })
@@ -240,7 +302,11 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-panel-border px-4 py-3 sm:px-6">
           <div className="min-w-0">
             <h2 className="truncate text-base font-semibold text-panel-text">Ödev Ekle</h2>
-            <p className="mt-0.5 truncate text-xs text-panel-text-muted">{selectedBook?.name || 'Ders ve kaynak seçin'}</p>
+            <p className="mt-0.5 truncate text-xs text-panel-text-muted">
+              {isSchoolHomework
+                ? selectedSchoolResource?.name || 'Ders ve okul kaynağı seçin'
+                : selectedBook?.name || 'Ders ve kaynak seçin'}
+            </p>
           </div>
           <button
             type="button"
@@ -254,6 +320,30 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-panel-text-muted">Ödev türü</span>
+              <div className="grid grid-cols-2 gap-2">
+                {HOMEWORK_TYPE_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-pressed={homeworkType === option.id}
+                    onClick={() => handleHomeworkTypeChange(option.id)}
+                    className={cn(
+                      'rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors',
+                      homeworkType === option.id
+                        ? isStudentPanel
+                          ? 'border-student-theme-primary bg-student-theme-soft text-student-theme-text'
+                          : 'border-panel-blue bg-panel-blue-soft/50 text-panel-blue'
+                        : 'border-panel-border bg-panel-surface text-panel-text-muted hover:border-panel-warm',
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <label className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-panel-text-muted">Ders</span>
               <select
@@ -275,28 +365,51 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
               {subjectsError ? <span className="text-xs text-panel-warm">{subjectsError}</span> : null}
             </label>
 
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-panel-text-muted">Kaynak</span>
-              <ResourceBookSelect
-                resourceBooks={resourceBooks}
-                value={resourceBookId}
-                onChange={(bookId) => handleResourceBookChange({ target: { value: bookId } })}
-                disabled={!subjectId || !resourceBooks?.length}
-                variant={isStudentPanel ? 'student' : 'panel'}
-                placeholder={
-                  !subjectId
-                    ? 'Önce ders seçin'
-                    : resourceBooks === null
-                      ? 'Kaynaklar yükleniyor...'
-                      : resourceBooks.length === 0
-                        ? 'Bu derse atanmış kaynak yok'
-                        : 'Kaynak seçin'
-                }
-              />
-              {resourceBooksError ? <span className="text-xs text-panel-warm">{resourceBooksError}</span> : null}
-            </label>
+            {isSchoolHomework ? (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-panel-text-muted">Okul Kaynağı</span>
+                <SchoolResourceDropdown
+                  resources={schoolResourcesForSubject}
+                  selectedResource={selectedSchoolResource}
+                  onSelect={(resource) => setSchoolResourceId(resource.id)}
+                  placeholder={
+                    !subjectId
+                      ? 'Önce ders seçin'
+                      : schoolResourceGroups === null
+                        ? 'Okul kaynakları yükleniyor...'
+                        : schoolResourcesForSubject.length === 0
+                          ? 'Bu derse tanımlı okul kaynağı yok'
+                          : 'Okul kaynağı seçin'
+                  }
+                />
+                {schoolResourceGroupsError ? (
+                  <span className="text-xs text-panel-warm">{schoolResourceGroupsError}</span>
+                ) : null}
+              </label>
+            ) : (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-panel-text-muted">Kaynak</span>
+                <ResourceBookSelect
+                  resourceBooks={resourceBooks}
+                  value={resourceBookId}
+                  onChange={(bookId) => handleResourceBookChange({ target: { value: bookId } })}
+                  disabled={!subjectId || !resourceBooks?.length}
+                  variant={isStudentPanel ? 'student' : 'panel'}
+                  placeholder={
+                    !subjectId
+                      ? 'Önce ders seçin'
+                      : resourceBooks === null
+                        ? 'Kaynaklar yükleniyor...'
+                        : resourceBooks.length === 0
+                          ? 'Bu derse atanmış kaynak yok'
+                          : 'Kaynak seçin'
+                  }
+                />
+                {resourceBooksError ? <span className="text-xs text-panel-warm">{resourceBooksError}</span> : null}
+              </label>
+            )}
 
-            {resourceBookId && !isReadingBook ? (
+            {!isSchoolHomework && resourceBookId && !isReadingBook ? (
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-medium text-panel-text-muted">Testler</span>
@@ -425,7 +538,7 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
                 </div>
               </div>
 
-              {isReadingBook ? (
+              {!isSchoolHomework && isReadingBook ? (
                 <label className="flex flex-col gap-1.5">
                   <span className="text-xs font-medium text-panel-text-muted">Sayfa Sayısı</span>
                   <input
@@ -459,7 +572,7 @@ export default function AddHomeworkModal({ onSave, onClose, defaultTaskDate, pan
           {saveError ? <p className="mb-2 text-xs text-panel-warm">{saveError}</p> : null}
           <button
             type="submit"
-            disabled={saving || !resourceBookId}
+            disabled={saving || (isSchoolHomework ? !schoolResourceId : !resourceBookId)}
             className={cn(
               'flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-70',
               primaryButtonClass,

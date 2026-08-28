@@ -4,6 +4,7 @@ const { clearSessionHeaders, json } = require('./http')
 const { isSessionError } = require('./security')
 const { requireAdmin } = require('./admin')
 const { requireStudentContext } = require('./studentScope')
+const { requireTeacherStudentContext } = require('./teacherScope')
 
 const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const GRADE_OPTIONS = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'])
@@ -309,10 +310,62 @@ async function getPanelSchoolResourcesHandler(request) {
   }
 }
 
+// Öğretmen öğrenci detayında "Okul Ödevi" atarken: öğrencinin okulu + sınıfı ve
+// öğretmenin dersi (StudentTeachers.subject_id) için tanımlı aktif okul kaynakları.
+// Tek ders olduğundan grup yerine düz bir liste döner.
+async function getTeacherStudentSchoolResourcesHandler(request) {
+  try {
+    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    const profileDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const profileResult = await profileDb.query(`
+      SELECT school_id, grade FROM dbo.StudentProfiles WHERE student_id = @studentId;
+    `)
+    const profile = profileResult.recordset[0]
+    if (!profile?.school_id || !profile?.grade || !subjectId) {
+      return json(200, { resources: [] })
+    }
+
+    const requestDb = await withRequest({
+      schoolId: { type: sql.UniqueIdentifier, value: profile.school_id },
+      grade: { type: sql.NVarChar(20), value: profile.grade },
+      subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+    })
+    const result = await requestDb.query(`
+      SELECT scr.id, scr.name, scr.image_url
+      FROM dbo.SchoolClassResources scr
+      WHERE scr.school_id = @schoolId AND scr.grade = @grade
+        AND scr.subject_id = @subjectId AND scr.is_active = 1
+      ORDER BY scr.name ASC;
+    `)
+
+    return json(200, {
+      resources: result.recordset.map((row) => ({
+        id: row.id,
+        name: row.name,
+        imageUrl: row.image_url || null,
+      })),
+    })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+    console.error('getTeacherStudentSchoolResourcesHandler failed', error)
+    return json(500, { error: 'Okul kaynakları yüklenemedi.' })
+  }
+}
+
 module.exports = {
   listSchoolResourcesHandler,
   createSchoolResourceHandler,
   updateSchoolResourceHandler,
   deleteSchoolResourceHandler,
   getPanelSchoolResourcesHandler,
+  getTeacherStudentSchoolResourcesHandler,
 }

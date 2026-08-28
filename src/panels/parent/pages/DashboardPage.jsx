@@ -468,6 +468,7 @@ export default function DashboardPage() {
           task={answerSheetTask}
           lessonLabel={answerSheetTask.subject || 'Görev'}
           photoMode="view"
+          studentId={selectedStudentId}
           onClose={() => setAnswerSheetTask(null)}
           onSaved={(updatedTask) => {
             setTasks((prev) => prev.map((item) => (item.id === updatedTask.id ? updatedTask : item)))
