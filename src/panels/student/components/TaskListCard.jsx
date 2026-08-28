@@ -14,6 +14,7 @@ import {
   Coffee,
   Utensils,
   XCircle,
+  StickyNote,
 } from 'lucide-react'
 import { calculateNet } from '../../../utils/netCalculator'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
@@ -471,6 +472,15 @@ export default function TaskListCard({
                   {item}
                 </p>
               ))}
+            </div>
+          ) : null}
+
+          {task.parentNote ? (
+            <div className="mt-1.5 flex items-start gap-1.5 rounded-[10px] bg-panel-yellow-soft/60 px-2 py-1 text-xs leading-snug text-panel-text sm:mt-2 sm:text-sm">
+              <StickyNote size={14} className="mt-0.5 shrink-0 text-panel-yellow" aria-hidden="true" />
+              <span className="min-w-0">
+                <span className="font-semibold">Görev notu:</span> {task.parentNote}
+              </span>
             </div>
           ) : null}
 
