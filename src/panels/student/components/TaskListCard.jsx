@@ -59,16 +59,23 @@ function getPrimaryText(task, details) {
 }
 
 function getSecondaryItems(details) {
+  const items = []
   if (details.testGroups.length) {
-    return details.testGroups.map((item) => {
-      if (item.topic && item.testName) return `${item.topic}: ${item.testName}`
-      return item.topic || item.testName
-    })
+    items.push(
+      ...details.testGroups.map((item) => {
+        if (item.topic && item.testName) return `${item.topic}: ${item.testName}`
+        return item.topic || item.testName
+      }),
+    )
+  } else if (details.testTopic || details.testName) {
+    items.push(`${details.testTopic || ''}${details.testTopic && details.testName ? ': ' : ''}${details.testName || ''}`)
   }
-  if (details.testTopic || details.testName) {
-    return [`${details.testTopic || ''}${details.testTopic && details.testName ? ': ' : ''}${details.testName || ''}`]
+  // Kaynak birincil metinde gösterildiğinde (ör. Okul Ödevi), veli/öğretmenin yazdığı serbest
+  // metin görev açıklaması ikincil satır olarak görünsün — aksi halde öğrencinin akışında kaybolur.
+  if (details.kaynak && details.rawText) {
+    items.push(details.rawText)
   }
-  return []
+  return items
 }
 
 function isTimerRunning(task) {
