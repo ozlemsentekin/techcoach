@@ -5,7 +5,7 @@ import { initiateIyzicoCheckout } from '../services/paymentService'
 import './LandingPage.css'
 
 const BILLING_OPTIONS = {
-  monthly: { price: '3000', period: 'TL / ay' },
+  monthly: { price: '1', period: 'TL / ay' },
   yearly: { price: '24000', period: 'TL / yıl', badge: '%20 indirim' },
 }
 
