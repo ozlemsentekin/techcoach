@@ -98,7 +98,7 @@ async function initiateIyzicoCheckoutHandler(request) {
         surname,
         identityNumber,
         email: parent.email || undefined,
-        gsmNumber: parent.phone_number ? `+9${parent.phone_number}` : undefined,
+        gsmNumber: parent.phone_number || undefined,
         billingAddress,
         shippingAddress: billingAddress,
       },
