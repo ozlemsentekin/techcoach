@@ -20,7 +20,6 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
   const isEdit = Boolean(book)
   const effectiveSubjectId = book?.subjectId || subject?.id
   const [name, setName] = useState(book?.name || '')
-  const [pageCount, setPageCount] = useState(book ? String(book.pageCount) : '')
   const [publisherId, setPublisherId] = useState(book?.publisherId || '')
   const [type, setType] = useState(book?.type || '')
   const [grade, setGrade] = useState(book?.grade || '')
@@ -41,11 +40,6 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
       setError('Kaynak kitap adı en az 2 karakter olmalı.')
       return
     }
-    const pageCountNumber = Number(pageCount)
-    if (!Number.isInteger(pageCountNumber) || pageCountNumber <= 0) {
-      setError('Sayfa sayısı pozitif bir tam sayı olmalı.')
-      return
-    }
     if (!type) {
       setError('Kaynak tipi seçilmeli.')
       return
@@ -62,7 +56,6 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
         publisherId,
         subjectId: effectiveSubjectId,
         name: name.trim(),
-        pageCount: pageCountNumber,
         isActive,
         type,
         grade,
@@ -173,17 +166,6 @@ function ResourceBookModal({ subject, book, publishers, onSaved, onClose }) {
             </select>
           </label>
 
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">Sayfa Sayısı</span>
-            <input
-              type="number"
-              min="1"
-              value={pageCount}
-              onChange={(event) => setPageCount(event.target.value)}
-              className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-            />
-          </label>
-
           <ResourceImageField value={imageUrl} onChange={setImageUrl} />
 
           {type === 'soru_bankasi' ? (
@@ -236,7 +218,6 @@ function BookRow({ book, publishersById, onEditBook, onToggleActive, onPreviewIm
           <Pencil size={13} aria-hidden="true" />
         </button>
         <span className="text-xs text-[#667475]">{publishersById[book.publisherId]?.name || '—'}</span>
-        <span className="text-xs text-[#667475]">· {book.pageCount} sayfa</span>
       </div>
       <button
         type="button"
@@ -351,7 +332,6 @@ export default function AdminSubjectsPage() {
           publisherId: book.publisherId,
           subjectId: book.subjectId,
           name: book.name,
-          pageCount: book.pageCount,
           isActive: !book.isActive,
           type: book.type,
           grade: book.grade,

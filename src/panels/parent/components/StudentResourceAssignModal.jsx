@@ -222,9 +222,6 @@ export default function StudentResourceAssignModal({ student, onSaved, onClose }
                         <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#1c2b5e]">
                           {RESOURCE_BOOK_TYPE_LABELS[book.type] || book.type}
                         </span>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-panel-text-muted">
-                          {book.pageCount} sayfa
-                        </span>
                       </span>
                     </span>
                   </button>

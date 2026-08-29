@@ -2681,7 +2681,7 @@ async function getTeacherStudentProgressOverviewHandler(request) {
         withRequest(bindings).then((requestDb) =>
           requestDb.query(`
             SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-                   rb.name, rb.page_count, rb.resource_type, rb.has_answer_key
+                   rb.name, rb.resource_type, rb.has_answer_key
             FROM dbo.StudentResourceBooks srb
             INNER JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id
             LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id

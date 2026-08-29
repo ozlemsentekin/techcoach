@@ -30,7 +30,6 @@ CREATE TABLE dbo.ResourceBooks (
     id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWID(),
     publisher_id UNIQUEIDENTIFIER NOT NULL CONSTRAINT FK_ResourceBooks_PublisherId REFERENCES dbo.Publishers(id),
     name NVARCHAR(200) NOT NULL,
-    page_count INT NOT NULL CONSTRAINT CK_ResourceBooks_PageCount CHECK (page_count > 0),
     created_at DATETIME2 NOT NULL CONSTRAINT DF_ResourceBooks_CreatedAt DEFAULT SYSUTCDATETIME()
 );
 GO

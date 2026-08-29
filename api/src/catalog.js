@@ -62,7 +62,6 @@ function sanitizeResourceBook(record) {
     subjectId: record.subject_id,
     subjectName: record.subject_name || null,
     name: record.name,
-    pageCount: record.page_count,
     isActive: Boolean(record.is_active),
     type: record.resource_type,
     hasAnswerKey: Boolean(record.has_answer_key),
@@ -373,7 +372,7 @@ async function listResourceBooksHandler(request) {
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
       SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.publish_year, rb.publish_month_year, rb.grade, rb.resource_source, rb.created_at,
+             rb.name, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.publish_year, rb.publish_month_year, rb.grade, rb.resource_source, rb.created_at,
              rb.status, rb.created_by_role, rb.created_by_user_id, rb.rejection_reason, u.full_name AS created_by_name
       FROM dbo.ResourceBooks rb
       LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
@@ -420,7 +419,7 @@ async function listResourceBooksMissingAnswerKeyHandler(request) {
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
       SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.publish_month_year, rb.grade, rb.created_at,
+             rb.name, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.publish_month_year, rb.grade, rb.created_at,
              COUNT(tt.id) AS total_test_count,
              SUM(CASE WHEN tt.question_count > ISNULL(ak.answer_count, 0) THEN 1 ELSE 0 END) AS incomplete_test_count
       FROM dbo.ResourceBooks rb
@@ -434,7 +433,7 @@ async function listResourceBooksMissingAnswerKeyHandler(request) {
         GROUP BY test_id
       ) ak ON ak.test_id = tt.id
       WHERE rb.resource_type = 'soru_bankasi' AND rb.has_answer_key = 1
-      GROUP BY rb.id, rb.publisher_id, p.name, rb.subject_id, s.name, rb.name, rb.page_count,
+      GROUP BY rb.id, rb.publisher_id, p.name, rb.subject_id, s.name, rb.name,
                rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.publish_month_year, rb.grade, rb.created_at
       HAVING SUM(CASE WHEN tt.question_count > ISNULL(ak.answer_count, 0) THEN 1 ELSE 0 END) > 0
       ORDER BY s.name ASC, rb.name ASC;
@@ -475,7 +474,7 @@ async function listResourceBooksForPanelHandler(request) {
     )
     const result = await requestDb.query(`
       SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-             rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, ${imageColumn},
+             rb.name, rb.is_active, rb.resource_type, rb.has_answer_key, ${imageColumn},
              rb.publish_month_year, rb.grade, rb.resource_source, rb.created_at
       FROM dbo.StudentResourceBooks srb
       INNER JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id
@@ -526,7 +525,6 @@ async function createResourceBookHandler(request) {
     const name = payload?.name?.trim()
     const publisherId = payload?.publisherId
     const subjectId = payload?.subjectId || null
-    const pageCount = Number(payload?.pageCount)
     const isActive = payload?.isActive !== false
     const type = payload?.type
     const hasAnswerKey = payload?.hasAnswerKey !== false
@@ -542,9 +540,6 @@ async function createResourceBookHandler(request) {
     }
     if (!name || name.length < 2) {
       return json(400, { error: 'Kaynak kitap adı en az 2 karakter olmalı.' })
-    }
-    if (!Number.isInteger(pageCount) || pageCount <= 0) {
-      return json(400, { error: 'Sayfa sayısı pozitif bir tam sayı olmalı.' })
     }
     if (!RESOURCE_BOOK_TYPES.includes(type)) {
       return json(400, { error: 'Kaynak tipi seçilmeli.' })
@@ -563,7 +558,6 @@ async function createResourceBookHandler(request) {
       publisherId: { type: sql.UniqueIdentifier, value: publisherId },
       subjectId: { type: sql.UniqueIdentifier, value: subjectId },
       name: { type: sql.NVarChar(200), value: name },
-      pageCount: { type: sql.Int, value: pageCount },
       isActive: { type: sql.Bit, value: isActive },
       resourceType: { type: sql.NVarChar(30), value: type },
       hasAnswerKey: { type: sql.Bit, value: hasAnswerKey },
@@ -574,9 +568,9 @@ async function createResourceBookHandler(request) {
     })
 
     const result = await requestDb.query(`
-      INSERT INTO dbo.ResourceBooks (publisher_id, subject_id, name, page_count, is_active, resource_type, has_answer_key, image_url, publish_month_year, grade, resource_source)
-      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.page_count, inserted.is_active, inserted.resource_type, inserted.has_answer_key, inserted.image_url, inserted.publish_month_year, inserted.grade, inserted.resource_source, inserted.created_at
-      VALUES (@publisherId, @subjectId, @name, @pageCount, @isActive, @resourceType, @hasAnswerKey, @imageUrl, @publishMonthYear, @grade, @resourceSource);
+      INSERT INTO dbo.ResourceBooks (publisher_id, subject_id, name, is_active, resource_type, has_answer_key, image_url, publish_month_year, grade, resource_source)
+      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.is_active, inserted.resource_type, inserted.has_answer_key, inserted.image_url, inserted.publish_month_year, inserted.grade, inserted.resource_source, inserted.created_at
+      VALUES (@publisherId, @subjectId, @name, @isActive, @resourceType, @hasAnswerKey, @imageUrl, @publishMonthYear, @grade, @resourceSource);
     `)
 
     return json(201, { resourceBook: sanitizeResourceBook(result.recordset[0]) })
@@ -606,7 +600,6 @@ async function updateResourceBookHandler(request) {
     const name = payload?.name?.trim()
     const publisherId = payload?.publisherId
     const subjectId = payload?.subjectId || null
-    const pageCount = Number(payload?.pageCount)
     const isActive = payload?.isActive !== false
     const type = payload?.type
     const hasAnswerKey = payload?.hasAnswerKey !== false
@@ -622,9 +615,6 @@ async function updateResourceBookHandler(request) {
     }
     if (!name || name.length < 2) {
       return json(400, { error: 'Kaynak kitap adı en az 2 karakter olmalı.' })
-    }
-    if (!Number.isInteger(pageCount) || pageCount <= 0) {
-      return json(400, { error: 'Sayfa sayısı pozitif bir tam sayı olmalı.' })
     }
     if (!RESOURCE_BOOK_TYPES.includes(type)) {
       return json(400, { error: 'Kaynak tipi seçilmeli.' })
@@ -644,7 +634,6 @@ async function updateResourceBookHandler(request) {
       publisherId: { type: sql.UniqueIdentifier, value: publisherId },
       subjectId: { type: sql.UniqueIdentifier, value: subjectId },
       name: { type: sql.NVarChar(200), value: name },
-      pageCount: { type: sql.Int, value: pageCount },
       isActive: { type: sql.Bit, value: isActive },
       resourceType: { type: sql.NVarChar(30), value: type },
       hasAnswerKey: { type: sql.Bit, value: hasAnswerKey },
@@ -656,8 +645,8 @@ async function updateResourceBookHandler(request) {
 
     const result = await requestDb.query(`
       UPDATE dbo.ResourceBooks
-      SET publisher_id = @publisherId, subject_id = @subjectId, name = @name, page_count = @pageCount, is_active = @isActive, resource_type = @resourceType, has_answer_key = @hasAnswerKey, image_url = @imageUrl, publish_month_year = @publishMonthYear, grade = @grade, resource_source = @resourceSource
-      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.page_count, inserted.is_active, inserted.resource_type, inserted.has_answer_key, inserted.image_url, inserted.publish_month_year, inserted.grade, inserted.resource_source, inserted.created_at
+      SET publisher_id = @publisherId, subject_id = @subjectId, name = @name, is_active = @isActive, resource_type = @resourceType, has_answer_key = @hasAnswerKey, image_url = @imageUrl, publish_month_year = @publishMonthYear, grade = @grade, resource_source = @resourceSource
+      OUTPUT inserted.id, inserted.publisher_id, inserted.subject_id, inserted.name, inserted.is_active, inserted.resource_type, inserted.has_answer_key, inserted.image_url, inserted.publish_month_year, inserted.grade, inserted.resource_source, inserted.created_at
       WHERE id = @id;
     `)
 
@@ -683,7 +672,7 @@ async function updateResourceBookHandler(request) {
 
 const LIBRARY_RESOURCE_BOOK_SELECT = `
   SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-         rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url,
+         rb.name, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url,
          rb.publish_year, rb.publish_month_year, rb.grade, rb.resource_source, rb.status,
          rb.created_by_role, rb.created_by_user_id, rb.rejection_reason, rb.created_at
   FROM dbo.ResourceBooks rb

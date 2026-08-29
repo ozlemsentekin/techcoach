@@ -116,9 +116,6 @@ function ResourceCard({ book, onPreviewImage }) {
           <span className="rounded-full bg-student-theme-soft px-2.5 py-1 text-[11px] font-semibold text-student-theme-text">
             {RESOURCE_BOOK_TYPE_LABELS[book.type] || book.type}
           </span>
-          <span className="rounded-full bg-[#f3f5f5] px-2.5 py-1 text-[11px] font-semibold text-panel-text-muted">
-            {book.pageCount} sayfa
-          </span>
         </div>
       </div>
     </article>

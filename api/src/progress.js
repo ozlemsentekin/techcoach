@@ -86,7 +86,6 @@ function sanitizeProgressResourceBook(record) {
     subjectId: record.subject_id || undefined,
     subjectName: record.subject_name || undefined,
     name: record.name,
-    pageCount: record.page_count,
     type: record.resource_type,
     hasAnswerKey: record.has_answer_key === null || record.has_answer_key === undefined ? undefined : Boolean(record.has_answer_key),
   }
@@ -814,7 +813,7 @@ async function getProgressOverviewHandler(request) {
       withRequest(bindings).then((requestDb) =>
         requestDb.query(`
           SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-                 rb.name, rb.page_count, rb.resource_type, rb.has_answer_key
+                 rb.name, rb.resource_type, rb.has_answer_key
           FROM dbo.StudentResourceBooks srb
           INNER JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id
           LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id

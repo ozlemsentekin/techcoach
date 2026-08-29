@@ -70,7 +70,6 @@ function sanitizeStudentResourceBook(record) {
     subjectId: record.subject_id,
     subjectName: record.subject_name || null,
     name: record.name,
-    pageCount: record.page_count,
     isActive: Boolean(record.is_active),
     type: record.resource_type,
     hasAnswerKey: Boolean(record.has_answer_key),
@@ -93,7 +92,6 @@ function sanitizeTeacherResourceBook(record) {
     subjectId: record.subject_id,
     subjectName: record.subject_name || null,
     name: record.name,
-    pageCount: record.page_count,
     isActive: Boolean(record.is_active),
     type: record.resource_type,
     hasAnswerKey: Boolean(record.has_answer_key),
@@ -345,7 +343,7 @@ async function fetchStudentResourceBooks(studentId, actorUserId) {
   })
   const result = await requestDb.query(`
     SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-           rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.grade, rb.status,
+           rb.name, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.grade, rb.status,
            rb.resource_source,
            CASE WHEN srb.resource_book_id IS NULL THEN 0 ELSE 1 END AS assigned,
            srb.assigned_at
@@ -394,7 +392,7 @@ async function attachResourceBooksToTeachers(teachers) {
   const requestDb = await withRequest(bindings)
   const result = await requestDb.query(`
     SELECT strb.teacher_id, rb.id, rb.publisher_id, p.name AS publisher_name,
-           rb.subject_id, s.name AS subject_name, rb.name, rb.page_count, rb.is_active,
+           rb.subject_id, s.name AS subject_name, rb.name, rb.is_active,
            rb.resource_type, rb.has_answer_key, rb.image_url, 1 AS assigned, strb.assigned_at
     FROM dbo.StudentTeacherResourceBooks strb
     INNER JOIN dbo.ResourceBooks rb ON rb.id = strb.resource_book_id
@@ -448,7 +446,7 @@ async function fetchTeacherResourceBooks(studentId, teacherId) {
   })
   const result = await requestDb.query(`
     SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-           rb.name, rb.page_count, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url,
+           rb.name, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url,
            rb.resource_source,
            CASE WHEN strb.resource_book_id IS NULL THEN 0 ELSE 1 END AS assigned,
            strb.assigned_at
