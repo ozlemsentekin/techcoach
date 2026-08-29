@@ -151,7 +151,6 @@ function ResourceBookModal({ publisher, book, subjects, presetSubjectId, onSaved
   const isEdit = Boolean(book)
   const effectivePublisherId = book?.publisherId || publisher?.id
   const [name, setName] = useState(book?.name || '')
-  const [pageCount, setPageCount] = useState(book ? String(book.pageCount) : '')
   const [subjectId, setSubjectId] = useState(book?.subjectId || presetSubjectId || '')
   const [grade, setGrade] = useState(book?.grade || '')
   const [type, setType] = useState(book?.type || '')
@@ -167,11 +166,6 @@ function ResourceBookModal({ publisher, book, subjects, presetSubjectId, onSaved
 
     if (name.trim().length < 2) {
       setError('Kaynak kitap adı en az 2 karakter olmalı.')
-      return
-    }
-    const pageCountNumber = Number(pageCount)
-    if (!Number.isInteger(pageCountNumber) || pageCountNumber <= 0) {
-      setError('Sayfa sayısı pozitif bir tam sayı olmalı.')
       return
     }
     if (!subjectId) {
@@ -193,7 +187,6 @@ function ResourceBookModal({ publisher, book, subjects, presetSubjectId, onSaved
         publisherId: effectivePublisherId,
         subjectId,
         name: name.trim(),
-        pageCount: pageCountNumber,
         isActive,
         type,
         grade,
@@ -308,28 +301,15 @@ function ResourceBookModal({ publisher, book, subjects, presetSubjectId, onSaved
               </label>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Basım Ay/Yıl</span>
-                <input
-                  value={publishMonthYear}
-                  onChange={(event) => setPublishMonthYear(event.target.value)}
-                  placeholder="Örn. Eylül 2024"
-                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-                />
-              </label>
-
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Sayfa Sayısı</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={pageCount}
-                  onChange={(event) => setPageCount(event.target.value)}
-                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-                />
-              </label>
-            </div>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-panel-text-muted">Basım Ay/Yıl</span>
+              <input
+                value={publishMonthYear}
+                onChange={(event) => setPublishMonthYear(event.target.value)}
+                placeholder="Örn. Eylül 2024"
+                className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+              />
+            </label>
 
             <label className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-panel-text-muted">Kaynak Tipi</span>
@@ -1068,7 +1048,7 @@ function TopicBlock({
   const totalTests = tests.length
   const totalPages = tests.reduce((sum, test) => sum + test.pageCount, 0)
   const totalQuestions = tests.reduce((sum, test) => sum + (test.questionCount || 0), 0)
-  const showAnswerKeyAction = resourceBookType === 'soru_bankasi'
+  const showAnswerKeyAction = resourceBookType === 'soru_bankasi' || resourceBookType === 'etkinlik'
   const visibleTests = onlyMissingAnswerKey && showAnswerKeyAction ? tests.filter((test) => !test.hasAnswerKey) : tests
 
   return (
@@ -1700,7 +1680,6 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
           publisherId: book.publisherId,
           subjectId: book.subjectId,
           name: book.name,
-          pageCount: book.pageCount,
           isActive: !book.isActive,
           type: book.type,
           grade: book.grade,
@@ -1931,12 +1910,14 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
                 <PublisherRow
                   key={publisher.id}
                   publisher={publisher}
-                  books={resourceBooks.filter(
-                    (book) =>
-                      book.publisherId === publisher.id &&
-                      (!subjectId || (book.subjectId === subjectId && book.isActive)) &&
-                      (!onlyMissingAnswerKey || missingAnswerKeyIds.has(book.id)),
-                  )}
+                  books={resourceBooks
+                    .filter(
+                      (book) =>
+                        book.publisherId === publisher.id &&
+                        (!subjectId || (book.subjectId === subjectId && book.isActive)) &&
+                        (!onlyMissingAnswerKey || missingAnswerKeyIds.has(book.id)),
+                    )
+                    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'tr', { numeric: true, sensitivity: 'base' }))}
                   subjectsById={subjectsById}
                   topics={topics}
                   tests={tests}
