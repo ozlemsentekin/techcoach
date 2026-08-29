@@ -130,7 +130,7 @@ function PricingCard({ planKey, plan, billingCycle, onBillingChange, selected, o
 
 export default function SignUpPage() {
   const navigate = useNavigate()
-  const { authLoading, authError, authMessage, register, setAuthError } = useAuth()
+  const { authLoading, authError, authMessage, register, setAuthError, clearAuthFeedback } = useAuth()
 
   const [selectedPlan, setSelectedPlan] = useState(null)
   const [role, setRole] = useState('ebeveyn')
@@ -167,6 +167,7 @@ export default function SignUpPage() {
   }
 
   const handleSelectPlan = (nextRole) => {
+    clearAuthFeedback()
     setSelectedPlan(nextRole)
     setRole(nextRole)
     setBillingCycle('monthly')
