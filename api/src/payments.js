@@ -114,7 +114,7 @@ async function initiateIyzicoCheckoutHandler(request) {
     }
 
     console.error('initiateIyzicoCheckoutHandler failed', error)
-    return json(500, { error: 'Ödeme başlatılamadı.' })
+    return json(500, { error: `Ödeme başlatılamadı. (${error.message})` })
   }
 }
 
