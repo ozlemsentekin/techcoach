@@ -53,48 +53,113 @@ function createAuthServiceErrorResponse(error, fallbackMessage) {
   return json(500, { error: 'Kimlik doğrulama servisi şu anda kullanılamıyor.' })
 }
 
-async function registerHandler(request) {
-  const payload = await request.json().catch(() => null)
-  if (!payload) {
-    return json(400, { error: 'Geçersiz istek gövdesi.' })
-  }
-
+// registerHandler ve iyzico ödeme akışındaki yeni-veli endpoint'i (henüz hesap yokken kayıt
+// bilgilerini toplayan) tarafından ortak kullanılır — mantık iki yerde tekrar yazılmasın diye.
+function validateParentRegistrationPayload(payload) {
   const fullName = String(payload.fullName || '').trim()
   if (fullName.length < 3 || fullName.length > 120) {
-    return json(400, { error: 'Ad soyad 3 ile 120 karakter arasında olmalı.' })
+    return { error: 'Ad soyad 3 ile 120 karakter arasında olmalı.' }
   }
 
   const phone = normalizePhone(payload.phone)
   if (!phone) {
-    return json(400, { error: 'Geçerli bir telefon numarası girin.' })
+    return { error: 'Geçerli bir telefon numarası girin.' }
   }
 
   let email = null
   const rawEmail = String(payload.email || '').trim().toLowerCase()
   if (rawEmail) {
     if (!EMAIL_RULE.test(rawEmail) || rawEmail.length > 320) {
-      return json(400, { error: 'Geçerli bir e-posta adresi girin.' })
+      return { error: 'Geçerli bir e-posta adresi girin.' }
     }
     email = rawEmail
   }
 
   if (payload.acceptAydinlatma !== true || payload.acceptKvkk !== true) {
-    return json(400, { error: 'Devam etmek için aydınlatma ve KVKK onaylarını vermelisiniz.' })
+    return { error: 'Devam etmek için aydınlatma ve KVKK onaylarını vermelisiniz.' }
   }
 
+  return { fullName, phone, email }
+}
+
+// Turnstile doğrulaması + kayıt rate limit'i — public kayıt/ödeme başlatma uçlarının hepsinde
+// aynı istismar korumasını uygulamak için ortak.
+async function runRegistrationAntiAbuseChecks(request, payload) {
   const ip = getClientIp(request)
 
   if (isCaptchaConfigured()) {
     const turnstileResult = await verifyTurnstileToken(payload.turnstileToken, ip)
     if (!turnstileResult.success) {
-      return json(403, { error: 'Doğrulama başarısız. Lütfen sayfayı yenileyip tekrar deneyin.' })
+      return { error: 'Doğrulama başarısız. Lütfen sayfayı yenileyip tekrar deneyin.', status: 403 }
     }
   } else {
     console.warn('[auth] TURNSTILE_SECRET_KEY yapılandırılmadı, Turnstile doğrulaması atlanıyor.')
   }
 
   if (!(await consumeRateLimit(`register:${ip}`))) {
-    return json(429, { error: 'Çok fazla kayıt denemesi yapıldı. Lütfen daha sonra tekrar deneyin.' })
+    return { error: 'Çok fazla kayıt denemesi yapıldı. Lütfen daha sonra tekrar deneyin.', status: 429 }
+  }
+
+  return {}
+}
+
+// "DENEME" kupon koduyla anında ücretsiz aktif olan veli hesabı — registerHandler'daki kuponlu
+// veli dalıyla, iyzico ödeme akışındaki kuponlu-veli dalı arasında ortak kullanılır.
+async function createCompParentAccount({ fullName, phone, email }) {
+  const passwordHash = await hashPassword(defaultPasswordForPhone(phone))
+  const now = new Date()
+
+  const { user, entitlement } = await withTransaction(async (requestInTransaction) => {
+    const insertUserDb = requestInTransaction({
+      fullName: { type: sql.NVarChar(120), value: fullName },
+      email: { type: sql.NVarChar(320), value: email },
+      phone: { type: sql.NVarChar(20), value: phone },
+      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
+      role: { type: sql.NVarChar(20), value: 'ebeveyn' },
+      consentAt: { type: sql.DateTime2, value: now },
+    })
+
+    const result = await insertUserDb.query(`
+      INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
+      OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
+             inserted.is_admin, inserted.can_manage_library, inserted.last_login_at, inserted.created_at,
+             inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at, inserted.teacher_subject_ids_json
+      VALUES (@fullName, @email, @phone, @passwordHash, @role, @consentAt, @consentAt);
+    `)
+
+    const insertedUser = sanitizeUser(result.recordset[0])
+
+    const entitlementDb = requestInTransaction({
+      parentId: { type: sql.UniqueIdentifier, value: insertedUser.id },
+      maxStudents: { type: sql.Int, value: TRIAL_COUPON_PARENT_MAX_STUDENTS },
+    })
+    await entitlementDb.query(`
+      INSERT INTO dbo.Entitlements (parent_id, status, source, max_students, granted_reason)
+      VALUES (@parentId, 'active', 'comp', @maxStudents, 'coupon:DENEME');
+    `)
+
+    return { user: insertedUser, entitlement: { status: 'active', source: 'comp', currentPeriodEnd: null } }
+  })
+
+  user.entitlement = entitlement
+  return user
+}
+
+async function registerHandler(request) {
+  const payload = await request.json().catch(() => null)
+  if (!payload) {
+    return json(400, { error: 'Geçersiz istek gövdesi.' })
+  }
+
+  const validation = validateParentRegistrationPayload(payload)
+  if (validation.error) {
+    return json(400, { error: validation.error })
+  }
+  const { fullName, phone, email } = validation
+
+  const antiAbuse = await runRegistrationAntiAbuseChecks(request, payload)
+  if (antiAbuse.error) {
+    return json(antiAbuse.status, { error: antiAbuse.error })
   }
 
   const passwordHash = await hashPassword(defaultPasswordForPhone(phone))
@@ -492,4 +557,8 @@ module.exports = {
   registerHandler,
   sanitizeUser,
   acceptConsentHandler,
+  validateParentRegistrationPayload,
+  runRegistrationAntiAbuseChecks,
+  createCompParentAccount,
+  TRIAL_COUPON_CODE,
 }

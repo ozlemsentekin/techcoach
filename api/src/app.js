@@ -181,6 +181,7 @@ const {
 const { revenuecatWebhookHandler } = require('./entitlements')
 const {
   initiateIyzicoCheckoutHandler,
+  initiateIyzicoCheckoutForNewParentHandler,
   iyzicoCheckoutCallbackHandler,
   iyzicoWebhookHandler,
 } = require('./payments')
@@ -257,6 +258,13 @@ app.http('parent-payments-iyzico-checkout-initialize', {
   methods: ['POST'],
   route: 'parent/payments/iyzico/checkout-initialize',
   handler: initiateIyzicoCheckoutHandler,
+})
+
+app.http('payments-iyzico-parent-checkout-initialize', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'payments/iyzico/parent-checkout-initialize',
+  handler: initiateIyzicoCheckoutForNewParentHandler,
 })
 
 app.http('payments-iyzico-callback', {

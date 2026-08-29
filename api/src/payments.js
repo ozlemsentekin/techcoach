@@ -1,9 +1,16 @@
 const crypto = require('crypto')
-const { sql, withRequest } = require('./db')
+const { sql, withRequest, withTransaction } = require('./db')
 const { isConfigError, getIyzicoConfig } = require('./config')
-const { json } = require('./http')
-const { isSessionError } = require('./security')
+const { createSessionHeaders, json } = require('./http')
+const { createSessionToken, defaultPasswordForPhone, hashPassword, isSessionError } = require('./security')
 const { requireParentSession } = require('./students')
+const {
+  sanitizeUser,
+  validateParentRegistrationPayload,
+  runRegistrationAntiAbuseChecks,
+  createCompParentAccount,
+  TRIAL_COUPON_CODE,
+} = require('./auth')
 const {
   hasActiveParentEntitlement,
   upsertParentEntitlementFromIyzico,
@@ -43,6 +50,58 @@ async function getParentProfile(parentId) {
   return result.recordset[0] || null
 }
 
+// initiateIyzicoCheckoutHandler (mevcut veli) ve initiateIyzicoCheckoutForNewParentHandler (henüz
+// hesabı olmayan yeni veli) tarafından ortak kullanılır.
+function validatePaymentFields(payload) {
+  const billingCycle = payload?.billingCycle
+  const identityNumber = payload?.identityNumber
+  const address = payload?.address || {}
+
+  if (!BILLING_CYCLES[billingCycle]) {
+    return { error: 'Geçerli bir ödeme periyodu seçin.' }
+  }
+  if (!isValidIdentityNumber(identityNumber)) {
+    return { error: 'Geçerli bir TC Kimlik No girin.' }
+  }
+  if (!address.addressLine || !address.city || !address.zipCode) {
+    return { error: 'Adres, il ve posta kodu bilgilerini girin.' }
+  }
+
+  return { billingCycle, identityNumber, address }
+}
+
+async function initializeParentSubscriptionCheckout({ conversationId, billingCycle, identityNumber, address, fullName, email, phone }) {
+  const config = getIyzicoConfig()
+  const pricingPlanReferenceCode = BILLING_CYCLES[billingCycle](config)
+  const { name, surname } = splitFullName(fullName)
+
+  const billingAddress = {
+    contactName: fullName,
+    city: address.city,
+    district: address.district || address.city,
+    country: 'Turkey',
+    address: address.addressLine,
+    zipCode: address.zipCode,
+  }
+
+  return initializeSubscriptionCheckoutForm({
+    locale: Iyzipay.LOCALE.TR,
+    conversationId,
+    callbackUrl: config.callbackUrl,
+    pricingPlanReferenceCode,
+    subscriptionInitialStatus: Iyzipay.SUBSCRIPTION_INITIAL_STATUS.ACTIVE,
+    customer: {
+      name,
+      surname,
+      identityNumber,
+      email: email || undefined,
+      gsmNumber: phone || undefined,
+      billingAddress,
+      shippingAddress: billingAddress,
+    },
+  })
+}
+
 async function initiateIyzicoCheckoutHandler(request) {
   try {
     const { error, parentId } = await requireParentSession(request)
@@ -51,18 +110,9 @@ async function initiateIyzicoCheckoutHandler(request) {
     }
 
     const payload = await request.json().catch(() => null)
-    const billingCycle = payload?.billingCycle
-    const identityNumber = payload?.identityNumber
-    const address = payload?.address || {}
-
-    if (!BILLING_CYCLES[billingCycle]) {
-      return json(400, { error: 'Geçerli bir ödeme periyodu seçin.' })
-    }
-    if (!isValidIdentityNumber(identityNumber)) {
-      return json(400, { error: 'Geçerli bir TC Kimlik No girin.' })
-    }
-    if (!address.addressLine || !address.city || !address.zipCode) {
-      return json(400, { error: 'Adres, il ve posta kodu bilgilerini girin.' })
+    const fields = validatePaymentFields(payload)
+    if (fields.error) {
+      return json(400, { error: fields.error })
     }
 
     if (await hasActiveParentEntitlement(parentId)) {
@@ -74,34 +124,12 @@ async function initiateIyzicoCheckoutHandler(request) {
       return json(401, { error: 'Oturum geçersiz.' })
     }
 
-    const config = getIyzicoConfig()
-    const pricingPlanReferenceCode = BILLING_CYCLES[billingCycle](config)
-    const { name, surname } = splitFullName(parent.full_name)
-
-    const billingAddress = {
-      contactName: parent.full_name,
-      city: address.city,
-      district: address.district || address.city,
-      country: 'Turkey',
-      address: address.addressLine,
-      zipCode: address.zipCode,
-    }
-
-    const result = await initializeSubscriptionCheckoutForm({
-      locale: Iyzipay.LOCALE.TR,
+    const result = await initializeParentSubscriptionCheckout({
       conversationId: parentId,
-      callbackUrl: config.callbackUrl,
-      pricingPlanReferenceCode,
-      subscriptionInitialStatus: Iyzipay.SUBSCRIPTION_INITIAL_STATUS.ACTIVE,
-      customer: {
-        name,
-        surname,
-        identityNumber,
-        email: parent.email || undefined,
-        gsmNumber: parent.phone_number || undefined,
-        billingAddress,
-        shippingAddress: billingAddress,
-      },
+      ...fields,
+      fullName: parent.full_name,
+      email: parent.email,
+      phone: parent.phone_number,
     })
 
     return json(200, { checkoutFormContent: result.checkoutFormContent, token: result.token })
@@ -114,6 +142,89 @@ async function initiateIyzicoCheckoutHandler(request) {
     }
 
     console.error('initiateIyzicoCheckoutHandler failed', error)
+    return json(500, { error: `Ödeme başlatılamadı. (${error.message})` })
+  }
+}
+
+// Henüz hiçbir hesabı olmayan bir veli için: kayıt bilgilerini + ödeme bilgilerini birlikte alır.
+// "DENEME" kupon kodu varsa iyzico'ya hiç gitmeden hesabı anında ücretsiz açar; aksi halde hesabı
+// dbo.Users'a YAZMADAN dbo.PendingParentRegistrations'a bekleyen bir kayıt bırakır ve iyzico
+// checkout formunu bu bekleyen kaydın id'sini conversationId olarak kullanarak başlatır — gerçek
+// hesap yalnızca ödeme onaylandığında iyzicoCheckoutCallbackHandler içinde oluşturulur.
+async function initiateIyzicoCheckoutForNewParentHandler(request) {
+  try {
+    const payload = await request.json().catch(() => null)
+    if (!payload) {
+      return json(400, { error: 'Geçersiz istek gövdesi.' })
+    }
+
+    const registration = validateParentRegistrationPayload(payload)
+    if (registration.error) {
+      return json(400, { error: registration.error })
+    }
+    const { fullName, phone, email } = registration
+
+    const fields = validatePaymentFields(payload)
+    if (fields.error) {
+      return json(400, { error: fields.error })
+    }
+
+    const antiAbuse = await runRegistrationAntiAbuseChecks(request, payload)
+    if (antiAbuse.error) {
+      return json(antiAbuse.status, { error: antiAbuse.error })
+    }
+
+    const existingDb = await withRequest({ phone: { type: sql.NVarChar(20), value: phone } })
+    const existingResult = await existingDb.query('SELECT TOP 1 id FROM dbo.Users WHERE phone_number = @phone;')
+    if (existingResult.recordset[0]) {
+      return json(409, { error: 'Bu telefon numarasıyla zaten bir hesabınız var. Giriş yapın.' })
+    }
+
+    const hasTrialCoupon = String(payload.couponCode || '').trim().toUpperCase() === TRIAL_COUPON_CODE
+    if (hasTrialCoupon) {
+      const user = await createCompParentAccount({ fullName, phone, email })
+      const token = createSessionToken(user)
+      return json(201, { user }, createSessionHeaders(token))
+    }
+
+    const passwordHash = await hashPassword(defaultPasswordForPhone(phone))
+    const now = new Date()
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
+
+    const insertDb = await withRequest({
+      fullName: { type: sql.NVarChar(120), value: fullName },
+      phone: { type: sql.NVarChar(20), value: phone },
+      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
+      aydinlatmaAt: { type: sql.DateTime2, value: now },
+      kvkkAt: { type: sql.DateTime2, value: now },
+      expiresAt: { type: sql.DateTime2, value: expiresAt },
+    })
+    const insertResult = await insertDb.query(`
+      INSERT INTO dbo.PendingParentRegistrations
+        (full_name, phone_number, password_hash, aydinlatma_accepted_at, kvkk_accepted_at, expires_at)
+      OUTPUT inserted.id
+      VALUES (@fullName, @phone, @passwordHash, @aydinlatmaAt, @kvkkAt, @expiresAt);
+    `)
+    const pendingId = insertResult.recordset[0].id
+
+    const result = await initializeParentSubscriptionCheckout({
+      conversationId: pendingId,
+      ...fields,
+      fullName,
+      email,
+      phone,
+    })
+
+    return json(200, { checkoutFormContent: result.checkoutFormContent, token: result.token })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Ödeme servisi yapılandırması eksik.' })
+    }
+    if (error.number === 2601 || error.number === 2627) {
+      return json(409, { error: 'Bu telefon numarasıyla zaten bir hesabınız var. Giriş yapın.' })
+    }
+
+    console.error('initiateIyzicoCheckoutForNewParentHandler failed', error)
     return json(500, { error: `Ödeme başlatılamadı. (${error.message})` })
   }
 }
@@ -155,8 +266,57 @@ async function recordEntitlementEvent({ providerEventId, eventType, appUserId, r
   }
 }
 
-function redirectTo(url) {
-  return { status: 302, headers: { Location: url } }
+function redirectTo(url, extraHeaders = {}) {
+  return { status: 302, headers: { Location: url, ...extraHeaders } }
+}
+
+async function findExistingParent(id) {
+  const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: id } })
+  const result = await requestDb.query(`
+    SELECT TOP 1 id, full_name, email, phone_number, role, is_admin, can_manage_library, last_login_at,
+           created_at, aydinlatma_accepted_at, kvkk_accepted_at, teacher_subject_ids_json
+    FROM dbo.Users WHERE id = @id;
+  `)
+  return result.recordset[0] || null
+}
+
+async function consumePendingParentRegistration(id) {
+  const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: id } })
+  const result = await requestDb.query(`
+    SELECT TOP 1 id, full_name, phone_number, password_hash, aydinlatma_accepted_at, kvkk_accepted_at
+    FROM dbo.PendingParentRegistrations
+    WHERE id = @id AND consumed_at IS NULL AND expires_at > SYSUTCDATETIME();
+  `)
+  return result.recordset[0] || null
+}
+
+// Bekleyen kaydı gerçek dbo.Users satırına dönüştürür ve pending satırı tüketildi olarak işaretler
+// — tek transaction, ödeme onaylandıktan sonra iyzicoCheckoutCallbackHandler'dan çağrılır.
+async function createParentFromPendingRegistration(pending) {
+  return withTransaction(async (requestInTransaction) => {
+    const insertUserDb = requestInTransaction({
+      fullName: { type: sql.NVarChar(120), value: pending.full_name },
+      phone: { type: sql.NVarChar(20), value: pending.phone_number },
+      passwordHash: { type: sql.NVarChar(255), value: pending.password_hash },
+      aydinlatmaAt: { type: sql.DateTime2, value: pending.aydinlatma_accepted_at },
+      kvkkAt: { type: sql.DateTime2, value: pending.kvkk_accepted_at },
+    })
+    const result = await insertUserDb.query(`
+      INSERT INTO dbo.Users (full_name, phone_number, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
+      OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
+             inserted.is_admin, inserted.can_manage_library, inserted.last_login_at, inserted.created_at,
+             inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at, inserted.teacher_subject_ids_json
+      VALUES (@fullName, @phone, @passwordHash, 'ebeveyn', @aydinlatmaAt, @kvkkAt);
+    `)
+    const insertedUser = sanitizeUser(result.recordset[0])
+
+    const consumeDb = requestInTransaction({ id: { type: sql.UniqueIdentifier, value: pending.id } })
+    await consumeDb.query(`
+      UPDATE dbo.PendingParentRegistrations SET consumed_at = SYSUTCDATETIME() WHERE id = @id;
+    `)
+
+    return insertedUser
+  })
 }
 
 async function iyzicoCheckoutCallbackHandler(request) {
@@ -171,10 +331,28 @@ async function iyzicoCheckoutCallbackHandler(request) {
 
     const result = await retrieveSubscriptionCheckoutForm({ checkoutFormToken: token })
     const data = result.data
-    const parentId = result.conversationId
+    const conversationId = result.conversationId
 
-    if (!parentId || data.subscriptionStatus !== 'ACTIVE') {
+    if (!conversationId || data.subscriptionStatus !== 'ACTIVE') {
       return redirectTo(failureUrl)
+    }
+
+    // conversationId ya mevcut bir velinin (yenileme ödemesi) dbo.Users.id'si, ya da henüz hesabı
+    // olmayan yeni bir velinin dbo.PendingParentRegistrations.id'sidir — hangisi olduğunu burada
+    // ayırt ediyoruz. İkinci durumda gerçek hesap ancak bu noktada, ödeme onaylandıktan sonra oluşur.
+    const existingParent = await findExistingParent(conversationId)
+    let parentId = existingParent?.id
+    let sessionHeaders = {}
+
+    if (!existingParent) {
+      const pending = await consumePendingParentRegistration(conversationId)
+      if (!pending) {
+        return redirectTo(failureUrl)
+      }
+      const newUser = await createParentFromPendingRegistration(pending)
+      parentId = newUser.id
+      const sessionToken = createSessionToken(newUser)
+      sessionHeaders = createSessionHeaders(sessionToken)
     }
 
     const isNew = await recordEntitlementEvent({
@@ -195,7 +373,7 @@ async function iyzicoCheckoutCallbackHandler(request) {
       })
     }
 
-    return redirectTo(`${config.webRedirectBaseUrl}/odeme/sonuc?durum=basarili`)
+    return redirectTo(`${config.webRedirectBaseUrl}/odeme/sonuc?durum=basarili`, sessionHeaders)
   } catch (error) {
     console.error('iyzicoCheckoutCallbackHandler failed', error)
     return redirectTo(failureUrl)
@@ -291,6 +469,7 @@ async function iyzicoWebhookHandler(request) {
 
 module.exports = {
   initiateIyzicoCheckoutHandler,
+  initiateIyzicoCheckoutForNewParentHandler,
   iyzicoCheckoutCallbackHandler,
   iyzicoWebhookHandler,
 }

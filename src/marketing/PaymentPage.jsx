@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
-import { initiateIyzicoCheckout } from '../services/paymentService'
+import { panelPathForRole } from '../utils/panelPath'
+import { initiateIyzicoCheckout, initiateIyzicoCheckoutForNewParent } from '../services/paymentService'
 import './LandingPage.css'
 
 const BILLING_OPTIONS = {
@@ -31,7 +32,11 @@ function injectCheckoutFormContent(container, html) {
 }
 
 export default function PaymentPage() {
-  const { authUser } = useAuth()
+  const { authUser, refreshSession } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const pendingRegistration = location.state?.pendingRegistration || null
+
   const [billingCycle, setBillingCycle] = useState('monthly')
   const [identityNumber, setIdentityNumber] = useState('')
   const [addressLine, setAddressLine] = useState('')
@@ -48,10 +53,13 @@ export default function PaymentPage() {
     }
   }, [checkoutFormContent])
 
-  if (!authUser) {
-    return <Navigate to="/login" replace />
+  // Var olan bir veli (yenileme ödemesi) ya da /uye-ol'dan gelen bekleyen kayıt bilgisiyle
+  // (henüz hesabı yok, ödeme sonrası hesap oluşacak) buraya girilebilir. İkisi de yoksa ödeme
+  // başlatılamaz.
+  if (!authUser && !pendingRegistration) {
+    return <Navigate to="/uye-ol" replace />
   }
-  if (authUser.role !== 'ebeveyn') {
+  if (authUser && authUser.role !== 'ebeveyn') {
     return <Navigate to="/" replace />
   }
 
@@ -70,11 +78,20 @@ export default function PaymentPage() {
 
     setLoading(true)
     try {
-      const result = await initiateIyzicoCheckout({
-        billingCycle,
-        identityNumber,
-        address: { addressLine: addressLine.trim(), city: city.trim(), zipCode: zipCode.trim() },
-      })
+      const address = { addressLine: addressLine.trim(), city: city.trim(), zipCode: zipCode.trim() }
+
+      const result = authUser
+        ? await initiateIyzicoCheckout({ billingCycle, identityNumber, address })
+        : await initiateIyzicoCheckoutForNewParent({ ...pendingRegistration, billingCycle, identityNumber, address })
+
+      if (result.user) {
+        // Savunma amaçlı: pendingRegistration'a bir "DENEME" kupon kodu sızarsa backend hesabı
+        // ödemesiz anında açar — bu durumda normal panele geçilir.
+        await refreshSession()
+        navigate(panelPathForRole(result.user.role), { replace: true })
+        return
+      }
+
       setCheckoutFormContent(result.checkoutFormContent)
     } catch (submitError) {
       setError(submitError.message || 'Ödeme başlatılamadı.')

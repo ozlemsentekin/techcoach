@@ -206,12 +206,33 @@ export default function SignUpPage() {
     return null
   }
 
+  const hasTrialCoupon = form.couponCode.trim().toUpperCase() === 'DENEME'
+  // Veli, kupon kodu yoksa hesabı hemen açmıyoruz — ödeme adımına geçiyoruz, gerçek hesap
+  // yalnızca ödeme başarılı olunca backend'de oluşturuluyor (bkz. PaymentPage.jsx).
+  const isPaymentBound = role === 'ebeveyn' && !hasTrialCoupon
+
   const handleSubmit = async (event) => {
     event.preventDefault()
 
     const validationError = validateForm()
     if (validationError) {
       setAuthError(validationError)
+      return
+    }
+
+    if (isPaymentBound) {
+      navigate('/odeme', {
+        state: {
+          pendingRegistration: {
+            fullName: combinedFullName(),
+            phone: form.phone,
+            couponCode: form.couponCode.trim(),
+            acceptAydinlatma: form.acceptAydinlatma,
+            acceptKvkk: form.acceptKvkk,
+            turnstileToken: turnstileToken || undefined,
+          },
+        },
+      })
       return
     }
 
@@ -406,7 +427,7 @@ export default function SignUpPage() {
                 disabled={authLoading || (Boolean(TURNSTILE_SITE_KEY) && !turnstileToken)}
               >
                 <UserPlus size={18} aria-hidden="true" />
-                {authLoading ? 'Üye olunuyor...' : 'Üye Ol'}
+                {authLoading ? 'Üye olunuyor...' : isPaymentBound ? 'Ödemeye Geç' : 'Üye Ol'}
               </button>
               <Link to="/login" className="btn btn-outline login-register">
                 Zaten Üyeyim
