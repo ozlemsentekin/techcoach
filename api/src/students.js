@@ -354,6 +354,7 @@ async function fetchStudentResourceBooks(studentId, actorUserId) {
       ON srb.resource_book_id = rb.id AND srb.student_id = @studentId
     LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = @studentId
     WHERE rb.is_active = 1
+      AND (rb.scope = 'catalog' OR srb.resource_book_id IS NOT NULL)
       AND (sp.grade IS NULL OR rb.grade IS NULL OR rb.grade = sp.grade OR srb.resource_book_id IS NOT NULL)
       AND (rb.status = 'approved' OR rb.created_by_user_id = @actorUserId OR srb.resource_book_id IS NOT NULL)
     ORDER BY s.name ASC, p.name ASC, rb.name ASC;

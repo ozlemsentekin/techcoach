@@ -16,7 +16,11 @@ export default function ParentSidebar() {
   const { authUser } = useAuth()
   const { hasStudents } = useParentStudentsGate()
   const isAdminSection = location.pathname.startsWith('/parent/admin')
-  const sidebarNav = getParentSidebarNav(authUser?.isAdmin, hasStudents)
+  const sidebarNav = getParentSidebarNav(
+    authUser?.isAdmin,
+    hasStudents,
+    Boolean(authUser?.isAdmin || authUser?.canManageLibrary),
+  )
 
   return (
     <aside className="hidden shrink-0 flex-col bg-panel-surface px-2 py-5 shadow-panel-1 md:flex md:w-20 xl:w-64 xl:px-3">

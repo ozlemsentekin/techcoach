@@ -70,6 +70,7 @@ function sanitizeResourceBook(record) {
     publishMonthYear: record.publish_month_year || null,
     grade: record.grade || null,
     resourceSource: record.resource_source || null,
+    scope: record.scope || 'catalog',
     status: record.status,
     createdByRole: record.created_by_role || null,
     createdByUserId: record.created_by_user_id || null,
@@ -378,7 +379,7 @@ async function listResourceBooksHandler(request) {
       LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
       LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
       LEFT JOIN dbo.Users u ON u.id = rb.created_by_user_id
-      WHERE NOT (rb.status = 'pending' AND rb.is_active = 0)
+      WHERE rb.scope = 'catalog' AND NOT (rb.status = 'pending' AND rb.is_active = 0)
       ORDER BY rb.created_at ASC;
     `)
 
@@ -432,7 +433,7 @@ async function listResourceBooksMissingAnswerKeyHandler(request) {
         FROM dbo.TestAnswerKeys
         GROUP BY test_id
       ) ak ON ak.test_id = tt.id
-      WHERE rb.resource_type = 'soru_bankasi' AND rb.has_answer_key = 1
+      WHERE rb.scope = 'catalog' AND rb.resource_type = 'soru_bankasi' AND rb.has_answer_key = 1
       GROUP BY rb.id, rb.publisher_id, p.name, rb.subject_id, s.name, rb.name,
                rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.publish_month_year, rb.grade, rb.created_at
       HAVING SUM(CASE WHEN tt.question_count > ISNULL(ak.answer_count, 0) THEN 1 ELSE 0 END) > 0
@@ -673,7 +674,7 @@ async function updateResourceBookHandler(request) {
 const LIBRARY_RESOURCE_BOOK_SELECT = `
   SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
          rb.name, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url,
-         rb.publish_year, rb.publish_month_year, rb.grade, rb.resource_source, rb.status,
+         rb.publish_year, rb.publish_month_year, rb.grade, rb.resource_source, rb.scope, rb.status,
          rb.created_by_role, rb.created_by_user_id, rb.rejection_reason, rb.created_at
   FROM dbo.ResourceBooks rb
   LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
@@ -696,7 +697,7 @@ async function fetchLibraryResourceBooks({ grade, subjectId, actorUserId, source
   })
   const result = await requestDb.query(`
     ${LIBRARY_RESOURCE_BOOK_SELECT}
-    WHERE rb.is_active = 1 AND rb.grade = @grade AND rb.subject_id = @subjectId
+    WHERE rb.is_active = 1 AND rb.scope = 'catalog' AND rb.grade = @grade AND rb.subject_id = @subjectId
       AND ${LIBRARY_VISIBILITY_SQL} ${source ? 'AND rb.resource_source = @source' : ''}
     ORDER BY rb.name ASC
     OFFSET 0 ROWS FETCH NEXT @limit ROWS ONLY;
@@ -764,6 +765,58 @@ async function reviewResourceBookHandler(request) {
   }
 }
 
+// Kütüphane katalog içeriğini (konu/test/cevap anahtarı) yalnızca kütüphane editörleri
+// düzenler. Özel (Kitaplık) bir kaynağın içeriğini ise yalnızca onu ekleyen kişi
+// düzenleyebilir — diğer üçgen üyeleri yalnızca atama yapar/kullanır. resourceBookId
+// çözülemezse (kayıt yok) orijinal editör kontrolünün 403'ü döner.
+async function requireResourceBookEditor(request, resourceBookId) {
+  const editor = await requireLibraryEditor(request)
+  if (!editor.error || !resourceBookId) {
+    return editor
+  }
+
+  let session
+  try {
+    session = verifySessionToken(readSessionToken(request) || '')
+  } catch {
+    return editor
+  }
+  const actorId = session.actingParentId || session.sub
+
+  const db = await withRequest({ id: { type: sql.UniqueIdentifier, value: resourceBookId } })
+  const result = await db.query(`
+    SELECT scope, created_by_user_id FROM dbo.ResourceBooks WHERE id = @id;
+  `)
+  const book = result.recordset[0]
+  if (
+    book &&
+    book.scope === 'private' &&
+    String(book.created_by_user_id || '').toLowerCase() === String(actorId).toLowerCase()
+  ) {
+    return { session }
+  }
+  return editor
+}
+
+async function resolveBookIdFromTopic(topicId) {
+  if (!topicId) return null
+  const db = await withRequest({ id: { type: sql.UniqueIdentifier, value: topicId } })
+  const result = await db.query(`SELECT resource_book_id FROM dbo.ResourceBookTopics WHERE id = @id;`)
+  return result.recordset[0]?.resource_book_id || null
+}
+
+async function resolveBookIdFromTest(testId) {
+  if (!testId) return null
+  const db = await withRequest({ id: { type: sql.UniqueIdentifier, value: testId } })
+  const result = await db.query(`
+    SELECT t.resource_book_id
+    FROM dbo.ResourceBookTopicTests tt
+    INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
+    WHERE tt.id = @id;
+  `)
+  return result.recordset[0]?.resource_book_id || null
+}
+
 async function listResourceBookTopicsHandler(request) {
   try {
     const { error } = await requireCatalogStaff(request)
@@ -773,9 +826,11 @@ async function listResourceBookTopicsHandler(request) {
 
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
-      SELECT id, resource_book_id, name, created_at
-      FROM dbo.ResourceBookTopics
-      ORDER BY created_at ASC;
+      SELECT rbt.id, rbt.resource_book_id, rbt.name, rbt.created_at
+      FROM dbo.ResourceBookTopics rbt
+      INNER JOIN dbo.ResourceBooks rb ON rb.id = rbt.resource_book_id
+      WHERE rb.scope = 'catalog'
+      ORDER BY rbt.created_at ASC;
     `)
 
     return json(200, { topics: result.recordset.map(sanitizeResourceBookTopic) })
@@ -795,14 +850,14 @@ async function listResourceBookTopicsHandler(request) {
 
 async function createResourceBookTopicHandler(request) {
   try {
-    const { error } = await requireLibraryEditor(request)
-    if (error) {
-      return error
-    }
-
     const payload = await request.json().catch(() => null)
     const name = payload?.name?.trim()
     const resourceBookId = payload?.resourceBookId
+
+    const { error } = await requireResourceBookEditor(request, resourceBookId)
+    if (error) {
+      return error
+    }
 
     if (!resourceBookId) {
       return json(400, { error: 'Kaynak kitap seçilmeli.' })
@@ -839,12 +894,12 @@ async function createResourceBookTopicHandler(request) {
 
 async function updateResourceBookTopicHandler(request) {
   try {
-    const { error } = await requireLibraryEditor(request)
+    const topicId = request.params.topicId
+    const { error } = await requireResourceBookEditor(request, await resolveBookIdFromTopic(topicId))
     if (error) {
       return error
     }
 
-    const topicId = request.params.topicId
     const payload = await request.json().catch(() => null)
     const name = payload?.name?.trim()
 
@@ -1682,9 +1737,12 @@ async function listResourceBookTopicTestsHandler(request) {
 
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
-      SELECT id, topic_id, topic_name, name, page_start, page_end, page_count, question_count, created_at
-      FROM dbo.ResourceBookTopicTests
-      ORDER BY created_at ASC;
+      SELECT tt.id, tt.topic_id, tt.topic_name, tt.name, tt.page_start, tt.page_end, tt.page_count, tt.question_count, tt.created_at
+      FROM dbo.ResourceBookTopicTests tt
+      INNER JOIN dbo.ResourceBookTopics rbt ON rbt.id = tt.topic_id
+      INNER JOIN dbo.ResourceBooks rb ON rb.id = rbt.resource_book_id
+      WHERE rb.scope = 'catalog'
+      ORDER BY tt.created_at ASC;
     `)
 
     const answerKeyCountsDb = await withRequest({})
@@ -1714,15 +1772,15 @@ async function listResourceBookTopicTestsHandler(request) {
 
 async function createResourceBookTopicTestHandler(request) {
   try {
-    const { error } = await requireLibraryEditor(request)
-    if (error) {
-      return error
-    }
-
     const payload = await request.json().catch(() => null)
     const name = payload?.name?.trim()
     const topicName = payload?.topicName?.trim()
     const topicId = payload?.topicId
+
+    const { error } = await requireResourceBookEditor(request, await resolveBookIdFromTopic(topicId))
+    if (error) {
+      return error
+    }
     const pageStart = Number(payload?.pageStart)
     const pageEnd = Number(payload?.pageEnd)
     const questionCountRaw = payload?.questionCount
@@ -1789,12 +1847,12 @@ async function createResourceBookTopicTestHandler(request) {
 
 async function updateResourceBookTopicTestHandler(request) {
   try {
-    const { error } = await requireLibraryEditor(request)
+    const testId = request.params.testId
+    const { error } = await requireResourceBookEditor(request, await resolveBookIdFromTest(testId))
     if (error) {
       return error
     }
 
-    const testId = request.params.testId
     const payload = await request.json().catch(() => null)
     const name = payload?.name?.trim()
     const topicName = payload?.topicName?.trim()
@@ -1868,12 +1926,11 @@ async function updateResourceBookTopicTestHandler(request) {
 
 async function deleteResourceBookTopicTestHandler(request) {
   try {
-    const { error } = await requireLibraryEditor(request)
+    const testId = request.params.testId
+    const { error } = await requireResourceBookEditor(request, await resolveBookIdFromTest(testId))
     if (error) {
       return error
     }
-
-    const testId = request.params.testId
 
     const requestDb = await withRequest({
       testId: { type: sql.UniqueIdentifier, value: testId },
@@ -1904,12 +1961,11 @@ async function deleteResourceBookTopicTestHandler(request) {
 
 async function listTestAnswerKeyHandler(request) {
   try {
-    const { error } = await requireCatalogStaff(request)
+    const testId = request.params.testId
+    const { error } = await requireResourceBookEditor(request, await resolveBookIdFromTest(testId))
     if (error) {
       return error
     }
-
-    const testId = request.params.testId
 
     const requestDb = await withRequest({
       testId: { type: sql.UniqueIdentifier, value: testId },
@@ -1935,12 +1991,12 @@ async function listTestAnswerKeyHandler(request) {
 
 async function setTestAnswerKeyHandler(request) {
   try {
-    const { error } = await requireLibraryEditor(request)
+    const testId = request.params.testId
+    const { error } = await requireResourceBookEditor(request, await resolveBookIdFromTest(testId))
     if (error) {
       return error
     }
 
-    const testId = request.params.testId
     const payload = await request.json().catch(() => null)
     const entries = Array.isArray(payload?.entries) ? payload.entries : []
 

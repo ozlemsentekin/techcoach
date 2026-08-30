@@ -1,9 +1,12 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import NavIcon from './NavIcon'
-import { TEACHER_SIDEBAR_NAV, isNavItemActive } from './navConfig'
+import { useAuth } from '../../context/useAuth'
+import { getTeacherSidebarNav, isNavItemActive } from './navConfig'
 
 export default function TeacherSidebar() {
   const location = useLocation()
+  const { authUser } = useAuth()
+  const sidebarNav = getTeacherSidebarNav(Boolean(authUser?.isAdmin || authUser?.canManageLibrary))
 
   return (
     <aside className="hidden shrink-0 flex-col bg-panel-surface px-2 py-5 shadow-panel-1 md:flex md:w-20 xl:w-64 xl:px-3">
@@ -13,7 +16,7 @@ export default function TeacherSidebar() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5" aria-label="Öğretmen menüsü">
-        {TEACHER_SIDEBAR_NAV.map((item) => (
+        {sidebarNav.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
