@@ -775,7 +775,7 @@ export default function DailyPlanTable({ tasks, backlogTasks = [], onEdit, onDel
           </span>
           <h3 className="mt-3 text-base font-semibold text-panel-text">Bugün plan boş</h3>
           <p className="mt-1 max-w-sm text-sm text-panel-text-muted">
-            {onAddTask ? 'Aylin için ilk görevi ekleyebilirsin.' : 'Öğretmenin planladığı görevler burada görünecek.'}
+            {onAddTask ? 'İlk görevi ekleyebilirsin.' : 'Öğretmenin planladığı görevler burada görünecek.'}
           </p>
           {onAddTask ? (
             <button
