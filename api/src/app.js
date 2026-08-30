@@ -123,6 +123,15 @@ const {
   updateSchoolHandler,
   bulkImportSchoolsHandler,
 } = require('./catalog')
+const {
+  listBooksHandler: listBookshelfBooksHandler,
+  getBookHandler: getBookshelfBookHandler,
+  createBookHandler: createBookshelfBookHandler,
+  updateBookHandler: updateBookshelfBookHandler,
+  deleteBookHandler: deleteBookshelfBookHandler,
+  setBookStudentsHandler: setBookshelfBookStudentsHandler,
+  createPublisherForPanelHandler: createBookshelfPublisherHandler,
+} = require('./bookshelf')
 const { extractQuestionsFromImageHandler } = require('./questionExtraction')
 const {
   listHomeworksHandler,
@@ -1126,6 +1135,55 @@ app.http('panel-admin-resource-book-topic-tests-answer-key-set', {
   methods: ['PUT'],
   route: 'panel-admin/resource-book-topic-tests/{testId}/answer-key',
   handler: setTestAnswerKeyHandler,
+})
+
+app.http('panel-bookshelf-resource-books-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/bookshelf/resource-books',
+  handler: listBookshelfBooksHandler,
+})
+
+app.http('panel-bookshelf-resource-books-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel/bookshelf/resource-books',
+  handler: createBookshelfBookHandler,
+})
+
+app.http('panel-bookshelf-resource-book-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/bookshelf/resource-books/{resourceBookId}',
+  handler: getBookshelfBookHandler,
+})
+
+app.http('panel-bookshelf-resource-book-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel/bookshelf/resource-books/{resourceBookId}',
+  handler: updateBookshelfBookHandler,
+})
+
+app.http('panel-bookshelf-resource-book-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel/bookshelf/resource-books/{resourceBookId}',
+  handler: deleteBookshelfBookHandler,
+})
+
+app.http('panel-bookshelf-resource-book-students', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel/bookshelf/resource-books/{resourceBookId}/students',
+  handler: setBookshelfBookStudentsHandler,
+})
+
+app.http('panel-bookshelf-publishers-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel/bookshelf/publishers',
+  handler: createBookshelfPublisherHandler,
 })
 
 app.http('panel-homeworks-list', {

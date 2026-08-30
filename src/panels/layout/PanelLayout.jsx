@@ -12,7 +12,7 @@ import {
   getParentPrimaryNav,
   getParentMoreNav,
   PARENT_ADMIN_NAV,
-  TEACHER_PRIMARY_NAV,
+  getTeacherPrimaryNav,
   TEACHER_MORE_NAV,
 } from './navConfig'
 
@@ -25,12 +25,13 @@ export default function PanelLayout({ role }) {
   const { hasStudents } = useParentStudentsGate()
   const Sidebar = SIDEBAR_BY_ROLE[role] || StudentSidebar
   const isAdminSection = role === 'parent' && location.pathname.startsWith('/parent/admin')
+  const canManageLibrary = Boolean(authUser?.isAdmin || authUser?.canManageLibrary)
   const primaryItems = isAdminSection
     ? [RETURN_TO_PANEL_ITEM]
     : role === 'parent'
-      ? getParentPrimaryNav(hasStudents)
+      ? getParentPrimaryNav(hasStudents, canManageLibrary)
       : role === 'teacher'
-        ? TEACHER_PRIMARY_NAV
+        ? getTeacherPrimaryNav(canManageLibrary)
         : STUDENT_PRIMARY_NAV
   const moreItems = isAdminSection
     ? PARENT_ADMIN_NAV.children

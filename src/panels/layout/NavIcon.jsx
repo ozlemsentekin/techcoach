@@ -25,6 +25,7 @@ import {
   UserRound,
   Undo2,
   Library,
+  BookMarked,
 } from 'lucide-react'
 
 const ICONS = {
@@ -54,6 +55,7 @@ const ICONS = {
   UserRound,
   Undo2,
   Library,
+  BookMarked,
 }
 
 export default function NavIcon({ name, size = 20, className }) {
