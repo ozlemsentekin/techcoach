@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { CheckCircle2, Lock } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { panelPathForRole } from '../utils/panelPath'
 import { initiateIyzicoCheckout, initiateIyzicoCheckoutForNewParent } from '../services/paymentService'
@@ -9,6 +10,14 @@ const BILLING_OPTIONS = {
   monthly: { price: '1', period: 'TL / ay' },
   yearly: { price: '24000', period: 'TL / yıl', badge: '%20 indirim' },
 }
+
+const INCLUDED_FEATURES = [
+  '2 öğrenciye kadar tam erişim',
+  'Günlük çalışma planı ve ders ajandası',
+  'Hata defteri ile konu bazlı tekrar takibi',
+  'Haftalık ilerleme raporu ve risk uyarıları',
+  'Sınav takvimini fotoğrafla içe aktarma',
+]
 
 function BrandIcon() {
   return <img src="/logo-mark.png" alt="" className="logo-mark-img" />
@@ -100,6 +109,8 @@ export default function PaymentPage() {
     }
   }
 
+  const activeBilling = BILLING_OPTIONS[billingCycle]
+
   return (
     <div className="landing-page">
       <header className="topbar auth-topbar">
@@ -115,91 +126,121 @@ export default function PaymentPage() {
         </div>
       </header>
 
-      <main className="auth-page">
-        <div className="container auth-page-shell">
-          <div className="login-card">
-            <h3>Aboneliğini Başlat</h3>
-            <p>Paket seç, ödeme bilgilerini gir ve panele hemen eriş.</p>
-
-            {checkoutFormContent ? (
+      <main className="auth-page checkout-page">
+        <div className="container checkout-shell">
+          {checkoutFormContent ? (
+            <div className="login-card checkout-iyzico-card">
+              <h3>Kart Bilgilerini Girin</h3>
+              <p>Ödeme adımını iyzico'nun güvenli sayfası üzerinden tamamlayın.</p>
               <div ref={formContainerRef} />
-            ) : (
-              <form className="login-form" onSubmit={handleSubmit}>
-                <div className="billing-toggle" role="tablist" aria-label="Fatura periyodu">
-                  <button
-                    type="button"
-                    className={billingCycle === 'monthly' ? 'active' : ''}
-                    onClick={() => setBillingCycle('monthly')}
-                  >
-                    Aylık
-                  </button>
-                  <button
-                    type="button"
-                    className={billingCycle === 'yearly' ? 'active' : ''}
-                    onClick={() => setBillingCycle('yearly')}
-                  >
-                    Yıllık
-                  </button>
-                </div>
-
-                <div className="price">
-                  {BILLING_OPTIONS[billingCycle].price} <small>{BILLING_OPTIONS[billingCycle].period}</small>
-                  {BILLING_OPTIONS[billingCycle].badge ? (
-                    <span className="badge signup-price-badge">{BILLING_OPTIONS[billingCycle].badge}</span>
-                  ) : null}
-                </div>
+            </div>
+          ) : (
+            <div className="checkout-layout">
+              <div className="login-card checkout-form-card">
+                <h3>Fatura Bilgileri</h3>
+                <p>Aboneliğini başlatmak için TC Kimlik No ve adres bilgilerini gir.</p>
 
                 {error ? <div className="auth-feedback auth-feedback-error">{error}</div> : null}
 
-                <input
-                  name="identityNumber"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="TC Kimlik No"
-                  aria-label="TC Kimlik No"
-                  maxLength="11"
-                  required
-                  value={identityNumber}
-                  onChange={(event) => setIdentityNumber(event.target.value.replace(/\D/g, '').slice(0, 11))}
-                />
-
-                <input
-                  name="addressLine"
-                  type="text"
-                  placeholder="Adres"
-                  aria-label="Adres"
-                  required
-                  value={addressLine}
-                  onChange={(event) => setAddressLine(event.target.value)}
-                />
-
-                <div className="signup-name-row">
+                <form id="payment-form" className="login-form" onSubmit={handleSubmit}>
                   <input
-                    name="city"
+                    name="identityNumber"
                     type="text"
-                    placeholder="İl"
-                    aria-label="İl"
+                    inputMode="numeric"
+                    placeholder="TC Kimlik No"
+                    aria-label="TC Kimlik No"
+                    maxLength="11"
                     required
-                    value={city}
-                    onChange={(event) => setCity(event.target.value)}
+                    value={identityNumber}
+                    onChange={(event) => setIdentityNumber(event.target.value.replace(/\D/g, '').slice(0, 11))}
                   />
+
                   <input
-                    name="zipCode"
+                    name="addressLine"
                     type="text"
-                    placeholder="Posta Kodu"
-                    aria-label="Posta Kodu"
+                    placeholder="Adres"
+                    aria-label="Adres"
                     required
-                    value={zipCode}
-                    onChange={(event) => setZipCode(event.target.value)}
+                    value={addressLine}
+                    onChange={(event) => setAddressLine(event.target.value)}
                   />
+
+                  <div className="signup-name-row">
+                    <input
+                      name="city"
+                      type="text"
+                      placeholder="İl"
+                      aria-label="İl"
+                      required
+                      value={city}
+                      onChange={(event) => setCity(event.target.value)}
+                    />
+                    <input
+                      name="zipCode"
+                      type="text"
+                      placeholder="Posta Kodu"
+                      aria-label="Posta Kodu"
+                      required
+                      value={zipCode}
+                      onChange={(event) => setZipCode(event.target.value)}
+                    />
+                  </div>
+                </form>
+              </div>
+
+              <aside className="checkout-summary-card">
+                <h4>Sepetiniz</h4>
+
+                <div className="checkout-summary-plan-row">
+                  <span className="checkout-summary-plan-name">Veli Takip Paketi</span>
+                  <div className="billing-toggle" role="tablist" aria-label="Fatura periyodu">
+                    <button
+                      type="button"
+                      className={billingCycle === 'monthly' ? 'active' : ''}
+                      onClick={() => setBillingCycle('monthly')}
+                    >
+                      Aylık
+                    </button>
+                    <button
+                      type="button"
+                      className={billingCycle === 'yearly' ? 'active' : ''}
+                      onClick={() => setBillingCycle('yearly')}
+                    >
+                      Yıllık
+                    </button>
+                  </div>
                 </div>
 
-                <button type="submit" className="btn btn-primary" disabled={loading}>
+                <ul className="checkout-summary-features">
+                  {INCLUDED_FEATURES.map((feature) => (
+                    <li key={feature}>
+                      <CheckCircle2 size={15} aria-hidden="true" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="checkout-summary-divider" />
+
+                <div className="checkout-summary-total-row">
+                  <span>Toplam</span>
+                  <div className="checkout-summary-total-price">
+                    {activeBilling.price} <small>{activeBilling.period}</small>
+                  </div>
+                </div>
+                {activeBilling.badge ? <span className="badge signup-price-badge">{activeBilling.badge}</span> : null}
+
+                <button type="submit" form="payment-form" className="btn btn-primary checkout-submit" disabled={loading}>
                   {loading ? 'Yönlendiriliyor...' : 'Öde'}
                 </button>
-              </form>
-            )}
-          </div>
+
+                <div className="checkout-summary-trust">
+                  <Lock size={13} aria-hidden="true" />
+                  <span>iyzico ile güvenli ödeme</span>
+                </div>
+              </aside>
+            </div>
+          )}
         </div>
       </main>
     </div>

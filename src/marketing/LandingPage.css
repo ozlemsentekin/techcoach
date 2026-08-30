@@ -4509,6 +4509,130 @@ footer {
   gap: 10px;
 }
 
+.checkout-shell {
+  max-width: 920px;
+}
+
+.checkout-layout {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.checkout-form-card,
+.checkout-iyzico-card {
+  margin: 0;
+}
+
+.checkout-summary-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 28px;
+  position: sticky;
+  top: 24px;
+}
+
+.checkout-summary-card h4 {
+  margin: 0 0 18px;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  color: var(--indigo);
+}
+
+.checkout-summary-plan-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.checkout-summary-plan-name {
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.checkout-summary-features {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.checkout-summary-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.checkout-summary-features li svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--indigo);
+}
+
+.checkout-summary-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 4px 0 16px;
+}
+
+.checkout-summary-total-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.checkout-summary-total-row > span {
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.checkout-summary-total-price {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--indigo);
+}
+
+.checkout-summary-total-price small {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.checkout-submit {
+  width: 100%;
+  margin-top: 20px;
+}
+
+.checkout-summary-trust {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@media (max-width: 900px) {
+  .checkout-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .checkout-summary-card {
+    position: static;
+    order: -1;
+  }
+}
+
 .paywall-card {
   text-align: center;
 }
