@@ -473,6 +473,23 @@ async function listTasksHandler(request) {
     const from = request.query.get('from')
     const to = request.query.get('to')
     const isDraft = request.query.get('isDraft') === 'true'
+    const unscheduledOnly = request.query.get('unscheduled') === 'true'
+
+    // Ödev/görev tekilleştirme (Faz 2): bir güne/saate atanmamış ders-tipi görevler ("Atanmamış
+    // Görevler"). Takvimde görünmezler; Haftalık Plan sayfasındaki ayrı bir bölümden yönetilirler.
+    if (unscheduledOnly) {
+      const requestDb = await withRequest({
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        isDraft: { type: sql.Bit, value: isDraft },
+      })
+      const result = await requestDb.query(`
+        ${SELECT_TASK}
+        WHERE t.student_id = @studentId AND t.is_draft = @isDraft AND t.is_unscheduled = 1
+        ORDER BY t.assigned_date ASC, t.created_at ASC;
+      `)
+
+      return json(200, { tasks: result.recordset.map(sanitizeTask) })
+    }
 
     // Geçmiş günlerin tamamlanmamış görevlerini tek istekte listelemek için (bkz. TodayPage
     // history fetch) tekil "date" yerine "from"/"to" aralığı da kabul edilir. Aralık modunda

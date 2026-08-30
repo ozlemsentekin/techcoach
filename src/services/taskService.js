@@ -25,6 +25,16 @@ export async function getTasksForDateRange(fromDate, toDate, { isDraft = false, 
   return data.tasks
 }
 
+/**
+ * Bir güne/saate atanmamış ders-tipi görevler ("Atanmamış Görevler"). Haftalık Plan
+ * sayfasındaki ayrı bölümde listelenir; buradan bir güne atanır ya da silinir.
+ * @returns {Promise<object[]>}
+ */
+export async function getUnscheduledTasks({ studentId } = {}) {
+  const data = await authRequest(withStudentId('/api/panel/tasks?unscheduled=true', studentId), { method: 'GET' })
+  return data.tasks
+}
+
 /** @returns {Promise<object>} */
 export async function getTaskById(taskId) {
   const data = await authRequest(`/api/panel/tasks/${taskId}`, { method: 'GET' })
