@@ -1,19 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Plus, X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import Button from '../../ui/Button'
 import LoadingState from '../LoadingState'
 import ResourceImageField from '../../parent/components/ResourceImageField'
 import { authRequest } from '../../../services/authClient'
-import { createBookshelfBook, createBookshelfPublisher, updateBookshelfBook } from '../../../services/bookshelfService'
+import {
+  createBookshelfBook,
+  createBookshelfPublisher,
+  getBookshelfStudents,
+  updateBookshelfBook,
+} from '../../../services/bookshelfService'
 import { BOOKSHELF_GRADE_OPTIONS, BOOKSHELF_RESOURCE_TYPES } from './bookshelfConstants'
+import StudentPicker from './StudentPicker'
 
 // Kitaplık "Yeni Kitap Ekle" / "Kitabı Düzenle" formu. Kütüphanedeki ResourceBookModal ile
 // aynı alanlar (yayın evi, ad, ders, sınıf, tip, görsel, cevap anahtarı) + oluştururken hangi
 // çocuk/öğrencilere atanacağı adımı. Kaydedince oluşan/güncellenen kaynağı döndürür.
-export default function BookFormModal({ book, students = [], defaultStudentIds, onSaved, onClose }) {
+export default function BookFormModal({ book, onSaved, onClose }) {
   const isEdit = Boolean(book)
   const [subjects, setSubjects] = useState(null)
   const [publishers, setPublishers] = useState(null)
+  const [students, setStudents] = useState(null)
   const [loadError, setLoadError] = useState('')
 
   const [name, setName] = useState(book?.name || '')
@@ -26,12 +33,7 @@ export default function BookFormModal({ book, students = [], defaultStudentIds, 
   const [hasAnswerKey, setHasAnswerKey] = useState(book ? book.hasAnswerKey : true)
   const [imageUrl, setImageUrl] = useState(book?.imageUrl || '')
 
-  const [selectedStudentIds, setSelectedStudentIds] = useState(() => {
-    if (isEdit) return new Set()
-    if (defaultStudentIds?.length) return new Set(defaultStudentIds.map(String))
-    if (students.length === 1) return new Set([String(students[0].id)])
-    return new Set()
-  })
+  const [selectedStudentIds, setSelectedStudentIds] = useState(() => new Set())
 
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -41,11 +43,17 @@ export default function BookFormModal({ book, students = [], defaultStudentIds, 
     Promise.all([
       authRequest('/api/panel/subjects', { method: 'GET' }),
       authRequest('/api/panel/publishers', { method: 'GET' }),
+      getBookshelfStudents(),
     ])
-      .then(([subjectsData, publishersData]) => {
+      .then(([subjectsData, publishersData, studentList]) => {
         if (ignore) return
         setSubjects(subjectsData.subjects)
         setPublishers(publishersData.publishers)
+        setStudents(studentList)
+        // Tek çocuk/öğrenci varsa (ör. tek çocuklu veli, öğrenci hesabı) otomatik seç.
+        if (!isEdit && studentList.length === 1) {
+          setSelectedStudentIds(new Set([String(studentList[0].id)]))
+        }
       })
       .catch((err) => {
         if (!ignore) setLoadError(err.message)
@@ -53,7 +61,7 @@ export default function BookFormModal({ book, students = [], defaultStudentIds, 
     return () => {
       ignore = true
     }
-  }, [])
+  }, [isEdit])
 
   const sortedPublishers = useMemo(
     () =>
@@ -155,7 +163,7 @@ export default function BookFormModal({ book, students = [], defaultStudentIds, 
           <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{loadError}</div>
         ) : null}
 
-        {subjects === null || publishers === null ? (
+        {subjects === null || publishers === null || students === null ? (
           <LoadingState label="Form yükleniyor..." />
         ) : (
           <div className="grid gap-4 sm:grid-cols-[200px_1fr] sm:gap-5">
@@ -167,33 +175,11 @@ export default function BookFormModal({ book, students = [], defaultStudentIds, 
               {!isEdit && students.length > 1 ? (
                 <div className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium text-panel-text-muted">Kime eklensin?</span>
-                  <div className="flex flex-wrap gap-2">
-                    {students.map((student) => {
-                      const selected = selectedStudentIds.has(String(student.id))
-                      return (
-                        <button
-                          key={student.id}
-                          type="button"
-                          onClick={() => toggleStudent(student.id)}
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
-                            selected
-                              ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
-                              : 'border-panel-border text-panel-text-muted hover:border-panel-blue'
-                          }`}
-                        >
-                          <span
-                            className={`flex h-4 w-4 items-center justify-center rounded border ${
-                              selected ? 'border-panel-blue bg-panel-blue text-white' : 'border-panel-border'
-                            }`}
-                          >
-                            {selected ? <Check size={11} strokeWidth={3} /> : null}
-                          </span>
-                          {student.fullName}
-                          {student.grade ? <span className="text-xs text-panel-text-muted">· {student.grade}. sınıf</span> : null}
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <StudentPicker
+                    students={students}
+                    selectedIds={selectedStudentIds}
+                    onToggle={toggleStudent}
+                  />
                 </div>
               ) : null}
 
@@ -308,7 +294,12 @@ export default function BookFormModal({ book, students = [], defaultStudentIds, 
           </div>
         )}
 
-        <Button type="submit" disabled={saving || subjects === null} size="md" className="mt-5 w-full">
+        <Button
+          type="submit"
+          disabled={saving || subjects === null || publishers === null || students === null}
+          size="md"
+          className="mt-5 w-full"
+        >
           {saving ? 'Kaydediliyor...' : isEdit ? 'Kaydet' : 'Kitabı Oluştur'}
         </Button>
       </form>

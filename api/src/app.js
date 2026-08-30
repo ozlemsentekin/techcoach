@@ -131,6 +131,7 @@ const {
   deleteBookHandler: deleteBookshelfBookHandler,
   setBookStudentsHandler: setBookshelfBookStudentsHandler,
   createPublisherForPanelHandler: createBookshelfPublisherHandler,
+  listAssignableStudentsHandler: listBookshelfStudentsHandler,
 } = require('./bookshelf')
 const { extractQuestionsFromImageHandler } = require('./questionExtraction')
 const {
@@ -1184,6 +1185,13 @@ app.http('panel-bookshelf-publishers-create', {
   methods: ['POST'],
   route: 'panel/bookshelf/publishers',
   handler: createBookshelfPublisherHandler,
+})
+
+app.http('panel-bookshelf-students-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/bookshelf/students',
+  handler: listBookshelfStudentsHandler,
 })
 
 app.http('panel-homeworks-list', {

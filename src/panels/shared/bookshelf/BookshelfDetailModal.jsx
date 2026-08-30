@@ -8,10 +8,12 @@ import { TopicModal, TestModal, AnswerKeyFlow } from '../library/resourceBookMod
 import {
   deleteBookshelfBook,
   getBookshelfBook,
+  getBookshelfStudents,
   setBookshelfBookStudents,
 } from '../../../services/bookshelfService'
 import { authRequest } from '../../../services/authClient'
 import { BOOKSHELF_RESOURCE_TYPE_LABELS } from './bookshelfConstants'
+import StudentPicker from './StudentPicker'
 
 function ContentTab({ book, topics, tests, canEdit, onChanged }) {
   const [expandedTopicId, setExpandedTopicId] = useState(null)
@@ -244,12 +246,27 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
   )
 }
 
-function AssigneesTab({ book, students, onChanged }) {
+function AssigneesTab({ book, onChanged }) {
+  const [students, setStudents] = useState(null)
   const [assignedIds, setAssignedIds] = useState(
-    () => new Set((book.assignedManageableStudents || []).map((s) => String(s.id))),
+    () => new Set((book.assignedStudents || []).map((s) => String(s.id))),
   )
-  const [savingId, setSavingId] = useState(null)
+  const [savingIds, setSavingIds] = useState(() => new Set())
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    let ignore = false
+    getBookshelfStudents()
+      .then((list) => {
+        if (!ignore) setStudents(list)
+      })
+      .catch((err) => {
+        if (!ignore) setError(err.message)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [])
 
   const toggle = async (studentId) => {
     const key = String(studentId)
@@ -257,7 +274,7 @@ function AssigneesTab({ book, students, onChanged }) {
     if (next.has(key)) next.delete(key)
     else next.add(key)
 
-    setSavingId(key)
+    setSavingIds((current) => new Set(current).add(key))
     setError('')
     const previous = assignedIds
     setAssignedIds(next)
@@ -268,38 +285,12 @@ function AssigneesTab({ book, students, onChanged }) {
       setAssignedIds(previous)
       setError(err.message)
     } finally {
-      setSavingId(null)
+      setSavingIds((current) => {
+        const n = new Set(current)
+        n.delete(key)
+        return n
+      })
     }
-  }
-
-  // Yönetilebilir öğrenci yoksa (ör. admin denetim görünümü) atama listesi salt-okunur gösterilir.
-  if (students.length === 0) {
-    const all = book.assignedStudents || []
-    return (
-      <div className="flex flex-col gap-3">
-        <p className="text-sm text-panel-text-muted">Bu kaynağın atandığı çocuk/öğrenciler:</p>
-        {all.length === 0 && !book.otherAssignedCount ? (
-          <p className="p-2 text-sm text-panel-text-muted">Henüz kimseye atanmamış.</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {all.map((student) => (
-              <div key={student.id} className="rounded-xl border border-panel-border px-3 py-2.5 text-sm">
-                <span className="font-medium text-panel-text">{student.fullName}</span>
-                {student.grade ? <span className="ml-2 text-xs text-panel-text-muted">{student.grade}. sınıf</span> : null}
-                {student.archived ? (
-                  <span className="ml-2 rounded-full bg-panel-accent-soft px-2 py-0.5 text-[11px] font-medium text-panel-warm">
-                    Arşiv
-                  </span>
-                ) : null}
-              </div>
-            ))}
-            {book.otherAssignedCount > 0 ? (
-              <p className="px-1 text-xs text-panel-text-muted">+{book.otherAssignedCount} kişi daha</p>
-            ) : null}
-          </div>
-        )}
-      </div>
-    )
   }
 
   return (
@@ -311,41 +302,18 @@ function AssigneesTab({ book, students, onChanged }) {
           : ''}
       </p>
       {error ? <div className="rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{error}</div> : null}
-      <div className="flex flex-col gap-2">
-          {students.map((student) => {
-            const key = String(student.id)
-            const assigned = assignedIds.has(key)
-            const gradeMismatch = book.grade && student.grade && String(student.grade) !== String(book.grade)
-            return (
-              <label
-                key={key}
-                className="flex cursor-pointer items-center gap-3 rounded-xl border border-panel-border px-3 py-2.5 text-sm"
-              >
-                <input
-                  type="checkbox"
-                  checked={assigned}
-                  disabled={savingId === key}
-                  onChange={() => toggle(student.id)}
-                  className="h-4 w-4 accent-panel-blue"
-                />
-                <span className="min-w-0 flex-1 truncate font-medium text-panel-text">{student.fullName}</span>
-                {student.grade ? (
-                  <span className="text-xs text-panel-text-muted">{student.grade}. sınıf</span>
-                ) : null}
-                {assigned && gradeMismatch ? (
-                  <span className="rounded-full bg-panel-accent-soft px-2 py-0.5 text-[11px] font-medium text-panel-warm">
-                    Arşiv (farklı sınıf)
-                  </span>
-                ) : null}
-              </label>
-            )
-          })}
-      </div>
+      {students === null ? (
+        <LoadingState label="Öğrenciler yükleniyor..." />
+      ) : students.length === 0 ? (
+        <p className="p-2 text-sm text-panel-text-muted">Atama yapabileceğiniz çocuk/öğrenci yok.</p>
+      ) : (
+        <StudentPicker students={students} selectedIds={assignedIds} onToggle={toggle} savingIds={savingIds} />
+      )}
     </div>
   )
 }
 
-export default function BookshelfDetailModal({ resourceBookId, students = [], showAssignees = true, onClose, onChanged, onEdit }) {
+export default function BookshelfDetailModal({ resourceBookId, showAssignees = true, onClose, onChanged, onEdit }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [tab, setTab] = useState('content')
@@ -456,7 +424,7 @@ export default function BookshelfDetailModal({ resourceBookId, students = [], sh
           ) : data === null ? (
             <LoadingState label="Yükleniyor..." />
           ) : tab === 'assignees' && showAssignees ? (
-            <AssigneesTab book={book} students={students} onChanged={() => { load(); onChanged?.() }} />
+            <AssigneesTab book={book} onChanged={() => { load(); onChanged?.() }} />
           ) : (
             <ContentTab
               book={book}
