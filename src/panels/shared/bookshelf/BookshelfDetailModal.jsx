@@ -84,31 +84,35 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
                     <span className="text-[11px] font-medium text-panel-text-muted">{topicTests.length} test</span>
                   </button>
                   {canEdit ? (
-                    <>
-                      <button
-                        type="button"
-                        aria-label="İçeriği düzenle"
-                        onClick={() => setEditingTopic(topic)}
-                        className="text-panel-text-muted hover:text-panel-blue"
-                      >
-                        <Pencil size={13} aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Test ekle"
-                        onClick={() => setTestModalTopic(topic)}
-                        className="text-panel-text-muted hover:text-panel-blue"
-                      >
-                        <Plus size={15} aria-hidden="true" />
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      aria-label="İçeriği düzenle"
+                      onClick={() => setEditingTopic(topic)}
+                      className="text-panel-text-muted hover:text-panel-blue"
+                    >
+                      <Pencil size={13} aria-hidden="true" />
+                    </button>
                   ) : null}
                 </div>
 
                 {!collapsed ? (
-                  <div className="ml-5 flex flex-col gap-1 pl-1">
+                  <div className="ml-5 flex flex-col gap-1.5 pl-1">
+                    {canEdit ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="w-fit gap-1.5"
+                        onClick={() => setTestModalTopic(topic)}
+                      >
+                        <Plus size={14} aria-hidden="true" />
+                        Test Ekle
+                      </Button>
+                    ) : null}
                     {topicTests.length === 0 ? (
-                      <p className="py-1 text-xs text-panel-text-muted">Bu içeriğe ait test yok.</p>
+                      <p className="py-1 text-xs text-panel-text-muted">
+                        Bu içeriğe henüz test eklenmemiş. “Test Ekle” ile kitaptaki testleri girin.
+                      </p>
                     ) : (
                       topicTests.map((test) => (
                         <div key={test.id} className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-xs text-panel-text-muted">
@@ -166,8 +170,10 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
       {topicModalOpen ? (
         <TopicModal
           book={book}
-          onSaved={() => {
+          onSaved={(topic) => {
             setTopicModalOpen(false)
+            // Yeni içeriği hemen aç ki "Test Ekle" butonu görünür olsun.
+            if (topic?.id) setExpandedTopicId(topic.id)
             onChanged()
           }}
           onClose={() => setTopicModalOpen(false)}
@@ -186,7 +192,7 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
       ) : null}
       {testModalTopic ? (
         <TestModal
-          topic={testModalTopic}
+          topic={{ ...testModalTopic, bookName: book?.name }}
           onSaved={() => {
             setTestModalTopic(null)
             onChanged()
@@ -208,7 +214,12 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
       {answerKeyTest ? (
         <AnswerKeyFlow
           test={answerKeyTest}
-          onTestUpdated={() => onChanged()}
+          // Soru sayısı girilince güncel test nesnesiyle yeniden render et → optik/cevap
+          // anahtarı ekranı açılsın (aksi halde eski test.questionCount=null'da takılı kalıyordu).
+          onTestUpdated={(updatedTest) => {
+            if (updatedTest) setAnswerKeyTest(updatedTest)
+            onChanged()
+          }}
           onClose={() => {
             setAnswerKeyTest(null)
             onChanged()

@@ -1,8 +1,49 @@
 import { useEffect, useState } from 'react'
-import { Copy, Trash2, X } from 'lucide-react'
+import { BookOpen, Copy, FileText, ListTree, Trash2, X } from 'lucide-react'
 import Button from '../../ui/Button'
 import LoadingState from '../LoadingState'
 import { authRequest } from '../../../services/authClient'
+
+// Kaynak yapısı üç katmanlı: Kitap → İçerik (bölüm/ünite) → Test. "İçerik", "Test Konusu"
+// ve "Test Adı" terimleri karışabildiği için ekleme ekranlarında somut bir örnekle gösterilir.
+function ContentHierarchyHint({ bookName, highlight }) {
+  const row = (active) =>
+    `flex items-start gap-2 rounded-lg px-2 py-1.5 ${active ? 'bg-panel-blue-soft' : ''}`
+  return (
+    <div className="mb-4 rounded-xl border border-panel-border bg-panel-surface-soft p-3">
+      <p className="mb-2 text-xs font-semibold text-panel-text">Kaynak nasıl bölünüyor?</p>
+      <div className="flex flex-col gap-0.5 text-xs text-panel-text-muted">
+        <div className={row(false)}>
+          <BookOpen size={14} className="mt-0.5 shrink-0 text-panel-blue" aria-hidden="true" />
+          <span>
+            <span className="font-semibold text-panel-text">Kitap</span>
+            {bookName ? <span> — {bookName}</span> : null}
+          </span>
+        </div>
+        <div className="ml-3 border-l border-panel-border pl-3">
+          <div className={row(highlight === 'topic')}>
+            <ListTree size={14} className="mt-0.5 shrink-0 text-panel-blue" aria-hidden="true" />
+            <span>
+              <span className="font-semibold text-panel-text">İçerik</span> — kitabın bir bölümü / ünitesi
+              <span className="block italic">örnek: “1. Ünite — Çarpanlar ve Katlar”</span>
+            </span>
+          </div>
+          <div className="ml-3 border-l border-panel-border pl-3">
+            <div className={row(highlight === 'test')}>
+              <FileText size={14} className="mt-0.5 shrink-0 text-panel-blue" aria-hidden="true" />
+              <span>
+                <span className="font-semibold text-panel-text">Test</span> — o bölümdeki tek bir test
+                <span className="block italic">
+                  örnek: Test Konusu “Asal Sayılar” · Test Adı “1. Test” · kitapta 12. sayfada başlıyor
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function TopicModal({ book, topic, onSaved, onClose }) {
   const isEdit = Boolean(topic)
@@ -54,11 +95,7 @@ function TopicModal({ book, topic, onSaved, onClose }) {
           </button>
         </div>
 
-        {book ? (
-          <p className="mb-3 text-sm text-panel-text-muted">
-            Kitap: <span className="font-medium text-panel-text">{book.name}</span>
-          </p>
-        ) : null}
+        {!isEdit ? <ContentHierarchyHint bookName={book?.name} highlight="topic" /> : null}
 
         {error ? (
           <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
@@ -66,17 +103,20 @@ function TopicModal({ book, topic, onSaved, onClose }) {
 
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">İçerik Adı</span>
+            <span className="text-sm font-medium text-panel-text-muted">İçerik Adı (kitabın bölümü / ünitesi)</span>
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Örn. Paragrafın Anlamı ve Yorumu"
+              placeholder="Örn. 1. Ünite — Çarpanlar ve Katlar"
               className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
             />
+            <span className="text-xs text-panel-text-muted">
+              Kitabın içindekiler bölümündeki başlığı yazın. Testleri bir sonraki adımda bu içeriğe ekleyeceksiniz.
+            </span>
           </label>
 
           <Button type="submit" disabled={loading} size="md" className="w-full">
-            {loading ? 'Kaydediliyor...' : isEdit ? 'Kaydet' : 'İçerik Oluştur'}
+            {loading ? 'Kaydediliyor...' : isEdit ? 'Kaydet' : 'İçeriği Oluştur'}
           </Button>
         </div>
       </form>
@@ -161,11 +201,11 @@ function EditTestModal({ topic, test, onSaved, onClose }) {
 
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">Konu Adı</span>
+            <span className="text-sm font-medium text-panel-text-muted">Test Konusu</span>
             <input
               value={topicName}
               onChange={(event) => setTopicName(event.target.value)}
-              placeholder="Örn. Paragrafın Konusu"
+              placeholder="ör. Asal Sayılar"
               className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
             />
           </label>
@@ -175,19 +215,19 @@ function EditTestModal({ topic, test, onSaved, onClose }) {
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Örn. 1. Test"
+              placeholder="ör. 1. Test"
               className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
             />
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">Sayfa</span>
+            <span className="text-sm font-medium text-panel-text-muted">Kitapta başladığı sayfa</span>
             <input
               type="number"
               min="1"
               value={pageStart}
               onChange={(event) => setPageStart(event.target.value)}
-              placeholder="Örn. 8"
+              placeholder="ör. 12"
               className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
             />
           </label>
@@ -314,16 +354,19 @@ function AddTestsModal({ topic, onSaved, onClose }) {
           </button>
         </div>
 
+        <ContentHierarchyHint bookName={topic?.bookName} highlight="test" />
+
         {topic ? (
           <p className="mb-3 text-sm text-panel-text-muted">
-            İçerik: <span className="font-medium text-panel-text">{topic.name}</span>
+            Eklenecek içerik: <span className="font-medium text-panel-text">{topic.name}</span>
           </p>
         ) : null}
 
         <p className="mb-3 text-xs text-panel-text-muted">
-          Sadece başlangıç sayfasını girin, sayfa aralığını sonra "Test Düzenle" ile ayarlayabilirsiniz. Soru
-          sayısını da şimdi girmenize gerek yok; test listesindeki cevap anahtarı ikonuna tıklayınca
-          belirleyebilirsiniz.
+          Her satır bir testtir. <span className="font-medium text-panel-text">Test Konusu</span> = testin işlediği
+          konu (ör. “Asal Sayılar”), <span className="font-medium text-panel-text">Test Adı</span> = kitaptaki adı
+          (ör. “1. Test”), <span className="font-medium text-panel-text">Başladığı Sayfa</span> = kitapta bu testin
+          başladığı sayfa numarası. Soru sayısını ve cevap anahtarını sonra ekleyebilirsiniz.
         </p>
 
         {error ? (
@@ -358,26 +401,35 @@ function AddTestsModal({ topic, onSaved, onClose }) {
                   </div>
                 </div>
                 <div className="flex flex-col gap-2">
-                  <input
-                    value={row.topicName}
-                    onChange={(event) => updateRow(row.id, { topicName: event.target.value })}
-                    placeholder="Konu adı"
-                    className="rounded-lg border border-panel-border p-2 text-sm text-panel-text"
-                  />
-                  <input
-                    value={row.name}
-                    onChange={(event) => updateRow(row.id, { name: event.target.value })}
-                    placeholder="Test adı"
-                    className="rounded-lg border border-panel-border p-2 text-sm text-panel-text"
-                  />
-                  <input
-                    type="number"
-                    min="1"
-                    value={row.pageStart}
-                    onChange={(event) => updateRow(row.id, { pageStart: event.target.value })}
-                    placeholder="Başlangıç sayfası"
-                    className="rounded-lg border border-panel-border p-2 text-sm text-panel-text"
-                  />
+                  <label className="flex flex-col gap-1 text-xs font-medium text-panel-text-muted">
+                    Test Konusu
+                    <input
+                      value={row.topicName}
+                      onChange={(event) => updateRow(row.id, { topicName: event.target.value })}
+                      placeholder="ör. Asal Sayılar"
+                      className="rounded-lg border border-panel-border p-2 text-sm text-panel-text"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-medium text-panel-text-muted">
+                    Test Adı
+                    <input
+                      value={row.name}
+                      onChange={(event) => updateRow(row.id, { name: event.target.value })}
+                      placeholder="ör. 1. Test"
+                      className="rounded-lg border border-panel-border p-2 text-sm text-panel-text"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-medium text-panel-text-muted">
+                    Kitapta başladığı sayfa
+                    <input
+                      type="number"
+                      min="1"
+                      value={row.pageStart}
+                      onChange={(event) => updateRow(row.id, { pageStart: event.target.value })}
+                      placeholder="ör. 12"
+                      className="rounded-lg border border-panel-border p-2 text-sm text-panel-text"
+                    />
+                  </label>
                 </div>
               </div>
             ))}
@@ -387,9 +439,9 @@ function AddTestsModal({ topic, onSaved, onClose }) {
             <table className="w-full min-w-[460px] text-left text-sm">
               <thead>
                 <tr className="bg-panel-surface-soft text-xs font-semibold text-panel-text-muted">
-                  <th className="px-3 py-2">Konu Adı</th>
+                  <th className="px-3 py-2">Test Konusu</th>
                   <th className="px-3 py-2">Test Adı</th>
-                  <th className="w-32 px-3 py-2">Başl. Sayfa</th>
+                  <th className="w-36 px-3 py-2">Başladığı Sayfa</th>
                   <th className="w-16 px-3 py-2" />
                 </tr>
               </thead>
@@ -400,7 +452,7 @@ function AddTestsModal({ topic, onSaved, onClose }) {
                       <input
                         value={row.topicName}
                         onChange={(event) => updateRow(row.id, { topicName: event.target.value })}
-                        placeholder="Örn. Paragrafın Konusu"
+                        placeholder="ör. Asal Sayılar"
                         className="w-full rounded-lg border border-panel-border p-1.5 text-sm text-panel-text"
                       />
                     </td>
@@ -408,7 +460,7 @@ function AddTestsModal({ topic, onSaved, onClose }) {
                       <input
                         value={row.name}
                         onChange={(event) => updateRow(row.id, { name: event.target.value })}
-                        placeholder="Örn. 1. Test"
+                        placeholder="ör. 1. Test"
                         className="w-full rounded-lg border border-panel-border p-1.5 text-sm text-panel-text"
                       />
                     </td>
@@ -418,7 +470,7 @@ function AddTestsModal({ topic, onSaved, onClose }) {
                         min="1"
                         value={row.pageStart}
                         onChange={(event) => updateRow(row.id, { pageStart: event.target.value })}
-                        placeholder="8"
+                        placeholder="ör. 12"
                         className="w-full rounded-lg border border-panel-border p-1.5 text-sm text-panel-text"
                       />
                     </td>
@@ -523,7 +575,7 @@ function SetQuestionCountModal({ test, onSaved, onClose }) {
 
         <p className="mb-3 text-sm text-panel-text-muted">
           Cevap anahtarını girebilmek için önce <span className="font-medium text-panel-text">{test.name}</span>{' '}
-          testinin soru sayısını belirleyin.
+          testinin soru sayısını belirleyin. Kaydettikten sonra cevap anahtarı ekranı açılır.
         </p>
 
         {error ? (
@@ -543,7 +595,7 @@ function SetQuestionCountModal({ test, onSaved, onClose }) {
         </label>
 
         <Button type="submit" disabled={loading} size="md" className="mt-3 w-full">
-          {loading ? 'Kaydediliyor...' : 'Devam Et'}
+          {loading ? 'Kaydediliyor...' : 'Kaydet ve Cevap Anahtarına Geç'}
         </Button>
       </form>
     </div>
