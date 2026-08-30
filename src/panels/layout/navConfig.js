@@ -24,35 +24,39 @@ export const STUDENT_SIDEBAR_NAV = [...STUDENT_PRIMARY_NAV, ...STUDENT_MORE_NAV]
 
 export const PARENT_STUDENTS_NAV_ITEM = { to: '/parent/students', label: 'Çocuklarım', icon: 'Users' }
 
-export const PARENT_MORE_NAV = [PARENT_STUDENTS_NAV_ITEM]
-
 // Mesajlar şimdilik yalnızca admin yetkili veli hesaplarına gösteriliyor.
 export const PARENT_ADMIN_ONLY_NAV = [{ to: '/parent/messages', label: 'Mesajlar', icon: 'MessageCircle' }]
+
+const sortNavItemsByLabel = (items) =>
+  [...items].sort((a, b) => a.label.localeCompare(b.label, 'tr'))
 
 // Henüz hiç çocuk profili eklenmemiş bir veli için Bugün/Haftalık Plan sayfalarının
 // hepsi boş/hatalı görünür (bunlar bir öğrenci bağlamı gerektirir); o yüzden ilk kayıtta tek
 // birincil menü öğesi olarak yalnızca Çocuklarım gösterilir.
-export function getParentPrimaryNav(hasStudents, canManageLibrary = false) {
+// Aksi halde ilk üç birincil menü öğesi sabit sıradadır: Bugün, Haftalık Plan, Çocuklarım.
+export function getParentPrimaryNav(hasStudents) {
   if (!hasStudents) return [PARENT_STUDENTS_NAV_ITEM]
   return [
     { to: '/parent/dashboard', label: 'Bugün', icon: 'Home' },
     { to: '/parent/weekly-plan', label: 'Haftalık Plan', icon: 'CalendarRange' },
-    canManageLibrary ? KUTUPHANE_PARENT_ITEM : KITAPLIK_PARENT_ITEM,
+    PARENT_STUDENTS_NAV_ITEM,
   ]
 }
 
-export function getParentMoreNav(isAdmin, hasStudents = true) {
-  const base = isAdmin
-    ? [...PARENT_ADMIN_ONLY_NAV, KITAPLIK_PARENT_ITEM, ...PARENT_MORE_NAV]
-    : [...PARENT_MORE_NAV]
-  // Çocuklarım hiç öğrenci yokken zaten birincil menüde gösteriliyor, burada tekrar etmesin.
-  return hasStudents ? base : base.filter((item) => item.to !== PARENT_STUDENTS_NAV_ITEM.to)
+// İlk üç sabit öğeden sonra kalan menüler alfabetik sırayla gösterilir.
+export function getParentMoreNav(isAdmin, hasStudents = true, canManageLibrary = false) {
+  if (!hasStudents) return []
+  const items = [canManageLibrary || isAdmin ? KUTUPHANE_PARENT_ITEM : KITAPLIK_PARENT_ITEM]
+  if (isAdmin) {
+    items.push(KITAPLIK_PARENT_ITEM, ...PARENT_ADMIN_ONLY_NAV)
+  }
+  return sortNavItemsByLabel(items)
 }
 
 export function getParentSidebarNav(isAdmin, hasStudents = true, canManageLibrary = false) {
   return [
-    ...getParentPrimaryNav(hasStudents, canManageLibrary || isAdmin),
-    ...getParentMoreNav(isAdmin, hasStudents),
+    ...getParentPrimaryNav(hasStudents),
+    ...getParentMoreNav(isAdmin, hasStudents, canManageLibrary),
   ]
 }
 

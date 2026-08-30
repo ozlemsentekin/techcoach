@@ -29,14 +29,14 @@ export default function PanelLayout({ role }) {
   const primaryItems = isAdminSection
     ? [RETURN_TO_PANEL_ITEM]
     : role === 'parent'
-      ? getParentPrimaryNav(hasStudents, canManageLibrary)
+      ? getParentPrimaryNav(hasStudents)
       : role === 'teacher'
         ? getTeacherPrimaryNav(canManageLibrary)
         : STUDENT_PRIMARY_NAV
   const moreItems = isAdminSection
     ? PARENT_ADMIN_NAV.children
     : role === 'parent'
-      ? getParentMoreNav(authUser?.isAdmin, hasStudents)
+      ? getParentMoreNav(authUser?.isAdmin, hasStudents, canManageLibrary)
       : role === 'teacher'
         ? TEACHER_MORE_NAV
         : STUDENT_MORE_NAV
