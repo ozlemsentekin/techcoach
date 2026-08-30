@@ -118,7 +118,7 @@ export default function MessagesPage() {
                 className="flex items-start gap-3 border-b border-[#edf0f1] px-4 py-3 last:border-0 hover:bg-[#f8f7fb]"
               >
                 <Badge tone={message.from === 'ebeveyn' ? 'blue' : 'sage'} className="shrink-0">
-                  {message.from === 'ebeveyn' ? 'Sen' : 'Aylin'}
+                  {message.from === 'ebeveyn' ? 'Sen' : 'Öğrenci'}
                 </Badge>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-[#253d3e]">{message.text}</p>

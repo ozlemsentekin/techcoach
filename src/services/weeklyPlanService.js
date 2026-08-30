@@ -63,10 +63,10 @@ export async function setPlanStatus(weekStartDateISO, status) {
   return data.status
 }
 
-async function fetchDayTasks(date) {
+async function fetchDayTasks(date, studentId) {
   const [draftTasks, liveTasks] = await Promise.all([
-    getTasksForDate(date, { isDraft: true }),
-    getTasksForDate(date, { isDraft: false }),
+    getTasksForDate(date, { isDraft: true, studentId }),
+    getTasksForDate(date, { isDraft: false, studentId }),
   ])
   return { draftTasks, liveTasks }
 }
@@ -79,12 +79,12 @@ function groupTasksByDate(tasks, dates) {
   return tasksByDate
 }
 
-async function fetchWeekTaskLists(weekStartDateISO) {
+async function fetchWeekTaskLists(weekStartDateISO, studentId) {
   const weekDates = getWeekDates(weekStartDateISO)
   const weekEndDateISO = weekDates[weekDates.length - 1]
   const [draftTasks, liveTasks] = await Promise.all([
-    getTasksForDateRange(weekStartDateISO, weekEndDateISO, { isDraft: true }),
-    getTasksForDateRange(weekStartDateISO, weekEndDateISO, { isDraft: false }),
+    getTasksForDateRange(weekStartDateISO, weekEndDateISO, { isDraft: true, studentId }),
+    getTasksForDateRange(weekStartDateISO, weekEndDateISO, { isDraft: false, studentId }),
   ])
 
   return {
@@ -96,8 +96,8 @@ async function fetchWeekTaskLists(weekStartDateISO) {
   }
 }
 
-export async function getWeekPlans(weekStartDateISO) {
-  const { weekDates, draftTasksByDate, liveTasksByDate } = await fetchWeekTaskLists(weekStartDateISO)
+export async function getWeekPlans(weekStartDateISO, { studentId } = {}) {
+  const { weekDates, draftTasksByDate, liveTasksByDate } = await fetchWeekTaskLists(weekStartDateISO, studentId)
   const tasksByDate = {}
   const dayStatusByDate = {}
 
@@ -123,8 +123,8 @@ export async function getBacklogTasks(beforeDateISO, lookbackDays = 30, { studen
 }
 
 /** Bir günün canlı görevlerini, varsa bekleyen taslak eklemeleriyle birlikte döner (taslak canlıyı gizlemez). */
-export async function getDraftTasksForDate(date) {
-  const { draftTasks, liveTasks } = await fetchDayTasks(date)
+export async function getDraftTasksForDate(date, { studentId } = {}) {
+  const { draftTasks, liveTasks } = await fetchDayTasks(date, studentId)
   return [...liveTasks, ...draftTasks]
 }
 
@@ -133,8 +133,8 @@ export async function getDraftTasksForDate(date) {
  * 'taslak' (yayınlanmamış bekleyen ekleme/değişiklik var), 'yayinlandi' (tüm görevler canlı),
  * 'bos' (o gün için hiç görev yok).
  */
-export async function getDayPlan(date) {
-  const { draftTasks, liveTasks } = await fetchDayTasks(date)
+export async function getDayPlan(date, { studentId } = {}) {
+  const { draftTasks, liveTasks } = await fetchDayTasks(date, studentId)
   const status = draftTasks.length > 0 ? 'taslak' : liveTasks.length > 0 ? 'yayinlandi' : 'bos'
   return { tasks: [...liveTasks, ...draftTasks], status }
 }
@@ -143,45 +143,51 @@ export async function getDayPlan(date) {
  * Bir günün taslak görevlerini canlıya taşır. Var olan canlı görevlere DOKUNMAZ, silmez —
  * sadece taslakları canlıya ekleyerek senkronize eder (taslak yoksa hiçbir şey yapmaz).
  */
-async function publishDayTasks(date) {
-  const draftTasks = await getTasksForDate(date, { isDraft: true })
+async function publishDayTasks(date, studentId) {
+  const draftTasks = await getTasksForDate(date, { isDraft: true, studentId })
   if (draftTasks.length === 0) return
-  await Promise.all(draftTasks.map((task) => patchTask(task.id, { isDraft: false })))
+  await Promise.all(draftTasks.map((task) => patchTask(task.id, { isDraft: false }, studentId)))
 }
 
 /** Tek bir günü yayınlar ve o günün güncel (canlı) halini döner. */
-export async function publishDay(date) {
-  await publishDayTasks(date)
-  return getDayPlan(date)
+export async function publishDay(date, { studentId } = {}) {
+  await publishDayTasks(date, studentId)
+  return getDayPlan(date, { studentId })
 }
 
 /**
  * Bir gün için yeni görev kaydeder: gün zaten yayındaysa doğrudan canlıya yazar
  * (yayınlanmış bir günde yapılan değişiklik anında plana yansır), aksi halde taslağa yazar.
  */
-export async function saveTaskForDay(date, taskData, dayStatus) {
+export async function saveTaskForDay(date, taskData, dayStatus, { studentId } = {}) {
   if (dayStatus === 'yayinlandi') {
-    return postTask({
+    return postTask(
+      {
+        status: 'bekliyor',
+        createdBy: 'ebeveyn',
+        priority: 'orta',
+        ...taskData,
+        date,
+        isDraft: false,
+      },
+      studentId,
+    )
+  }
+  return saveDraftTask(date, taskData, { studentId })
+}
+
+export async function saveDraftTask(date, taskData, { studentId } = {}) {
+  return postTask(
+    {
       status: 'bekliyor',
       createdBy: 'ebeveyn',
       priority: 'orta',
       ...taskData,
       date,
-      isDraft: false,
-    })
-  }
-  return saveDraftTask(date, taskData)
-}
-
-export async function saveDraftTask(date, taskData) {
-  return postTask({
-    status: 'bekliyor',
-    createdBy: 'ebeveyn',
-    priority: 'orta',
-    ...taskData,
-    date,
-    isDraft: true,
-  })
+      isDraft: true,
+    },
+    studentId,
+  )
 }
 
 export async function updateDraftTask(date, taskId, updates) {

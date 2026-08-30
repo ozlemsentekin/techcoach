@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../../context/useAuth'
-import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Info } from 'lucide-react'
+import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Info, Users } from 'lucide-react'
+import { cachedGet } from '../../../services/authClient'
 import {
   getWeekDates,
   getDraftTasksForDate,
@@ -26,11 +27,17 @@ const currentWeekStart = getMondayOfWeek(todayISODate())
 
 export default function WeeklyPlanPage() {
   const { authUser } = useAuth()
-  const restricted = Boolean(authUser?.restricted)
   const [searchParams, setSearchParams] = useSearchParams()
   const [weekOffset, setWeekOffset] = useState(0)
   const weekStart = useMemo(() => addDaysISO(currentWeekStart, weekOffset * 7), [weekOffset])
   const weekDates = useMemo(() => getWeekDates(weekStart), [weekStart])
+
+  const [students, setStudents] = useState(null)
+  const [selectedStudentId, setSelectedStudentId] = useState('')
+  const selectedStudent = students?.find((student) => student.id === selectedStudentId)
+  const studentName = selectedStudent?.fullName?.trim().split(/\s+/)[0] || ''
+  const restricted = Boolean(selectedStudent ? selectedStudent.restricted : authUser?.restricted)
+  const hasMultipleStudents = (students?.length || 0) > 1
 
   const [tasksByDate, setTasksByDate] = useState({})
   const [dayStatusByDate, setDayStatusByDate] = useState({})
@@ -44,7 +51,36 @@ export default function WeeklyPlanPage() {
   const [homeworkModalDate, setHomeworkModalDate] = useState('')
   const [banner, setBanner] = useState('')
 
-  const loadWeekPlans = useCallback((nextWeekStart) => getWeekPlans(nextWeekStart), [])
+  // authUser.id'ye bağlı: admin bir veliyi impersonate ettiğinde ParentApp yeniden mount
+  // olmadığından, kimlik değişince öğrenci listesini yeniden çekmezsek önceki kullanıcının
+  // çocuğu seçili kalır (bkz. DashboardPage aynı desen).
+  useEffect(() => {
+    let ignore = false
+    cachedGet('/api/parent/students')
+      .then((data) => {
+        if (ignore) return
+        const sorted = [...(data.students || [])].sort((a, b) => a.fullName.localeCompare(b.fullName, 'tr'))
+        setStudents(sorted)
+        setSelectedStudentId((current) =>
+          current && sorted.some((student) => student.id === current) ? current : sorted[0]?.id || '',
+        )
+      })
+      .catch((err) => {
+        if (!ignore) {
+          setStudents([])
+          setLoadError(err.message)
+          setLoading(false)
+        }
+      })
+    return () => {
+      ignore = true
+    }
+  }, [authUser?.id])
+
+  const loadWeekPlans = useCallback(
+    (nextWeekStart) => getWeekPlans(nextWeekStart, { studentId: selectedStudentId }),
+    [selectedStudentId],
+  )
 
   const applyWeekPlans = useCallback((plans) => {
     setTasksByDate(plans.tasksByDate)
@@ -52,10 +88,11 @@ export default function WeeklyPlanPage() {
   }, [])
 
   const loadUnscheduled = useCallback(() => {
-    getUnscheduledTasks()
+    if (!selectedStudentId) return
+    getUnscheduledTasks({ studentId: selectedStudentId })
       .then(setUnscheduledTasks)
       .catch(() => setUnscheduledTasks([]))
-  }, [])
+  }, [selectedStudentId])
 
   const refresh = useCallback(async (nextWeekStart = weekStart) => {
     applyWeekPlans(await loadWeekPlans(nextWeekStart))
@@ -63,6 +100,7 @@ export default function WeeklyPlanPage() {
   }, [applyWeekPlans, loadWeekPlans, loadUnscheduled, weekStart])
 
   useEffect(() => {
+    if (!selectedStudentId) return undefined
     let ignore = false
     setLoading(true)
     loadWeekPlans(weekStart)
@@ -78,18 +116,19 @@ export default function WeeklyPlanPage() {
     return () => {
       ignore = true
     }
-  }, [applyWeekPlans, loadWeekPlans, weekStart])
+  }, [applyWeekPlans, loadWeekPlans, weekStart, selectedStudentId])
 
   useEffect(() => {
+    if (!selectedStudentId) return
     Promise.all([
-      getTeacherLessonSchedule().catch(() => []),
-      getSchoolSchedule().catch(() => ({ entries: [], holidays: [] })),
+      getTeacherLessonSchedule({ studentId: selectedStudentId }).catch(() => []),
+      getSchoolSchedule({ studentId: selectedStudentId }).catch(() => ({ entries: [], holidays: [] })),
     ]).then(([teacherLessons, school]) => {
       setLessonSchedule(teacherLessons)
       setSchoolSchedule(school.entries || [])
       setSchoolHolidays(school.holidays || [])
     })
-  }, [])
+  }, [selectedStudentId])
 
   useEffect(() => {
     if (!restricted) preloadPanelHomeworkResourceBooks()
@@ -118,12 +157,12 @@ export default function WeeklyPlanPage() {
 
     if (initialTask && taskData.date === initialTask.date) {
       // Aynı gün içinde düzenleme: görev zaten hangi durumdaysa (taslak/canlı) o durumda kalır.
-      await patchTask(initialTask.id, taskData)
+      await patchTask(initialTask.id, taskData, selectedStudentId)
     } else if (initialTask) {
-      await removeTask(initialTask.id)
-      await saveTaskForDay(taskData.date, taskData, targetStatus)
+      await removeTask(initialTask.id, selectedStudentId)
+      await saveTaskForDay(taskData.date, taskData, targetStatus, { studentId: selectedStudentId })
     } else {
-      await saveTaskForDay(taskData.date, taskData, targetStatus)
+      await saveTaskForDay(taskData.date, taskData, targetStatus, { studentId: selectedStudentId })
     }
 
     await refresh()
@@ -132,7 +171,7 @@ export default function WeeklyPlanPage() {
   }
 
   const handleDeleteTask = async (task) => {
-    await removeTask(task.id)
+    await removeTask(task.id, selectedStudentId)
     await refresh()
     setDrawerState(null)
     showBanner('Görev silindi.')
@@ -144,6 +183,7 @@ export default function WeeklyPlanPage() {
       ...payload,
       dueDate: scheduledDate || payload.dueDate,
       taskDate: scheduledDate,
+      studentId: selectedStudentId,
     })
     await refresh()
     setHomeworkModalDate('')
@@ -151,7 +191,7 @@ export default function WeeklyPlanPage() {
   }
 
   const handlePublishDay = async (date) => {
-    await publishDay(date)
+    await publishDay(date, { studentId: selectedStudentId })
     await refresh()
     showBanner('Gün yayınlandı.')
   }
@@ -171,6 +211,7 @@ export default function WeeklyPlanPage() {
         durationMinutes: minutes,
       },
       targetStatus,
+      { studentId: selectedStudentId },
     )
 
     await refresh()
@@ -178,8 +219,8 @@ export default function WeeklyPlanPage() {
   }
 
   const getExistingTasksForDrawer = useCallback(
-    (date) => tasksByDate[date] || getDraftTasksForDate(date),
-    [tasksByDate],
+    (date) => tasksByDate[date] || getDraftTasksForDate(date, { studentId: selectedStudentId }),
+    [tasksByDate, selectedStudentId],
   )
 
   return (
@@ -189,9 +230,28 @@ export default function WeeklyPlanPage() {
           <CalendarCheck size={32} strokeWidth={2.1} aria-hidden="true" />
         </span>
         <div className="min-w-0">
-          <h1 className="break-words text-2xl font-bold leading-tight text-panel-text sm:text-3xl">
-            Aylin'in Haftasını Planla
-          </h1>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="break-words text-2xl font-bold leading-tight text-panel-text sm:text-3xl">
+              {studentName ? `${studentName}'in Haftasını Planla` : 'Haftalık Plan'}
+            </h1>
+            {hasMultipleStudents ? (
+              <label className="inline-flex w-fit items-center gap-2 rounded-full border border-panel-border bg-panel-surface-soft px-3 py-1 text-sm font-semibold text-panel-text">
+                <Users size={15} aria-hidden="true" />
+                <select
+                  value={selectedStudentId}
+                  onChange={(event) => setSelectedStudentId(event.target.value)}
+                  aria-label="Öğrenci seç"
+                  className="bg-transparent text-sm font-semibold text-panel-text focus:outline-none"
+                >
+                  {students.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.fullName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
           <p className="mt-1 text-sm font-medium leading-relaxed text-panel-blue sm:text-base">
             Dersleri, ödevleri, molaları ve serbest zamanı dengeli şekilde planla.
           </p>
@@ -256,7 +316,12 @@ export default function WeeklyPlanPage() {
             onQuickAddBreak={restricted ? undefined : handleQuickAddBreak}
           />
 
-          <UnscheduledTasksPanel tasks={unscheduledTasks} onChanged={refresh} readOnly={restricted} />
+          <UnscheduledTasksPanel
+            tasks={unscheduledTasks}
+            studentId={selectedStudentId}
+            onChanged={refresh}
+            readOnly={restricted}
+          />
 
           <div className="flex items-center gap-3 rounded-2xl bg-panel-blue-soft px-5 py-4 text-sm font-semibold text-panel-blue">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-panel-blue/30">

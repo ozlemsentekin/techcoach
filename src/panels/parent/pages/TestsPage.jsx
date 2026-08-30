@@ -83,7 +83,7 @@ export default function TestsPage() {
       <PageHeader title="Test ve Denemeler" />
 
       {testSessions.length === 0 ? (
-        <EmptyState icon={FileCheck2} title="Henüz test sonucu yok" description="Aylin bir test tamamladığında burada görünecek." />
+        <EmptyState icon={FileCheck2} title="Henüz test sonucu yok" description="Öğrencin bir test tamamladığında burada görünecek." />
       ) : (
         <div className="fade-slide-in">
           <div className="grid gap-3 md:hidden">

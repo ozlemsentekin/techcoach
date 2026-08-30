@@ -86,7 +86,7 @@ export default function StudentWelcomeBanner({ studentName, tasks = [], checkIn 
 
           <div className="mt-4 flex flex-col gap-2">
             <h1 className="text-2xl font-bold leading-tight text-panel-text sm:text-3xl">
-              {greeting.label}, {firstName || 'Aylin'}
+              {firstName ? `${greeting.label}, ${firstName}` : greeting.label}
             </h1>
             <p className="flex max-w-3xl items-start gap-2 text-base font-medium leading-relaxed text-panel-text-muted">
               <Sparkles className="mt-0.5 shrink-0 text-panel-blue" size={17} aria-hidden="true" />
