@@ -16,7 +16,6 @@ export const STUDENT_PRIMARY_NAV = [
 
 export const STUDENT_MORE_NAV = [
   { to: '/student/teachers', label: 'Öğretmenlerim', icon: 'GraduationCap' },
-  { to: '/student/homework', label: 'Ödevlerim', icon: 'NotebookPen' },
   { to: '/student/bookshelf', label: 'Kitaplık', icon: 'BookMarked' },
   { to: '/student/mistakes', label: 'Hata Defterim', icon: 'AlertCircle' },
 ]
@@ -30,7 +29,7 @@ export const PARENT_MORE_NAV = [PARENT_STUDENTS_NAV_ITEM]
 // Mesajlar şimdilik yalnızca admin yetkili veli hesaplarına gösteriliyor.
 export const PARENT_ADMIN_ONLY_NAV = [{ to: '/parent/messages', label: 'Mesajlar', icon: 'MessageCircle' }]
 
-// Henüz hiç çocuk profili eklenmemiş bir veli için Bugün/Haftalık Plan/Ödevler sayfalarının
+// Henüz hiç çocuk profili eklenmemiş bir veli için Bugün/Haftalık Plan sayfalarının
 // hepsi boş/hatalı görünür (bunlar bir öğrenci bağlamı gerektirir); o yüzden ilk kayıtta tek
 // birincil menü öğesi olarak yalnızca Çocuklarım gösterilir.
 export function getParentPrimaryNav(hasStudents, canManageLibrary = false) {
@@ -38,7 +37,6 @@ export function getParentPrimaryNav(hasStudents, canManageLibrary = false) {
   return [
     { to: '/parent/dashboard', label: 'Bugün', icon: 'Home' },
     { to: '/parent/weekly-plan', label: 'Haftalık Plan', icon: 'CalendarRange' },
-    { to: '/parent/homework', label: 'Ödevler', icon: 'NotebookPen' },
     canManageLibrary ? KUTUPHANE_PARENT_ITEM : KITAPLIK_PARENT_ITEM,
   ]
 }

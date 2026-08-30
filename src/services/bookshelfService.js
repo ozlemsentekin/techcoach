@@ -13,6 +13,13 @@ export async function getBookshelfBook(resourceBookId) {
   return authRequest(`/api/panel/bookshelf/resource-books/${resourceBookId}`, { method: 'GET' })
 }
 
+// Aktörün bir kaynağa atayabileceği çocuk/öğrenciler (veli: çocukları, öğretmen:
+// öğrencileri, admin: tüm öğrenciler, öğrenci: yalnızca kendisi).
+export async function getBookshelfStudents() {
+  const data = await authRequest('/api/panel/bookshelf/students', { method: 'GET' })
+  return data.students
+}
+
 export async function createBookshelfBook(payload) {
   const data = await authRequest('/api/panel/bookshelf/resource-books', {
     method: 'POST',

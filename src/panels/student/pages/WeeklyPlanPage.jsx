@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Coffee, Star } from 'lucide-react'
-import { getTasksForDateRange } from '../../../services/taskService'
+import { getTasksForDateRange, getUnscheduledTasks } from '../../../services/taskService'
 import {
   getSchoolSchedule,
   getTeacherLessonSchedule,
@@ -12,6 +12,7 @@ import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import Button from '../../ui/Button'
 import WeeklyPlannerGrid from '../../parent/components/WeeklyPlannerGrid'
+import UnscheduledTasksPanel from '../../shared/UnscheduledTasksPanel'
 
 const currentWeekStart = getMondayOfWeek(todayISODate())
 
@@ -96,6 +97,24 @@ export default function WeeklyPlanPage() {
   const [schoolHolidays, setSchoolHolidays] = useState([])
   const [loadedWeekStart, setLoadedWeekStart] = useState('')
   const [loadError, setLoadError] = useState('')
+  const [unscheduledTasks, setUnscheduledTasks] = useState([])
+  const [refreshToken, setRefreshToken] = useState(0)
+
+  const reload = () => setRefreshToken((token) => token + 1)
+
+  useEffect(() => {
+    let ignore = false
+    getUnscheduledTasks()
+      .then((tasks) => {
+        if (!ignore) setUnscheduledTasks(tasks)
+      })
+      .catch(() => {
+        if (!ignore) setUnscheduledTasks([])
+      })
+    return () => {
+      ignore = true
+    }
+  }, [refreshToken])
 
   useEffect(() => {
     let ignore = false
@@ -128,7 +147,7 @@ export default function WeeklyPlanPage() {
     return () => {
       ignore = true
     }
-  }, [weekDates, weekStart])
+  }, [weekDates, weekStart, refreshToken])
 
   const allTasks = useMemo(() => weekDates.flatMap((date) => tasksByDate[date] || []), [tasksByDate, weekDates])
   const weekSummary = useMemo(() => getWeekSummary(allTasks), [allTasks])
@@ -197,6 +216,8 @@ export default function WeeklyPlanPage() {
             schoolSchedule={schoolSchedule}
             schoolHolidays={schoolHolidays}
           />
+
+          <UnscheduledTasksPanel tasks={unscheduledTasks} onChanged={() => reload()} />
         </>
       )}
     </div>

@@ -139,7 +139,7 @@ export default function StudentDetailPage() {
     await addTeacherHomework(studentTeacherId, payload)
     await refreshWeek()
     setHomeworkModalDate('')
-    showBanner('Ödev atandı.')
+    showBanner('Görev atandı.')
   }
 
   const handleReschedule = async ({ date, startTime, durationMinutes }) => {
@@ -199,7 +199,7 @@ export default function StudentDetailPage() {
     await updateTeacherHomework(studentTeacherId, editingHomework.id, updates)
     await refreshWeek()
     setEditingHomework(null)
-    showBanner('Ödev güncellendi.')
+    showBanner('Görev güncellendi.')
   }
 
   const handleDeleteHomeworkConfirmed = async () => {
@@ -208,7 +208,7 @@ export default function StudentDetailPage() {
     try {
       await deleteTeacherHomework(studentTeacherId, homeworkId)
       await refreshWeek()
-      showBanner('Ödev silindi.')
+      showBanner('Görev silindi.')
     } catch (err) {
       setWeekError(err.message)
     }
@@ -293,7 +293,7 @@ export default function StudentDetailPage() {
           }`}
         >
           <CalendarDays size={15} aria-hidden="true" />
-          Takvim ve Ödevler
+          Takvim
         </button>
         <button
           type="button"
@@ -481,8 +481,8 @@ export default function StudentDetailPage() {
 
       {deletingHomework ? (
         <ConfirmationDialog
-          title="Ödevi sil"
-          description={`"${deletingHomework.title}" ödevini silmek istediğine emin misin?`}
+          title="Görevi sil"
+          description={`"${deletingHomework.title}" görevini silmek istediğine emin misin?`}
           confirmLabel="Sil"
           cancelLabel="Vazgeç"
           onConfirm={handleDeleteHomeworkConfirmed}

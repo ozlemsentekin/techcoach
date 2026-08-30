@@ -24,7 +24,6 @@ const StudentsPage = lazy(() => import('./pages/StudentsPage'))
 const TeachersPage = lazy(() => import('./pages/TeachersPage'))
 const LibraryPage = lazy(() => import('./pages/LibraryPage'))
 const BookshelfPage = lazy(() => import('./pages/BookshelfPage'))
-const HomeworkPage = lazy(() => import('./pages/HomeworkPage'))
 const TestsPage = lazy(() => import('./pages/TestsPage'))
 const MistakesPage = lazy(() => import('./pages/MistakesPage'))
 
@@ -33,7 +32,7 @@ function RequireAdmin({ children }) {
   return authUser?.isAdmin ? children : <Navigate to="/parent/dashboard" replace />
 }
 
-// Bugün/Haftalık Plan/Ödevler bir öğrenci bağlamı gerektirir; hiç çocuk profili eklenmemiş
+// Bugün/Haftalık Plan bir öğrenci bağlamı gerektirir; hiç çocuk profili eklenmemiş
 // bir veli için bunlar yerine Çocuklarım'a yönlendirir (bkz. navConfig.getParentPrimaryNav).
 function RequireStudents({ children }) {
   const { studentsLoading, hasStudents } = useParentStudentsGate()
@@ -108,10 +107,9 @@ export default function ParentApp() {
             />
             <Route path="progress" element={pageElement(ProgressPage)} />
             <Route path="messages" element={pageElement(MessagesPage)} />
-            <Route
-              path="homework"
-              element={<RequireStudents>{pageElement(HomeworkPage)}</RequireStudents>}
-            />
+            {/* Ödev/görev tekilleştirme (Faz 2): ayrı "Ödevler" sayfası kaldırıldı; ders-tipi
+                görevler artık Haftalık Plan üzerinden yönetiliyor. Eski yer imleri yönlendirilir. */}
+            <Route path="homework" element={<Navigate to="/parent/weekly-plan" replace />} />
             <Route path="tests" element={pageElement(TestsPage)} />
             <Route path="mistakes" element={pageElement(MistakesPage)} />
             <Route path="students" element={pageElement(StudentsPage)} />

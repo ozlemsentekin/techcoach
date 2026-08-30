@@ -58,8 +58,9 @@ function shapeBook(row, assignmentRows, ctx) {
     archived: Boolean(row.grade && a.grade && String(a.grade) !== String(row.grade)),
     manageable: ctx.manageableStudentIds.has(String(a.student_id).toLowerCase()),
   }))
+  // Admin her atamayı görür ve yönetebilir; veli/öğretmen yalnızca kendi öğrencilerini.
   const named = assignedAll.filter((a) => ctx.isAdmin || a.manageable)
-  const namedManageable = assignedAll.filter((a) => a.manageable)
+  const editableAssigned = assignedAll.filter((a) => ctx.isAdmin || a.manageable)
   const allArchived = named.length > 0 && named.every((a) => a.archived)
 
   return {
@@ -77,12 +78,13 @@ function shapeBook(row, assignmentRows, ctx) {
     createdByRole: row.created_by_role || null,
     createdByName: row.created_by_name || null,
     createdByMe: mine,
-    // İçerik düzenleme yalnızca ekleyen kişide; admin denetim amaçlı yalnızca silebilir.
-    canEditContent: mine,
+    // İçerik düzenleme ekleyen kişide veya admin'de; admin Kitaplık'ta tam yetkilidir.
+    canEditContent: mine || ctx.isAdmin,
     canDelete: mine || ctx.isAdmin,
-    isAdminView: ctx.isAdmin && !mine,
+    canManageAssignees: ctx.isAdmin || editableAssigned.length > 0 || ctx.manageableStudentIds.size > 0,
+    isAdmin: ctx.isAdmin,
     assignedStudents: named,
-    assignedManageableStudents: namedManageable,
+    assignedManageableStudents: editableAssigned,
     otherAssignedCount: assignedAll.length - named.length,
     assignedCount: assignedAll.length,
     archived: allArchived,
@@ -132,6 +134,68 @@ function actorOwnsBook(book, ctx) {
     ctx.isAdmin ||
     String(book.created_by_user_id || '').toLowerCase() === String(ctx.actorId).toLowerCase()
   )
+}
+
+// Aktörün bir kaynağa atayabileceği öğrenci id'lerini süzer. Veli/öğretmen yalnızca
+// yönettiği öğrencilere; admin sistemdeki herhangi bir öğrenciye atayabilir.
+async function filterAssignableStudentIds(ctx, requestedIds) {
+  const wanted = [...new Set((requestedIds || []).map((id) => String(id).toLowerCase()))].filter(Boolean)
+  if (!wanted.length) return []
+  if (!ctx.isAdmin) {
+    return wanted.filter((id) => ctx.manageableStudentIds.has(id))
+  }
+  const db = await withRequest({ idsCsv: { type: sql.NVarChar(sql.MAX), value: wanted.join(',') } })
+  const result = await db.query(`
+    SELECT LOWER(CONVERT(NVARCHAR(36), u.id)) AS id
+    FROM dbo.Users u
+    JOIN STRING_SPLIT(@idsCsv, ',') s ON TRY_CAST(s.value AS UNIQUEIDENTIFIER) = u.id
+    WHERE u.role = 'ogrenci';
+  `)
+  return result.recordset.map((row) => row.id)
+}
+
+async function listAssignableStudentsHandler(request) {
+  try {
+    const ctx = await requireBookshelfActor(request)
+    if (ctx.error) return ctx.error
+
+    let rows = []
+    if (ctx.isAdmin) {
+      const db = await withRequest({})
+      rows = (await db.query(`
+        SELECT u.id, u.full_name, sp.grade, pu.full_name AS parent_name
+        FROM dbo.Users u
+        LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
+        LEFT JOIN dbo.Users pu ON pu.id = u.parent_id
+        WHERE u.role = 'ogrenci'
+        ORDER BY u.full_name ASC;
+      `)).recordset
+    } else {
+      const ids = [...ctx.manageableStudentIds]
+      if (ids.length) {
+        const db = await withRequest({ idsCsv: { type: sql.NVarChar(sql.MAX), value: ids.join(',') } })
+        rows = (await db.query(`
+          SELECT u.id, u.full_name, sp.grade, pu.full_name AS parent_name
+          FROM dbo.Users u
+          JOIN STRING_SPLIT(@idsCsv, ',') s ON TRY_CAST(s.value AS UNIQUEIDENTIFIER) = u.id
+          LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
+          LEFT JOIN dbo.Users pu ON pu.id = u.parent_id
+          ORDER BY u.full_name ASC;
+        `)).recordset
+      }
+    }
+
+    return json(200, {
+      students: rows.map((r) => ({
+        id: r.id,
+        fullName: r.full_name,
+        grade: r.grade || null,
+        parentName: r.parent_name || null,
+      })),
+    })
+  } catch (error) {
+    return handleError(error, 'listAssignableStudentsHandler', 'Öğrenciler yüklenemedi.')
+  }
 }
 
 async function actorCanSeeBook(book, ctx) {
@@ -311,14 +375,7 @@ async function createBookHandler(request) {
     const validated = validateBookPayload(payload)
     if (validated.error) return json(400, { error: validated.error })
 
-    const requestedStudentIds = Array.isArray(payload?.studentIds) ? payload.studentIds : []
-    const studentIds = [
-      ...new Set(
-        requestedStudentIds
-          .map((id) => String(id).toLowerCase())
-          .filter((id) => ctx.manageableStudentIds.has(id)),
-      ),
-    ]
+    const studentIds = await filterAssignableStudentIds(ctx, payload?.studentIds)
     if (!studentIds.length) {
       return json(400, { error: 'En az bir öğrenci seçilmeli.' })
     }
@@ -379,7 +436,7 @@ async function createBookHandler(request) {
         hasAnswerKey: { type: sql.Bit, value: validated.value.hasAnswerKey },
         imageUrl: { type: sql.NVarChar(sql.MAX), value: validated.value.imageUrl },
         grade: { type: sql.NVarChar(20), value: validated.value.grade },
-        createdByRole: { type: sql.NVarChar(20), value: ctx.role },
+        createdByRole: { type: sql.NVarChar(20), value: ctx.isAdmin ? 'admin' : ctx.role },
         createdByUserId: { type: sql.UniqueIdentifier, value: ctx.actorId },
       }).query(`
         INSERT INTO dbo.ResourceBooks (${columns.join(', ')})
@@ -527,14 +584,10 @@ async function setBookStudentsHandler(request) {
     }
 
     const payload = await request.json().catch(() => null)
-    const requested = Array.isArray(payload?.studentIds) ? payload.studentIds : []
-    const desired = new Set(
-      requested
-        .map((id) => String(id).toLowerCase())
-        .filter((id) => ctx.manageableStudentIds.has(id)),
-    )
+    const desired = new Set(await filterAssignableStudentIds(ctx, payload?.studentIds))
 
-    // Aktörün yönetebildiği öğrenciler için mevcut atamalar
+    // Mevcut atamalar. Admin hepsini yönetebilir; veli/öğretmen yalnızca kendi öğrencilerini
+    // (kapsam dışı atamalara dokunulmaz).
     const currentDb = await withRequest({ bookId: { type: sql.UniqueIdentifier, value: book.id } })
     const currentResult = await currentDb.query(`
       SELECT student_id FROM dbo.StudentResourceBooks WHERE resource_book_id = @bookId;
@@ -542,7 +595,7 @@ async function setBookStudentsHandler(request) {
     const currentManageable = new Set(
       currentResult.recordset
         .map((r) => String(r.student_id).toLowerCase())
-        .filter((id) => ctx.manageableStudentIds.has(id)),
+        .filter((id) => ctx.isAdmin || ctx.manageableStudentIds.has(id)),
     )
 
     const toAdd = [...desired].filter((id) => !currentManageable.has(id))
@@ -636,4 +689,5 @@ module.exports = {
   deleteBookHandler,
   setBookStudentsHandler,
   createPublisherForPanelHandler,
+  listAssignableStudentsHandler,
 }

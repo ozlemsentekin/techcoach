@@ -13,13 +13,14 @@ import {
 } from '../../../services/weeklyPlanService'
 import { addHomework } from '../../../services/homeworkService'
 import { preloadPanelHomeworkResourceBooks } from '../../../services/resourceBookService'
-import { patchTask, removeTask } from '../../../services/taskService'
+import { getUnscheduledTasks, patchTask, removeTask } from '../../../services/taskService'
 import { addDaysISO, addMinutesToTime, getMondayOfWeek, todayISODate } from '../../../utils/time'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
 import WeeklyPlannerGrid from '../components/WeeklyPlannerGrid'
 import AddTaskDrawer from '../components/AddTaskDrawer'
 import AssignHomeworkModal from '../components/AssignHomeworkModal'
+import UnscheduledTasksPanel from '../../shared/UnscheduledTasksPanel'
 
 const currentWeekStart = getMondayOfWeek(todayISODate())
 
@@ -33,6 +34,7 @@ export default function WeeklyPlanPage() {
 
   const [tasksByDate, setTasksByDate] = useState({})
   const [dayStatusByDate, setDayStatusByDate] = useState({})
+  const [unscheduledTasks, setUnscheduledTasks] = useState([])
   const [lessonSchedule, setLessonSchedule] = useState([])
   const [schoolSchedule, setSchoolSchedule] = useState([])
   const [schoolHolidays, setSchoolHolidays] = useState([])
@@ -49,9 +51,16 @@ export default function WeeklyPlanPage() {
     setDayStatusByDate(plans.dayStatusByDate)
   }, [])
 
+  const loadUnscheduled = useCallback(() => {
+    getUnscheduledTasks()
+      .then(setUnscheduledTasks)
+      .catch(() => setUnscheduledTasks([]))
+  }, [])
+
   const refresh = useCallback(async (nextWeekStart = weekStart) => {
     applyWeekPlans(await loadWeekPlans(nextWeekStart))
-  }, [applyWeekPlans, loadWeekPlans, weekStart])
+    loadUnscheduled()
+  }, [applyWeekPlans, loadWeekPlans, loadUnscheduled, weekStart])
 
   useEffect(() => {
     let ignore = false
@@ -85,6 +94,10 @@ export default function WeeklyPlanPage() {
   useEffect(() => {
     if (!restricted) preloadPanelHomeworkResourceBooks()
   }, [restricted])
+
+  useEffect(() => {
+    loadUnscheduled()
+  }, [loadUnscheduled])
 
   useEffect(() => {
     if (searchParams.get('openDrawer') === '1') {
@@ -242,6 +255,8 @@ export default function WeeklyPlanPage() {
             onPublishDay={handlePublishDay}
             onQuickAddBreak={restricted ? undefined : handleQuickAddBreak}
           />
+
+          <UnscheduledTasksPanel tasks={unscheduledTasks} onChanged={refresh} readOnly={restricted} />
 
           <div className="flex items-center gap-3 rounded-2xl bg-panel-blue-soft px-5 py-4 text-sm font-semibold text-panel-blue">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-panel-blue/30">

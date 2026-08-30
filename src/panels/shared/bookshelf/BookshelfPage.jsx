@@ -56,11 +56,11 @@ function BookCard({ book, showAssignees, showCreator, onClick }) {
   )
 }
 
-export default function BookshelfPage({ students = [], showAssignees = true }) {
+export default function BookshelfPage({ showAssignees = true }) {
   const { authUser } = useAuth()
-  // Admin, yönettiği öğrenci olmadığından yeni kaynak ekleyemez / atayamaz; Kitaplık ekranı
-  // onun için tüm özel kaynakları görüp gerektiğinde silebildiği bir denetim görünümüdür.
-  const adminView = Boolean(authUser?.isAdmin) && students.length === 0
+  // Admin Kitaplık'ta tam yetkilidir (her kaynağı görür, ekler, düzenler, atar, siler) ve
+  // ayrıca ekleyen kişi / arama gibi denetim kolaylıklarını görür.
+  const adminView = Boolean(authUser?.isAdmin)
 
   const [books, setBooks] = useState(null)
   const [error, setError] = useState('')
@@ -113,16 +113,14 @@ export default function BookshelfPage({ students = [], showAssignees = true }) {
         title="Kitaplık"
         subtitle={
           adminView
-            ? 'Veli, öğretmen ve öğrencilerin eklediği tüm özel kaynaklar (denetim).'
+            ? 'Veli, öğretmen ve öğrencilerin eklediği tüm özel kaynaklar. Ekleyebilir, düzenleyebilir, atayabilir ve silebilirsiniz.'
             : 'Yalnızca sizin ve çocuğunuzun/öğrencinizin gördüğü özel kaynaklar.'
         }
         actions={
-          adminView ? null : (
-            <Button type="button" size="md" className="gap-1.5" onClick={() => setCreating(true)}>
-              <Plus size={16} aria-hidden="true" />
-              Yeni Kitap Ekle
-            </Button>
-          )
+          <Button type="button" size="md" className="gap-1.5" onClick={() => setCreating(true)}>
+            <Plus size={16} aria-hidden="true" />
+            Yeni Kitap Ekle
+          </Button>
         }
       />
 
@@ -153,7 +151,7 @@ export default function BookshelfPage({ students = [], showAssignees = true }) {
           title={adminView ? 'Henüz özel kaynak yok' : 'Kitaplığınız boş'}
           description={
             adminView
-              ? 'Veli, öğretmen veya öğrenciler kaynak ekledikçe burada listelenir.'
+              ? 'Veli, öğretmen veya öğrenciler kaynak ekledikçe burada listelenir. Siz de "Yeni Kitap Ekle" ile ekleyebilirsiniz.'
               : '"Yeni Kitap Ekle" ile ilk özel kaynağınızı ekleyin.'
           }
         />
@@ -231,11 +229,7 @@ export default function BookshelfPage({ students = [], showAssignees = true }) {
       )}
 
       {creating ? (
-        <BookFormModal
-          students={students}
-          onSaved={handleCreated}
-          onClose={() => setCreating(false)}
-        />
+        <BookFormModal onSaved={handleCreated} onClose={() => setCreating(false)} />
       ) : null}
 
       {editingBook ? (
@@ -252,7 +246,6 @@ export default function BookshelfPage({ students = [], showAssignees = true }) {
       {detailBookId ? (
         <BookshelfDetailModal
           resourceBookId={detailBookId}
-          students={students}
           showAssignees={showAssignees}
           onChanged={load}
           onEdit={(book) => {
