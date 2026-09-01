@@ -781,7 +781,11 @@ async function requireResourceBookEditor(request, resourceBookId) {
   } catch {
     return editor
   }
-  const actorId = session.actingParentId || session.sub
+  // Veli, çocuğunun öğrenci görünümündeyken özel kaynak içeriğini düzenleyemez.
+  if (session.actingParentId) {
+    return editor
+  }
+  const actorId = session.sub
 
   const db = await withRequest({ id: { type: sql.UniqueIdentifier, value: resourceBookId } })
   const result = await db.query(`

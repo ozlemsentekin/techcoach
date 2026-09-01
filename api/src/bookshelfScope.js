@@ -22,6 +22,11 @@ async function requireBookshelfActor(request) {
 
   const session = verifySessionToken(token)
   const actorId = session.actingParentId || session.sub
+  // Veli, bir çocuğunun "öğrenci görünümüne" geçtiğinde (actingParentId dolu) Kitaplık'ı
+  // yalnızca o öğrencinin üçgeni kadar görür: velinin admin denetim yetkisi ya da başka
+  // çocukları/kendi eklediği kaynaklar bu bağlama sızmaz.
+  const isActingAsStudent = Boolean(session.actingParentId)
+  const viewedStudentId = isActingAsStudent ? session.sub : null
 
   const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: actorId } })
   const result = await requestDb.query(`
@@ -41,10 +46,12 @@ async function requireBookshelfActor(request) {
     return { error: json(403, CONSENT_REQUIRED_ERROR) }
   }
 
-  const isAdmin = Boolean(record.is_admin)
-  const manageableStudentIds = await fetchManageableStudentIds(actorId, role)
+  const isAdmin = Boolean(record.is_admin) && !isActingAsStudent
+  const manageableStudentIds = isActingAsStudent
+    ? new Set([String(viewedStudentId).toLowerCase()])
+    : await fetchManageableStudentIds(actorId, role)
 
-  return { session, actorId, role, isAdmin, manageableStudentIds }
+  return { session, actorId, role, isAdmin, isActingAsStudent, manageableStudentIds }
 }
 
 async function fetchManageableStudentIds(actorId, role) {

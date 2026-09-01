@@ -50,7 +50,13 @@ async function hasResourceBooksPageCount() {
 }
 
 function shapeBook(row, assignmentRows, ctx) {
-  const mine = String(row.created_by_user_id || '').toLowerCase() === String(ctx.actorId).toLowerCase()
+  // Katalog (genel) kaynaklar öğretmenin Kitaplık'ında salt görüntülenir: içerik/atama/silme
+  // yalnızca özel kaynaklarda açıktır.
+  const isPrivate = (row.scope || 'private') === 'private'
+  const mine =
+    isPrivate &&
+    !ctx.isActingAsStudent &&
+    String(row.created_by_user_id || '').toLowerCase() === String(ctx.actorId).toLowerCase()
   const assignedAll = (assignmentRows || []).map((a) => ({
     id: a.student_id,
     fullName: a.full_name,
@@ -72,6 +78,7 @@ function shapeBook(row, assignmentRows, ctx) {
     publisherName: row.publisher_name || null,
     grade: row.grade || null,
     type: row.resource_type,
+    scope: isPrivate ? 'private' : 'catalog',
     hasAnswerKey: Boolean(row.has_answer_key),
     imageUrl: row.image_url || null,
     createdByUserId: row.created_by_user_id,
@@ -79,9 +86,11 @@ function shapeBook(row, assignmentRows, ctx) {
     createdByName: row.created_by_name || null,
     createdByMe: mine,
     // İçerik düzenleme ekleyen kişide veya admin'de; admin Kitaplık'ta tam yetkilidir.
-    canEditContent: mine || ctx.isAdmin,
-    canDelete: mine || ctx.isAdmin,
-    canManageAssignees: ctx.isAdmin || editableAssigned.length > 0 || ctx.manageableStudentIds.size > 0,
+    // Katalog kaynaklarında hiçbiri açık değildir (salt görüntüleme).
+    canEditContent: isPrivate && (mine || ctx.isAdmin),
+    canDelete: isPrivate && (mine || ctx.isAdmin),
+    canManageAssignees:
+      isPrivate && (ctx.isAdmin || editableAssigned.length > 0 || ctx.manageableStudentIds.size > 0),
     isAdmin: ctx.isAdmin,
     assignedStudents: named,
     assignedManageableStudents: editableAssigned,
@@ -129,7 +138,44 @@ async function loadPrivateBook(resourceBookId) {
   return result.recordset[0] || null
 }
 
+// getBookHandler için: özel ya da katalog fark etmeksizin aktif kaynağı yükler.
+// Görünürlük denetimi actorCanSeeBook'ta scope'a göre yapılır.
+async function loadBookRow(resourceBookId) {
+  if (!resourceBookId) return null
+  const db = await withRequest({ id: { type: sql.UniqueIdentifier, value: resourceBookId } })
+  const result = await db.query(`
+    SELECT rb.id, rb.name, rb.subject_id, sub.name AS subject_name, rb.publisher_id, p.name AS publisher_name,
+           rb.grade, rb.resource_type, rb.has_answer_key, rb.image_url, rb.is_active, rb.scope,
+           rb.created_by_user_id, rb.created_by_role, u.full_name AS created_by_name, rb.created_at
+    FROM dbo.ResourceBooks rb
+    LEFT JOIN dbo.Subjects sub ON sub.id = rb.subject_id
+    LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+    LEFT JOIN dbo.Users u ON u.id = rb.created_by_user_id
+    WHERE rb.id = @id AND rb.is_active = 1;
+  `)
+  return result.recordset[0] || null
+}
+
+// Bir öğretmenin öğrenci profillerinde takip ettiği (kendi atadığı ya da velinin öğretmene
+// atadığı) kaynak mı? StudentTeacherResourceBooks üzerinden bakılır.
+async function teacherTracksBook(actorId, resourceBookId) {
+  const db = await withRequest({
+    actorId: { type: sql.UniqueIdentifier, value: actorId },
+    bookId: { type: sql.UniqueIdentifier, value: resourceBookId },
+  })
+  const result = await db.query(`
+    SELECT TOP 1 1 AS ok
+    FROM dbo.StudentTeacherResourceBooks strb
+    JOIN dbo.StudentTeachers st ON st.id = strb.teacher_id
+    WHERE strb.resource_book_id = @bookId AND st.teacher_user_id = @actorId AND st.is_active = 1;
+  `)
+  return Boolean(result.recordset[0])
+}
+
 function actorOwnsBook(book, ctx) {
+  // Öğrenci görünümündeki veli sahip sayılmaz: o bağlamda yalnızca öğrencinin üçgenine
+  // atanmış kaynakları görüntüleyebilir, içerik düzenleyemez/silemez.
+  if (ctx.isActingAsStudent) return false
   return (
     ctx.isAdmin ||
     String(book.created_by_user_id || '').toLowerCase() === String(ctx.actorId).toLowerCase()
@@ -200,6 +246,11 @@ async function listAssignableStudentsHandler(request) {
 
 async function actorCanSeeBook(book, ctx) {
   if (actorOwnsBook(book, ctx)) return true
+  if ((book.scope || 'private') !== 'private') {
+    // Katalog kaynağı: yalnızca takip eden öğretmen görebilir.
+    if (ctx.role !== 'ogretmen' || ctx.isActingAsStudent) return false
+    return teacherTracksBook(ctx.actorId, book.id)
+  }
   const ids = [...ctx.manageableStudentIds]
   if (!ids.length) return false
   const db = await withRequest({
@@ -230,19 +281,41 @@ async function listBooksHandler(request) {
       actorId: { type: sql.UniqueIdentifier, value: ctx.actorId },
       idsCsv: { type: sql.NVarChar(sql.MAX), value: idsCsv },
     })
-    const visibility = ctx.isAdmin
-      ? `rb.scope = 'private' AND rb.is_active = 1`
-      : `rb.scope = 'private' AND rb.is_active = 1 AND (
-           rb.created_by_user_id = @actorId
-           OR EXISTS (
+    const assignedToManageable = `EXISTS (
              SELECT 1 FROM dbo.StudentResourceBooks x
              JOIN STRING_SPLIT(@idsCsv, ',') s ON TRY_CAST(s.value AS UNIQUEIDENTIFIER) = x.student_id
              WHERE x.resource_book_id = rb.id
+           )`
+    let visibility
+    if (ctx.isAdmin) {
+      visibility = `rb.scope = 'private' AND rb.is_active = 1`
+    } else if (ctx.isActingAsStudent) {
+      // Öğrenci görünümü: yalnızca o öğrenciye atanmış kaynaklar (velinin kendi eklediği
+      // ama bu öğrenciye atanmamış kaynaklar dahil değil).
+      visibility = `rb.scope = 'private' AND rb.is_active = 1 AND ${assignedToManageable}`
+    } else if (ctx.role === 'ogretmen') {
+      // Öğretmen Kitaplık'ı: kendi eklediği özel kaynaklar + öğrenci profillerinde takip
+      // ettiği (kendi ya da velinin öğretmene atadığı) tüm kaynaklar — katalog dahil.
+      // Katalog kaynaklar shapeBook'ta salt görüntüleme olarak işaretlenir.
+      visibility = `rb.is_active = 1 AND (
+           (rb.scope = 'private' AND rb.created_by_user_id = @actorId)
+           OR EXISTS (
+             SELECT 1 FROM dbo.StudentTeacherResourceBooks strb
+             JOIN dbo.StudentTeachers st ON st.id = strb.teacher_id
+             WHERE strb.resource_book_id = rb.id
+               AND st.teacher_user_id = @actorId
+               AND st.is_active = 1
            )
          )`
+    } else {
+      visibility = `rb.scope = 'private' AND rb.is_active = 1 AND (
+           rb.created_by_user_id = @actorId
+           OR ${assignedToManageable}
+         )`
+    }
     const booksResult = await db.query(`
       SELECT rb.id, rb.name, rb.subject_id, sub.name AS subject_name, rb.publisher_id, p.name AS publisher_name,
-             rb.grade, rb.resource_type, rb.has_answer_key, rb.image_url,
+             rb.grade, rb.resource_type, rb.has_answer_key, rb.image_url, rb.scope,
              rb.created_by_user_id, rb.created_by_role, u.full_name AS created_by_name, rb.created_at
       FROM dbo.ResourceBooks rb
       LEFT JOIN dbo.Subjects sub ON sub.id = rb.subject_id
@@ -277,7 +350,7 @@ async function getBookHandler(request) {
     const ctx = await requireBookshelfActor(request)
     if (ctx.error) return ctx.error
 
-    const book = await loadPrivateBook(request.params.resourceBookId)
+    const book = await loadBookRow(request.params.resourceBookId)
     if (!book || !(await actorCanSeeBook(book, ctx))) {
       return json(404, { error: 'Kaynak bulunamadı.' })
     }
