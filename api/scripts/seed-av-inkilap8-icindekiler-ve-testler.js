@@ -107,33 +107,125 @@ const UNITS = [
           { name: 'Test-12', page: 50, answers: 'BBADC' },
         ],
       },
-      { name: 'Büyük Millet Meclisine Karşı Çıkan İsyanlar', tests: [] },
-      { name: 'Sevr Barış Antlaşması', tests: [] },
-      { name: 'Akıllı Değerlendirme Sınavı', tests: [] },
+      {
+        name: 'Büyük Millet Meclisine Karşı Çıkan İsyanlar',
+        tests: [
+          { name: 'Test-13', page: 52, answers: 'DDCDACB' },
+          { name: 'Test-14', page: 54, answers: 'DCABD' },
+        ],
+      },
+      {
+        name: 'Sevr Barış Antlaşması',
+        tests: [
+          { name: 'Test-15', page: 56, answers: 'ABACAAD' },
+          { name: 'Test-16', page: 58, answers: 'BADBB' },
+        ],
+      },
+      {
+        name: 'Akıllı Değerlendirme Sınavı',
+        tests: [
+          { name: 'Test 1', page: 60, answers: 'BACDABDBDA' },
+          { name: 'Test 2', page: 64, answers: 'BCADBDCDDD' },
+          { name: 'Test 3', page: 70, answers: 'ADDCADCADA' },
+        ],
+      },
     ],
   },
   {
     no: 3,
     title: 'Millî Bir Destan: Ya İstiklal Ya Ölüm',
     topics: [
-      { name: 'Doğu ve Güney Cepheleri', tests: [] },
-      { name: 'Batı Cephesi ve Maarif Kongresi', tests: [] },
-      { name: 'Başkomutanlık Yasası ve Tekalif-i Millîye Emirleri', tests: [] },
-      { name: "Direnişten Dirilişe: Sakarya'dan Büyük Taarruz'a", tests: [] },
-      { name: "Türkiye'nin Tapu Senedi: Lozan Barış Antlaşması", tests: [] },
-      { name: "Millî Mücadele'nin Sanata ve Edebiyata Yansımaları", tests: [] },
-      { name: 'Akıllı Değerlendirme Sınavı', tests: [] },
+      {
+        name: 'Doğu ve Güney Cepheleri',
+        tests: [
+          { name: 'Test-1', page: 76, answers: 'CCDBCAA' },
+          { name: 'Test-2', page: 78, answers: 'ACB' },
+        ],
+      },
+      {
+        name: 'Batı Cephesi ve Maarif Kongresi',
+        tests: [
+          { name: 'Test-3', page: 80, answers: 'CDDBCDC' },
+          { name: 'Test-4', page: 82, answers: 'DCBA' },
+        ],
+      },
+      {
+        name: 'Başkomutanlık Yasası ve Tekalif-i Millîye Emirleri',
+        tests: [
+          { name: 'Test-5', page: 84, answers: 'BCADBDD' },
+          { name: 'Test-6', page: 86, answers: 'DBCA' },
+        ],
+      },
+      {
+        name: "Direnişten Dirilişe: Sakarya'dan Büyük Taarruz'a",
+        tests: [
+          { name: 'Test-7', page: 88, answers: 'BAABDCD' },
+          { name: 'Test-8', page: 90, answers: 'CDADBC' },
+        ],
+      },
+      {
+        name: "Türkiye'nin Tapu Senedi: Lozan Barış Antlaşması",
+        tests: [
+          { name: 'Test-9', page: 92, answers: 'BDBDACC' },
+          { name: 'Test-10', page: 94, answers: 'BADBB' },
+        ],
+      },
+      {
+        name: "Millî Mücadele'nin Sanata ve Edebiyata Yansımaları",
+        tests: [
+          { name: 'Test-11', page: 96, answers: 'DACDCDA' },
+          { name: 'Test-12', page: 98, answers: 'DBDAB' },
+        ],
+      },
+      {
+        name: 'Akıllı Değerlendirme Sınavı',
+        tests: [
+          { name: 'Test 1', page: 100, answers: 'CBAABBAABA' },
+          { name: 'Test 2', page: 104, answers: 'DBDBADBCCD' },
+        ],
+      },
     ],
   },
   {
     no: 4,
     title: 'Atatürkçülük ve Çağdaşlaşan Türkiye',
     topics: [
-      { name: 'Atatürk İlkeleri', tests: [] },
-      { name: 'Siyasal Alanda Yapılan İnkılaplar', tests: [] },
-      { name: 'Hukuk Alanında Yapılan İnkılaplar', tests: [] },
-      { name: 'Eğitim ve Kültür Alanında Yapılan İnkılaplar', tests: [] },
-      { name: 'Toplumsal Alanda Yapılan İnkılaplar', tests: [] },
+      {
+        name: 'Atatürk İlkeleri',
+        tests: [
+          { name: 'Test-1', page: 110, answers: 'DBAACBBCB' },
+          { name: 'Test-2', page: 112, answers: 'ABAD' },
+        ],
+      },
+      {
+        name: 'Siyasal Alanda Yapılan İnkılaplar',
+        tests: [
+          { name: 'Test-3', page: 114, answers: 'DCBABDAAC' },
+          { name: 'Test-4', page: 116, answers: 'CDA' },
+        ],
+      },
+      {
+        name: 'Hukuk Alanında Yapılan İnkılaplar',
+        tests: [
+          { name: 'Test-5', page: 118, answers: 'ACCBDDBC' },
+          { name: 'Test-6', page: 120, answers: 'BBDA' },
+        ],
+      },
+      {
+        name: 'Eğitim ve Kültür Alanında Yapılan İnkılaplar',
+        tests: [
+          { name: 'Test-7', page: 122, answers: 'BADBDDC' },
+          { name: 'Test-8', page: 124, answers: 'ADBCC' },
+        ],
+      },
+      {
+        name: 'Toplumsal Alanda Yapılan İnkılaplar',
+        tests: [
+          { name: 'Test-9', page: 126, answers: 'DBBAACDDB' },
+          // Kaynakta "Test-108" basılmış (dizgi hatası) — Test-10.
+          { name: 'Test-10', page: 128, answers: 'BDBCCB' },
+        ],
+      },
       { name: 'Ekonomi Alanında Yapılan İnkılaplar', tests: [] },
       { name: "Atatürk'ün Gösterdiği Hedefler, Atatürk ve Sağlık", tests: [] },
       { name: 'İlelebet Cumhuriyet', tests: [] },
