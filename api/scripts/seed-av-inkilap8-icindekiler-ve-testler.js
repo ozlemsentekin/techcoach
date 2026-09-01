@@ -226,11 +226,42 @@ const UNITS = [
           { name: 'Test-10', page: 128, answers: 'BDBCCB' },
         ],
       },
-      { name: 'Ekonomi Alanında Yapılan İnkılaplar', tests: [] },
-      { name: "Atatürk'ün Gösterdiği Hedefler, Atatürk ve Sağlık", tests: [] },
-      { name: 'İlelebet Cumhuriyet', tests: [] },
-      { name: 'Atatürk İlke ve İnkılaplarını Oluşturan Temel Esaslar', tests: [] },
-      { name: 'Akıllı Değerlendirme Sınavı', tests: [] },
+      {
+        name: 'Ekonomi Alanında Yapılan İnkılaplar',
+        tests: [
+          { name: 'Test-11', page: 130, answers: 'DABDCACBA' },
+          { name: 'Test-12', page: 132, answers: 'DABB' },
+        ],
+      },
+      {
+        name: "Atatürk'ün Gösterdiği Hedefler, Atatürk ve Sağlık",
+        tests: [
+          { name: 'Test-13', page: 134, answers: 'CBADDAAD' },
+          { name: 'Test-14', page: 136, answers: 'DBAD' },
+        ],
+      },
+      {
+        name: 'İlelebet Cumhuriyet',
+        tests: [
+          { name: 'Test-15', page: 138, answers: 'DCBBCBA' },
+          { name: 'Test-16', page: 140, answers: 'CADD' },
+        ],
+      },
+      {
+        name: 'Atatürk İlke ve İnkılaplarını Oluşturan Temel Esaslar',
+        tests: [
+          { name: 'Test-17', page: 142, answers: 'DBCAAABCB' },
+          { name: 'Test-18', page: 144, answers: 'DBCDC' },
+        ],
+      },
+      {
+        name: 'Akıllı Değerlendirme Sınavı',
+        tests: [
+          { name: 'Test 1', page: 146, answers: 'AADAACADCB' },
+          { name: 'Test 2', page: 150, answers: 'BDADDCACBB' },
+          { name: 'Test 3', page: 154, answers: 'CADABCDBAD' },
+        ],
+      },
     ],
   },
   {
