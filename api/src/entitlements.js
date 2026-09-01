@@ -279,6 +279,41 @@ async function findParentIdBySubscriptionReferenceCode(subscriptionReferenceCode
   return result.recordset[0]?.parent_id || null
 }
 
+// Bir öğrenci veya velinin efektif abonelik durumunu belirler. Öncelik sırası:
+//   1. Kişinin (velinin) kendi Entitlements kaydı aktifse (iyzico/revenuecat/kupon) o kullanılır.
+//   2. Aksi halde kişi bir öğretmen tarafından eklenmişse — yani bağlı öğrencinin
+//      funded_by_teacher_id alanı dolu — ve o öğretmenin panel aboneliği aktifse,
+//      durum 'active' (source: 'teacher') kabul edilir. Böylece öğretmenin eklediği
+//      öğrenci/veli, öğretmenin aboneliği sürdüğü sürece paywall'a takılmaz.
+//   3. Hiçbiri yoksa temel durum ('none' vb.) aynen döner.
+async function resolveEffectiveEntitlement({ userId, status, source = null, currentPeriodEnd = null }) {
+  if (ACTIVE_STATUSES.has(status)) {
+    return { status, source: source || null, currentPeriodEnd: currentPeriodEnd || null }
+  }
+
+  const requestDb = await withRequest({ userId: { type: sql.UniqueIdentifier, value: userId } })
+  const result = await requestDb.query(`
+    SELECT TOP 1 te.status
+    FROM dbo.TeacherEntitlements te
+    WHERE te.teacher_id IN (
+      SELECT funded_by_teacher_id
+      FROM dbo.Users
+      WHERE role = 'ogrenci'
+        AND funded_by_teacher_id IS NOT NULL
+        AND (id = @userId OR parent_id = @userId)
+    )
+    ORDER BY CASE te.status
+      WHEN 'active' THEN 0 WHEN 'trial' THEN 1 WHEN 'grace_period' THEN 2 ELSE 3
+    END;
+  `)
+
+  if (ACTIVE_STATUSES.has(result.recordset[0]?.status)) {
+    return { status: 'active', source: 'teacher', currentPeriodEnd: null }
+  }
+
+  return { status: status || 'none', source: source || null, currentPeriodEnd: currentPeriodEnd || null }
+}
+
 async function hasActiveParentEntitlement(parentId) {
   const requestDb = await withRequest({ parentId: { type: sql.UniqueIdentifier, value: parentId } })
   const result = await requestDb.query(`
@@ -312,6 +347,7 @@ module.exports = {
   revenuecatWebhookHandler,
   getTeacherQuota,
   hasActiveParentEntitlement,
+  resolveEffectiveEntitlement,
   getParentStudentQuota,
   upsertParentEntitlementFromIyzico,
   updateParentEntitlementStatus,

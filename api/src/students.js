@@ -13,7 +13,7 @@ const {
 } = require('./security')
 const { sanitizeUser } = require('./auth')
 const { requireStudentContext } = require('./studentScope')
-const { getParentStudentQuota } = require('./entitlements')
+const { getParentStudentQuota, resolveEffectiveEntitlement } = require('./entitlements')
 const { fetchResourceBookStatsForStudent } = require('./catalog')
 
 const TEACHER_TYPES = new Set(['ozel_ogretmen', 'okul_ogretmeni'])
@@ -755,11 +755,12 @@ async function enterStudentHandler(request) {
     const user = {
       ...student,
       actingParent: { id: parentId, fullName: parentFullName },
-      entitlement: {
-        status: record.entitlement_status || 'none',
-        source: record.entitlement_source || null,
-        currentPeriodEnd: record.entitlement_current_period_end || null,
-      },
+      entitlement: await resolveEffectiveEntitlement({
+        userId: record.id,
+        status: record.entitlement_status,
+        source: record.entitlement_source,
+        currentPeriodEnd: record.entitlement_current_period_end,
+      }),
     }
     return json(200, { user }, createSessionHeaders(token))
   } catch (error) {
@@ -807,11 +808,12 @@ async function exitStudentHandler(request) {
     }
 
     const user = sanitizeUser(record)
-    user.entitlement = {
-      status: record.entitlement_status || 'none',
-      source: record.entitlement_source || null,
-      currentPeriodEnd: record.entitlement_current_period_end || null,
-    }
+    user.entitlement = await resolveEffectiveEntitlement({
+      userId: record.id,
+      status: record.entitlement_status,
+      source: record.entitlement_source,
+      currentPeriodEnd: record.entitlement_current_period_end,
+    })
     const newToken = createSessionToken(user)
     return json(200, { user }, createSessionHeaders(newToken))
   } catch (error) {
