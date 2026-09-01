@@ -42,6 +42,12 @@ function isValidIdentityNumber(value) {
   return /^\d{11}$/.test(String(value || ''))
 }
 
+const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function isValidEmail(value) {
+  return EMAIL_RULE.test(String(value || '').trim())
+}
+
 async function getParentProfile(parentId) {
   const requestDb = await withRequest({ parentId: { type: sql.UniqueIdentifier, value: parentId } })
   const result = await requestDb.query(`
@@ -56,6 +62,7 @@ function validatePaymentFields(payload) {
   const billingCycle = payload?.billingCycle
   const identityNumber = payload?.identityNumber
   const address = payload?.address || {}
+  const email = String(payload?.email || '').trim().toLowerCase()
 
   if (!BILLING_CYCLES[billingCycle]) {
     return { error: 'Geçerli bir ödeme periyodu seçin.' }
@@ -66,8 +73,13 @@ function validatePaymentFields(payload) {
   if (!address.addressLine || !address.city || !address.zipCode) {
     return { error: 'Adres, il ve posta kodu bilgilerini girin.' }
   }
+  // iyzico'nun abonelik checkout formu email olmadan "Sistem hatası" ile başarısız oluyor —
+  // bu yüzden burada da (TC no/adres gibi) zorunlu tutuyoruz.
+  if (!isValidEmail(email)) {
+    return { error: 'Geçerli bir e-posta adresi girin.' }
+  }
 
-  return { billingCycle, identityNumber, address }
+  return { billingCycle, identityNumber, address, email }
 }
 
 async function initializeParentSubscriptionCheckout({ conversationId, billingCycle, identityNumber, address, fullName, email, phone }) {
@@ -128,7 +140,6 @@ async function initiateIyzicoCheckoutHandler(request) {
       conversationId: parentId,
       ...fields,
       fullName: parent.full_name,
-      email: parent.email,
       phone: parent.phone_number,
     })
 
@@ -162,7 +173,7 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
     if (registration.error) {
       return json(400, { error: registration.error })
     }
-    const { fullName, phone, email } = registration
+    const { fullName, phone } = registration
 
     const fields = validatePaymentFields(payload)
     if (fields.error) {
@@ -182,7 +193,7 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
 
     const hasTrialCoupon = String(payload.couponCode || '').trim().toUpperCase() === TRIAL_COUPON_CODE
     if (hasTrialCoupon) {
-      const user = await createCompParentAccount({ fullName, phone, email })
+      const user = await createCompParentAccount({ fullName, phone, email: fields.email })
       const token = createSessionToken(user)
       return json(201, { user }, createSessionHeaders(token))
     }
@@ -194,6 +205,7 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
     const insertDb = await withRequest({
       fullName: { type: sql.NVarChar(120), value: fullName },
       phone: { type: sql.NVarChar(20), value: phone },
+      email: { type: sql.NVarChar(320), value: fields.email },
       passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       aydinlatmaAt: { type: sql.DateTime2, value: now },
       kvkkAt: { type: sql.DateTime2, value: now },
@@ -201,9 +213,9 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
     })
     const insertResult = await insertDb.query(`
       INSERT INTO dbo.PendingParentRegistrations
-        (full_name, phone_number, password_hash, aydinlatma_accepted_at, kvkk_accepted_at, expires_at)
+        (full_name, phone_number, email, password_hash, aydinlatma_accepted_at, kvkk_accepted_at, expires_at)
       OUTPUT inserted.id
-      VALUES (@fullName, @phone, @passwordHash, @aydinlatmaAt, @kvkkAt, @expiresAt);
+      VALUES (@fullName, @phone, @email, @passwordHash, @aydinlatmaAt, @kvkkAt, @expiresAt);
     `)
     const pendingId = insertResult.recordset[0].id
 
@@ -211,7 +223,6 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
       conversationId: pendingId,
       ...fields,
       fullName,
-      email,
       phone,
     })
 
@@ -283,7 +294,7 @@ async function findExistingParent(id) {
 async function consumePendingParentRegistration(id) {
   const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: id } })
   const result = await requestDb.query(`
-    SELECT TOP 1 id, full_name, phone_number, password_hash, aydinlatma_accepted_at, kvkk_accepted_at
+    SELECT TOP 1 id, full_name, phone_number, email, password_hash, aydinlatma_accepted_at, kvkk_accepted_at
     FROM dbo.PendingParentRegistrations
     WHERE id = @id AND consumed_at IS NULL AND expires_at > SYSUTCDATETIME();
   `)
@@ -297,16 +308,17 @@ async function createParentFromPendingRegistration(pending) {
     const insertUserDb = requestInTransaction({
       fullName: { type: sql.NVarChar(120), value: pending.full_name },
       phone: { type: sql.NVarChar(20), value: pending.phone_number },
+      email: { type: sql.NVarChar(320), value: pending.email },
       passwordHash: { type: sql.NVarChar(255), value: pending.password_hash },
       aydinlatmaAt: { type: sql.DateTime2, value: pending.aydinlatma_accepted_at },
       kvkkAt: { type: sql.DateTime2, value: pending.kvkk_accepted_at },
     })
     const result = await insertUserDb.query(`
-      INSERT INTO dbo.Users (full_name, phone_number, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
+      INSERT INTO dbo.Users (full_name, phone_number, email, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
       OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
              inserted.is_admin, inserted.can_manage_library, inserted.last_login_at, inserted.created_at,
              inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at, inserted.teacher_subject_ids_json
-      VALUES (@fullName, @phone, @passwordHash, 'ebeveyn', @aydinlatmaAt, @kvkkAt);
+      VALUES (@fullName, @phone, @email, @passwordHash, 'ebeveyn', @aydinlatmaAt, @kvkkAt);
     `)
     const insertedUser = sanitizeUser(result.recordset[0])
 

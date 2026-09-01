@@ -1,10 +1,10 @@
 import { authRequest } from './authClient'
 
 /** iyzico abonelik checkout formunu başlatır (mevcut/oturum açmış veli). @returns {Promise<{checkoutFormContent: string, token: string}>} */
-export async function initiateIyzicoCheckout({ billingCycle, identityNumber, address }) {
+export async function initiateIyzicoCheckout({ billingCycle, email, identityNumber, address }) {
   return authRequest('/api/parent/payments/iyzico/checkout-initialize', {
     method: 'POST',
-    body: JSON.stringify({ billingCycle, identityNumber, address }),
+    body: JSON.stringify({ billingCycle, email, identityNumber, address }),
   })
 }
 
@@ -22,6 +22,7 @@ export async function initiateIyzicoCheckoutForNewParent({
   acceptKvkk,
   turnstileToken,
   billingCycle,
+  email,
   identityNumber,
   address,
 }) {
@@ -35,6 +36,7 @@ export async function initiateIyzicoCheckoutForNewParent({
       acceptKvkk,
       turnstileToken,
       billingCycle,
+      email,
       identityNumber,
       address,
     }),
