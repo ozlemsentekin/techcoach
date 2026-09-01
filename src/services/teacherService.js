@@ -165,6 +165,15 @@ export async function moveTeacherRecurringLessonOccurrence(
   })
 }
 
+/** Tekrarlayan bir ders kuralının yalnızca tek bir haftadaki oluşumunu, seriyi bozmadan siler. @returns {Promise<Array>} güncel recurringEntries */
+export async function deleteTeacherRecurringLessonOccurrence(studentTeacherId, { dayOfWeek, startTime, date }) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/lesson-plan/recurring/occurrence`, {
+    method: 'DELETE',
+    body: JSON.stringify({ dayOfWeek, startTime, date }),
+  })
+  return data.recurringEntries
+}
+
 /** Tek seferlik bir dersi günceller. @returns {Promise<Array>} güncel oneTimeEntries */
 export async function updateTeacherOneTimeLesson(studentTeacherId, lessonId, { date, startTime, durationMinutes }) {
   const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/lesson-plan/one-time/${lessonId}`, {

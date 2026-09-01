@@ -30,8 +30,8 @@ const INITIAL_FORM = {
   subjectId: '',
   fullName: '',
   phone: '',
-  type: 'okul_ogretmeni',
-  schedule: [],
+  type: 'ozel_ogretmen',
+  schedule: [{ ...DEFAULT_SCHEDULE_ROW }],
 }
 
 function scheduleLabel(row) {
@@ -105,6 +105,7 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
   const [accessNotice, setAccessNotice] = useState('')
   const [saving, setSaving] = useState(false)
   const [resourceModalTeacher, setResourceModalTeacher] = useState(null)
+  const [showAddForm, setShowAddForm] = useState(false)
 
   useEffect(() => {
     let ignore = false
@@ -228,6 +229,18 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
     }
   }
 
+  const openAddForm = () => {
+    setError('')
+    setAccessNotice('')
+    setShowAddForm(true)
+  }
+
+  const closeAddForm = () => {
+    setError('')
+    setAccessNotice('')
+    setShowAddForm(false)
+  }
+
   const handleTeacherResourcesSaved = (teacherId, resourceBooks, resourceCount) => {
     setTeachers((current) =>
       (current || []).map((teacher) =>
@@ -246,7 +259,7 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
       <div className="flex h-full w-full max-w-6xl flex-col overflow-hidden bg-white shadow-panel-2 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-[#edf0f1] px-4 py-3 sm:px-5 sm:py-4">
           <div>
-            <h2 className="text-lg font-semibold text-panel-text">Öğretmen Ekle</h2>
+            <h2 className="text-lg font-semibold text-panel-text">Öğretmenler</h2>
             <p className="text-sm text-panel-text-muted">{student.fullName}</p>
           </div>
           <button type="button" aria-label="Kapat" onClick={onClose}>
@@ -265,35 +278,65 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
           {isLoading ? (
             <LoadingState label="Öğretmen bilgileri yükleniyor..." />
           ) : (
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_420px]">
-              <section className="flex flex-col gap-3">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-bold uppercase text-[#667475]">Kayıtlı Öğretmenler</h3>
+            <section className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-bold uppercase text-[#667475]">Kayıtlı Öğretmenler</h3>
+                <div className="flex items-center gap-2">
                   <span className="rounded-full bg-[#fbe9d7] px-3 py-1 text-xs font-semibold text-[#c96a1f]">
                     {teachers.length} öğretmen
                   </span>
+                  <Button type="button" size="sm" onClick={openAddForm}>
+                    <Plus size={14} aria-hidden="true" />
+                    Öğretmen Ekle
+                  </Button>
                 </div>
+              </div>
 
-                {teachers.length === 0 ? (
-                  <div className="flex min-h-[180px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[#dfe4e5] bg-[#fbfcfc] px-5 py-8 text-center">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#fbe9d7] text-[#c96a1f]">
-                      <GraduationCap size={22} aria-hidden="true" />
-                    </span>
-                    <div>
-                      <h4 className="text-base font-semibold text-panel-text">Henüz öğretmen eklenmedi</h4>
-                      <p className="mt-1 text-sm text-panel-text-muted">İlk öğretmeni sağdaki formdan ekleyebilirsiniz.</p>
-                    </div>
+              {teachers.length === 0 ? (
+                <div className="flex min-h-[180px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[#dfe4e5] bg-[#fbfcfc] px-5 py-8 text-center">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#fbe9d7] text-[#c96a1f]">
+                    <GraduationCap size={22} aria-hidden="true" />
+                  </span>
+                  <div>
+                    <h4 className="text-base font-semibold text-panel-text">Henüz öğretmen eklenmedi</h4>
+                    <p className="mt-1 text-sm text-panel-text-muted">
+                      İlk öğretmeni "Öğretmen Ekle" butonuyla ekleyebilirsiniz.
+                    </p>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                    {teachers.map((teacher) => (
-                      <TeacherCard key={teacher.id} teacher={teacher} onEditResources={setResourceModalTeacher} />
-                    ))}
-                  </div>
-                )}
-              </section>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                  {teachers.map((teacher) => (
+                    <TeacherCard key={teacher.id} teacher={teacher} onEditResources={setResourceModalTeacher} />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+        </div>
+      </div>
+      {showAddForm ? (
+        <div className="fixed inset-0 z-[60] flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+          <div className="flex h-full w-full max-w-lg flex-col overflow-hidden bg-white shadow-panel-2 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-[#edf0f1] px-4 py-3 sm:px-5 sm:py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-panel-text">Öğretmen Ekle</h2>
+                <p className="text-sm text-panel-text-muted">{student.fullName}</p>
+              </div>
+              <button type="button" aria-label="Kapat" onClick={closeAddForm}>
+                <X size={20} />
+              </button>
+            </div>
 
-              <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-xl border border-[#e5e8e9] bg-[#fbfcfc] p-3 sm:p-4">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+              {error ? (
+                <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
+              ) : null}
+              {accessNotice ? (
+                <div className="mb-4 rounded-xl bg-[#e8f3ee] px-4 py-3 text-sm font-medium text-[#3f8f6c]">{accessNotice}</div>
+              ) : null}
+
+              <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 <label className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium text-panel-text-muted">Ders</span>
                   <select
@@ -333,32 +376,24 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
                   />
                 </label>
 
-                <div className="flex flex-col gap-2">
+                <label className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium text-panel-text-muted">Öğretmen Tipi</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {TEACHER_TYPE_OPTIONS.map((option) => {
-                      const selected = form.type === option.value
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          aria-pressed={selected}
-                          onClick={() => handleTypeChange(option.value)}
-                          className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
-                            selected
-                              ? 'border-[#c96a1f] bg-[#fbe9d7] text-[#c96a1f]'
-                              : 'border-panel-border bg-white text-panel-text-muted hover:bg-panel-surface-soft'
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
+                  <select
+                    name="type"
+                    value={form.type}
+                    onChange={(event) => handleTypeChange(event.target.value)}
+                    className="rounded-xl border border-panel-border bg-white p-2.5 text-base text-panel-text"
+                  >
+                    {TEACHER_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
                 {form.type === 'ozel_ogretmen' ? (
-                  <div className="flex flex-col gap-3 rounded-xl border border-[#e9edf0] bg-white p-3">
+                  <div className="flex flex-col gap-3 rounded-xl border border-[#e9edf0] bg-[#fbfcfc] p-3">
                     <div className="flex items-center justify-between gap-2">
                       <span className="flex items-center gap-2 text-sm font-semibold text-panel-text">
                         <CalendarDays size={16} aria-hidden="true" />
@@ -431,9 +466,9 @@ export default function StudentTeacherModal({ student, onSaved, onClose }) {
                 </Button>
               </form>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      ) : null}
       {resourceModalTeacher ? (
         <TeacherResourceBooksModal
           student={student}

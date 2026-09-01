@@ -196,6 +196,8 @@ async function createHomeworkTask(
     taskTime = null,
     taskDurationMinutes = null,
     createdBy = 'ebeveyn',
+    createdByUserId = null,
+    studentTeacherId = null,
   },
 ) {
   const resolvedSubjectName = subjectName || (subjectId ? await resolveSubjectName(subjectId) : null)
@@ -229,6 +231,8 @@ async function createHomeworkTask(
     targetPageCount: { type: sql.Int, value: isReading ? totalPageCount || null : null },
     priority: { type: sql.NVarChar(20), value: priority || 'orta' },
     createdBy: { type: sql.NVarChar(20), value: createdBy },
+    createdByUserId: { type: sql.UniqueIdentifier, value: createdByUserId || null },
+    studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId || null },
     resourceBookId: { type: sql.UniqueIdentifier, value: isSchoolHomework ? null : resourceBookId || null },
     schoolResourceId: { type: sql.UniqueIdentifier, value: schoolResourceId || null },
     selectedTestIdsJson: {
@@ -241,14 +245,14 @@ async function createHomeworkTask(
     INSERT INTO dbo.Tasks (
       student_id, is_draft, is_unscheduled, date, assigned_date, title, description, subject, subject_id,
       task_type, start_time, end_time, duration_minutes, target_question_count, completed_question_count,
-      target_page_count, completed_page_count, priority, status, created_by,
+      target_page_count, completed_page_count, priority, status, created_by, created_by_user_id, student_teacher_id,
       resource_book_id, school_resource_id, selected_test_ids_json
     )
     OUTPUT inserted.id
     VALUES (
       @studentId, 0, @isUnscheduled, @date, @assignedDate, @title, @description, @subject, @subjectId,
       @taskType, @startTime, @endTime, @durationMinutes, @targetQuestionCount, 0,
-      @targetPageCount, 0, @priority, N'bekliyor', @createdBy,
+      @targetPageCount, 0, @priority, N'bekliyor', @createdBy, @createdByUserId, @studentTeacherId,
       @resourceBookId, @schoolResourceId, @selectedTestIdsJson
     );
   `)
@@ -342,7 +346,9 @@ async function listHomeworksHandler(request) {
 async function createHomeworkHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
-    const { error, studentId, actorRole } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
+    const { error, studentId, actorRole, actorId } = await requireStudentWriteContext(request, {
+      studentId: payload?.studentId,
+    })
     if (error) {
       return error
     }
@@ -428,6 +434,7 @@ async function createHomeworkHandler(request) {
       taskTime,
       taskDurationMinutes,
       createdBy: actorRole === 'ogrenci' ? 'ogrenci' : 'ebeveyn',
+      createdByUserId: actorId || null,
     })
 
     return json(201, { homework: await fetchHomeworkById(homeworkId) })

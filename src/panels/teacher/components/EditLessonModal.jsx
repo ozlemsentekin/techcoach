@@ -4,9 +4,15 @@ import { todayISODate } from '../../../utils/time'
 import {
   updateTeacherRecurringLesson,
   deleteTeacherRecurringLesson,
+  deleteTeacherRecurringLessonOccurrence,
   updateTeacherOneTimeLesson,
   deleteTeacherOneTimeLesson,
 } from '../../../services/teacherService'
+
+function formatOccurrenceDate(dateISO) {
+  if (!dateISO) return 'bu hafta'
+  return new Date(dateISO).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })
+}
 
 const WEEKDAYS = [
   { id: 'pazartesi', label: 'Pzt' },
@@ -79,6 +85,7 @@ export default function EditLessonModal({ entry, onSave, onDelete, onClose }) {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -106,13 +113,19 @@ export default function EditLessonModal({ entry, onSave, onDelete, onClose }) {
     }
   }
 
-  const handleDelete = async () => {
+  const handleDelete = async (scope = 'series') => {
     if (saving || deleting) return
     setDeleting(true)
     setSaveError('')
     try {
       if (entry.isOneTime) {
         await deleteTeacherOneTimeLesson(entry.studentTeacherId, entry.id)
+      } else if (scope === 'occurrence') {
+        await deleteTeacherRecurringLessonOccurrence(entry.studentTeacherId, {
+          dayOfWeek: entry.dayOfWeek,
+          startTime: entry.startTime,
+          date: entry.occurrenceDate,
+        })
       } else {
         await deleteTeacherRecurringLesson(entry.studentTeacherId, { dayOfWeek: entry.dayOfWeek, startTime: entry.startTime })
       }
@@ -190,11 +203,45 @@ export default function EditLessonModal({ entry, onSave, onDelete, onClose }) {
 
           {saveError ? <span className="text-xs text-panel-warm">{saveError}</span> : null}
 
+          {!entry.isOneTime && confirmingDelete ? (
+            <div className="flex flex-col gap-2 rounded-xl border border-panel-warm/40 bg-panel-warm/5 p-3">
+              <span className="text-xs font-medium text-panel-text">
+                Bu ders her hafta tekrar ediyor. Ne silinsin?
+              </span>
+              <button
+                type="button"
+                onClick={() => handleDelete('occurrence')}
+                disabled={saving || deleting}
+                className="flex h-11 items-center justify-center gap-2 rounded-xl border border-panel-warm/40 px-4 text-sm font-semibold text-panel-warm hover:bg-panel-warm/10 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} aria-hidden="true" />}
+                Sadece {formatOccurrenceDate(entry.occurrenceDate)} dersini sil
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete('series')}
+                disabled={saving || deleting}
+                className="flex h-11 items-center justify-center gap-2 rounded-xl border border-panel-warm/40 px-4 text-sm font-semibold text-panel-warm hover:bg-panel-warm/10 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} aria-hidden="true" />}
+                Tüm haftalardan sil
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(false)}
+                disabled={saving || deleting}
+                className="flex h-11 items-center justify-center rounded-xl border border-panel-border px-4 text-sm font-semibold text-panel-text hover:bg-panel-surface-soft disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Vazgeç
+              </button>
+            </div>
+          ) : null}
+
           <div className="flex flex-col gap-2 min-[420px]:flex-row">
             <button
               type="button"
-              onClick={handleDelete}
-              disabled={saving || deleting}
+              onClick={() => (entry.isOneTime ? handleDelete('series') : setConfirmingDelete(true))}
+              disabled={saving || deleting || (!entry.isOneTime && confirmingDelete)}
               className="flex h-12 items-center justify-center gap-2 rounded-xl border border-panel-warm/40 px-4 text-sm font-semibold text-panel-warm hover:bg-panel-warm/10 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} aria-hidden="true" />}
