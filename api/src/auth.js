@@ -4,6 +4,7 @@ const { clearSessionHeaders, createSessionHeaders, getClientIp, json } = require
 const { consumeRateLimit } = require('./rate-limit')
 const { verifyTurnstileToken } = require('./turnstile')
 const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
+const { resolveEffectiveEntitlement } = require('./entitlements')
 const {
   createSessionToken,
   defaultPasswordForPhone,
@@ -364,11 +365,13 @@ async function loginHandler(request) {
     })
     // registerHandler'daki aynı nedenden: route guard'ın (App.jsx) girişten hemen sonra
     // paywall'a yanlış yönlendirmemesi için entitlement bilgisi yanıta ekleniyor.
-    user.entitlement = {
-      status: record.entitlement_status || 'none',
-      source: record.entitlement_source || null,
-      currentPeriodEnd: record.entitlement_current_period_end || null,
-    }
+    // Öğretmen tarafından eklenen öğrenci/veli için öğretmenin aboneliği devreye girer.
+    user.entitlement = await resolveEffectiveEntitlement({
+      userId: record.id,
+      status: record.entitlement_status,
+      source: record.entitlement_source,
+      currentPeriodEnd: record.entitlement_current_period_end,
+    })
     const token = createSessionToken(user)
 
     return json(200, { user }, createSessionHeaders(token))
@@ -425,11 +428,12 @@ async function meHandler(request) {
     if (session.actingAdminId) {
       user.actingAdmin = { id: session.actingAdminId, fullName: session.actingAdminName }
     }
-    user.entitlement = {
-      status: record.entitlement_status || 'none',
-      source: record.entitlement_source || null,
-      currentPeriodEnd: record.entitlement_current_period_end || null,
-    }
+    user.entitlement = await resolveEffectiveEntitlement({
+      userId: record.id,
+      status: record.entitlement_status,
+      source: record.entitlement_source,
+      currentPeriodEnd: record.entitlement_current_period_end,
+    })
 
     return json(200, { user })
   } catch (error) {
