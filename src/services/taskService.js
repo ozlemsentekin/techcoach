@@ -85,8 +85,8 @@ export async function saveWrongQuestionPhoto(taskId, testId, orderNo, photoDataU
 }
 
 /** Cevap kağıdındaki tek "Kaydet" butonu: görevdeki tüm testlerin o anki cevaplarını tek istekte gönderir. */
-export async function saveTaskAnswers(taskId, tests) {
-  const data = await authRequest(`/api/panel/tasks/${taskId}/answers`, {
+export async function saveTaskAnswers(taskId, tests, studentId) {
+  const data = await authRequest(withStudentId(`/api/panel/tasks/${taskId}/answers`, studentId), {
     method: 'PATCH',
     body: JSON.stringify({ tests }),
   })
@@ -94,8 +94,8 @@ export async function saveTaskAnswers(taskId, tests) {
 }
 
 /** Öğrenilmeyen konuları içeren tek bir testi (cevap/sonuçlarıyla) görevden kaldırır; test kaynağı silinmez, daha sonra ayrı bir görev olarak yeniden atanabilir. */
-export async function removeTaskTest(taskId, testId) {
-  const data = await authRequest(`/api/panel/tasks/${taskId}/tests/${testId}`, { method: 'DELETE' })
+export async function removeTaskTest(taskId, testId, studentId) {
+  const data = await authRequest(withStudentId(`/api/panel/tasks/${taskId}/tests/${testId}`, studentId), { method: 'DELETE' })
   return data.task
 }
 

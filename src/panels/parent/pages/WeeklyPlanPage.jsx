@@ -19,6 +19,7 @@ import { addDaysISO, addMinutesToTime, getMondayOfWeek, todayISODate } from '../
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
 import WeeklyPlannerGrid from '../components/WeeklyPlannerGrid'
+import TaskAnswerSheetModal from '../../student/components/TaskAnswerSheetModal'
 import AddTaskDrawer from '../components/AddTaskDrawer'
 import AssignHomeworkModal from '../components/AssignHomeworkModal'
 import UnscheduledTasksPanel from '../../shared/UnscheduledTasksPanel'
@@ -48,6 +49,7 @@ export default function WeeklyPlanPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [drawerState, setDrawerState] = useState(null)
+  const [answerSheetTask, setAnswerSheetTask] = useState(null)
   const [homeworkModalDate, setHomeworkModalDate] = useState('')
   const [banner, setBanner] = useState('')
 
@@ -312,6 +314,7 @@ export default function WeeklyPlanPage() {
             onAddHomework={restricted ? undefined : (date) => setHomeworkModalDate(date)}
             onAddTask={restricted ? undefined : (date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}
             onEditTask={(task) => setDrawerState({ initialTask: task })}
+            onViewAnswerSheet={setAnswerSheetTask}
             onPublishDay={handlePublishDay}
             onQuickAddBreak={restricted ? undefined : handleQuickAddBreak}
           />
@@ -341,6 +344,21 @@ export default function WeeklyPlanPage() {
               onSave={handleSaveDrawerTask}
               onDelete={handleDeleteTask}
               onClose={() => setDrawerState(null)}
+            />
+          ) : null}
+
+          {answerSheetTask ? (
+            <TaskAnswerSheetModal
+              task={answerSheetTask}
+              lessonLabel={answerSheetTask.subject || 'Görev'}
+              photoMode="view"
+              studentId={selectedStudentId}
+              canRegrade={!restricted}
+              onClose={() => setAnswerSheetTask(null)}
+              onSaved={(updatedTask) => {
+                setAnswerSheetTask(updatedTask)
+                refresh()
+              }}
             />
           ) : null}
 

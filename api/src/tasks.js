@@ -1023,10 +1023,14 @@ async function saveTaskAnswersHandler(request) {
     const answers = taskRecord.answers_json ? JSON.parse(taskRecord.answers_json) : {}
     const results = taskRecord.test_results_json ? JSON.parse(taskRecord.test_results_json) : {}
 
+    // Değerlendirilmiş test öğrenci akışında kilitlidir (kendi sonucunu değiştiremesin).
+    // Veli, öğrencinin yanlış aktardığı bir optiği fark edip düzeltip yeniden notlatabilir.
+    const canOverwriteGraded = actorRole !== STUDENT_ACTIVITY_ACTOR_ROLE
+
     submittedTests.forEach((entry) => {
       const testId = entry?.testId
       if (!testId || !selectedTestIds.includes(testId)) return
-      if (results[testId]) return // Değerlendirilmiş test: cevaplar kilitli, üzerine yazılamaz.
+      if (results[testId] && !canOverwriteGraded) return
 
       answers[testId] = sanitizeAnswers(entry?.answers)
     })
@@ -1087,7 +1091,8 @@ async function saveTaskAnswersHandler(request) {
       wrongCount: { type: sql.Int, value: totalWrong },
       blankCount: { type: sql.Int, value: totalBlank },
       status: { type: sql.NVarChar(30), value: nextStatus },
-      completedAt: { type: sql.DateTime2, value: allGraded ? new Date() : null },
+      // Sonradan düzeltme (veli) ilk tamamlanma zamanını korur; ilk kez tamamlanıyorsa şimdi.
+      completedAt: { type: sql.DateTime2, value: allGraded ? (taskRecord.completed_at || new Date()) : null },
     })
     await updateDb.query(`
       UPDATE dbo.Tasks
