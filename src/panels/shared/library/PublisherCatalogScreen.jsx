@@ -1316,6 +1316,8 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
       {canEdit && topicModalBook ? (
         <TopicModal
           book={topicModalBook}
+          topics={topics}
+          tests={tests}
           onSaved={handleTopicCreated}
           onClose={() => setTopicModalBook(null)}
         />
@@ -1333,6 +1335,8 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
         <TopicModal
           topic={editingTopic}
           book={resourceBooks?.find((book) => book.id === editingTopic.resourceBookId)}
+          topics={topics}
+          tests={tests}
           onSaved={handleTopicUpdated}
           onClose={() => setEditingTopic(null)}
         />
