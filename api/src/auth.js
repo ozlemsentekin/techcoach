@@ -413,18 +413,6 @@ async function meHandler(request) {
     }
 
     const user = sanitizeUser(record)
-    if (record.role === 'ogrenci') {
-      user.restricted = Boolean(record.funded_by_teacher_id)
-    } else if (record.role === 'ebeveyn') {
-      // Veli panelindeki sayfalar (Dashboard, Haftalık Plan) bir studentId belirtmeden çalışır ve
-      // arka planda requireStudentContext bu veliye ait İLK öğrenciyi (created_at ASC) varsayılan
-      // olarak kullanır — burada da aynı öğrenciyi çözüp kısıtlı olup olmadığını aynı alanda taşırız.
-      const defaultStudentDb = await withRequest({ parentId: { type: sql.UniqueIdentifier, value: record.id } })
-      const defaultStudentResult = await defaultStudentDb.query(`
-        SELECT TOP 1 funded_by_teacher_id FROM dbo.Users WHERE parent_id = @parentId ORDER BY created_at ASC;
-      `)
-      user.restricted = Boolean(defaultStudentResult.recordset[0]?.funded_by_teacher_id)
-    }
     if (session.actingParentId) {
       user.actingParent = { id: session.actingParentId, fullName: session.actingParentName }
     }

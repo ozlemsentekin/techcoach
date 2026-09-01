@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
   BookOpen,
@@ -31,6 +31,7 @@ import ResourceImageField from '../components/ResourceImageField'
 import { COMMON_ARTS, COMMON_SPORTS } from '../components/studentInterestCatalog'
 import { BirthDateField, FieldIcon, WizardSteps } from '../components/StudentWizardShared'
 import { GENDER_OPTIONS, GRADE_OPTIONS, WIZARD_STEPS, getGradeBirthYearRange } from '../components/studentWizardConstants'
+import ChildSeatPurchaseModal from '../components/ChildSeatPurchaseModal'
 
 const INITIAL_FORM = {
   firstName: '',
@@ -671,22 +672,49 @@ function StudentCard({ student, onOpenLibrary, onOpenProfile, onOpenTeachers }) 
 
 export default function StudentsPage() {
   const { markHasStudents } = useParentStudentsGate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [students, setStudents] = useState(null)
+  const [quota, setQuota] = useState(null)
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [showSeatPurchase, setShowSeatPurchase] = useState(false)
+  const [seatPurchaseBanner] = useState(() => searchParams.get('cocuk_koltugu') === 'eklendi')
   const [libraryModalStudent, setLibraryModalStudent] = useState(null)
   const [teacherModalStudent, setTeacherModalStudent] = useState(null)
   const [profileModalStudent, setProfileModalStudent] = useState(null)
 
-  const loadStudents = () => {
-    cachedGet('/api/parent/students')
-      .then((data) => setStudents(data.students))
+  const loadStudents = ({ force } = {}) => {
+    if (force) invalidateCache('/api/parent/students')
+    return cachedGet('/api/parent/students')
+      .then((data) => {
+        setStudents(data.students)
+        setQuota(data.quota || null)
+        return data
+      })
       .catch((err) => setError(err.message))
   }
 
+  // iyzico çocuk-koltuğu ödemesi başarıyla dönünce /parent/students?cocuk_koltugu=eklendi olur:
+  // kotayı tazele (force), URL'i temizle ve hak açıldıysa profil sihirbazını aç.
   useEffect(() => {
-    loadStudents()
+    const justPurchased = searchParams.get('cocuk_koltugu') === 'eklendi'
+    if (justPurchased) {
+      searchParams.delete('cocuk_koltugu')
+      setSearchParams(searchParams, { replace: true })
+    }
+    loadStudents({ force: justPurchased }).then((data) => {
+      if (justPurchased && data?.quota?.hasRemaining) setShowModal(true)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const handleAddChild = () => {
+    if (quota && !quota.hasRemaining) {
+      setShowSeatPurchase(true)
+    } else {
+      setShowModal(true)
+    }
+  }
 
   const handleCreated = (student) => {
     setStudents((current) => [...(current || []), student])
@@ -695,7 +723,12 @@ export default function StudentsPage() {
 
   const handleWizardClose = () => {
     setShowModal(false)
-    loadStudents()
+    loadStudents({ force: true })
+  }
+
+  const handleSeatPurchaseClose = () => {
+    setShowSeatPurchase(false)
+    loadStudents({ force: true })
   }
 
   const handleTeachersSaved = (studentId, teacherCount) => {
@@ -710,12 +743,18 @@ export default function StudentsPage() {
         title="Çocuklarım"
         subtitle="Çocuklarınızın profillerini yönetin, gelişimlerini takip edin ve onlara özel kaynaklara ulaşın."
         actions={
-          <Button onClick={() => setShowModal(true)}>
+          <Button onClick={handleAddChild}>
             <Plus size={16} aria-hidden="true" />
             Çocuk Profili Ekle
           </Button>
         }
       />
+
+      {seatPurchaseBanner ? (
+        <div className="rounded-xl bg-panel-sage-soft px-4 py-3 text-sm text-panel-text" role="status">
+          Ödemeniz alındı. Yeni çocuk profilinizi şimdi oluşturabilirsiniz.
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
@@ -744,6 +783,7 @@ export default function StudentsPage() {
       )}
 
       {showModal ? <AddStudentModal onCreated={handleCreated} onClose={handleWizardClose} /> : null}
+      {showSeatPurchase ? <ChildSeatPurchaseModal onClose={handleSeatPurchaseClose} /> : null}
       {libraryModalStudent ? (
         <StudentResourceLibraryModal student={libraryModalStudent} onClose={() => setLibraryModalStudent(null)} />
       ) : null}

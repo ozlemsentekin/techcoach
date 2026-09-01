@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../../context/useAuth'
 import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Info, Users } from 'lucide-react'
-import { cachedGet } from '../../../services/authClient'
+import { cachedGet, invalidateCache } from '../../../services/authClient'
 import {
   getWeekDates,
   getDraftTasksForDate,
   getWeekPlans,
   getSchoolSchedule,
   getTeacherLessonSchedule,
+  getPrivateLessonTeachers,
   saveTaskForDay,
   publishDay,
 } from '../../../services/weeklyPlanService'
@@ -16,12 +17,14 @@ import { addHomework } from '../../../services/homeworkService'
 import { preloadPanelHomeworkResourceBooks } from '../../../services/resourceBookService'
 import { getUnscheduledTasks, patchTask, removeTask } from '../../../services/taskService'
 import { addDaysISO, addMinutesToTime, getMondayOfWeek, todayISODate } from '../../../utils/time'
+import { withGenitive } from '../../../utils/turkishSuffix'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
 import WeeklyPlannerGrid from '../components/WeeklyPlannerGrid'
 import TaskAnswerSheetModal from '../../student/components/TaskAnswerSheetModal'
 import AddTaskDrawer from '../components/AddTaskDrawer'
 import AssignHomeworkModal from '../components/AssignHomeworkModal'
+import ParentLessonSlotModal from '../components/ParentLessonSlotModal'
 import UnscheduledTasksPanel from '../../shared/UnscheduledTasksPanel'
 
 const currentWeekStart = getMondayOfWeek(todayISODate())
@@ -37,18 +40,19 @@ export default function WeeklyPlanPage() {
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const selectedStudent = students?.find((student) => student.id === selectedStudentId)
   const studentName = selectedStudent?.fullName?.trim().split(/\s+/)[0] || ''
-  const restricted = Boolean(selectedStudent ? selectedStudent.restricted : authUser?.restricted)
   const hasMultipleStudents = (students?.length || 0) > 1
 
   const [tasksByDate, setTasksByDate] = useState({})
   const [dayStatusByDate, setDayStatusByDate] = useState({})
   const [unscheduledTasks, setUnscheduledTasks] = useState([])
   const [lessonSchedule, setLessonSchedule] = useState([])
+  const [privateTeachers, setPrivateTeachers] = useState([])
   const [schoolSchedule, setSchoolSchedule] = useState([])
   const [schoolHolidays, setSchoolHolidays] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [drawerState, setDrawerState] = useState(null)
+  const [managingSlot, setManagingSlot] = useState(null)
   const [answerSheetTask, setAnswerSheetTask] = useState(null)
   const [homeworkModalDate, setHomeworkModalDate] = useState('')
   const [banner, setBanner] = useState('')
@@ -120,21 +124,27 @@ export default function WeeklyPlanPage() {
     }
   }, [applyWeekPlans, loadWeekPlans, weekStart, selectedStudentId])
 
-  useEffect(() => {
+  const loadTeacherAndSchoolData = useCallback(() => {
     if (!selectedStudentId) return
     Promise.all([
       getTeacherLessonSchedule({ studentId: selectedStudentId }).catch(() => []),
+      getPrivateLessonTeachers({ studentId: selectedStudentId }).catch(() => []),
       getSchoolSchedule({ studentId: selectedStudentId }).catch(() => ({ entries: [], holidays: [] })),
-    ]).then(([teacherLessons, school]) => {
+    ]).then(([teacherLessons, teachers, school]) => {
       setLessonSchedule(teacherLessons)
+      setPrivateTeachers(teachers)
       setSchoolSchedule(school.entries || [])
       setSchoolHolidays(school.holidays || [])
     })
   }, [selectedStudentId])
 
   useEffect(() => {
-    if (!restricted) preloadPanelHomeworkResourceBooks()
-  }, [restricted])
+    loadTeacherAndSchoolData()
+  }, [loadTeacherAndSchoolData])
+
+  useEffect(() => {
+    preloadPanelHomeworkResourceBooks()
+  }, [])
 
   useEffect(() => {
     loadUnscheduled()
@@ -161,8 +171,15 @@ export default function WeeklyPlanPage() {
       // Aynı gün içinde düzenleme: görev zaten hangi durumdaysa (taslak/canlı) o durumda kalır.
       await patchTask(initialTask.id, taskData, selectedStudentId)
     } else if (initialTask) {
+      // Gün değişince görev silinip yeniden oluşturulur — orijinal ekleyen (ör. öğretmen)
+      // korunmalı, aksi halde "Veli ekledi" gibi yanlış görünür.
       await removeTask(initialTask.id, selectedStudentId)
-      await saveTaskForDay(taskData.date, taskData, targetStatus, { studentId: selectedStudentId })
+      await saveTaskForDay(
+        taskData.date,
+        { ...taskData, createdBy: initialTask.createdBy, createdByUserId: initialTask.createdByUserId },
+        targetStatus,
+        { studentId: selectedStudentId },
+      )
     } else {
       await saveTaskForDay(taskData.date, taskData, targetStatus, { studentId: selectedStudentId })
     }
@@ -196,6 +213,19 @@ export default function WeeklyPlanPage() {
     await publishDay(date, { studentId: selectedStudentId })
     await refresh()
     showBanner('Gün yayınlandı.')
+  }
+
+  const managingTeacher = managingSlot
+    ? privateTeachers.find((teacher) => teacher.id === managingSlot.studentTeacherId) || null
+    : null
+
+  const handleLessonSlotSaved = async () => {
+    invalidateCache(`/api/panel/teachers?studentId=${selectedStudentId}`)
+    invalidateCache('/api/panel/teachers')
+    setManagingSlot(null)
+    loadTeacherAndSchoolData()
+    await refresh()
+    showBanner('Ders programı güncellendi.')
   }
 
   const handleQuickAddBreak = async (date, afterTask, minutes) => {
@@ -234,7 +264,7 @@ export default function WeeklyPlanPage() {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <h1 className="break-words text-2xl font-bold leading-tight text-panel-text sm:text-3xl">
-              {studentName ? `${studentName}'in Haftasını Planla` : 'Haftalık Plan'}
+              {studentName ? `${withGenitive(studentName)} Haftasını Planla` : 'Haftalık Plan'}
             </h1>
             {hasMultipleStudents ? (
               <label className="inline-flex w-fit items-center gap-2 rounded-full border border-panel-border bg-panel-surface-soft px-3 py-1 text-sm font-semibold text-panel-text">
@@ -311,19 +341,19 @@ export default function WeeklyPlanPage() {
             lessonSchedule={lessonSchedule}
             schoolSchedule={schoolSchedule}
             schoolHolidays={schoolHolidays}
-            onAddHomework={restricted ? undefined : (date) => setHomeworkModalDate(date)}
-            onAddTask={restricted ? undefined : (date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}
+            onAddHomework={(date) => setHomeworkModalDate(date)}
+            onAddTask={(date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}
             onEditTask={(task) => setDrawerState({ initialTask: task })}
             onViewAnswerSheet={setAnswerSheetTask}
             onPublishDay={handlePublishDay}
-            onQuickAddBreak={restricted ? undefined : handleQuickAddBreak}
+            onQuickAddBreak={handleQuickAddBreak}
+            onManageLessonSlot={setManagingSlot}
           />
 
           <UnscheduledTasksPanel
             tasks={unscheduledTasks}
             studentId={selectedStudentId}
             onChanged={refresh}
-            readOnly={restricted}
           />
 
           <div className="flex items-center gap-3 rounded-2xl bg-panel-blue-soft px-5 py-4 text-sm font-semibold text-panel-blue">
@@ -347,13 +377,23 @@ export default function WeeklyPlanPage() {
             />
           ) : null}
 
+          {managingSlot ? (
+            <ParentLessonSlotModal
+              slot={managingSlot}
+              teacher={managingTeacher}
+              studentId={selectedStudentId}
+              onSaved={handleLessonSlotSaved}
+              onClose={() => setManagingSlot(null)}
+            />
+          ) : null}
+
           {answerSheetTask ? (
             <TaskAnswerSheetModal
               task={answerSheetTask}
               lessonLabel={answerSheetTask.subject || 'Görev'}
               photoMode="view"
               studentId={selectedStudentId}
-              canRegrade={!restricted}
+              canRegrade
               onClose={() => setAnswerSheetTask(null)}
               onSaved={(updatedTask) => {
                 setAnswerSheetTask(updatedTask)

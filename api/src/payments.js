@@ -16,6 +16,10 @@ const {
   upsertParentEntitlementFromIyzico,
   updateParentEntitlementStatus,
   findParentIdBySubscriptionReferenceCode,
+  getParentStudentQuota,
+  insertChildSeatSubscription,
+  findParentIdByChildSeatSubscriptionReferenceCode,
+  updateChildSeatSubscriptionFromIyzico,
 } = require('./entitlements')
 const {
   Iyzipay,
@@ -27,6 +31,22 @@ const {
 const BILLING_CYCLES = {
   monthly: (config) => config.parentMonthlyPlanRef,
   yearly: (config) => config.parentYearlyPlanRef,
+}
+
+// Ek çocuk (çocuk-koltuğu) paketi pricing plan referansları.
+const CHILD_SEAT_BILLING_CYCLES = {
+  monthly: (config) => config.childMonthlyPlanRef,
+  yearly: (config) => config.childYearlyPlanRef,
+}
+
+function isChildSeatPlanRef(config, pricingPlanReferenceCode) {
+  if (!pricingPlanReferenceCode) {
+    return false
+  }
+  return (
+    pricingPlanReferenceCode === config.childMonthlyPlanRef ||
+    pricingPlanReferenceCode === config.childYearlyPlanRef
+  )
 }
 
 function splitFullName(fullName) {
@@ -82,9 +102,19 @@ function validatePaymentFields(payload) {
   return { billingCycle, identityNumber, address, email }
 }
 
-async function initializeParentSubscriptionCheckout({ conversationId, billingCycle, identityNumber, address, fullName, email, phone }) {
+async function initializeParentSubscriptionCheckout({
+  conversationId,
+  billingCycle,
+  identityNumber,
+  address,
+  fullName,
+  email,
+  phone,
+  planKind = 'parent',
+}) {
   const config = getIyzicoConfig()
-  const pricingPlanReferenceCode = BILLING_CYCLES[billingCycle](config)
+  const cycles = planKind === 'childSeat' ? CHILD_SEAT_BILLING_CYCLES : BILLING_CYCLES
+  const pricingPlanReferenceCode = cycles[billingCycle](config)
   const { name, surname } = splitFullName(fullName)
 
   const billingAddress = {
@@ -153,6 +183,60 @@ async function initiateIyzicoCheckoutHandler(request) {
     }
 
     console.error('initiateIyzicoCheckoutHandler failed', error)
+    return json(500, { error: `Ödeme başlatılamadı. (${error.message})` })
+  }
+}
+
+// Mevcut bir veli için EK çocuk (çocuk-koltuğu) paketi satın alma akışını başlatır. Velinin
+// kendi aktif aboneliği olsun olmasın çalışır; sadece çocuk ekleme kotası dolu olduğunda izin
+// verir. conversationId = velinin Users.id'si; ödeme onaylanınca iyzicoCheckoutCallbackHandler
+// içinde ChildSeatSubscriptions'a bir satır yazılır.
+async function initiateChildSeatCheckoutHandler(request) {
+  try {
+    const { error, parentId } = await requireParentSession(request)
+    if (error) {
+      return error
+    }
+
+    const payload = await request.json().catch(() => null)
+    const fields = validatePaymentFields(payload)
+    if (fields.error) {
+      return json(400, { error: fields.error })
+    }
+
+    const config = getIyzicoConfig()
+    if (!CHILD_SEAT_BILLING_CYCLES[fields.billingCycle](config)) {
+      return json(503, { error: 'Ek çocuk paketi şu anda satın alınamıyor. Lütfen daha sonra tekrar deneyin.' })
+    }
+
+    const quota = await getParentStudentQuota(parentId)
+    if (quota.hasRemaining) {
+      return json(409, { error: 'Zaten kullanabileceğiniz bir çocuk profili hakkınız var.' })
+    }
+
+    const parent = await getParentProfile(parentId)
+    if (!parent) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    const result = await initializeParentSubscriptionCheckout({
+      conversationId: parentId,
+      ...fields,
+      planKind: 'childSeat',
+      fullName: parent.full_name,
+      phone: parent.phone_number,
+    })
+
+    return json(200, { checkoutFormContent: result.checkoutFormContent, token: result.token })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Ödeme servisi yapılandırması eksik.' })
+    }
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('initiateChildSeatCheckoutHandler failed', error)
     return json(500, { error: `Ödeme başlatılamadı. (${error.message})` })
   }
 }
@@ -349,6 +433,31 @@ async function iyzicoCheckoutCallbackHandler(request) {
       return redirectTo(failureUrl)
     }
 
+    // Ek çocuk (çocuk-koltuğu) paketi — conversationId her zaman mevcut bir velinin Users.id'sidir.
+    if (isChildSeatPlanRef(config, data.pricingPlanReferenceCode)) {
+      const childSeatParent = await findExistingParent(conversationId)
+      if (!childSeatParent) {
+        return redirectTo(failureUrl)
+      }
+      const isNewChildSeatEvent = await recordEntitlementEvent({
+        providerEventId: data.referenceCode,
+        eventType: 'child_seat.checkout.completed',
+        appUserId: childSeatParent.id,
+        rawPayload: data,
+      })
+      if (isNewChildSeatEvent) {
+        await insertChildSeatSubscription({
+          parentId: childSeatParent.id,
+          status: 'active',
+          period: data.pricingPlanReferenceCode === config.childYearlyPlanRef ? 'yearly' : 'monthly',
+          productId: data.pricingPlanReferenceCode,
+          subscriptionReferenceCode: data.referenceCode,
+          currentPeriodEnd: data.endDate ? new Date(data.endDate) : null,
+        })
+      }
+      return redirectTo(`${config.webRedirectBaseUrl}/parent/students?cocuk_koltugu=eklendi`)
+    }
+
     // conversationId ya mevcut bir velinin (yenileme ödemesi) dbo.Users.id'si, ya da henüz hesabı
     // olmayan yeni bir velinin dbo.PendingParentRegistrations.id'sidir — hangisi olduğunu burada
     // ayırt ediyoruz. İkinci durumda gerçek hesap ancak bu noktada, ödeme onaylandıktan sonra oluşur.
@@ -438,20 +547,41 @@ async function iyzicoWebhookHandler(request) {
       return json(400, { error: 'Geçersiz webhook gövdesi.' })
     }
 
+    // Abonelik ya taban veli planı (Entitlements) ya da ek çocuk paketidir (ChildSeatSubscriptions).
     const parentId = await findParentIdBySubscriptionReferenceCode(subscriptionReferenceCode)
-    if (!parentId) {
+    const childSeatParentId = parentId
+      ? null
+      : await findParentIdByChildSeatSubscriptionReferenceCode(subscriptionReferenceCode)
+
+    if (!parentId && !childSeatParentId) {
       return json(200, { ok: true, skipped: 'unknown_subscription' })
     }
 
     const isNew = await recordEntitlementEvent({
       providerEventId: iyziReferenceCode,
       eventType: iyziEventType,
-      appUserId: parentId,
+      appUserId: parentId || childSeatParentId,
       rawPayload: payload,
     })
 
     if (!isNew) {
       return json(200, { ok: true, deduplicated: true })
+    }
+
+    if (childSeatParentId) {
+      if (iyziEventType === 'subscription.order.success') {
+        const subscription = await retrieveSubscription({ subscriptionReferenceCode })
+        await updateChildSeatSubscriptionFromIyzico({
+          subscriptionReferenceCode,
+          status: 'active',
+          currentPeriodEnd: subscription.data.endDate ? new Date(subscription.data.endDate) : null,
+        })
+      } else if (iyziEventType === 'subscription.order.failure') {
+        await updateChildSeatSubscriptionFromIyzico({ subscriptionReferenceCode, status: 'grace_period' })
+      } else if (iyziEventType === 'subscription.cancelled' || iyziEventType === 'subscription.expired') {
+        await updateChildSeatSubscriptionFromIyzico({ subscriptionReferenceCode, status: 'cancelled' })
+      }
+      return json(200, { ok: true })
     }
 
     if (iyziEventType === 'subscription.order.success') {
@@ -481,6 +611,7 @@ async function iyzicoWebhookHandler(request) {
 
 module.exports = {
   initiateIyzicoCheckoutHandler,
+  initiateChildSeatCheckoutHandler,
   initiateIyzicoCheckoutForNewParentHandler,
   iyzicoCheckoutCallbackHandler,
   iyzicoWebhookHandler,

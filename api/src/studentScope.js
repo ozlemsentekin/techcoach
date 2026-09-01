@@ -12,10 +12,6 @@ const CONSENT_REQUIRED_ERROR = {
  * - A student session (own or entered-via-parent) is scoped to itself.
  * - A parent session must specify studentId (query or body) and own that student;
  *   omitting it defaults to the parent's first student (by created_at ASC).
- *
- * Also resolves `restricted`: true when the target student was added through a teacher's
- * panel quota (funded_by_teacher_id set) rather than the parent's own plan — in that case
- * the parent may only view data, not create new tasks/homeworks/plans (see requireStudentWriteContext).
  */
 async function requireStudentContext(request, { studentId: bodyStudentId } = {}) {
   const token = readSessionToken(request)
@@ -46,7 +42,7 @@ async function requireStudentContext(request, { studentId: bodyStudentId } = {})
     if (!record.aydinlatma_accepted_at || !record.kvkk_accepted_at) {
       return { error: json(403, CONSENT_REQUIRED_ERROR) }
     }
-    return { studentId: record.id, restricted: Boolean(record.funded_by_teacher_id), ...actor }
+    return { studentId: record.id, ...actor }
   }
 
   if (record.role !== 'ebeveyn') {
@@ -71,7 +67,7 @@ async function requireStudentContext(request, { studentId: bodyStudentId } = {})
     if (!ownedStudent) {
       return { error: json(404, { error: 'Öğrenci bulunamadı.' }) }
     }
-    return { studentId: requestedStudentId, restricted: Boolean(ownedStudent.funded_by_teacher_id), ...actor }
+    return { studentId: requestedStudentId, ...actor }
   }
 
   const firstStudentDb = await withRequest({
@@ -85,31 +81,17 @@ async function requireStudentContext(request, { studentId: bodyStudentId } = {})
     return { error: json(404, { error: 'Bağlı öğrenci bulunamadı.' }) }
   }
 
-  return { studentId: firstStudent.id, restricted: Boolean(firstStudent.funded_by_teacher_id), ...actor }
+  return { studentId: firstStudent.id, ...actor }
 }
 
 /**
- * Same as requireStudentContext, but rejects write attempts (POST/PUT/PATCH/DELETE) made by
- * a parent on a `restricted` student — one added through a teacher's panel quota, where the
- * parent may only view the tasks/homeworks/plans that teacher defined, not create their own.
- * The student's own session is never restricted by this check.
+ * Historically this rejected parent write attempts on a teacher-funded ("restricted") student.
+ * That restriction was removed: a parent added by a teacher now has full rights over that child,
+ * exactly like a parent who bought their own plan. Kept as a thin alias so existing write-path
+ * callers keep a distinct, self-documenting entry point.
  */
 async function requireStudentWriteContext(request, options = {}) {
-  const result = await requireStudentContext(request, options)
-  if (result.error) {
-    return result
-  }
-
-  if (result.restricted && result.actorRole === 'ebeveyn') {
-    return {
-      error: json(403, {
-        error: 'Bu öğrenci için görev/ödev/plan eklemeye yetkiniz yok.',
-        code: 'RESTRICTED_STUDENT',
-      }),
-    }
-  }
-
-  return result
+  return requireStudentContext(request, options)
 }
 
 module.exports = { requireStudentContext, requireStudentWriteContext }

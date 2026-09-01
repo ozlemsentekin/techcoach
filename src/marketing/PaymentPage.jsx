@@ -4,6 +4,7 @@ import { CheckCircle2, Lock } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { panelPathForRole } from '../utils/panelPath'
 import { initiateIyzicoCheckout, initiateIyzicoCheckoutForNewParent } from '../services/paymentService'
+import { injectCheckoutFormContent } from './iyzicoCheckoutForm'
 import './LandingPage.css'
 
 const BILLING_OPTIONS = {
@@ -21,23 +22,6 @@ const INCLUDED_FEATURES = [
 
 function BrandIcon() {
   return <img src="/logo-mark.png" alt="" className="logo-mark-img" />
-}
-
-function injectCheckoutFormContent(container, html) {
-  container.innerHTML = ''
-  const template = document.createElement('template')
-  template.innerHTML = html
-
-  Array.from(template.content.childNodes).forEach((node) => {
-    if (node.tagName === 'SCRIPT') {
-      const script = document.createElement('script')
-      Array.from(node.attributes).forEach((attr) => script.setAttribute(attr.name, attr.value))
-      script.textContent = node.textContent
-      container.appendChild(script)
-    } else {
-      container.appendChild(node.cloneNode(true))
-    }
-  })
 }
 
 export default function PaymentPage() {
