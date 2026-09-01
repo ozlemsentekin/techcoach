@@ -1033,17 +1033,21 @@ async function createTeacherStudentHandler(request) {
       consumesQuota = !(await hasActiveParentEntitlement(parentId))
     } else {
       consumesQuota = true
-      parentHasPanelAccess = false
+      parentHasPanelAccess = true
+      // Öğretmenin eklediği veli de öğrenci gibi hemen panele girebilsin: varsayılan
+      // şifre (telefon numarasının son 6 hanesi) kayıt anında atanır.
+      const parentPasswordHash = await hashPassword(defaultPasswordForPhone(parentPhone))
       const insertParentDb = await withRequest({
         fullName: { type: sql.NVarChar(120), value: parentFullName },
         phone: { type: sql.NVarChar(20), value: parentPhone },
         role: { type: sql.NVarChar(20), value: 'ebeveyn' },
+        passwordHash: { type: sql.NVarChar(255), value: parentPasswordHash },
       })
       try {
         const insertParentResult = await insertParentDb.query(`
-          INSERT INTO dbo.Users (full_name, phone_number, role)
+          INSERT INTO dbo.Users (full_name, phone_number, role, password_hash)
           OUTPUT inserted.id
-          VALUES (@fullName, @phone, @role);
+          VALUES (@fullName, @phone, @role, @passwordHash);
         `)
         parentId = insertParentResult.recordset[0].id
       } catch (insertError) {
@@ -1076,21 +1080,29 @@ async function createTeacherStudentHandler(request) {
     `)
     const parentConsent = parentConsentResult.recordset[0]
 
+    // Telefonu verilen öğrenci de veli gibi hemen giriş yapabilsin: varsayılan şifre
+    // (telefon numarasının son 6 hanesi) kayıt anında atanır. Telefon verilmemişse
+    // password_hash NULL kalır (öğrenci yalnızca veli oturumundan yönetilir).
+    const studentPasswordHash = studentPhone
+      ? await hashPassword(defaultPasswordForPhone(studentPhone))
+      : null
+
     const insertStudentDb = await withRequest({
       fullName: { type: sql.NVarChar(120), value: studentFullName },
       role: { type: sql.NVarChar(20), value: 'ogrenci' },
       phone: { type: sql.NVarChar(30), value: studentPhone },
       parentId: { type: sql.UniqueIdentifier, value: parentId },
       fundedByTeacherId: { type: sql.UniqueIdentifier, value: consumesQuota ? teacherUserId : null },
+      passwordHash: { type: sql.NVarChar(255), value: studentPasswordHash },
       aydinlatmaAcceptedAt: { type: sql.DateTime2, value: parentConsent?.aydinlatma_accepted_at || null },
       kvkkAcceptedAt: { type: sql.DateTime2, value: parentConsent?.kvkk_accepted_at || null },
     })
     let studentResult
     try {
       studentResult = await insertStudentDb.query(`
-        INSERT INTO dbo.Users (full_name, role, phone_number, parent_id, funded_by_teacher_id, aydinlatma_accepted_at, kvkk_accepted_at)
+        INSERT INTO dbo.Users (full_name, role, phone_number, parent_id, funded_by_teacher_id, password_hash, aydinlatma_accepted_at, kvkk_accepted_at)
         OUTPUT inserted.id
-        VALUES (@fullName, @role, @phone, @parentId, @fundedByTeacherId, @aydinlatmaAcceptedAt, @kvkkAcceptedAt);
+        VALUES (@fullName, @role, @phone, @parentId, @fundedByTeacherId, @passwordHash, @aydinlatmaAcceptedAt, @kvkkAcceptedAt);
       `)
     } catch (insertError) {
       if (studentPhone && (insertError.number === 2601 || insertError.number === 2627)) {
