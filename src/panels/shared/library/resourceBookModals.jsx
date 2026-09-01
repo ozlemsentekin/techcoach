@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { BookOpen, Copy, FileText, ListTree, Trash2, X } from 'lucide-react'
 import Button from '../../ui/Button'
 import LoadingState from '../LoadingState'
@@ -64,9 +64,59 @@ function TopicBookPageRow({ label, page, active = false, subline }) {
   )
 }
 
-function TopicContentsPreview({ bookName, topicName }) {
-  const previewTopicName = topicName.trim() || CONTENT_TOPIC_EXAMPLE
-  const previewPage = topicName.trim() ? '...' : '12'
+// Kaynağa eklenmiş içerikleri (aynı adlı satırları birleştirerek) başlangıç sayfasına göre
+// sıralı bir "İçindekiler" listesine dönüştürür. Bir içeriğin başlangıç sayfası, o içeriğe
+// bağlı testlerin en küçük başlangıç sayfasıdır; hiç testi yoksa sayfa bilinmiyor demektir.
+function buildBookContents(bookTopics, bookTests) {
+  const groups = new Map()
+  bookTopics.forEach((topic) => {
+    const existing = groups.get(topic.name)
+    if (existing) existing.topicIds.push(topic.id)
+    else groups.set(topic.name, { name: topic.name, topicIds: [topic.id] })
+  })
+
+  const entries = Array.from(groups.values()).map((group) => {
+    const pages = bookTests
+      .filter((test) => group.topicIds.includes(test.topicId))
+      .map((test) => Number(test.pageStart))
+      .filter((page) => Number.isInteger(page) && page > 0)
+    return { name: group.name, page: pages.length ? Math.min(...pages) : null }
+  })
+
+  entries.sort((a, b) => {
+    if (a.page == null && b.page == null) return a.name.localeCompare(b.name, 'tr')
+    if (a.page == null) return 1
+    if (b.page == null) return -1
+    return a.page - b.page
+  })
+
+  return entries
+}
+
+function TopicContentsPreview({ bookName, topicName, bookContents, editingName }) {
+  const trimmed = topicName.trim()
+  const isEdit = Boolean(editingName)
+
+  const rows = bookContents.map((entry) => {
+    const active = isEdit && entry.name === editingName
+    return {
+      key: entry.name,
+      label: active ? trimmed || entry.name : entry.name,
+      page: entry.page == null ? '—' : String(entry.page),
+      active,
+    }
+  })
+
+  // Yeni içerik henüz sayfa numarası taşımadığı için listenin sonuna eklenir.
+  if (!isEdit) {
+    rows.push({
+      key: '__new__',
+      label: trimmed || CONTENT_TOPIC_EXAMPLE,
+      page: trimmed ? '...' : '12',
+      active: true,
+      subline: 'Yeni içerik başlığı',
+    })
+  }
 
   return (
     <div className="relative flex h-full min-h-[360px] flex-col bg-[#fffdf8] px-4 py-5 sm:px-6 sm:py-6">
@@ -82,9 +132,18 @@ function TopicContentsPreview({ bookName, topicName }) {
       </div>
 
       <div className="flex flex-1 flex-col gap-2" aria-live="polite">
-        <TopicBookPageRow label="Ön Söz" page="3" />
-        <TopicBookPageRow label={previewTopicName} page={previewPage} active subline="Yeni içerik başlığı" />
-        <TopicBookPageRow label="Testler" page="..." subline="Bir sonraki adımda eklenecek" />
+        {rows.map((row) => (
+          <TopicBookPageRow
+            key={row.key}
+            label={row.label}
+            page={row.page}
+            active={row.active}
+            subline={row.subline}
+          />
+        ))}
+        {rows.length === 0 ? (
+          <p className="px-2.5 text-sm text-[#8b7666]">Bu kaynağa henüz içerik eklenmedi.</p>
+        ) : null}
       </div>
 
       <div className="mt-5 flex items-center justify-between border-t border-[#eadbc8] pt-3 text-[11px] font-medium text-[#b49c84]">
@@ -95,12 +154,21 @@ function TopicContentsPreview({ bookName, topicName }) {
   )
 }
 
-function TopicModal({ book, topic, onSaved, onClose }) {
+function TopicModal({ book, topic, topics = [], tests = [], onSaved, onClose }) {
   const isEdit = Boolean(topic)
   const [name, setName] = useState(topic?.name || '')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const previewTopicName = name.trim() || CONTENT_TOPIC_EXAMPLE
+
+  const bookId = book?.id
+  const bookContents = useMemo(() => {
+    if (!bookId) return []
+    const bookTopics = topics.filter((item) => item.resourceBookId === bookId)
+    const bookTopicIds = new Set(bookTopics.map((item) => item.id))
+    const bookTests = tests.filter((item) => bookTopicIds.has(item.topicId))
+    return buildBookContents(bookTopics, bookTests)
+  }, [bookId, topics, tests])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -226,7 +294,12 @@ function TopicModal({ book, topic, onSaved, onClose }) {
             </section>
 
             <section className="min-w-0">
-              <TopicContentsPreview bookName={book?.name} topicName={name} />
+              <TopicContentsPreview
+                bookName={book?.name}
+                topicName={name}
+                bookContents={bookContents}
+                editingName={topic?.name || ''}
+              />
             </section>
           </div>
         </div>
