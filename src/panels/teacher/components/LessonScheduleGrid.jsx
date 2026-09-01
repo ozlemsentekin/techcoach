@@ -19,8 +19,11 @@ export default function LessonScheduleGrid({ recurringEntries, oneTimeEntries, w
   const entriesByDay = new Map(WEEKDAYS.map((day) => [day.id, []]))
 
   recurringEntries.forEach((entry) => {
+    const dayIndex = WEEKDAYS.findIndex((day) => day.id === entry.dayOfWeek)
+    const occurrenceDate = dayIndex >= 0 ? weekDates?.[dayIndex] : null
+    if (occurrenceDate && entry.skipDates?.includes(occurrenceDate)) return
     const list = entriesByDay.get(entry.dayOfWeek)
-    if (list) list.push({ ...entry, isOneTime: false })
+    if (list) list.push({ ...entry, isOneTime: false, occurrenceDate })
   })
 
   const dateToDay = new Map(weekDates.map((date, index) => [date, WEEKDAYS[index].id]))

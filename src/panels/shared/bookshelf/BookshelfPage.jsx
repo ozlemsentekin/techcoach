@@ -42,6 +42,11 @@ function BookCard({ book, showAssignees, showCreator, onClick }) {
           {book.name}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-panel-text-muted">
+          {book.scope === 'catalog' ? (
+            <Badge tone="slate" className="text-[10px]">Katalog</Badge>
+          ) : (
+            <Badge tone="sage" className="text-[10px]">Özel kaynak</Badge>
+          )}
           <span>{BOOKSHELF_RESOURCE_TYPE_LABELS[book.type] || book.type}</span>
           {book.grade ? <span>· {book.grade}. sınıf</span> : null}
           {showAssignees && book.assignedCount ? (
@@ -114,7 +119,7 @@ export default function BookshelfPage({ showAssignees = true }) {
         subtitle={
           adminView
             ? 'Veli, öğretmen ve öğrencilerin eklediği tüm özel kaynaklar. Ekleyebilir, düzenleyebilir, atayabilir ve silebilirsiniz.'
-            : 'Yalnızca sizin ve çocuğunuzun/öğrencinizin gördüğü özel kaynaklar.'
+            : 'Öğrencilerinizle takip ettiğiniz tüm kaynaklar — katalog kitapları ve sizin eklediğiniz özel kaynaklar. Özel kaynakları buradan ekleyip yönetebilirsiniz.'
         }
         actions={
           <Button type="button" size="md" className="gap-1.5" onClick={() => setCreating(true)}>
@@ -152,7 +157,7 @@ export default function BookshelfPage({ showAssignees = true }) {
           description={
             adminView
               ? 'Veli, öğretmen veya öğrenciler kaynak ekledikçe burada listelenir. Siz de "Yeni Kitap Ekle" ile ekleyebilirsiniz.'
-              : '"Yeni Kitap Ekle" ile ilk özel kaynağınızı ekleyin.'
+              : 'Öğrencilerinize kaynak atadıkça (ya da veli size kaynak atadıkça) burada listelenir. "Yeni Kitap Ekle" ile kendi özel kaynağınızı da ekleyebilirsiniz.'
           }
         />
       ) : filteredBooks.length === 0 ? (

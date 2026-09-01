@@ -164,8 +164,9 @@ export async function saveTaskForDay(date, taskData, dayStatus, { studentId } = 
     return postTask(
       {
         status: 'bekliyor',
-        createdBy: 'ebeveyn',
         priority: 'orta',
+        // createdBy gönderilmez: sunucu oturumdan belirler (veli → ebeveyn, öğrenci → ogrenci).
+        // taskData zaten bir createdBy taşıyorsa (kopyalama/yeniden planlama) o korunur.
         ...taskData,
         date,
         isDraft: false,
@@ -180,7 +181,6 @@ export async function saveDraftTask(date, taskData, { studentId } = {}) {
   return postTask(
     {
       status: 'bekliyor',
-      createdBy: 'ebeveyn',
       priority: 'orta',
       ...taskData,
       date,
@@ -366,9 +366,40 @@ export async function getTeacherLessonSchedule({ studentId } = {}) {
 }
 
 /** "Özel Ders" görev türü için Ders + Öğretmen seçimini besleyen, öğrencinin aktif özel öğretmenleri. */
-export async function getPrivateLessonTeachers() {
-  const data = await cachedGet('/api/panel/teachers')
+export async function getPrivateLessonTeachers({ studentId } = {}) {
+  const data = await cachedGet(studentId ? `/api/panel/teachers?studentId=${studentId}` : '/api/panel/teachers')
   return (data.teachers || []).filter((teacher) => teacher.type === 'ozel_ogretmen' && teacher.isActive !== false)
+}
+
+/**
+ * Bir özel öğretmenin haftalık ders programındaki tek bir slotu (gün/saat/süre) değiştirir
+ * ya da siler. Veli, StudentTeachers kaydının sahibidir (created_by_parent_id) — bu yüzden
+ * mevcut PUT ucundan tüm schedule_json yeniden yazılır. Seri geneli etkiler (bu hafta / gelecek
+ * haftalar hepsi). `removeSlot` true ise slot listeden çıkarılır.
+ */
+export async function updatePrivateLessonSlot(
+  studentId,
+  teacher,
+  { originalDayOfWeek, originalStartTime, dayOfWeek, startTime, endTime, removeSlot = false },
+) {
+  const nextSchedule = (teacher.schedule || [])
+    .map((slot) => {
+      if (slot.dayOfWeek !== originalDayOfWeek || slot.startTime !== originalStartTime) return slot
+      return removeSlot ? null : { dayOfWeek, startTime, endTime }
+    })
+    .filter(Boolean)
+
+  const data = await authRequest(`/api/parent/students/${studentId}/teachers/${teacher.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      subjectId: teacher.subjectId,
+      fullName: teacher.fullName,
+      phone: teacher.phone,
+      type: teacher.type,
+      schedule: nextSchedule,
+    }),
+  })
+  return data.teachers || []
 }
 
 /** Düzenli öğretmen derslerini öğrenci akışında gösterilecek salt okunur plan öğelerine çevirir. */

@@ -55,6 +55,22 @@ function getRequiredEnv(name, options = {}) {
   return value
 }
 
+// getRequiredEnv gibi ama eksik/placeholder değerde fırlatmak yerine null döner.
+function getOptionalEnv(name, options = {}) {
+  loadLocalSettings()
+
+  const value = process.env[name]
+  const placeholders = options.placeholders || []
+
+  if (!value) {
+    return null
+  }
+  if (placeholders.some((placeholder) => value.includes(placeholder))) {
+    return null
+  }
+  return value
+}
+
 function isProductionLike() {
   loadLocalSettings()
   return process.env.NODE_ENV === 'production' || process.env.WEBSITE_SITE_NAME
@@ -144,6 +160,16 @@ function getIyzicoConfig() {
     }),
     parentYearlyPlanRef: getRequiredEnv('IYZICO_PARENT_YEARLY_PLAN_REF', {
       placeholders: ['replace-with-iyzico-parent-yearly-plan-ref'],
+    }),
+    // Ek çocuk (çocuk-koltuğu) paketi — aylık 1.999 TL / yıllık 14.999 TL. Planlar iyzico
+    // panelinde oluşturulunca gerçek reference code'lar app settings'e girilecek. Opsiyonel:
+    // henüz set edilmediyse null döner (çocuk-koltuğu satın alma handler'ı 503 verir), taban
+    // veli aboneliği akışı etkilenmez.
+    childMonthlyPlanRef: getOptionalEnv('IYZICO_CHILD_MONTHLY_PLAN_REF', {
+      placeholders: ['replace-with-iyzico-child-monthly-plan-ref'],
+    }),
+    childYearlyPlanRef: getOptionalEnv('IYZICO_CHILD_YEARLY_PLAN_REF', {
+      placeholders: ['replace-with-iyzico-child-yearly-plan-ref'],
     }),
     callbackUrl: getRequiredEnv('IYZICO_CALLBACK_URL', {
       placeholders: ['replace-with-iyzico-callback-url'],

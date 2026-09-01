@@ -22,6 +22,21 @@ const CATEGORY_LABELS = {
   completed_day: 'Gün Tamamlandı',
 }
 
+// Mesaj kategorileri iki eksende seçiliyor (bkz. determineMessageCategory):
+// öğrencinin check-in'ine göre (duygu durumu) veya günün görev ilerlemesine göre.
+const CATEGORY_GROUPS = [
+  {
+    value: 'emotion',
+    label: 'Duygu Durumu',
+    categories: ['high_stress', 'low_energy', 'general'],
+  },
+  {
+    value: 'progress',
+    label: 'İlerleme',
+    categories: ['start_easy', 'task_started', 'partial_completion', 'strong_progress', 'completed_day'],
+  },
+]
+
 function MessageModal({ message, defaultCategory, onSaved, onClose }) {
   const isEdit = Boolean(message)
   const [category, setCategory] = useState(message?.category || defaultCategory)
@@ -82,10 +97,14 @@ function MessageModal({ message, defaultCategory, onSaved, onClose }) {
               onChange={(event) => setCategory(event.target.value)}
               className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
             >
-              {MOTIVATION_CATEGORIES.map((value) => (
-                <option key={value} value={value}>
-                  {CATEGORY_LABELS[value]}
-                </option>
+              {CATEGORY_GROUPS.map((group) => (
+                <optgroup key={group.value} label={group.label}>
+                  {group.categories.map((value) => (
+                    <option key={value} value={value}>
+                      {CATEGORY_LABELS[value]}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </label>
@@ -169,6 +188,7 @@ export default function AdminMotivationMessagesPage() {
   const [messages, setMessages] = useState(null)
   const [error, setError] = useState('')
   const [modalState, setModalState] = useState(null)
+  const [tab, setTab] = useState(CATEGORY_GROUPS[0].value)
 
   const loadData = () => {
     getMotivationMessagePool()
@@ -210,6 +230,11 @@ export default function AdminMotivationMessagesPage() {
     return grouped
   }, [messages])
 
+  const activeGroup = CATEGORY_GROUPS.find((group) => group.value === tab) || CATEGORY_GROUPS[0]
+
+  const countForGroup = (group) =>
+    group.categories.reduce((total, category) => total + (messagesByCategory[category]?.length || 0), 0)
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader title="Motivasyon Mesajları" />
@@ -222,7 +247,28 @@ export default function AdminMotivationMessagesPage() {
         <EmptyState icon={Sparkles} title="Henüz mesaj yok" />
       ) : (
         <div className="fade-slide-in flex flex-col gap-4">
-          {MOTIVATION_CATEGORIES.map((category) => (
+          <div className="flex gap-1 border-b border-panel-border">
+            {CATEGORY_GROUPS.map((group) => {
+              const active = tab === group.value
+              return (
+                <button
+                  key={group.value}
+                  type="button"
+                  onClick={() => setTab(group.value)}
+                  className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
+                    active
+                      ? 'border-[#1c2b5e] text-[#1c2b5e]'
+                      : 'border-transparent text-[#667475] hover:text-[#253d3e]'
+                  }`}
+                >
+                  {group.label}
+                  <span className="ml-1.5 text-xs font-medium text-[#87a3a5]">{countForGroup(group)}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {activeGroup.categories.map((category) => (
             <CategorySection
               key={category}
               category={category}

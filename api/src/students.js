@@ -53,7 +53,6 @@ function sanitizeStudent(record) {
     createdAt: record.created_at,
     resourceCount: Number(record.resource_count) || 0,
     teacherCount: Number(record.teacher_count) || 0,
-    restricted: Boolean(record.funded_by_teacher_id),
     phone: record.phone || null,
     photoUrl: record.photo_url || null,
     grade: record.grade || null,
@@ -76,6 +75,7 @@ function sanitizeStudentResourceBook(record) {
     imageUrl: record.image_url || null,
     grade: record.grade || null,
     resourceSource: record.resource_source || null,
+    scope: record.scope || null,
     status: record.status,
     assigned: Boolean(record.assigned),
     assignedAt: record.assigned_at || null,
@@ -306,7 +306,14 @@ async function requireParentSession(request) {
     }
   }
 
-  return { parentId: session.sub, isAdmin: Boolean(record.is_admin) }
+  return {
+    parentId: session.sub,
+    isAdmin: Boolean(record.is_admin),
+    // Admin bir veliyi impersonate ettiğinde iz sürülen bilgi; öğrenci görünümüne
+    // geçilirken yeni jetona taşınmalı ki "Yönetici Paneline Dön" kaybolmasın.
+    actingAdminId: session.actingAdminId || null,
+    actingAdminName: session.actingAdminName || null,
+  }
 }
 
 async function verifyParentOwnsStudent(parentId, studentId) {
@@ -344,7 +351,7 @@ async function fetchStudentResourceBooks(studentId, actorUserId) {
   const result = await requestDb.query(`
     SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
            rb.name, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.grade, rb.status,
-           rb.resource_source,
+           rb.resource_source, rb.scope,
            CASE WHEN srb.resource_book_id IS NULL THEN 0 ELSE 1 END AS assigned,
            srb.assigned_at
     FROM dbo.ResourceBooks rb
@@ -503,11 +510,18 @@ async function listStudentsHandler(request) {
       ORDER BY u.created_at ASC;
     `)
 
+    const quota = await getParentStudentQuota(parentId)
+
     return json(200, {
       students: result.recordset.map((record) => ({
         ...sanitizeStudent(record),
         lastLoginAt: record.last_login_at,
       })),
+      quota: {
+        usedStudents: quota.usedStudents,
+        coveredSeats: quota.coveredSeats,
+        hasRemaining: quota.hasRemaining,
+      },
     })
   } catch (error) {
     if (isConfigError(error)) {
@@ -711,7 +725,7 @@ async function createStudentHandler(request) {
 
 async function enterStudentHandler(request) {
   try {
-    const { error, parentId } = await requireParentSession(request)
+    const { error, parentId, actingAdminId, actingAdminName } = await requireParentSession(request)
     if (error) {
       return error
     }
@@ -751,11 +765,13 @@ async function enterStudentHandler(request) {
     const token = createSessionToken(student, {
       actingParentId: parentId,
       actingParentName: parentFullName,
+      ...(actingAdminId ? { actingAdminId, actingAdminName } : {}),
     })
 
     const user = {
       ...student,
       actingParent: { id: parentId, fullName: parentFullName },
+      ...(actingAdminId ? { actingAdmin: { id: actingAdminId, fullName: actingAdminName } } : {}),
       entitlement: await resolveEffectiveEntitlement({
         userId: record.id,
         status: record.entitlement_status,
@@ -815,7 +831,15 @@ async function exitStudentHandler(request) {
       source: record.entitlement_source,
       currentPeriodEnd: record.entitlement_current_period_end,
     })
-    const newToken = createSessionToken(user)
+    // Admin bir veliyi impersonate edip öğrenci görünümüne girdiyse, ebeveyn görünümüne
+    // dönerken yönetici izini koru — aksi halde "Yönetici Paneline Dön" kaybolur.
+    const adminTrail = session.actingAdminId
+      ? { actingAdminId: session.actingAdminId, actingAdminName: session.actingAdminName }
+      : {}
+    if (session.actingAdminId) {
+      user.actingAdmin = { id: session.actingAdminId, fullName: session.actingAdminName }
+    }
+    const newToken = createSessionToken(user, adminTrail)
     return json(200, { user }, createSessionHeaders(newToken))
   } catch (error) {
     if (isConfigError(error)) {

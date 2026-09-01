@@ -334,6 +334,8 @@ export default function BookshelfDetailModal({ resourceBookId, showAssignees = t
   }, [resourceBookId])
 
   const book = data?.resourceBook || null
+  // Katalog kaynaklarında atama yönetilemez → "Atananlar" sekmesi gizlenir, yalnızca içerik gösterilir.
+  const canShowAssignees = showAssignees && Boolean(book?.canManageAssignees)
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -395,7 +397,7 @@ export default function BookshelfDetailModal({ resourceBookId, showAssignees = t
           </div>
         </div>
 
-        {showAssignees ? (
+        {canShowAssignees ? (
           <div className="mb-4 flex gap-1 border-b border-panel-border">
             <button
               type="button"
@@ -423,7 +425,7 @@ export default function BookshelfDetailModal({ resourceBookId, showAssignees = t
             <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
           ) : data === null ? (
             <LoadingState label="Yükleniyor..." />
-          ) : tab === 'assignees' && showAssignees ? (
+          ) : tab === 'assignees' && canShowAssignees ? (
             <AssigneesTab book={book} onChanged={() => { load(); onChanged?.() }} />
           ) : (
             <ContentTab

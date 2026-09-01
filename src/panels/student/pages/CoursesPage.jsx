@@ -6,6 +6,8 @@ import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
 import { ImagePreviewLightbox } from '../../shared/ResourceBookCard'
+import { RATE_TONES, completionRateTone, successRateTone } from '../../shared/rateTones'
+import { cn } from '../../ui/utils'
 
 const RESOURCE_BOOK_TYPE_LABELS = {
   konu_anlatimi: 'Konu Anlatımı',
@@ -29,6 +31,66 @@ function groupResourceBooksBySubject(resourceBooks) {
   })
 
   return Array.from(groups.values())
+}
+
+function averageRate(books, key) {
+  const values = books.map((book) => book[key]).filter((value) => value !== null && value !== undefined)
+  if (!values.length) return null
+  return values.reduce((sum, value) => sum + value, 0) / values.length
+}
+
+function RateDonut({ label, value, tone, size = 26 }) {
+  const hasValue = value !== null && value !== undefined
+  const percentage = hasValue ? Math.round(value * 100) : 0
+  const colors = RATE_TONES[tone]
+  const strokeWidth = size <= 30 ? 3 : 4
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const dash = (Math.min(Math.max(percentage, 0), 100) / 100) * circumference
+
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <span className="relative block shrink-0" style={{ width: size, height: size }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            className="text-[#e7eaec]"
+          />
+          {hasValue ? (
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={strokeWidth}
+              strokeLinecap="round"
+              strokeDasharray={`${dash} ${circumference}`}
+              className={cn('transition-all', colors.text)}
+            />
+          ) : null}
+        </svg>
+      </span>
+      <span className="text-[11px] font-medium text-panel-text-muted">
+        {`${label} `}
+        <span className="font-bold tabular-nums text-panel-text">{hasValue ? `%${percentage}` : '—'}</span>
+      </span>
+    </span>
+  )
+}
+
+function ResourceBookDonuts({ completionRate, successRate, size, className }) {
+  return (
+    <span className={cn('inline-flex flex-wrap items-center gap-x-3 gap-y-1', className)}>
+      <RateDonut label="İlerleme" value={completionRate} tone={completionRateTone(completionRate)} size={size} />
+      <RateDonut label="Başarı" value={successRate} tone={successRateTone(successRate)} size={size} />
+    </span>
+  )
 }
 
 function ResourceCover({ book, className = 'h-20 w-16', onClick }) {
@@ -73,6 +135,8 @@ function ResourceCover({ book, className = 'h-20 w-16', onClick }) {
 
 function SubjectShelfCard({ group, onOpen }) {
   const previewBooks = group.books.slice(0, 6)
+  const completionRate = averageRate(group.books, 'completionRate')
+  const successRate = averageRate(group.books, 'successRate')
 
   return (
     <button
@@ -83,10 +147,15 @@ function SubjectShelfCard({ group, onOpen }) {
       <span className="flex items-start justify-between gap-3">
         <span className="min-w-0">
           <span className="block truncate text-lg font-bold text-panel-text sm:text-xl">{group.name}</span>
-          <span className="mt-1 block text-sm font-medium text-panel-text-muted">{group.books.length} kaynak</span>
+          <span className="mt-1.5 inline-flex items-center rounded-full bg-student-theme-soft px-2.5 py-1 text-[11px] font-semibold text-student-theme-text">
+            {group.books.length} kaynak
+          </span>
         </span>
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-student-theme-soft text-student-theme-text">
-          <BookOpen size={22} aria-hidden="true" />
+        <span className="flex shrink-0 items-center gap-3">
+          <ResourceBookDonuts completionRate={completionRate} successRate={successRate} size={24} />
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-student-theme-soft text-student-theme-text">
+            <BookOpen size={22} aria-hidden="true" />
+          </span>
         </span>
       </span>
 
@@ -117,6 +186,11 @@ function ResourceCard({ book, onPreviewImage }) {
             {RESOURCE_BOOK_TYPE_LABELS[book.type] || book.type}
           </span>
         </div>
+        <ResourceBookDonuts
+          completionRate={book.completionRate}
+          successRate={book.successRate}
+          className="mt-3"
+        />
       </div>
     </article>
   )

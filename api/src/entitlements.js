@@ -322,25 +322,93 @@ async function hasActiveParentEntitlement(parentId) {
   return ACTIVE_STATUSES.has(result.recordset[0]?.status)
 }
 
-// Velinin öğrenci ekleme kotasını döner. `max_students` yalnızca "DENEME" kupon kodu gibi
-// sınırlı haklarda set edilir; NULL ise (varsayılan) sınırsız kabul edilir, mevcut davranış
-// bozulmaz.
+// Taban veli planının kapsadığı çocuk sayısı (kendi aktif aboneliği olan veliler için).
+const BASE_PLAN_INCLUDED_STUDENTS = 2
+
+// Velinin çocuk profili ekleme kotasını döner.
+//   coveredSeats = öğretmen finansmanlı çocuk sayısı
+//                + satın alınmış aktif ek çocuk paketi sayısı (ChildSeatSubscriptions)
+//                + (velinin kendi aktif aboneliği varsa BASE_PLAN_INCLUDED_STUDENTS)
+// `max_students` yalnızca "DENEME" kupon kodu gibi özel olarak sınırlanmış haklarda set edilir;
+// set edilmişse mevcut (kısıtlayıcı) davranış aynen korunur.
 async function getParentStudentQuota(parentId) {
   const requestDb = await withRequest({ parentId: { type: sql.UniqueIdentifier, value: parentId } })
   const result = await requestDb.query(`
     SELECT
       (SELECT max_students FROM dbo.Entitlements WHERE parent_id = @parentId) AS max_students,
-      (SELECT COUNT(*) FROM dbo.Users WHERE parent_id = @parentId AND role = 'ogrenci') AS used_students;
+      (SELECT status FROM dbo.Entitlements WHERE parent_id = @parentId) AS entitlement_status,
+      (SELECT COUNT(*) FROM dbo.Users WHERE parent_id = @parentId AND role = 'ogrenci') AS used_students,
+      (SELECT COUNT(*) FROM dbo.Users
+         WHERE parent_id = @parentId AND role = 'ogrenci' AND funded_by_teacher_id IS NOT NULL) AS teacher_funded_students,
+      (SELECT COUNT(*) FROM dbo.ChildSeatSubscriptions
+         WHERE parent_id = @parentId AND status IN ('active', 'grace_period')) AS active_child_seats;
   `)
-  const record = result.recordset[0]
-  const maxStudents = record?.max_students ?? null
-  const usedStudents = Number(record?.used_students) || 0
+  const record = result.recordset[0] || {}
+  const maxStudents = record.max_students ?? null
+  const usedStudents = Number(record.used_students) || 0
+  const teacherFundedStudents = Number(record.teacher_funded_students) || 0
+  const activeChildSeats = Number(record.active_child_seats) || 0
+  const hasActiveBasePlan = ACTIVE_STATUSES.has(record.entitlement_status)
+
+  const coveredSeats =
+    teacherFundedStudents + activeChildSeats + (hasActiveBasePlan ? BASE_PLAN_INCLUDED_STUDENTS : 0)
+
+  const effectiveCap = maxStudents !== null ? maxStudents : coveredSeats
 
   return {
     maxStudents,
     usedStudents,
-    hasRemaining: maxStudents === null || usedStudents < maxStudents,
+    coveredSeats,
+    hasRemaining: usedStudents < effectiveCap,
   }
+}
+
+async function insertChildSeatSubscription({
+  parentId,
+  status,
+  period,
+  productId,
+  subscriptionReferenceCode,
+  currentPeriodEnd,
+}) {
+  const db = await withRequest({
+    parentId: { type: sql.UniqueIdentifier, value: parentId },
+    status: { type: sql.NVarChar(20), value: status },
+    period: { type: sql.NVarChar(10), value: period || null },
+    productId: { type: sql.NVarChar(120), value: productId || null },
+    subscriptionReferenceCode: { type: sql.NVarChar(100), value: subscriptionReferenceCode || null },
+    currentPeriodEnd: { type: sql.DateTime2, value: currentPeriodEnd || null },
+  })
+  await db.query(`
+    INSERT INTO dbo.ChildSeatSubscriptions
+      (parent_id, status, period, product_id, subscription_reference_code, current_period_end)
+    VALUES (@parentId, @status, @period, @productId, @subscriptionReferenceCode, @currentPeriodEnd);
+  `)
+}
+
+async function findParentIdByChildSeatSubscriptionReferenceCode(subscriptionReferenceCode) {
+  const requestDb = await withRequest({
+    subscriptionReferenceCode: { type: sql.NVarChar(100), value: subscriptionReferenceCode },
+  })
+  const result = await requestDb.query(`
+    SELECT TOP 1 parent_id FROM dbo.ChildSeatSubscriptions
+    WHERE subscription_reference_code = @subscriptionReferenceCode;
+  `)
+  return result.recordset[0]?.parent_id || null
+}
+
+async function updateChildSeatSubscriptionFromIyzico({ subscriptionReferenceCode, status, currentPeriodEnd = null }) {
+  const db = await withRequest({
+    subscriptionReferenceCode: { type: sql.NVarChar(100), value: subscriptionReferenceCode },
+    status: { type: sql.NVarChar(20), value: status },
+    currentPeriodEnd: { type: sql.DateTime2, value: currentPeriodEnd },
+  })
+  await db.query(`
+    UPDATE dbo.ChildSeatSubscriptions
+    SET status = @status,
+        current_period_end = COALESCE(@currentPeriodEnd, current_period_end)
+    WHERE subscription_reference_code = @subscriptionReferenceCode;
+  `)
 }
 
 module.exports = {
@@ -349,6 +417,9 @@ module.exports = {
   hasActiveParentEntitlement,
   resolveEffectiveEntitlement,
   getParentStudentQuota,
+  insertChildSeatSubscription,
+  findParentIdByChildSeatSubscriptionReferenceCode,
+  updateChildSeatSubscriptionFromIyzico,
   upsertParentEntitlementFromIyzico,
   updateParentEntitlementStatus,
   findParentIdBySubscriptionReferenceCode,

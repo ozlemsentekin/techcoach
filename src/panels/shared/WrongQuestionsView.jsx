@@ -116,7 +116,10 @@ function groupBySubjectAndSource(wrongQuestions, bookImages) {
   }))
 }
 
-function SubjectShelfCard({ subject, count, tone, onClick }) {
+function SubjectShelfCard({ subject, count, stats, tone, onClick }) {
+  const solvedCount = stats?.totalAnswered ?? null
+  const successPercent = stats?.successRate != null ? Math.round(stats.successRate * 100) : null
+  const colors = RATE_TONES[successRateTone(stats?.successRate)]
   return (
     <button
       type="button"
@@ -128,7 +131,20 @@ function SubjectShelfCard({ subject, count, tone, onClick }) {
       </span>
       <div className="min-w-0 flex-1">
         <h3 className="truncate text-base font-bold text-panel-text">{subject}</h3>
-        <p className="mt-0.5 text-sm text-panel-text-muted">{count} soru</p>
+        <p className="mt-0.5 text-sm text-panel-text-muted">
+          {count} yanlış
+          {solvedCount != null && solvedCount > 0 ? ` · ${solvedCount} soru çözüldü` : ''}
+        </p>
+        {solvedCount != null && solvedCount > 0 ? (
+          <span
+            className={cn(
+              'mt-1.5 inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[11px] font-semibold',
+              colors.chip,
+            )}
+          >
+            %{successPercent ?? 0} başarı
+          </span>
+        ) : null}
       </div>
       <ChevronRight
         size={18}
@@ -585,6 +601,31 @@ export default function WrongQuestionsView({
     )
   }, [sourceTopicStats])
 
+  // Ders kartlarında, o derste fotoğraflı yanlışı olan tüm konulardan çözülen toplam soru
+  // sayısını ve birleşik başarı oranını göstermek için topicStats'i ders düzeyinde toplar
+  // (sourceBookStatsMap ile aynı ağırlıklı-birleştirme mantığı, ama kitap yerine ders bazında).
+  const subjectStatsMap = useMemo(() => {
+    const map = new Map()
+    topicStats.forEach((stat) => {
+      const key = (stat.subject || '').trim()
+      if (!map.has(key)) map.set(key, { totalAnswered: 0, correct: 0 })
+      const entry = map.get(key)
+      entry.totalAnswered += stat.totalAnswered || 0
+      if (stat.successRate != null && stat.totalAnswered) {
+        entry.correct += stat.successRate * stat.totalAnswered
+      }
+    })
+    return new Map(
+      Array.from(map.entries()).map(([key, entry]) => [
+        key,
+        {
+          totalAnswered: entry.totalAnswered,
+          successRate: entry.totalAnswered > 0 ? entry.correct / entry.totalAnswered : null,
+        },
+      ]),
+    )
+  }, [topicStats])
+
   const activeTopics = !activeSource && groupMode === 'topic' ? selectedContentGroup?.topics : null
   const galleryTopicGroup = activeTopics?.find(
     (topicGroup) => topicStatsKey(effectiveSelectedSubject, topicGroup.topic) === galleryTopicKey,
@@ -649,7 +690,16 @@ export default function WrongQuestionsView({
       ) : effectiveSelectedSubject ? (
         <PageHeader
           title={effectiveSelectedSubject}
-          subtitle={`${selectedContentGroup?.items.length ?? 0} yanlış soru`}
+          subtitle={(() => {
+            const wrongCount = selectedContentGroup?.items.length ?? 0
+            const subjectStats = subjectStatsMap.get(effectiveSelectedSubject)
+            if (subjectStats && subjectStats.totalAnswered > 0) {
+              const percent =
+                subjectStats.successRate != null ? Math.round(subjectStats.successRate * 100) : 0
+              return `${wrongCount} yanlış · ${subjectStats.totalAnswered} soru çözüldü · %${percent} başarı`
+            }
+            return `${wrongCount} yanlış soru`
+          })()}
           actions={
             <div className="flex items-center gap-2">
               {headerActions}
@@ -733,6 +783,7 @@ export default function WrongQuestionsView({
               key={group.subject}
               subject={group.subject}
               count={group.items.length}
+              stats={subjectStatsMap.get(group.subject)}
               tone={SHELF_TONES[index % SHELF_TONES.length]}
               onClick={() => handleSelectSubject(group.subject)}
             />

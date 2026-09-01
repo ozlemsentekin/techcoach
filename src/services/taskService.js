@@ -104,8 +104,9 @@ export async function createTask(date, taskData, { isDraft = false, studentId } 
   return postTask(
     {
       status: 'bekliyor',
-      createdBy: 'ebeveyn',
       priority: 'orta',
+      // createdBy gönderilmez: sunucu oturumdan belirler. taskData bir createdBy taşıyorsa
+      // (yeniden planlanan/kopyalanan görevin orijinal ekleyeni) o korunur.
       ...taskData,
       date,
       isDraft,

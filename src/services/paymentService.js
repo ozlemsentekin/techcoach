@@ -9,6 +9,17 @@ export async function initiateIyzicoCheckout({ billingCycle, email, identityNumb
 }
 
 /**
+ * Mevcut veli için EK çocuk (çocuk-koltuğu) paketi checkout formunu başlatır. Yalnızca çocuk
+ * ekleme kotası dolu olduğunda kullanılır. @returns {Promise<{checkoutFormContent: string, token: string}>}
+ */
+export async function initiateChildSeatCheckout({ billingCycle, email, identityNumber, address }) {
+  return authRequest('/api/parent/payments/iyzico/child-seat-checkout-initialize', {
+    method: 'POST',
+    body: JSON.stringify({ billingCycle, email, identityNumber, address }),
+  })
+}
+
+/**
  * Henüz hesabı olmayan yeni bir veli için: kayıt bilgileri + ödeme bilgileri birlikte gönderilir.
  * Kupon "DENEME" ise hesap anında açılıp `{ user }` döner (oturum çerezi otomatik ayarlanır);
  * aksi halde iyzico checkout formu döner, gerçek hesap yalnızca ödeme onaylandığında oluşur.

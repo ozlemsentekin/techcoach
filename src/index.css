@@ -321,30 +321,40 @@ button {
   --color-student-theme-badge-bg: #54624f;
 }
 
+/*
+ * "Turuncu Tema" = veli/öğretmen panelinin marka stili. O panellerde ana aksiyon
+ * rengi lacivert değil, sıcak turuncudur (panel-warm #e08e4f — bkz. aşağıdaki
+ * [data-panel-role='parent'|'teacher'] bg-panel-blue → panel-warm eşlemeleri).
+ * Bu blok aynı sıcak turuncu ana rengi öğrenci paneline taşır; nötr yüzey/kenar
+ * ve amber ikincil aksan taban paletten korunur.
+ */
 [data-theme='orange'] {
   --color-panel-bg: #ffffff;
   --color-panel-surface: #ffffff;
-  --color-panel-surface-soft: #fff1e3;
-  --color-panel-border: #f3ddc4;
-  --color-panel-border-strong: #e8c79f;
-  --color-panel-text: #4a3320;
-  --color-panel-text-muted: #8a6a4a;
-  --color-panel-blue: #b85f22;
-  --color-panel-blue-soft: #f8e3d0;
-  --color-panel-sage: #6f9c7f;
-  --color-panel-sage-soft: #e3f3ee;
-  --color-panel-lilac: #b36b8f;
-  --color-panel-lilac-soft: #f3e7ed;
-  --color-panel-accent: #cf9a3a;
-  --color-panel-accent-soft: #faf0d9;
-  --color-panel-warm: #a8642c;
-  --color-student-theme-primary: #b85f22;
-  --color-student-theme-hover: color-mix(in srgb, #b85f22 82%, black);
-  --color-student-theme-soft: #f8e3d0;
-  --color-student-theme-border: #b85f22;
-  --color-student-theme-text: #b85f22;
+  --color-panel-surface-soft: #f4f3ef;
+  --color-panel-border: #e7e5df;
+  --color-panel-border-strong: #d7d4cb;
+  --color-panel-text: #2b2a33;
+  --color-panel-text-muted: #6f6e78;
+  --color-panel-blue: #e08e4f;
+  --color-panel-blue-soft: #f7e8db;
+  --color-panel-sage: #87a3a5;
+  --color-panel-sage-soft: #eef3f3;
+  --color-panel-lilac: #af6a8c;
+  --color-panel-lilac-soft: #f3e8ed;
+  --color-panel-slate: #5b7088;
+  --color-panel-slate-soft: #eaeef2;
+  --color-panel-accent: #e8a23d;
+  --color-panel-accent-soft: #fbf0dd;
+  --color-panel-warm: #e08e4f;
+  --color-panel-warm-soft: #f7e8db;
+  --color-student-theme-primary: #e08e4f;
+  --color-student-theme-hover: color-mix(in srgb, #e08e4f 82%, black);
+  --color-student-theme-soft: #f7e8db;
+  --color-student-theme-border: #e08e4f;
+  --color-student-theme-text: #b5651f;
   --color-student-theme-button-text: #ffffff;
-  --color-student-theme-badge-bg: #854c29;
+  --color-student-theme-badge-bg: #96551f;
 }
 
 [data-theme='black'] {

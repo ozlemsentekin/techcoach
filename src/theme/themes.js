@@ -37,8 +37,8 @@ export const THEMES = [
   {
     id: 'orange',
     label: 'Turuncu Tema',
-    description: 'Sıcak ve motive edici, canlı turuncu tonlar.',
-    swatches: ['#fffaf5', '#f8e3d0', '#b85f22', '#cf9a3a'],
+    description: 'Veli ve öğretmen panelinin marka stili: sıcak turuncu ana renk, nötr yüzeyler.',
+    swatches: ['#f4f3ef', '#f7e8db', '#e08e4f', '#e8a23d'],
   },
   {
     id: 'black',

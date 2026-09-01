@@ -5,7 +5,7 @@ import { getCheckIn } from '../../../services/checkInService'
 import { addSession } from '../../../services/studySessionService'
 import { addHomework } from '../../../services/homeworkService'
 import { buildTeacherLessonTasksForDate, getTeacherLessonSchedule } from '../../../services/weeklyPlanService'
-import { sendMessage, addCoachNote } from '../../../services/messageService'
+import { addCoachNote } from '../../../services/messageService'
 import { todayISODate, addDaysISO } from '../../../utils/time'
 import { getNextTask } from '../../../utils/taskSelectors'
 import { isBacklogTask } from '../../../utils/backlogTasks'
@@ -438,12 +438,6 @@ export default function TodayPage() {
       } else {
         setBanner('Şu an kolay bir görev bulunamadı.')
       }
-      return
-    }
-
-    if (optionId === 'notify-parent') {
-      await sendMessage({ from: 'ogrenci', text: 'Şu an kendimi bunalmış hissediyorum, desteğe ihtiyacım var.' })
-      setBanner('Annene haber verildi.')
       return
     }
 

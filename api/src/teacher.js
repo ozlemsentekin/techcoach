@@ -1142,7 +1142,7 @@ async function createTeacherStudentHandler(request) {
     `)
 
     return json(201, {
-      student: { id: studentId, fullName: studentFullName, restricted: consumesQuota },
+      student: { id: studentId, fullName: studentFullName },
       parent: { id: parentId, fullName: parentFullName, phone: parentPhone, hasPanelAccess: parentHasPanelAccess },
     })
   } catch (error) {
@@ -1506,15 +1506,16 @@ async function moveTeacherRecurringLessonOccurrenceHandler(request) {
         startTime: { type: sql.Char(5), value: startTime },
         endTime: { type: sql.Char(5), value: endTime },
         durationMinutes: { type: sql.Int, value: durationMinutes },
+        createdByUserId: { type: sql.UniqueIdentifier, value: teacherUserId || null },
       })
       await insertDb.query(`
         INSERT INTO dbo.Tasks (
           student_id, student_teacher_id, date, title, subject, task_type,
-          start_time, end_time, duration_minutes, status, priority, created_by, is_draft
+          start_time, end_time, duration_minutes, status, priority, created_by, created_by_user_id, is_draft
         )
         VALUES (
           @studentId, @studentTeacherId, @date, @title, @subject, 'ders-calisma',
-          @startTime, @endTime, @durationMinutes, 'bekliyor', 'orta', 'ogretmen', 0
+          @startTime, @endTime, @durationMinutes, 'bekliyor', 'orta', 'ogretmen', @createdByUserId, 0
         );
       `)
     })
@@ -1522,6 +1523,63 @@ async function moveTeacherRecurringLessonOccurrenceHandler(request) {
     return json(200, { success: true })
   } catch (error) {
     return handleError(error, 'moveTeacherRecurringLessonOccurrenceHandler', 'Ders taşınamadı.')
+  }
+}
+
+// Tekrarlayan bir ders kuralının tek bir haftadaki oluşumunu, kuralın kendisini bozmadan iptal eder:
+// schedule_exceptions_json'a o oluşum için bir "atla" kaydı eklenir; yeni bir satır oluşturulmaz.
+async function deleteTeacherRecurringLessonOccurrenceHandler(request) {
+  try {
+    const { error, studentTeacherId, teacherType, actorId: teacherUserId } =
+      await requireTeacherStudentContext(request)
+    if (error) return error
+
+    if (teacherType !== 'ozel_ogretmen') {
+      return json(400, { error: 'Ders planı yalnızca özel ders öğrencileri için kullanılabilir.' })
+    }
+
+    const payload = await request.json().catch(() => null)
+    const dayOfWeek = payload?.dayOfWeek
+    const startTime = payload?.startTime
+    const date = payload?.date
+
+    if (!WEEKDAY_IDS.includes(dayOfWeek) || !isValidTime(startTime)) {
+      return json(400, { error: 'Silinecek ders bulunamadı.' })
+    }
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || weekdayIdForDate(date) !== dayOfWeek) {
+      return json(400, { error: 'Silinecek dersin tarihi geçersiz.' })
+    }
+
+    const currentDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: studentTeacherId } })
+    const currentResult = await currentDb.query(`
+      SELECT schedule_json, schedule_exceptions_json FROM dbo.StudentTeachers WHERE id = @id;
+    `)
+    const currentRecord = currentResult.recordset[0]
+    const schedule = parseScheduleJson(currentRecord?.schedule_json)
+    const slotExists = schedule.some((slot) => slot.dayOfWeek === dayOfWeek && slot.startTime === startTime)
+    if (!slotExists) {
+      return json(404, { error: 'Silinecek ders bulunamadı.' })
+    }
+
+    const exceptions = parseScheduleJson(currentRecord?.schedule_exceptions_json)
+    const alreadySkipped = exceptions.some(
+      (exception) =>
+        exception.dayOfWeek === dayOfWeek && exception.startTime === startTime && exception.date === date,
+    )
+    if (!alreadySkipped) {
+      const nextExceptions = [...exceptions, { dayOfWeek, startTime, date }]
+      const updateDb = await withRequest({
+        id: { type: sql.UniqueIdentifier, value: studentTeacherId },
+        scheduleExceptionsJson: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(nextExceptions) },
+      })
+      await updateDb.query(`
+        UPDATE dbo.StudentTeachers SET schedule_exceptions_json = @scheduleExceptionsJson WHERE id = @id;
+      `)
+    }
+
+    return json(200, { recurringEntries: await fetchRecurringLessonEntries(teacherUserId) })
+  } catch (error) {
+    return handleError(error, 'deleteTeacherRecurringLessonOccurrenceHandler', 'Ders silinemedi.')
   }
 }
 
@@ -1592,16 +1650,17 @@ async function addTeacherOneTimeLessonHandler(request) {
       startTime: { type: sql.Char(5), value: startTime },
       endTime: { type: sql.Char(5), value: endTime },
       durationMinutes: { type: sql.Int, value: durationMinutes },
+      createdByUserId: { type: sql.UniqueIdentifier, value: teacherUserId || null },
     })
     const insertResult = await insertDb.query(`
       INSERT INTO dbo.Tasks (
         student_id, student_teacher_id, date, title, subject, task_type,
-        start_time, end_time, duration_minutes, status, priority, created_by, is_draft
+        start_time, end_time, duration_minutes, status, priority, created_by, created_by_user_id, is_draft
       )
       OUTPUT inserted.id
       VALUES (
         @studentId, @studentTeacherId, @date, @title, @subject, 'ders-calisma',
-        @startTime, @endTime, @durationMinutes, 'bekliyor', 'orta', 'ogretmen', 0
+        @startTime, @endTime, @durationMinutes, 'bekliyor', 'orta', 'ogretmen', @createdByUserId, 0
       );
     `)
 
@@ -2190,9 +2249,10 @@ async function listTeacherStudentHomeworksHandler(request) {
 async function createTeacherHomeworkHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
-    const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request, {
-      studentTeacherId: payload?.studentTeacherId,
-    })
+    const { error, studentId, subjectId, studentTeacherId, actorId: teacherUserId } =
+      await requireTeacherStudentContext(request, {
+        studentTeacherId: payload?.studentTeacherId,
+      })
     if (error) return error
 
     const isSchoolHomework = payload?.homeworkType === 'okul-odevi' || Boolean(payload?.schoolResourceId)
@@ -2273,6 +2333,10 @@ async function createTeacherHomeworkHandler(request) {
       taskTime,
       taskDurationMinutes,
       createdBy: 'ogretmen',
+      createdByUserId: teacherUserId || null,
+      // Ödev-görevini öğretmen ilişkisine de bağla (kapsam kontrolü zaten bunu içeriyordu) —
+      // created_by_user_id boşsa etiket bunun üzerinden öğretmen adına düşebilir.
+      studentTeacherId,
     })
 
     return json(201, { homework: await fetchHomeworkById(homeworkId) })
@@ -2696,17 +2760,34 @@ async function deleteTeacherStudentTaskHandler(request) {
 
 async function getTeacherStudentProgressOverviewHandler(request) {
   try {
-    const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
+    const { error, studentId, subjectId, studentTeacherId, actorId: teacherUserId } =
+      await requireTeacherStudentContext(request)
     if (error) return error
 
-    const subjectDb = await withRequest({ subjectId: { type: sql.UniqueIdentifier, value: subjectId } })
+    // Öğretmenin bu öğrenciye verdiği tüm aktif branşlar. Birden çoksa "Tüm Dersler"
+    // görünümü için hepsinin verisi toplanır (frontend combobox'ta tek tek de seçilebilir).
+    const relationsDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+    })
+    const relationsResult = await relationsDb.query(`
+      SELECT st.id, st.subject_id
+      FROM dbo.StudentTeachers st
+      WHERE st.teacher_user_id = @teacherUserId AND st.student_id = @studentId AND st.is_active = 1;
+    `)
+    const relations = relationsResult.recordset.length
+      ? relationsResult.recordset
+      : [{ id: studentTeacherId, subject_id: subjectId }]
+
+    const loadForRelation = async (relationSubjectId, relationStudentTeacherId) => {
+    const subjectDb = await withRequest({ subjectId: { type: sql.UniqueIdentifier, value: relationSubjectId } })
     const subjectResult = await subjectDb.query(`SELECT TOP 1 name FROM dbo.Subjects WHERE id = @subjectId;`)
     const subjectName = subjectResult.recordset[0]?.name || ''
 
     const bindings = {
       studentId: { type: sql.UniqueIdentifier, value: studentId },
-      subjectId: { type: sql.UniqueIdentifier, value: subjectId },
-      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+      subjectId: { type: sql.UniqueIdentifier, value: relationSubjectId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: relationStudentTeacherId },
     }
     const wrongQuestionBindings = {
       studentId: { type: sql.UniqueIdentifier, value: studentId },
@@ -2857,7 +2938,7 @@ async function getTeacherStudentProgressOverviewHandler(request) {
       ...manualTestCompletionsResult.recordset.map((r) => r.resource_book_id),
     ])
 
-    return json(200, {
+    return {
       resourceBooks: resourceBooksResult.recordset.map(sanitizeProgressResourceBook),
       tests: testsResult.recordset.map(sanitizeProgressTest),
       tasks: tasksResult.recordset.map(sanitizeProgressTask),
@@ -2866,7 +2947,37 @@ async function getTeacherStudentProgressOverviewHandler(request) {
       wrongQuestions: wrongQuestionsResult.recordset.map(sanitizeWrongQuestion),
       manualTestCompletions: manualTestCompletionsResult.recordset.map(sanitizeManualTestCompletion),
       resourceBookImages: Object.fromEntries(resourceBookImages),
-    })
+    }
+    }
+
+    const parts = await Promise.all(
+      relations.map((relation) => loadForRelation(relation.subject_id, relation.id)),
+    )
+
+    // Her branşın sorguları kendi subject_id / subject adına göre süzülü olduğu için
+    // sonuçlar çakışmadan birleştirilebilir.
+    const merged = {
+      resourceBooks: [],
+      tests: [],
+      tasks: [],
+      sessions: [],
+      homeworks: [],
+      wrongQuestions: [],
+      manualTestCompletions: [],
+      resourceBookImages: {},
+    }
+    for (const part of parts) {
+      merged.resourceBooks.push(...part.resourceBooks)
+      merged.tests.push(...part.tests)
+      merged.tasks.push(...part.tasks)
+      merged.sessions.push(...part.sessions)
+      merged.homeworks.push(...part.homeworks)
+      merged.wrongQuestions.push(...part.wrongQuestions)
+      merged.manualTestCompletions.push(...part.manualTestCompletions)
+      Object.assign(merged.resourceBookImages, part.resourceBookImages)
+    }
+
+    return json(200, merged)
   } catch (error) {
     return handleError(error, 'getTeacherStudentProgressOverviewHandler', 'Gelişim verileri yüklenemedi.')
   }
@@ -3073,6 +3184,7 @@ module.exports = {
   updateTeacherRecurringLessonSlotHandler,
   deleteTeacherRecurringLessonSlotHandler,
   moveTeacherRecurringLessonOccurrenceHandler,
+  deleteTeacherRecurringLessonOccurrenceHandler,
   addTeacherOneTimeLessonHandler,
   updateTeacherOneTimeLessonHandler,
   deleteTeacherOneTimeLessonHandler,

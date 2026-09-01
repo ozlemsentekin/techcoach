@@ -46,7 +46,7 @@ export default function PanelLayout({ role }) {
       <div className="flex min-w-0">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
-          <PanelHeader role={role} />
+          <PanelHeader />
           <main className="min-w-0 flex-1 px-4 pb-24 pt-5 md:px-6 md:pb-6 xl:px-8">
             <div className="mx-auto flex w-full max-w-[1480px] min-w-0 flex-col">
               <Outlet />

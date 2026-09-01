@@ -1,13 +1,11 @@
 import { useContext, useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   Check,
   ChevronDown,
   ChevronRight,
   GraduationCap,
-  HeartPulse,
   KeyRound,
-  LifeBuoy,
   LogOut,
   RefreshCw,
   ShieldCheck,
@@ -16,126 +14,30 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../../context/useAuth'
 import { cachedGet } from '../../services/authClient'
-import { getCheckIn, saveCheckIn } from '../../services/checkInService'
-import { ENERGY_LEVELS, ENERGY_MESSAGES } from '../../data/taskTypes'
-import { todayISODate } from '../../utils/time'
 import ThemeContext from '../../theme/themeContextObject'
 import { THEMES } from '../../theme/themes'
 import ChangePasswordDialog from './ChangePasswordDialog'
 import TeacherSubjectsDialog from '../teacher/components/TeacherSubjectsDialog'
 
-const STUDENT_SUPPORT_EVENT = 'student-support-requested'
-const STUDENT_ENERGY_UPDATED_EVENT = 'student-energy-updated'
-const PENDING_SUPPORT_KEY = 'student_support_pending'
 const ROLE_LABELS = {
   ebeveyn: 'Ebeveyn hesabı',
   ogrenci: 'Öğrenci hesabı',
   ogretmen: 'Öğretmen hesabı',
 }
 
-function StudentWellbeingMenu({
-  checkIn,
-  open,
-  saving,
-  error,
-  onToggle,
-  onSelectEnergy,
-  onOpenSupport,
-  menuRef,
-}) {
-  const selectedEnergy = ENERGY_LEVELS.find((level) => level.id === checkIn?.energyLevel)
-
-  return (
-    <div className="relative" ref={menuRef}>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-haspopup="true"
-        aria-expanded={open}
-        aria-label="Durumum"
-        className="flex h-9 items-center gap-2 rounded-full border border-panel-border bg-panel-surface px-2.5 text-sm font-semibold text-panel-text shadow-sm hover:border-student-theme-primary hover:bg-student-theme-soft hover:text-student-theme-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
-      >
-        <HeartPulse size={16} className="shrink-0" aria-hidden="true" />
-        <span className="hidden sm:inline">Durumum</span>
-        {selectedEnergy ? <span className="text-base leading-none" aria-hidden="true">{selectedEnergy.icon}</span> : null}
-        <ChevronDown size={14} className="hidden shrink-0 sm:block" aria-hidden="true" />
-      </button>
-
-      {open ? (
-        <div className="fixed inset-x-4 top-16 z-50 rounded-2xl border border-panel-border bg-panel-surface p-2 shadow-panel-2 sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-80">
-          <div className="flex items-center justify-between gap-3 px-2 pb-2 pt-1">
-            <span className="text-xs font-bold uppercase tracking-wide text-panel-text-muted">Durumum</span>
-            {selectedEnergy ? (
-              <span className="truncate rounded-full bg-student-theme-soft px-2.5 py-1 text-xs font-semibold text-student-theme-text">
-                {selectedEnergy.icon} {selectedEnergy.label}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="grid gap-1">
-            {ENERGY_LEVELS.map((level) => {
-              const selected = checkIn?.energyLevel === level.id
-
-              return (
-                <button
-                  key={level.id}
-                  type="button"
-                  disabled={saving}
-                  onClick={() => onSelectEnergy(level.id)}
-                  aria-pressed={selected}
-                  className={`flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors disabled:opacity-60 ${
-                    selected
-                      ? 'bg-student-theme-primary text-student-theme-button-text'
-                      : 'text-panel-text hover:bg-panel-surface-soft'
-                  }`}
-                >
-                  <span className="text-base" aria-hidden="true">{level.icon}</span>
-                  <span className="min-w-0 flex-1 truncate">{level.label}</span>
-                  {selected ? <Check size={15} className="shrink-0" aria-hidden="true" /> : null}
-                </button>
-              )
-            })}
-          </div>
-
-          <p className="mt-2 rounded-xl bg-panel-surface-soft px-3 py-2 text-xs font-medium leading-relaxed text-panel-text-muted">
-            {selectedEnergy ? ENERGY_MESSAGES[selectedEnergy.id] : 'Bugünkü enerjini seç; günün temposu görünür olsun.'}
-          </p>
-
-          {error ? <p className="mt-2 px-1 text-xs font-medium text-panel-red">{error}</p> : null}
-
-          <button
-            type="button"
-            onClick={onOpenSupport}
-            className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-student-theme-primary/25 bg-panel-surface px-3 text-sm font-semibold text-student-theme-text hover:bg-student-theme-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
-          >
-            <LifeBuoy size={16} aria-hidden="true" />
-            Destek Al
-          </button>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-export default function PanelHeader({ role }) {
+export default function PanelHeader() {
   const { authUser, logout, enterStudent, returnToParent, returnToAdmin } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
   const [open, setOpen] = useState(false)
   const [themeOpen, setThemeOpen] = useState(false)
-  const [wellbeingOpen, setWellbeingOpen] = useState(false)
-  const [checkIn, setCheckIn] = useState(null)
-  const [wellbeingSaving, setWellbeingSaving] = useState(false)
-  const [wellbeingError, setWellbeingError] = useState('')
   const [students, setStudents] = useState(null)
   const [teacherSubjects, setTeacherSubjects] = useState(null)
   const [switching, setSwitching] = useState(false)
+  const [switchError, setSwitchError] = useState('')
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const [subjectsDialogOpen, setSubjectsDialogOpen] = useState(false)
   const menuRef = useRef(null)
   const themeMenuRef = useRef(null)
-  const wellbeingMenuRef = useRef(null)
-  const todayDate = todayISODate()
   const initial = authUser?.fullName?.trim()?.[0]?.toUpperCase() || '?'
   const displayName = authUser?.fullName?.trim() || 'Hesap'
   const firstName = displayName.split(' ')[0]
@@ -143,14 +45,13 @@ export default function PanelHeader({ role }) {
   const contactLabel = authUser?.email || authUser?.phone || roleLabel
   const isParent = authUser?.role === 'ebeveyn'
   const isTeacher = authUser?.role === 'ogretmen'
-  const isStudentPanel = role === 'student'
   const actingParent = authUser?.actingParent
   const actingAdmin = authUser?.actingAdmin
   const themeCtx = useContext(ThemeContext)
   const activeTheme = themeCtx ? THEMES.find((theme) => theme.id === themeCtx.theme) || THEMES[0] : null
 
   useEffect(() => {
-    if (!open && !themeOpen && !wellbeingOpen) return undefined
+    if (!open && !themeOpen) return undefined
 
     const handleClick = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -159,13 +60,20 @@ export default function PanelHeader({ role }) {
       if (themeMenuRef.current && !themeMenuRef.current.contains(event.target)) {
         setThemeOpen(false)
       }
-      if (wellbeingMenuRef.current && !wellbeingMenuRef.current.contains(event.target)) {
-        setWellbeingOpen(false)
-      }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
-  }, [open, themeOpen, wellbeingOpen])
+  }, [open, themeOpen])
+
+  // Kimlik değiştiğinde (admin bir veliyi impersonate etti, "Yönetici/Ebeveyn Paneline Dön"
+  // yapıldı, öğrenci görünümünden çıkıldı) PanelHeader remount OLMUYOR. Bu yüzden bir önceki
+  // kullanıcıya ait öğrenci/branş listesini component state'inde temizlemezsek hesap menüsündeki
+  // "Öğrenciye geç" başka bir veliye (ör. admin'in kendi çocuğuna) ait ismi göstermeye devam eder.
+  useEffect(() => {
+    setStudents(null)
+    setTeacherSubjects(null)
+    setSwitchError('')
+  }, [authUser?.id])
 
   useEffect(() => {
     if (!open || !isParent || students !== null) return
@@ -190,29 +98,17 @@ export default function PanelHeader({ role }) {
         .join(', ')
     : ''
 
-  useEffect(() => {
-    if (!isStudentPanel) return undefined
-
-    let ignore = false
-    getCheckIn(todayDate)
-      .then((data) => {
-        if (!ignore) setCheckIn(data)
-      })
-      .catch(() => {})
-
-    return () => {
-      ignore = true
-    }
-  }, [isStudentPanel, todayDate])
-
   const handleEnterStudent = async (studentId) => {
     setSwitching(true)
+    setSwitchError('')
     try {
       await enterStudent(studentId)
       setOpen(false)
       navigate('/student/today')
-    } catch {
-      // authRequest already surfaces network/session errors elsewhere; keep the menu open on failure
+    } catch (error) {
+      // Ör. liste bir önceki kimliğe ait eski veriden geldiyse backend 404 döndürür —
+      // sessizce yutmak yerine kullanıcıya göster.
+      setSwitchError(error?.message || 'Öğrenci görünümüne geçilemedi. Sayfayı yenileyip tekrar deneyin.')
     } finally {
       setSwitching(false)
     }
@@ -242,31 +138,6 @@ export default function PanelHeader({ role }) {
     } finally {
       setSwitching(false)
     }
-  }
-
-  const handleSelectEnergy = async (levelId) => {
-    setWellbeingSaving(true)
-    setWellbeingError('')
-    try {
-      const nextCheckIn = await saveCheckIn(todayDate, { energyLevel: levelId, note: checkIn?.note })
-      setCheckIn(nextCheckIn)
-      window.dispatchEvent(new CustomEvent(STUDENT_ENERGY_UPDATED_EVENT, { detail: { checkIn: nextCheckIn } }))
-    } catch (err) {
-      setWellbeingError(err.message)
-    } finally {
-      setWellbeingSaving(false)
-    }
-  }
-
-  const handleOpenSupport = () => {
-    setWellbeingOpen(false)
-    if (location.pathname === '/student/today') {
-      window.dispatchEvent(new CustomEvent(STUDENT_SUPPORT_EVENT))
-      return
-    }
-
-    window.sessionStorage.setItem(PENDING_SUPPORT_KEY, '1')
-    navigate('/student/today')
   }
 
   return (
@@ -377,30 +248,12 @@ export default function PanelHeader({ role }) {
         </div>
       ) : null}
 
-      {isStudentPanel ? (
-        <StudentWellbeingMenu
-          checkIn={checkIn}
-          open={wellbeingOpen}
-          saving={wellbeingSaving}
-          error={wellbeingError}
-          menuRef={wellbeingMenuRef}
-          onToggle={() => {
-            setWellbeingOpen((value) => !value)
-            setThemeOpen(false)
-            setOpen(false)
-          }}
-          onSelectEnergy={handleSelectEnergy}
-          onOpenSupport={handleOpenSupport}
-        />
-      ) : null}
-
       <div className="relative min-w-0" ref={menuRef}>
         <button
           type="button"
           onClick={() => {
             setOpen((value) => !value)
             setThemeOpen(false)
-            setWellbeingOpen(false)
           }}
           aria-haspopup="true"
           aria-expanded={open}
@@ -475,6 +328,11 @@ export default function PanelHeader({ role }) {
                     </button>
                   ))
                 )}
+                {switchError ? (
+                  <div className="mx-1 mt-1 rounded-xl bg-panel-red-soft px-3 py-2 text-xs font-medium text-panel-red">
+                    {switchError}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 

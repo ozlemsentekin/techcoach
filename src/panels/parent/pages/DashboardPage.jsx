@@ -4,7 +4,6 @@ import { AlertTriangle, CalendarDays, Plus, Sparkles, Users } from 'lucide-react
 import { cachedGet } from '../../../services/authClient'
 import { getTasksForDate, patchTask, createTask, removeTask } from '../../../services/taskService'
 import { getSchoolSchedule, getBacklogTasks, getTeacherLessonSchedule, buildTeacherLessonTasksForDate } from '../../../services/weeklyPlanService'
-import { sendMessage } from '../../../services/messageService'
 import { getRequests, updateRequestStatus } from '../../../services/studentRequestService'
 import { evaluateDayBalance } from '../../../utils/planInsights'
 import { getSortedTasks } from '../../../utils/taskSelectors'
@@ -83,7 +82,7 @@ function ParentHomeHeader({ onAddTask, students, selectedStudentId, onSelectStud
   )
 }
 
-function RequestActions({ request, onApprove, onMessage, onSuggestOther, onPostpone }) {
+function RequestActions({ request, onApprove, onSuggestOther, onPostpone }) {
   return (
     <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
       <button
@@ -92,13 +91,6 @@ function RequestActions({ request, onApprove, onMessage, onSuggestOther, onPostp
         className="inline-flex h-9 items-center justify-center rounded-xl bg-panel-blue px-3 text-sm font-semibold text-white hover:opacity-90"
       >
         Onayla
-      </button>
-      <button
-        type="button"
-        onClick={() => onMessage(request)}
-        className="inline-flex h-9 items-center justify-center rounded-xl border border-panel-border px-3 text-sm font-semibold text-panel-text hover:bg-panel-surface-soft"
-      >
-        Mesaj Gönder
       </button>
       <button
         type="button"
@@ -118,7 +110,7 @@ function RequestActions({ request, onApprove, onMessage, onSuggestOther, onPostp
   )
 }
 
-function TodaySidePanel({ requests, warnings, onApprove, onMessage, onSuggestOther, onPostpone }) {
+function TodaySidePanel({ requests, warnings, onApprove, onSuggestOther, onPostpone }) {
   const pendingRequests = getPendingRequests(requests)
   const visibleWarnings = getVisibleBalanceWarnings(warnings)
 
@@ -147,7 +139,6 @@ function TodaySidePanel({ requests, warnings, onApprove, onMessage, onSuggestOth
                 <RequestActions
                   request={request}
                   onApprove={onApprove}
-                  onMessage={onMessage}
                   onSuggestOther={onSuggestOther}
                   onPostpone={onPostpone}
                 />
@@ -187,8 +178,6 @@ export default function DashboardPage() {
   const { authUser } = useAuth()
   const [students, setStudents] = useState(null)
   const [selectedStudentId, setSelectedStudentId] = useState('')
-  const selectedStudent = students?.find((student) => student.id === selectedStudentId)
-  const restricted = Boolean(selectedStudent ? selectedStudent.restricted : authUser?.restricted)
   const [tasks, setTasks] = useState([])
   const [backlogTasks, setBacklogTasks] = useState([])
   const [requests, setRequests] = useState([])
@@ -319,8 +308,13 @@ export default function DashboardPage() {
       const updatedTask = await patchTask(initialTask.id, taskData, selectedStudentId)
       setTasks((current) => current.map((task) => (task.id === updatedTask.id ? updatedTask : task)))
     } else if (initialTask) {
+      // Gün değişince görev yeniden oluşturulur — orijinal ekleyen (ör. öğretmen) korunmalı.
       await removeTask(initialTask.id, selectedStudentId)
-      const createdTask = await createTask(taskData.date, taskData, { studentId: selectedStudentId })
+      const createdTask = await createTask(
+        taskData.date,
+        { ...taskData, createdBy: initialTask.createdBy, createdByUserId: initialTask.createdByUserId },
+        { studentId: selectedStudentId },
+      )
       setTasks((current) => {
         const withoutInitialTask = current.filter((task) => task.id !== initialTask.id)
         return createdTask.date === date ? getSortedTasks([...withoutInitialTask, createdTask]) : withoutInitialTask
@@ -348,19 +342,12 @@ export default function DashboardPage() {
 
   const handleApproveRequest = async (request) => {
     setRequests(await updateRequestStatus(request.id, 'onaylandi', selectedStudentId))
-    await sendMessage({ from: 'ebeveyn', text: 'İsteğini onayladım, planına yansıttım.', studentId: selectedStudentId })
     showBanner('Talep onaylandı.')
-  }
-
-  const handleMessageRequest = async (request) => {
-    await sendMessage({ from: 'ebeveyn', text: `"${request.message}" konusunu konuşalım.`, studentId: selectedStudentId })
-    showBanner('Mesaj gönderildi.')
   }
 
   const handleSuggestOtherTime = async (request) => {
     setRequests(await updateRequestStatus(request.id, 'reddedildi', selectedStudentId))
-    await sendMessage({ from: 'ebeveyn', text: 'Başka bir saat önerdim, birlikte bakalım.', studentId: selectedStudentId })
-    showBanner('Alternatif saat mesajı gönderildi.')
+    showBanner('Alternatif saat önerildi.')
   }
 
   const handlePostponeRequest = async (request) => {
@@ -397,7 +384,7 @@ export default function DashboardPage() {
       ) : null}
 
       <ParentHomeHeader
-        onAddTask={restricted ? null : () => setDrawerState({ defaultDate: date })}
+        onAddTask={() => setDrawerState({ defaultDate: date })}
         students={students}
         selectedStudentId={selectedStudentId}
         onSelectStudent={(studentId) => {
@@ -405,16 +392,6 @@ export default function DashboardPage() {
           setSelectedStudentId(studentId)
         }}
       />
-
-      {restricted ? (
-        <div className="flex items-start gap-2.5 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">
-          <AlertTriangle size={17} className="mt-0.5 shrink-0" aria-hidden="true" />
-          <span>
-            Bu öğrenci bir öğretmen tarafından eklendi. Görevler öğretmen tarafından yönetiliyor; veli olarak
-            görev ekleyemez, düzenleyemez veya silemezsiniz.
-          </span>
-        </div>
-      ) : null}
 
       <div
         className={`grid gap-4 xl:items-start ${
@@ -424,9 +401,9 @@ export default function DashboardPage() {
         <DailyPlanTable
           tasks={dailyFlowTasks}
           backlogTasks={backlogTasks}
-          onAddTask={restricted ? null : () => setDrawerState({ defaultDate: date })}
-          onEdit={restricted ? null : (task) => setDrawerState({ initialTask: task })}
-          onDelete={restricted ? null : (task) => setDeletingTask(task)}
+          onAddTask={() => setDrawerState({ defaultDate: date })}
+          onEdit={(task) => setDrawerState({ initialTask: task })}
+          onDelete={(task) => setDeletingTask(task)}
           onOpenAnswerSheet={setAnswerSheetTask}
         />
 
@@ -434,7 +411,6 @@ export default function DashboardPage() {
           requests={requests}
           warnings={dashboardModel.balance.warnings}
           onApprove={handleApproveRequest}
-          onMessage={handleMessageRequest}
           onSuggestOther={handleSuggestOtherTime}
           onPostpone={handlePostponeRequest}
         />
@@ -469,7 +445,7 @@ export default function DashboardPage() {
           lessonLabel={answerSheetTask.subject || 'Görev'}
           photoMode="view"
           studentId={selectedStudentId}
-          canRegrade={!restricted}
+          canRegrade
           onClose={() => setAnswerSheetTask(null)}
           onSaved={(updatedTask) => {
             setTasks((prev) => prev.map((item) => (item.id === updatedTask.id ? updatedTask : item)))

@@ -15,6 +15,7 @@ import {
   ListChecks,
   MinusCircle,
   NotebookPen,
+  PencilLine,
   Plus,
   ScanLine,
   School,
@@ -279,18 +280,21 @@ function formatCreatedStamp(isoString) {
   return `${datePart} ${timePart}`
 }
 
-// Kartın en altında küçük bir etiket: "Öğretmen ekledi · 28 Ağu 14:30". Kim ekledi bilgisi
-// düzenleme yetkisini de belirler (bkz. canEditTask); etiket her panelde görünür.
+// Kartın en altında küçük bir etiket: "Serenay Sarı (Öğretmen) · 28 Ağu 14:30". İsim yoksa
+// (eski görev) yalnızca rol yazılır. Kim ekledi bilgisi düzenleme yetkisini de belirler
+// (bkz. canEditTask); etiket her panelde görünür.
 function CreatorNote({ task }) {
-  const label = CREATOR_LABELS[task.createdBy]
-  if (!label) return null
+  const roleLabel = CREATOR_LABELS[task.createdBy]
+  if (!roleLabel) return null
   const stamp = formatCreatedStamp(task.createdAt)
+  const who = task.createdByName ? `${task.createdByName} (${roleLabel})` : roleLabel
 
   return (
     <span className="mt-1 flex items-center gap-1 px-1 text-[10px] font-semibold leading-snug text-panel-text-muted">
       <UserRound size={11} className="shrink-0" aria-hidden="true" />
       <span className="truncate">
-        {label} ekledi{stamp ? ` · ${stamp}` : ''}
+        {who}
+        {stamp ? ` · ${stamp}` : ''}
       </span>
     </span>
   )
@@ -512,7 +516,15 @@ function ScheduleSlotCard({ task, muted = false, onManage }) {
       <button
         type="button"
         onClick={() =>
-          onManage({ dayOfWeek: task.dayOfWeek, startTime: task.startTime, endTime: task.endTime, date: task.date })
+          onManage({
+            studentTeacherId: task.studentTeacherId,
+            teacherFullName: task.teacherFullName,
+            subjectName: task.subjectName,
+            dayOfWeek: task.dayOfWeek,
+            startTime: task.startTime,
+            endTime: task.endTime,
+            date: task.date,
+          })
         }
         className={`${containerClassName} text-left hover:-translate-y-0.5 hover:shadow-sm`}
       >
@@ -557,8 +569,76 @@ function SchoolSlotCard({ task, muted = false }) {
   )
 }
 
+function getCompactDetailLabel({ source, testRows, fallbackDetail }) {
+  if (source) return source
+  if (testRows.length > 1) return `${testRows.length} test/konu`
+  if (testRows.length === 1) return testRows[0]
+  return fallbackDetail || null
+}
+
+function CompactMetricChips({
+  task,
+  testRowCount,
+  questionProgress,
+  pageProgress,
+  graded,
+  completionTimerInfo,
+  muted = false,
+}) {
+  const grade = graded ? getGradeSummary(task) : null
+  const timerLabel = completionTimerInfo?.label?.replace('Sayaç süresi: ', '')
+  const chipBaseClassName = muted
+    ? 'border-slate-200 bg-white/70 text-slate-500'
+    : 'border-panel-border bg-panel-surface-soft/80 text-panel-text-muted'
+
+  if (!testRowCount && !questionProgress && !pageProgress && !grade && !timerLabel) return null
+
+  return (
+    <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+      {testRowCount ? (
+        <span
+          className={`inline-flex min-w-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${chipBaseClassName}`}
+        >
+          <BookOpen size={11} className="shrink-0" aria-hidden="true" />
+          <span className="truncate">{testRowCount} konu/test</span>
+        </span>
+      ) : null}
+      {questionProgress ? (
+        <span
+          className={`inline-flex min-w-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${chipBaseClassName}`}
+        >
+          <ListChecks size={11} className="shrink-0" aria-hidden="true" />
+          <span className="truncate">{questionProgress}</span>
+        </span>
+      ) : null}
+      {pageProgress ? (
+        <span className={`inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${chipBaseClassName}`}>
+          {pageProgress}
+        </span>
+      ) : null}
+      {grade ? (
+        <span
+          className={`inline-flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold ${getGradeTierClassName(
+            grade.percent,
+          )}`}
+        >
+          <ScanLine size={11} className="shrink-0" aria-hidden="true" />
+          <span className="truncate">%{grade.percent} · Net {grade.net}</span>
+        </span>
+      ) : null}
+      {timerLabel ? (
+        <span className={`inline-flex min-w-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${chipBaseClassName}`}>
+          <Timer size={11} className="shrink-0" aria-hidden="true" />
+          <span className="truncate">{timerLabel}</span>
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onManageLessonSlot, canEditTask, muted = false }) {
   const [showBreakMenu, setShowBreakMenu] = useState(false)
+  const [expanded, setExpanded] = useState(false)
 
   if (task.isScheduleSlot) return <ScheduleSlotCard task={task} muted={muted} onManage={muted ? undefined : onManageLessonSlot} />
   if (task.isSchoolSlot) return <SchoolSlotCard task={task} muted={muted} />
@@ -588,6 +668,17 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onMana
   // etiketi ekliyoruz; barClassName tanımlı olmayan türlerde bu görsel hiç render edilmez.
   const hasTypeAccent = Boolean(style.barClassName) && !backlog && !muted
   const typeLabel = hasTypeAccent ? TASK_TYPES[task.taskType]?.label : null
+  const compactDetailLabel = getCompactDetailLabel({ source, testRows, fallbackDetail })
+  const hasDetails =
+    Boolean(source) ||
+    Boolean(fallbackDetail) ||
+    testRows.length > 0 ||
+    Boolean(questionProgress) ||
+    Boolean(pageProgress) ||
+    graded ||
+    Boolean(completionTimerInfo) ||
+    Boolean(completionTimestampLabel) ||
+    Boolean(task.createdBy)
 
   const handlePick = (minutes) => {
     setShowBreakMenu(false)
@@ -601,10 +692,10 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onMana
       : `shadow-[0_1px_4px_rgba(49,42,92,0.06)] hover:-translate-y-0.5 hover:shadow-sm ${style.card}`
   const summaryContent = (
     <>
-      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}>
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}>
         <Icon size={21} strokeWidth={2.2} aria-hidden="true" />
       </span>
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 self-center">
         <span className="flex flex-nowrap items-center justify-between gap-1">
           <span className={`block whitespace-nowrap text-[11px] font-bold leading-tight ${style.timeClassName}`}>
             {formatTaskTime(task)}
@@ -615,21 +706,37 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onMana
             </span>
           ) : null}
         </span>
-        {tag ? (
-          <span
-            title={tag}
-            className={`mt-1 inline-flex max-w-full items-center truncate rounded-full px-2 py-0.5 text-[10px] font-extrabold ${style.tagClassName}`}
-          >
-            {tag}
+        <span className="mt-1 flex min-w-0 items-center gap-1.5">
+          {tag ? (
+            <span
+              title={tag}
+              className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full px-2 py-0.5 text-[10px] font-extrabold ${style.tagClassName}`}
+            >
+              {tag}
+            </span>
+          ) : (
+            <span
+              title={task.title}
+              className={`block min-w-0 truncate text-xs font-bold leading-snug ${style.titleClassName}`}
+            >
+              {task.title}
+            </span>
+          )}
+        </span>
+        {compactDetailLabel ? (
+          <span className="mt-1 flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-snug text-panel-text-muted">
+            {source && task.schoolResourceImageUrl ? (
+              <img
+                src={task.schoolResourceImageUrl}
+                alt=""
+                className="h-4 w-4 shrink-0 rounded-full border border-panel-border object-cover"
+              />
+            ) : source ? (
+              <Library size={11} className="shrink-0" aria-hidden="true" />
+            ) : null}
+            <span className="truncate">{compactDetailLabel}</span>
           </span>
-        ) : (
-          <span
-            title={task.title}
-            className={`mt-1 block truncate text-xs font-bold leading-snug ${style.titleClassName}`}
-          >
-            {task.title}
-          </span>
-        )}
+        ) : null}
         {task.taskType === 'ozel-ders' && task.teacherFullName ? (
           <span className="mt-0.5 block truncate text-[11px] font-semibold text-panel-text-muted">
             {task.teacherFullName}
@@ -641,122 +748,175 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onMana
 
   return (
     <div
-      className={`group relative flex min-h-[68px] w-full flex-col gap-1.5 rounded-xl border py-2.5 pr-3 transition duration-150 ${hasTypeAccent ? 'pl-4' : 'pl-3'} ${cardToneClassName} ${showBreakMenu ? 'z-30' : ''}`}
+      className={`group relative flex min-h-[66px] w-full flex-col gap-1.5 rounded-xl border py-2.5 pr-2 transition duration-150 ${hasTypeAccent ? 'pl-4' : 'pl-2.5'} ${cardToneClassName} ${showBreakMenu ? 'z-30' : ''}`}
     >
       {hasTypeAccent ? (
         <span className={`absolute inset-y-2 left-1.5 w-1 rounded-full ${style.barClassName}`} aria-hidden="true" />
       ) : null}
 
-      {typeLabel ? (
-        <span
-          className={`inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${style.chipClassName}`}
-        >
-          {typeLabel}
-        </span>
-      ) : null}
-
-      {backlog ? (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="inline-flex items-center gap-1 rounded-full border border-panel-red/30 bg-panel-red-soft px-2 py-0.5 text-[10px] font-extrabold text-panel-red">
-            <AlertTriangle size={11} aria-hidden="true" />
-            Zamanında yapılmadı
+      <div className="flex flex-wrap items-center gap-1.5 pl-0.5">
+        {typeLabel ? (
+          <span
+            className={`inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${style.chipClassName}`}
+          >
+            {typeLabel}
           </span>
-          <Badge tone="red" className="px-2 py-0.5 text-[10px] font-extrabold">
-            Biriken Görev
-          </Badge>
-        </div>
-      ) : null}
+        ) : null}
 
-      <div className="flex items-stretch gap-1">
-        {canOpenTask ? (
+        {backlog ? (
+          <>
+            <span className="inline-flex items-center gap-1 rounded-full border border-panel-red/30 bg-panel-red-soft px-2 py-0.5 text-[10px] font-extrabold text-panel-red">
+              <AlertTriangle size={11} aria-hidden="true" />
+              Zamanında yapılmadı
+            </span>
+            <Badge tone="red" className="px-2 py-0.5 text-[10px] font-extrabold">
+              Biriken Görev
+            </Badge>
+          </>
+        ) : null}
+      </div>
+
+      <div className="flex items-start gap-1">
+        {hasDetails ? (
           <button
             type="button"
-            onClick={() => onEditTask(task)}
-            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+            onClick={() => setExpanded((current) => !current)}
+            aria-expanded={expanded}
+            className="flex min-w-0 flex-1 items-start gap-2 rounded-lg px-1 py-0.5 text-left transition-colors duration-150 hover:bg-panel-surface-soft/80"
           >
             {summaryContent}
           </button>
         ) : (
-          <div className="flex min-w-0 flex-1 items-center gap-2 text-left">{summaryContent}</div>
+          <div className="flex min-w-0 flex-1 items-start gap-2 px-1 py-0.5 text-left">{summaryContent}</div>
         )}
 
-        {canAddBreak ? (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation()
-              setShowBreakMenu((current) => !current)
-            }}
-            title="Bu dersin ardına mola ekle"
-            aria-expanded={showBreakMenu}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-panel-text-muted opacity-0 transition-colors duration-150 hover:bg-amber-100/70 hover:text-panel-warm focus-visible:opacity-100 group-hover:opacity-100"
-          >
-            <Coffee size={15} aria-hidden="true" />
-          </button>
-        ) : null}
-
-        {canAddBreak && showBreakMenu ? (
-          <QuickBreakMenu task={task} onPick={handlePick} onClose={() => setShowBreakMenu(false)} />
-        ) : null}
-      </div>
-
-      {source || testRows.length ? (
-        <div className="pl-11">
-          {source ? (
-            <span
-              title={source}
-              className="flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-snug text-panel-text-muted"
+        <div className="relative flex shrink-0 items-center gap-0.5">
+          {canOpenTask ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                onEditTask(task)
+              }}
+              title="Görevi düzenle"
+              aria-label="Görevi düzenle"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-panel-text-muted transition-colors duration-150 hover:bg-panel-blue-soft/70 hover:text-panel-blue"
             >
-              {task.schoolResourceImageUrl ? (
-                <img
-                  src={task.schoolResourceImageUrl}
-                  alt=""
-                  className="h-4 w-4 shrink-0 rounded-full border border-panel-border object-cover"
-                />
-              ) : (
-                <Library size={11} className="shrink-0" aria-hidden="true" />
-              )}
-              <span className="truncate">{source}</span>
-            </span>
+              <PencilLine size={14} aria-hidden="true" />
+            </button>
           ) : null}
 
-          {testRows.length ? (
-            <div className="mt-1 grid gap-0.5 border-l border-panel-blue-soft/80 pl-2">
-              {testRows.map((line, index) => (
-                <p key={index} className="break-words text-[11px] font-medium leading-snug text-panel-text-muted">
-                  {line}
+          {canAddBreak ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                setShowBreakMenu((current) => !current)
+              }}
+              title="Bu dersin ardına mola ekle"
+              aria-expanded={showBreakMenu}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-panel-text-muted opacity-0 transition-colors duration-150 hover:bg-amber-100/70 hover:text-panel-warm focus-visible:opacity-100 group-hover:opacity-100"
+            >
+              <Coffee size={15} aria-hidden="true" />
+            </button>
+          ) : null}
+
+          {hasDetails ? (
+            <button
+              type="button"
+              onClick={() => setExpanded((current) => !current)}
+              title={expanded ? 'Detayları kapat' : 'Detayları göster'}
+              aria-label={expanded ? 'Detayları kapat' : 'Detayları göster'}
+              aria-expanded={expanded}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-panel-text-muted transition-colors duration-150 hover:bg-panel-surface-soft hover:text-panel-blue"
+            >
+              <ChevronDown
+                size={15}
+                className={`transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`}
+                aria-hidden="true"
+              />
+            </button>
+          ) : null}
+
+          {canAddBreak && showBreakMenu ? (
+            <QuickBreakMenu task={task} onPick={handlePick} onClose={() => setShowBreakMenu(false)} />
+          ) : null}
+        </div>
+      </div>
+
+      <div className="pl-10 pr-1">
+        <CompactMetricChips
+          task={task}
+          testRowCount={testRows.length}
+          questionProgress={questionProgress}
+          pageProgress={pageProgress}
+          graded={graded}
+          completionTimerInfo={completionTimerInfo}
+          muted={muted}
+        />
+      </div>
+
+      {expanded && hasDetails ? (
+        <div className="mt-2 grid gap-2 rounded-xl border border-panel-border/70 bg-panel-surface-soft/70 p-2.5">
+          {source || testRows.length ? (
+            <div>
+              {source ? (
+                <span
+                  title={source}
+                  className="flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-snug text-panel-text-muted"
+                >
+                  {task.schoolResourceImageUrl ? (
+                    <img
+                      src={task.schoolResourceImageUrl}
+                      alt=""
+                      className="h-4 w-4 shrink-0 rounded-full border border-panel-border object-cover"
+                    />
+                  ) : (
+                    <Library size={11} className="shrink-0" aria-hidden="true" />
+                  )}
+                  <span className="truncate">{source}</span>
+                </span>
+              ) : null}
+
+              {testRows.length ? (
+                <div className="mt-1 grid gap-0.5 border-l border-panel-blue-soft/80 pl-2">
+                  {testRows.map((line, index) => (
+                    <p key={index} className="break-words text-[11px] font-medium leading-snug text-panel-text-muted">
+                      {line}
+                    </p>
+                  ))}
+                </div>
+              ) : fallbackDetail ? (
+                <p className="mt-1 whitespace-pre-line break-words border-l border-panel-blue-soft/80 pl-2 text-[11px] font-medium leading-snug text-panel-text-muted">
+                  {fallbackDetail}
                 </p>
-              ))}
+              ) : null}
             </div>
           ) : fallbackDetail ? (
-            <p className="mt-1 whitespace-pre-line break-words border-l border-panel-blue-soft/80 pl-2 text-[11px] font-medium leading-snug text-panel-text-muted">
+            <p className="whitespace-pre-line break-words text-[11px] font-medium leading-snug text-panel-text-muted">
               {fallbackDetail}
             </p>
           ) : null}
-        </div>
-      ) : fallbackDetail ? (
-        <p className="whitespace-pre-line break-words pl-11 text-[11px] font-medium leading-snug text-panel-text-muted">
-          {fallbackDetail}
-        </p>
-      ) : null}
 
-      {questionProgress || pageProgress ? (
-        <div className="flex flex-wrap items-center gap-1.5 pl-11">
-          {questionProgress ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-panel-blue-soft px-2 py-0.5 text-[10px] font-bold text-panel-blue">
-              <ListChecks size={11} aria-hidden="true" />
-              {questionProgress}
-            </span>
+          {questionProgress || pageProgress ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {questionProgress ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-panel-blue-soft px-2 py-0.5 text-[10px] font-bold text-panel-blue">
+                  <ListChecks size={11} aria-hidden="true" />
+                  {questionProgress}
+                </span>
+              ) : null}
+              {pageProgress ? (
+                <span className="text-[10px] font-semibold text-panel-text-muted">{pageProgress}</span>
+              ) : null}
+            </div>
           ) : null}
-          {pageProgress ? (
-            <span className="text-[10px] font-semibold text-panel-text-muted">{pageProgress}</span>
-          ) : null}
+
+          {graded ? <GradeSummaryBar task={task} onViewAnswerSheet={onViewAnswerSheet} /> : null}
+          <CompletionTimerNote info={completionTimerInfo} completedAtLabel={completionTimestampLabel} />
+          <CreatorNote task={task} />
         </div>
       ) : null}
-
-      {graded ? <GradeSummaryBar task={task} onViewAnswerSheet={onViewAnswerSheet} /> : null}
-      <CompletionTimerNote info={completionTimerInfo} completedAtLabel={completionTimestampLabel} />
-      <CreatorNote task={task} />
     </div>
   )
 }

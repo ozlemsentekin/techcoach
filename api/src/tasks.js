@@ -50,6 +50,23 @@ function sanitizeTask(record) {
     description: record.description || undefined,
     parentNote: record.parent_note || undefined,
     createdBy: record.created_by,
+    createdByUserId: record.created_by_user_id || undefined,
+    // Haftalık plan etiketi için görevi ekleyen kişinin adı. Öncelik: doğrudan
+    // created_by_user_id → Users. O yoksa (eski satır) rol bazında düş — hepsi geçmişe dönük:
+    //  - öğretmen: student_teacher_id → StudentTeachers.teacher_full_name; yoksa görevin
+    //    kaynağını takip eden öğretmen (StudentTeacherResourceBooks).
+    //  - ebeveyn:  öğrencinin bağlı velisi (Users.parent_id).
+    //  - öğrenci:  öğrencinin kendi adı.
+    createdByName:
+      record.created_by_full_name ||
+      (record.created_by === 'ogretmen'
+        ? record.teacher_full_name || record.resource_teacher_name
+        : record.created_by === 'ebeveyn'
+          ? record.parent_full_name
+          : record.created_by === 'ogrenci'
+            ? record.student_full_name
+            : null) ||
+      undefined,
     notes: record.notes || undefined,
     completedAt: record.completed_at,
     rescheduledFrom: record.rescheduled_from,
@@ -91,18 +108,27 @@ const SELECT_TASK = `
          t.subject, t.subject_id, t.topic, t.start_time, t.end_time, t.duration_minutes,
          t.timer_started_at, t.timer_stopped_at, t.timer_elapsed_seconds,
          t.target_question_count, t.completed_question_count, t.target_page_count, t.completed_page_count,
-         t.current_page_number, t.priority, t.status, t.description, t.parent_note, t.created_by,
+         t.current_page_number, t.priority, t.status, t.description, t.parent_note, t.created_by, t.created_by_user_id,
          t.notes, t.completed_at, t.rescheduled_from, t.rescheduled_to, t.reschedule_reason, t.correct_count, t.wrong_count,
          t.blank_count, t.difficulty, t.emotion, t.reflection_answers_json, t.completed_sub_goals_json,
          t.resource_book_id, t.selected_test_ids_json, t.answers_json, t.test_results_json, rb.name AS resource_book_name, rb.resource_type, rb.has_answer_key, p.name AS publisher_name,
          t.school_resource_id, scr.name AS school_resource_name, scr.image_url AS school_resource_image_url,
-         t.student_teacher_id, st.teacher_full_name,
+         t.student_teacher_id, st.teacher_full_name, cbu.full_name AS created_by_full_name,
+         stu.full_name AS student_full_name, par.full_name AS parent_full_name,
+         (SELECT TOP 1 rst.teacher_full_name
+            FROM dbo.StudentTeacherResourceBooks strb
+            JOIN dbo.StudentTeachers rst ON rst.id = strb.teacher_id
+            WHERE strb.resource_book_id = t.resource_book_id AND rst.student_id = t.student_id
+         ) AS resource_teacher_name,
          t.created_at, t.updated_at
   FROM dbo.Tasks t
   LEFT JOIN dbo.ResourceBooks rb ON rb.id = t.resource_book_id
   LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
   LEFT JOIN dbo.SchoolClassResources scr ON scr.id = t.school_resource_id
   LEFT JOIN dbo.StudentTeachers st ON st.id = t.student_teacher_id
+  LEFT JOIN dbo.Users cbu ON cbu.id = t.created_by_user_id
+  LEFT JOIN dbo.Users stu ON stu.id = t.student_id
+  LEFT JOIN dbo.Users par ON par.id = stu.parent_id
 `
 
 // Maps camelCase payload keys to { column, bind(requestDb, key, value) } for generic insert/update.
@@ -131,6 +157,7 @@ const FIELD_MAP = {
   description: (v) => ({ column: 'description', type: sql.NVarChar(1000), value: v || null }),
   parentNote: (v) => ({ column: 'parent_note', type: sql.NVarChar(1000), value: v || null }),
   createdBy: (v) => ({ column: 'created_by', type: sql.NVarChar(20), value: v }),
+  createdByUserId: (v) => ({ column: 'created_by_user_id', type: sql.UniqueIdentifier, value: v || null }),
   notes: (v) => ({ column: 'notes', type: sql.NVarChar(1000), value: v || null }),
   completedAt: (v) => ({ column: 'completed_at', type: sql.DateTime2, value: v || null }),
   rescheduledFrom: (v) => ({ column: 'rescheduled_from', type: sql.NVarChar(50), value: v || null }),
@@ -154,6 +181,8 @@ const FIELD_MAP = {
 
 const STUDENT_ACTIVITY_ACTOR_ROLE = 'ogrenci'
 const SYSTEM_ACTIVITY_ACTOR_ROLE = 'sistem'
+// Görevi ekleyen rolü (Tasks.created_by). Kopyalama/yeniden planlama bu değeri orijinalden taşır.
+const VALID_CREATOR_ROLES = new Set(['ebeveyn', 'ogrenci', 'ogretmen', 'koc', 'sistem'])
 
 // Haftalık plandaki bir görevin "tanımı": kim/ne/ne zaman/hangi kaynak. Bu alanlara dokunmak
 // görevi düzenlemek demektir ve yalnızca görevi ekleyen (ya da veli) yapabilir. Listede olmayan
@@ -611,15 +640,20 @@ async function getTaskHandler(request) {
 async function createTaskHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
-    const { error, studentId, actorRole } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
+    const { error, studentId, actorRole, actorId } = await requireStudentWriteContext(request, {
+      studentId: payload?.studentId,
+    })
     if (error) {
       return error
     }
 
-    // created_by istemciden değil oturumdan belirlenir — haftalık plandaki "… ekledi" etiketi
-    // ve düzenleme yetkisi buna dayanır. Öğretmenin eklediği görevler ayrı uçlardan geçer.
-    if (payload) {
+    // "… ekledi" etiketi + düzenleme yetkisi created_by'ye dayanır. Kopyalama ("geçen haftayı
+    // kopyala") ve yeniden planlama orijinal görevi olduğu gibi taşıdığından geçerli bir createdBy
+    // taşıyorsa ORİJİNAL ekleyen (rol + kişi) korunur. Panel formlarından gelen taze görevlerde
+    // createdBy gelmez → ekleyen = bu oturum.
+    if (payload && !VALID_CREATOR_ROLES.has(payload.createdBy)) {
       payload.createdBy = actorRole === STUDENT_ACTIVITY_ACTOR_ROLE ? 'ogrenci' : 'ebeveyn'
+      payload.createdByUserId = actorId || null
     }
 
     if (!payload?.date || !payload?.title || !payload?.taskType) {
@@ -696,6 +730,12 @@ async function updateTaskHandler(request) {
     const { error, studentId, actorRole, actorId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
+    }
+
+    // Görevi düzenlemek ekleyeni değiştirmez — istemci ne gönderirse göndersin yok say.
+    if (payload) {
+      delete payload.createdBy
+      delete payload.createdByUserId
     }
 
     const previousDb = await withRequest({
