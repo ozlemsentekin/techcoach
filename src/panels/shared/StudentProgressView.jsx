@@ -2,6 +2,7 @@ import { createElement, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   BookOpenCheck,
+  CalendarCheck,
   CheckCircle2,
   Layers3,
   Target,
@@ -9,9 +10,23 @@ import {
 } from 'lucide-react'
 import { getProgressOverview } from '../../services/progressService'
 import { calculateNet } from '../../utils/netCalculator'
-import { dateToISO, getMondayOfWeek, todayISODate } from '../../utils/time'
+import {
+  addDaysISO,
+  dateToISO,
+  formatDateShort,
+  getMondayOfWeek,
+  getMonthDates,
+  todayISODate,
+} from '../../utils/time'
+import { cn } from '../ui/utils'
 import PageHeader from '../layout/PageHeader'
 import LoadingState from './LoadingState'
+import {
+  CompositionDonut,
+  CompositionLegend,
+  DailyActivityBars,
+} from './ProgressAnalysisCharts'
+import { RATE_TONES, successRateTone } from './rateTones'
 import { ImagePreviewLightbox, ResourceBookAvatar } from './ResourceBookCard'
 
 const RANGE_FILTERS = [
@@ -20,6 +35,20 @@ const RANGE_FILTERS = [
   { id: 'month', label: 'Bu Ay' },
   { id: 'all', label: 'Tüm Zamanlar' },
 ]
+
+const GENERAL_TAB_KEY = '__genel-analiz__'
+const RANGE_METRIC_LABELS = {
+  today: 'Bugün',
+  week: 'Bu hafta',
+  month: 'Bu ay',
+  all: 'Tüm zamanlar',
+}
+const RANGE_ACTIVITY_LABELS = {
+  today: 'Bugün',
+  week: 'Bu hafta',
+  month: 'Bu ay',
+  all: 'Son 30 gün',
+}
 
 const COMPLETED_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
 const HIDDEN_SUBJECT_TAB_KEYS = new Set(['genel', 'online fen bilimleri'])
@@ -47,8 +76,12 @@ function formatPercent(value) {
 
 function toDateKey(value) {
   if (!value) return ''
-  if (typeof value === 'string') return value.slice(0, 10)
-  return dateToISO(new Date(value))
+  // Salt tarih ("2026-08-19") olduğu gibi; zaman damgası ("...T22:14:36.846Z") ise
+  // yerel güne çevrilir — aksi halde UTC'de gece geç işaretlenen kayıtlar bir gün
+  // geriye kayıyordu (bkz. Aylin'in 5/8 Ağustos manuel test tamamlamaları).
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? String(value).slice(0, 10) : dateToISO(date)
 }
 
 function subjectLabel(item) {
@@ -352,6 +385,35 @@ function sumRecords(records) {
   )
 }
 
+function rangeDayWindow(rangeId, today) {
+  if (rangeId === 'today') return [today]
+  if (rangeId === 'week') {
+    const days = []
+    for (let day = getMondayOfWeek(today); day <= today; day = addDaysISO(day, 1)) days.push(day)
+    return days
+  }
+  if (rangeId === 'month') return getMonthDates(today).filter((day) => day <= today)
+  return Array.from({ length: 30 }, (_, index) => addDaysISO(today, index - 29))
+}
+
+function buildDailyActivity(records, rangeId, today) {
+  const byDate = new Map()
+  records.forEach((record) => {
+    if (!record.date) return
+    const current = byDate.get(record.date) || { questions: 0, correct: 0, wrong: 0 }
+    current.questions += record.questions
+    current.correct += record.correct
+    current.wrong += record.wrong
+    byDate.set(record.date, current)
+  })
+
+  return rangeDayWindow(rangeId, today).map((date) => ({
+    date,
+    label: formatDateShort(date),
+    ...(byDate.get(date) || { questions: 0, correct: 0, wrong: 0 }),
+  }))
+}
+
 function buildInsights({ contentRows, wrongRows }) {
   const insights = []
   const weakestContent = contentRows
@@ -399,39 +461,67 @@ function metricDescription(stats, plannedTasks, completedTasks) {
   return 'Seçili filtrede kayıt yok'
 }
 
-function SummaryMetric({ icon, title, value, description }) {
+// Kart tasarımı öğrencinin "Bugün" sayfasındaki StatCard ile aynı: solda ikon + başlık +
+// alt metin, sağda ayrı zeminli büyük değer.
+function SummaryMetric({
+  icon,
+  title,
+  value,
+  description,
+  iconClassName = 'bg-panel-sage-soft text-panel-sage',
+  valueClassName,
+}) {
   return (
-    <article className="panel-card min-h-[132px] p-4">
-      <div className="flex items-center gap-2 text-sm font-medium text-panel-text-muted">
-        {createElement(icon, { size: 18, 'aria-hidden': true })}
-        <span>{title}</span>
+    <div className="flex h-full items-stretch overflow-hidden rounded-xl border border-panel-border bg-panel-surface shadow-sm">
+      <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5 p-4">
+        <div className="flex items-center gap-2">
+          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}>
+            {createElement(icon, { size: 16, 'aria-hidden': true })}
+          </div>
+          <p className="min-w-0 truncate text-base font-bold text-panel-text">{title}</p>
+        </div>
+        <p className="text-xs text-panel-text-muted">{description}</p>
       </div>
-      <p className="mt-3 text-2xl font-bold text-panel-text">{value}</p>
-      <p className="mt-1 text-sm text-panel-text-muted">{description}</p>
-    </article>
+
+      <div className="flex shrink-0 items-center justify-center border-l border-panel-border bg-panel-surface-soft px-5 py-4">
+        <p className={cn('whitespace-nowrap text-2xl font-bold leading-tight text-panel-text', valueClassName)}>
+          {value}
+        </p>
+      </div>
+    </div>
   )
 }
 
-function SubjectTabs({ subjects, selectedKey, onSelect }) {
+function SubjectSelect({ subjects, value, offerGeneral, onChange }) {
+  // Tek ders varsa seçilecek bir şey yok — dersin adını etiket olarak göster.
+  if (!offerGeneral && subjects.length <= 1) {
+    const only = subjects[0]
+    if (!only) return null
+    return (
+      <span className="inline-flex h-11 items-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-4 text-sm font-semibold text-panel-text">
+        <BookOpenCheck size={16} aria-hidden="true" className="text-student-theme-text" />
+        {only.label}
+      </span>
+    )
+  }
+
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Dersler">
-      {subjects.map((subject) => (
-        <button
-          key={subject.key}
-          type="button"
-          role="tab"
-          aria-selected={selectedKey === subject.key}
-          onClick={() => onSelect(subject.key)}
-          className={`h-10 shrink-0 rounded-xl border px-4 text-sm font-semibold transition-colors ${
-            selectedKey === subject.key
-              ? 'border-student-theme-primary bg-student-theme-primary text-student-theme-button-text'
-              : 'border-panel-border bg-panel-surface text-panel-text-muted hover:bg-student-theme-soft hover:text-student-theme-text'
-          }`}
-        >
-          {subject.label}
-        </button>
-      ))}
-    </div>
+    <label className="flex items-center gap-2">
+      <span className="text-sm font-semibold text-panel-text-muted">Ders</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label="Ders seçimi"
+        className="h-11 rounded-xl border border-panel-border bg-panel-surface px-3 text-sm font-semibold text-panel-text focus:border-student-theme-primary focus:outline-none"
+      >
+        {offerGeneral && <option value={GENERAL_TAB_KEY}>Tüm Dersler</option>}
+        {subjects.map((subject) => (
+          <option key={subject.key} value={subject.key}>
+            {subject.label}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
 
@@ -462,8 +552,7 @@ function InsightPanel({ insights }) {
     <section className="panel-card p-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold text-panel-text">Odak Sinyalleri</h2>
-          <p className="mt-1 text-sm text-panel-text-muted">Derse ait kısa okuma</p>
+          <h2 className="text-xl font-bold text-panel-text">Odak Sinyalleri</h2>
         </div>
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-panel-accent-soft text-panel-warm">
           <Target size={18} aria-hidden="true" />
@@ -570,6 +659,97 @@ function BreakdownPanel({ icon, title, subtitle, rows, emptyLabel, showResourceA
   )
 }
 
+function GeneralAnalysisView({
+  hasData,
+  stats,
+  insights,
+  subjectRows,
+  weakTopicRows,
+  dailyActivity,
+  activeDays,
+  metricLabel,
+  activityLabel,
+}) {
+  if (!hasData) {
+    return (
+      <div className="panel-card px-5 py-6 text-sm text-panel-text-muted">
+        Bu aralıkta genel analiz için yeterli veri yok. Görev ve testleri tamamladıkça buradaki grafikler oluşacak.
+      </div>
+    )
+  }
+
+  const answered = stats.correct + stats.wrong
+  const accuracy = answered > 0 ? (stats.correct / answered) * 100 : NaN
+  const accuracyTone = RATE_TONES[successRateTone(answered > 0 ? accuracy / 100 : null)]
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+        <SummaryMetric
+          icon={BookOpenCheck}
+          iconClassName="bg-panel-sage-soft text-panel-sage"
+          title="Toplam Soru"
+          value={formatNumber(stats.questions)}
+          description={`${formatNumber(stats.correct)} doğru · ${formatNumber(stats.wrong)} yanlış`}
+        />
+        <SummaryMetric
+          icon={CheckCircle2}
+          iconClassName={cn('bg-panel-blue-soft', accuracyTone.text)}
+          valueClassName={Number.isFinite(accuracy) ? accuracyTone.text : undefined}
+          title="Doğruluk"
+          value={formatPercent(accuracy)}
+          description={`${formatNet(calculateNet(stats.correct, stats.wrong))} net · ${formatNumber(stats.blank)} boş`}
+        />
+        <SummaryMetric
+          icon={CalendarCheck}
+          iconClassName="bg-panel-accent-soft text-panel-accent"
+          title="Aktif Gün"
+          value={formatNumber(activeDays)}
+          description={metricLabel}
+        />
+      </div>
+
+      {insights.length > 0 && <InsightPanel insights={insights} />}
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <section className="panel-card p-5">
+          <h2 className="text-base font-bold text-panel-text">Doğru / Yanlış / Boş</h2>
+          <p className="mt-0.5 text-sm text-panel-text-muted">{metricLabel} · tüm dersler</p>
+          <div className="mt-4 flex flex-col items-center gap-5 sm:flex-row">
+            <CompositionDonut correct={stats.correct} wrong={stats.wrong} blank={stats.blank} />
+            <CompositionLegend correct={stats.correct} wrong={stats.wrong} blank={stats.blank} />
+          </div>
+        </section>
+
+        <section className="panel-card p-5">
+          <h2 className="text-base font-bold text-panel-text">Günlük Soru Aktivitesi</h2>
+          <p className="mt-0.5 text-sm text-panel-text-muted">{activityLabel} · çözülen soru</p>
+          <div className="mt-4">
+            <DailyActivityBars data={dailyActivity} />
+          </div>
+        </section>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <BreakdownPanel
+          icon={Layers3}
+          title="Ders Bazında Performans"
+          subtitle="Tüm derslerin karşılaştırması"
+          rows={subjectRows}
+          emptyLabel="Bu aralıkta ders kaydı yok."
+        />
+        <BreakdownPanel
+          icon={Target}
+          title="En Çok Zorlanılan Konular"
+          subtitle="Doğruluğu düşük konular"
+          rows={weakTopicRows}
+          emptyLabel="Bu aralıkta zorlanılan konu tespit edilmedi."
+        />
+      </div>
+    </div>
+  )
+}
+
 export default function StudentProgressView({
   studentId,
   title = 'Gelişimim',
@@ -580,8 +760,9 @@ export default function StudentProgressView({
 }) {
   const [overview, setOverview] = useState(null)
   const [error, setError] = useState('')
+  // '' = otomatik: birden çok ders varsa "Tüm Dersler" (genel analiz), tek ders varsa o ders.
   const [selectedSubjectKey, setSelectedSubjectKey] = useState('')
-  const [selectedRange, setSelectedRange] = useState('month')
+  const [selectedRange, setSelectedRange] = useState('all')
   const [previewImage, setPreviewImage] = useState(null)
   const today = useMemo(() => todayISODate(), [])
 
@@ -610,7 +791,22 @@ export default function StudentProgressView({
   const activityRecords = useMemo(() => buildActivityRecords(overview || {}, testsById), [overview, testsById])
   const subjects = useMemo(() => buildSubjectTabs(overview || {}), [overview])
 
-  const selectedSubject = subjects.find((subject) => subject.key === selectedSubjectKey) || subjects[0]
+  // "Tüm Dersler" seçeneği yalnızca öğrencinin birden çok dersi varsa sunulur; tek dersi
+  // olan (ör. öğretmen paneli, tek branş) için doğrudan o ders seçili gelir.
+  const offerGeneralTab = subjects.length > 1
+  const hasExplicitSelection =
+    (selectedSubjectKey === GENERAL_TAB_KEY && offerGeneralTab) ||
+    subjects.some((subject) => subject.key === selectedSubjectKey)
+  const effectiveSubjectKey = hasExplicitSelection
+    ? selectedSubjectKey
+    : offerGeneralTab
+      ? GENERAL_TAB_KEY
+      : subjects[0]?.key ?? GENERAL_TAB_KEY
+
+  const isGeneralTab = effectiveSubjectKey === GENERAL_TAB_KEY
+  const selectedSubject = isGeneralTab
+    ? null
+    : subjects.find((subject) => subject.key === effectiveSubjectKey) || subjects[0]
 
   const filteredRecords = useMemo(
     () =>
@@ -659,9 +855,49 @@ export default function StudentProgressView({
   const plannedTasks = filteredTasks.length
   const completedTasks = filteredTasks.filter((task) => COMPLETED_STATUSES.has(task.status)).length
   const accuracy = stats.correct + stats.wrong > 0 ? (stats.correct / (stats.correct + stats.wrong)) * 100 : NaN
+  const subjectAccuracyTone = RATE_TONES[successRateTone(Number.isFinite(accuracy) ? accuracy / 100 : null)]
   const completedHomeworkQuestions = filteredHomeworks.reduce((sum, homework) => sum + asNumber(homework.completedQuestionCount), 0)
   const totalHomeworkQuestions = filteredHomeworks.reduce((sum, homework) => sum + asNumber(homework.totalQuestionCount), 0)
   const insights = buildInsights({ contentRows, wrongRows: filteredWrongRows })
+
+  // "Genel Analiz" sekmesi: ders filtresi olmadan, seçili tarih aralığındaki tüm dersler.
+  const generalRecords = useMemo(
+    () => activityRecords.filter((record) => dateInRange(record.date, selectedRange, today)),
+    [activityRecords, selectedRange, today],
+  )
+  const generalWrongRows = useMemo(
+    () =>
+      (overview?.wrongQuestions || []).filter((item) =>
+        dateInRange(toDateKey(item.createdAt), selectedRange, today),
+      ),
+    [overview, selectedRange, today],
+  )
+  const generalStats = useMemo(() => sumRecords(generalRecords), [generalRecords])
+  const generalContentRows = useMemo(
+    () => aggregateBy(generalRecords, (record) => record.contentGroup || record.content),
+    [generalRecords],
+  )
+  const generalSubjectRows = useMemo(
+    () => aggregateBy(generalRecords, (record) => record.subject),
+    [generalRecords],
+  )
+  const generalWeakTopicRows = useMemo(
+    () =>
+      aggregateBy(generalRecords, (record) => record.contentGroup || record.content)
+        .filter((row) => row.correct + row.wrong >= 3 && row.wrong > 0)
+        .sort((a, b) => a.accuracy - b.accuracy)
+        .slice(0, 6),
+    [generalRecords],
+  )
+  const generalDailyActivity = useMemo(
+    () => buildDailyActivity(activityRecords, selectedRange, today),
+    [activityRecords, selectedRange, today],
+  )
+  const generalActiveDays = useMemo(
+    () => new Set(generalRecords.map((record) => record.date).filter(Boolean)).size,
+    [generalRecords],
+  )
+  const generalInsights = buildInsights({ contentRows: generalContentRows, wrongRows: generalWrongRows })
 
   if (error) {
     return <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
@@ -671,7 +907,7 @@ export default function StudentProgressView({
     return <LoadingState label="Gelişim verileri yükleniyor..." />
   }
 
-  if (!selectedSubject) {
+  if (!isGeneralTab && !selectedSubject) {
     return (
       <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
         <PageHeader title={title} subtitle={emptySubtitle} actions={headerActions} />
@@ -680,50 +916,78 @@ export default function StudentProgressView({
     )
   }
 
+  const headerSubtitle = isGeneralTab
+    ? 'Tüm derslerdeki genel performans, aktivite ve gelişim özeti.'
+    : buildSubtitle(selectedSubject.label)
+
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
-      <PageHeader title={title} subtitle={buildSubtitle(selectedSubject.label)} actions={headerActions} />
+      <PageHeader title={title} subtitle={headerSubtitle} actions={headerActions} />
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <SubjectTabs subjects={subjects} selectedKey={selectedSubject.key} onSelect={setSelectedSubjectKey} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <SubjectSelect
+          subjects={subjects}
+          value={effectiveSubjectKey}
+          offerGeneral={offerGeneralTab}
+          onChange={setSelectedSubjectKey}
+        />
         <RangeFilter selectedRange={selectedRange} onSelect={setSelectedRange} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <SummaryMetric
-          icon={BookOpenCheck}
-          title="Çözülen Soru"
-          value={formatNumber(stats.questions)}
-          description={metricDescription(stats, plannedTasks, completedTasks)}
+      {isGeneralTab ? (
+        <GeneralAnalysisView
+          hasData={generalRecords.length > 0}
+          stats={generalStats}
+          insights={generalInsights}
+          subjectRows={generalSubjectRows}
+          weakTopicRows={generalWeakTopicRows}
+          dailyActivity={generalDailyActivity}
+          activeDays={generalActiveDays}
+          metricLabel={RANGE_METRIC_LABELS[selectedRange]}
+          activityLabel={RANGE_ACTIVITY_LABELS[selectedRange]}
         />
-        <SummaryMetric
-          icon={CheckCircle2}
-          title="Doğruluk"
-          value={formatPercent(accuracy)}
-          description={`${formatNet(calculateNet(stats.correct, stats.wrong))} net · ${formatNumber(stats.blank)} boş`}
-        />
-      </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+            <SummaryMetric
+              icon={BookOpenCheck}
+              iconClassName="bg-panel-sage-soft text-panel-sage"
+              title="Çözülen Soru"
+              value={formatNumber(stats.questions)}
+              description={metricDescription(stats, plannedTasks, completedTasks)}
+            />
+            <SummaryMetric
+              icon={CheckCircle2}
+              iconClassName={cn('bg-panel-blue-soft', subjectAccuracyTone.text)}
+              valueClassName={Number.isFinite(accuracy) ? subjectAccuracyTone.text : undefined}
+              title="Doğruluk"
+              value={formatPercent(accuracy)}
+              description={`${formatNet(calculateNet(stats.correct, stats.wrong))} net · ${formatNumber(stats.blank)} boş`}
+            />
+          </div>
 
-      <InsightPanel insights={insights} />
+          <InsightPanel insights={insights} />
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <BreakdownPanel
-          icon={Layers3}
-          title="İçerik Kırılımı"
-          subtitle="Test konusu bazında"
-          rows={contentRows}
-          emptyLabel="Bu filtrede içerik kırılımı oluşmadı."
-        />
-        <BreakdownPanel
-          icon={BookOpenCheck}
-          title="Kaynak Kitap Kırılımı"
-          subtitle={`${formatNumber(completedHomeworkQuestions)} / ${formatNumber(totalHomeworkQuestions)} ödev sorusu`}
-          rows={bookRows}
-          emptyLabel="Bu filtrede kaynak kitap kaydı yok."
-          showResourceAvatar
-          onPreviewImage={setPreviewImage}
-        />
-      </div>
+          <div className="grid gap-5 xl:grid-cols-2">
+            <BreakdownPanel
+              icon={Layers3}
+              title="İçerik Kırılımı"
+              subtitle="Test konusu bazında"
+              rows={contentRows}
+              emptyLabel="Bu filtrede içerik kırılımı oluşmadı."
+            />
+            <BreakdownPanel
+              icon={BookOpenCheck}
+              title="Kaynak Kitap Kırılımı"
+              subtitle={`${formatNumber(completedHomeworkQuestions)} / ${formatNumber(totalHomeworkQuestions)} ödev sorusu`}
+              rows={bookRows}
+              emptyLabel="Bu filtrede kaynak kitap kaydı yok."
+              showResourceAvatar
+              onPreviewImage={setPreviewImage}
+            />
+          </div>
+        </>
+      )}
 
       <ImagePreviewLightbox preview={previewImage} onClose={() => setPreviewImage(null)} />
     </div>

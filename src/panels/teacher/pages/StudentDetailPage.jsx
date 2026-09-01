@@ -386,7 +386,7 @@ export default function StudentDetailPage() {
           studentId={studentTeacherId}
           title="Gelişim Analizi"
           emptySubtitle={`${student.subjectName || 'Bu ders'} için ilerleme burada görünecek.`}
-          buildSubtitle={() => `${student.subjectName || 'Ders'} için emek, doğruluk ve kaynak ilerlemesi.`}
+          buildSubtitle={(subjectLabel) => `${subjectLabel} için emek, doğruluk ve kaynak ilerlemesi.`}
           fetchOverview={getTeacherStudentProgressOverview}
         />
       ) : (

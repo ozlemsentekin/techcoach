@@ -1,5 +1,7 @@
-import { Clock, HelpCircle, BookOpen } from 'lucide-react'
+import { HelpCircle, Target } from 'lucide-react'
 import { HOMEWORK_TASK_TYPES, TASK_TYPES } from '../../../data/taskTypes'
+import { cn } from '../../ui/utils'
+import { RATE_TONES, successRateTone } from '../../shared/rateTones'
 
 const DOT_CLASSES = [
   'bg-panel-blue',
@@ -10,20 +12,53 @@ const DOT_CLASSES = [
   'bg-panel-accent',
 ]
 
-const WORKED_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
-const READING_RESOURCE_TYPE = 'okuma_kitabi'
-
 function getSubjectLabel(task) {
   return task.subject || TASK_TYPES[task.taskType]?.label || 'Genel'
 }
 
-function formatDuration(totalMinutes) {
-  if (!totalMinutes || totalMinutes <= 0) return '0 dk'
-  const hours = Math.floor(totalMinutes / 60)
-  const minutes = totalMinutes % 60
-  if (hours === 0) return `${minutes} dk`
-  if (minutes === 0) return `${hours} sa`
-  return `${hours} sa ${minutes} dk`
+/** Bir görevin optik/manuel sonucundan doğru ve cevaplanan (doğru+yanlış+boş) soru sayısını çıkarır. */
+function getTaskResultTotals(task) {
+  const testResults = Object.values(task.testResults || {}).filter(Boolean)
+  const hasAggregate = [task.correctCount, task.wrongCount, task.blankCount].some(
+    (value) => value !== undefined && value !== null,
+  )
+
+  const fromTests = testResults.reduce(
+    (totals, result) => ({
+      correct: totals.correct + (Number(result.correct) || 0),
+      wrong: totals.wrong + (Number(result.wrong) || 0),
+      blank: totals.blank + (Number(result.blank) || 0),
+    }),
+    { correct: 0, wrong: 0, blank: 0 },
+  )
+
+  const correct = hasAggregate ? Number(task.correctCount) || 0 : fromTests.correct
+  const wrong = hasAggregate ? Number(task.wrongCount) || 0 : fromTests.wrong
+  const blank = hasAggregate ? Number(task.blankCount) || 0 : fromTests.blank
+
+  return { correct, answered: correct + wrong + blank }
+}
+
+/** Görevlerin sonuçlarını ders bazında toplar; başarı oranına göre azalan sıralı döner. */
+function aggregateResultsBySubject(tasks) {
+  const totals = new Map()
+  for (const task of tasks) {
+    const { correct, answered } = getTaskResultTotals(task)
+    if (answered <= 0) continue
+    const subject = getSubjectLabel(task)
+    const entry = totals.get(subject) || { correct: 0, answered: 0 }
+    entry.correct += correct
+    entry.answered += answered
+    totals.set(subject, entry)
+  }
+  return Array.from(totals.entries())
+    .map(([subject, entry]) => ({
+      subject,
+      correct: entry.correct,
+      answered: entry.answered,
+      successRate: entry.correct / entry.answered,
+    }))
+    .sort((a, b) => b.successRate - a.successRate)
 }
 
 /** Görevlerden ders bazlı toplamlar çıkarır; sadece pozitif değeri olan dersler döner. */
@@ -40,96 +75,81 @@ function aggregateBySubject(tasks, valueSelector) {
     .sort((a, b) => b.value - a.value)
 }
 
-function StatCard({ iconClassName, icon, title, mainValue, subtitle, children }) {
+function StatCard({ iconClassName, icon, title, mainValue, mainValueClassName, children }) {
   return (
-    <div className="flex h-full flex-col gap-3 rounded-xl border border-panel-border bg-panel-surface p-4 shadow-sm">
-      <div className="flex items-center gap-3">
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconClassName}`}>
-          {icon}
+    <div className="flex h-full items-stretch overflow-hidden rounded-xl border border-panel-border bg-panel-surface shadow-sm">
+      <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5 p-4">
+        <div className="flex items-center gap-2">
+          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}>
+            {icon}
+          </div>
+          <p className="min-w-0 truncate text-base font-bold text-panel-text">{title}</p>
         </div>
-        <p className="min-w-0 truncate text-sm font-semibold text-panel-text">{title}</p>
+        {children}
       </div>
 
-      <div>
-        <p className="text-2xl font-bold leading-tight text-panel-text">{mainValue}</p>
-        <p className="mt-1 text-xs text-panel-text-muted">{subtitle}</p>
+      <div className="flex shrink-0 items-center justify-center border-l border-panel-border bg-panel-surface-soft px-5 py-4">
+        <p className={cn('whitespace-nowrap text-2xl font-bold leading-tight text-panel-text', mainValueClassName)}>
+          {mainValue}
+        </p>
       </div>
-
-      {children}
     </div>
   )
 }
 
-function SubjectDetailList({ items, formatValue, columns = 2 }) {
+function SubjectInlineBreakdown({ items, formatValue }) {
   if (items.length === 0) {
     return <p className="text-xs text-panel-text-muted">Henüz veri yok</p>
   }
 
   return (
-    <div className={`grid gap-x-4 gap-y-1.5 ${columns === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-panel-text-muted">
       {items.map((item, index) => (
-        <div key={item.subject} className="flex min-w-0 items-start gap-1.5">
+        <span key={item.subject} className="inline-flex items-center gap-1.5">
           <span
-            className={`mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full ${DOT_CLASSES[index % DOT_CLASSES.length]}`}
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT_CLASSES[index % DOT_CLASSES.length]}`}
             aria-hidden="true"
           />
-          <span className="flex-1 text-xs leading-snug text-panel-text-muted">{item.subject}</span>
-          <span className="shrink-0 text-xs font-semibold text-panel-text">{formatValue(item.value)}</span>
-        </div>
+          <span>{item.subject}</span>
+          <span className="font-semibold text-panel-text">{formatValue(item.value)}</span>
+        </span>
       ))}
-    </div>
+    </p>
   )
 }
 
 export default function StudentStatsCards({ tasks = [] }) {
-  const workedTasks = tasks.filter((task) => WORKED_STATUSES.has(task.status))
-  const workedHomeworkTasks = workedTasks.filter((task) => HOMEWORK_TASK_TYPES.has(task.taskType))
-
-  const timeBySubject = aggregateBySubject(
-    workedHomeworkTasks.filter((task) => task.resourceType !== READING_RESOURCE_TYPE),
-    (task) => task.durationMinutes,
-  )
-  const totalMinutes = timeBySubject.reduce((sum, item) => sum + item.value, 0)
-
   const questionsBySubject = aggregateBySubject(tasks, (task) => task.completedQuestionCount)
   const totalQuestions = questionsBySubject.reduce((sum, item) => sum + item.value, 0)
 
-  const readingBySubject = aggregateBySubject(
-    workedTasks.filter((task) => task.resourceType === READING_RESOURCE_TYPE),
-    (task) => task.durationMinutes,
-  )
-  const totalReadingMinutes = readingBySubject.reduce((sum, item) => sum + item.value, 0)
+  const successBySubject = aggregateResultsBySubject(tasks)
+  const totalAnswered = successBySubject.reduce((sum, item) => sum + item.answered, 0)
+  const successRate = totalAnswered > 0 ? successBySubject.reduce((sum, item) => sum + item.correct, 0) / totalAnswered : null
+  const successPercent = successRate != null ? Math.round(successRate * 100) : null
+  const successColors = RATE_TONES[successRateTone(successRate)]
 
   return (
-    <div className="grid grid-cols-1 gap-3.5 min-[760px]:grid-cols-3">
-      <StatCard
-        iconClassName="bg-panel-slate-soft text-panel-slate"
-        icon={<Clock size={18} aria-hidden="true" />}
-        title="Çalışılan Toplam Süre"
-        mainValue={formatDuration(totalMinutes)}
-        subtitle="Toplam süre"
-      >
-        <SubjectDetailList items={timeBySubject} formatValue={formatDuration} />
-      </StatCard>
-
+    <div className="grid grid-cols-1 gap-3.5 min-[760px]:grid-cols-2">
       <StatCard
         iconClassName="bg-panel-sage-soft text-panel-sage"
-        icon={<HelpCircle size={18} aria-hidden="true" />}
+        icon={<HelpCircle size={16} aria-hidden="true" />}
         title="Çözülen Soru"
         mainValue={`${totalQuestions} soru`}
-        subtitle="Toplam çözülen soru"
       >
-        <SubjectDetailList items={questionsBySubject} formatValue={(value) => `${value}`} />
+        <SubjectInlineBreakdown items={questionsBySubject} formatValue={(value) => `${value}`} />
       </StatCard>
 
       <StatCard
-        iconClassName="bg-panel-warm-soft text-panel-warm"
-        icon={<BookOpen size={18} aria-hidden="true" />}
-        title="Okuma Süresi"
-        mainValue={formatDuration(totalReadingMinutes)}
-        subtitle="Toplam okuma süresi"
+        iconClassName={cn('bg-panel-blue-soft', successColors.text)}
+        icon={<Target size={16} aria-hidden="true" />}
+        title="Günün Başarı Oranı"
+        mainValue={successPercent != null ? `%${successPercent}` : '—'}
+        mainValueClassName={successPercent != null ? successColors.text : undefined}
       >
-        <SubjectDetailList items={readingBySubject} formatValue={formatDuration} columns={1} />
+        <SubjectInlineBreakdown
+          items={successBySubject.map((item) => ({ subject: item.subject, value: item.successRate }))}
+          formatValue={(value) => `(%${Math.round(value * 100)})`}
+        />
       </StatCard>
     </div>
   )
