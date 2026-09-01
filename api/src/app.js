@@ -58,6 +58,7 @@ const {
   updateTeacherRecurringLessonSlotHandler,
   deleteTeacherRecurringLessonSlotHandler,
   moveTeacherRecurringLessonOccurrenceHandler,
+  deleteTeacherRecurringLessonOccurrenceHandler,
   addTeacherOneTimeLessonHandler,
   updateTeacherOneTimeLessonHandler,
   deleteTeacherOneTimeLessonHandler,
@@ -157,9 +158,6 @@ const {
 const { verifyMistakePhotoQuestionNumberHandler } = require('./mistakePhoto')
 const { listTaskActivityLogsHandler } = require('./taskActivity')
 const {
-  listMessagesHandler,
-  sendMessageHandler,
-  markMessagesReadHandler,
   listCoachNotesHandler,
   addCoachNoteHandler,
   listStudentRequestsHandler,
@@ -191,6 +189,7 @@ const {
 const { revenuecatWebhookHandler } = require('./entitlements')
 const {
   initiateIyzicoCheckoutHandler,
+  initiateChildSeatCheckoutHandler,
   initiateIyzicoCheckoutForNewParentHandler,
   iyzicoCheckoutCallbackHandler,
   iyzicoWebhookHandler,
@@ -268,6 +267,13 @@ app.http('parent-payments-iyzico-checkout-initialize', {
   methods: ['POST'],
   route: 'parent/payments/iyzico/checkout-initialize',
   handler: initiateIyzicoCheckoutHandler,
+})
+
+app.http('parent-payments-iyzico-child-seat-checkout-initialize', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'parent/payments/iyzico/child-seat-checkout-initialize',
+  handler: initiateChildSeatCheckoutHandler,
 })
 
 app.http('payments-iyzico-parent-checkout-initialize', {
@@ -555,6 +561,13 @@ app.http('panel-teacher-lesson-plan-recurring-occurrence-update', {
   methods: ['PUT'],
   route: 'panel-teacher/students/{studentTeacherId}/lesson-plan/recurring/occurrence',
   handler: moveTeacherRecurringLessonOccurrenceHandler,
+})
+
+app.http('panel-teacher-lesson-plan-recurring-occurrence-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-teacher/students/{studentTeacherId}/lesson-plan/recurring/occurrence',
+  handler: deleteTeacherRecurringLessonOccurrenceHandler,
 })
 
 app.http('panel-teacher-lesson-plan-one-time-create', {
@@ -1332,27 +1345,6 @@ app.http('panel-weekly-plan-status-set', {
   methods: ['PUT'],
   route: 'panel/weekly-plan-status',
   handler: setWeeklyPlanStatusHandler,
-})
-
-app.http('panel-messages-list', {
-  authLevel: 'anonymous',
-  methods: ['GET'],
-  route: 'panel/messages',
-  handler: listMessagesHandler,
-})
-
-app.http('panel-messages-send', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'panel/messages',
-  handler: sendMessageHandler,
-})
-
-app.http('panel-messages-mark-read', {
-  authLevel: 'anonymous',
-  methods: ['POST'],
-  route: 'panel/messages/mark-read',
-  handler: markMessagesReadHandler,
 })
 
 app.http('panel-coach-notes-list', {

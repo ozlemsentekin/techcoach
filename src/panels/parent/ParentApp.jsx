@@ -11,7 +11,6 @@ import { useParentStudentsGate } from './useParentStudentsGate'
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const WeeklyPlanPage = lazy(() => import('./pages/WeeklyPlanPage'))
 const ProgressPage = lazy(() => import('./pages/ProgressPage'))
-const MessagesPage = lazy(() => import('./pages/MessagesPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'))
 const AdminSubjectsPage = lazy(() => import('./pages/AdminSubjectsPage'))
@@ -19,7 +18,6 @@ const AdminPublishersPage = lazy(() => import('./pages/AdminPublishersPage'))
 const AdminMotivationMessagesPage = lazy(() => import('./pages/AdminMotivationMessagesPage'))
 const AdminGreetingsPage = lazy(() => import('./pages/AdminGreetingsPage'))
 const AdminSchoolsPage = lazy(() => import('./pages/AdminSchoolsPage'))
-const AdminMissingAnswerKeysPage = lazy(() => import('./pages/AdminMissingAnswerKeysPage'))
 const StudentsPage = lazy(() => import('./pages/StudentsPage'))
 const TeachersPage = lazy(() => import('./pages/TeachersPage'))
 const LibraryPage = lazy(() => import('./pages/LibraryPage'))
@@ -106,7 +104,6 @@ export default function ParentApp() {
               element={<RequireStudents>{pageElement(WeeklyPlanPage)}</RequireStudents>}
             />
             <Route path="progress" element={pageElement(ProgressPage)} />
-            <Route path="messages" element={pageElement(MessagesPage)} />
             {/* Ödev/görev tekilleştirme (Faz 2): ayrı "Ödevler" sayfası kaldırıldı; ders-tipi
                 görevler artık Haftalık Plan üzerinden yönetiliyor. Eski yer imleri yönlendirilir. */}
             <Route path="homework" element={<Navigate to="/parent/weekly-plan" replace />} />
@@ -168,14 +165,6 @@ export default function ParentApp() {
               element={
                 <RequireAdmin>
                   {pageElement(AdminSchoolsPage)}
-                </RequireAdmin>
-              }
-            />
-            <Route
-              path="admin/missing-answer-keys"
-              element={
-                <RequireAdmin>
-                  {pageElement(AdminMissingAnswerKeysPage)}
                 </RequireAdmin>
               }
             />

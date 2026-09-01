@@ -10,14 +10,13 @@ const KITAPLIK_TEACHER_ITEM = { to: '/teacher/bookshelf', label: 'Kitaplık', ic
 export const STUDENT_PRIMARY_NAV = [
   { to: '/student/today', label: 'Bugün', icon: 'Home' },
   { to: '/student/weekly-plan', label: 'Haftalık Planım', icon: 'CalendarRange' },
+  { to: '/student/mistakes', label: 'Hata Defterim', icon: 'AlertCircle' },
   { to: '/student/progress', label: 'Gelişimim', icon: 'TrendingUp' },
-  { to: '/student/courses', label: 'Derslerim', icon: 'BookOpen' },
 ]
 
 export const STUDENT_MORE_NAV = [
+  { to: '/student/courses', label: 'Derslerim', icon: 'BookOpen' },
   { to: '/student/teachers', label: 'Öğretmenlerim', icon: 'GraduationCap' },
-  { to: '/student/bookshelf', label: 'Kitaplık', icon: 'BookMarked' },
-  { to: '/student/mistakes', label: 'Hata Defterim', icon: 'AlertCircle' },
 ]
 
 export const STUDENT_SIDEBAR_NAV = [...STUDENT_PRIMARY_NAV, ...STUDENT_MORE_NAV]
@@ -25,9 +24,6 @@ export const STUDENT_SIDEBAR_NAV = [...STUDENT_PRIMARY_NAV, ...STUDENT_MORE_NAV]
 export const PARENT_STUDENTS_NAV_ITEM = { to: '/parent/students', label: 'Çocuklarım', icon: 'Users' }
 
 export const PARENT_MORE_NAV = [PARENT_STUDENTS_NAV_ITEM]
-
-// Mesajlar şimdilik yalnızca admin yetkili veli hesaplarına gösteriliyor.
-export const PARENT_ADMIN_ONLY_NAV = [{ to: '/parent/messages', label: 'Mesajlar', icon: 'MessageCircle' }]
 
 // Henüz hiç çocuk profili eklenmemiş bir veli için Bugün/Haftalık Plan sayfalarının
 // hepsi boş/hatalı görünür (bunlar bir öğrenci bağlamı gerektirir); o yüzden ilk kayıtta tek
@@ -43,7 +39,7 @@ export function getParentPrimaryNav(hasStudents, canManageLibrary = false) {
 
 export function getParentMoreNav(isAdmin, hasStudents = true) {
   const base = isAdmin
-    ? [...PARENT_ADMIN_ONLY_NAV, KITAPLIK_PARENT_ITEM, ...PARENT_MORE_NAV]
+    ? [KITAPLIK_PARENT_ITEM, ...PARENT_MORE_NAV]
     : [...PARENT_MORE_NAV]
   // Çocuklarım hiç öğrenci yokken zaten birincil menüde gösteriliyor, burada tekrar etmesin.
   return hasStudents ? base : base.filter((item) => item.to !== PARENT_STUDENTS_NAV_ITEM.to)
@@ -84,7 +80,6 @@ export const PARENT_ADMIN_NAV = {
     { to: '/parent/admin/users', label: 'Üyeler', icon: 'Users' },
     { to: '/parent/admin/subjects', label: 'Dersler', icon: 'BookOpen' },
     { to: '/parent/admin/publishers', label: 'Yayın Evleri', icon: 'Building2' },
-    { to: '/parent/admin/missing-answer-keys', label: 'Eksik Cevap Anahtarları', icon: 'AlertCircle' },
     { to: '/parent/admin/schools', label: 'Okul Yönetimi', icon: 'School' },
     { to: '/parent/admin/motivation-messages', label: 'Motivasyon Mesajları', icon: 'Sparkles' },
     { to: '/parent/admin/greetings', label: 'Selamlama Metinleri', icon: 'Clock' },
