@@ -47,6 +47,7 @@ export default function PaymentPage() {
   const pendingRegistration = location.state?.pendingRegistration || null
 
   const [billingCycle, setBillingCycle] = useState('monthly')
+  const [email, setEmail] = useState('')
   const [identityNumber, setIdentityNumber] = useState('')
   const [addressLine, setAddressLine] = useState('')
   const [city, setCity] = useState('')
@@ -76,6 +77,10 @@ export default function PaymentPage() {
     event.preventDefault()
     setError('')
 
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Geçerli bir e-posta adresi girin.')
+      return
+    }
     if (!/^\d{11}$/.test(identityNumber)) {
       setError('Geçerli bir TC Kimlik No girin.')
       return
@@ -88,10 +93,17 @@ export default function PaymentPage() {
     setLoading(true)
     try {
       const address = { addressLine: addressLine.trim(), city: city.trim(), zipCode: zipCode.trim() }
+      const trimmedEmail = email.trim()
 
       const result = authUser
-        ? await initiateIyzicoCheckout({ billingCycle, identityNumber, address })
-        : await initiateIyzicoCheckoutForNewParent({ ...pendingRegistration, billingCycle, identityNumber, address })
+        ? await initiateIyzicoCheckout({ billingCycle, email: trimmedEmail, identityNumber, address })
+        : await initiateIyzicoCheckoutForNewParent({
+            ...pendingRegistration,
+            billingCycle,
+            email: trimmedEmail,
+            identityNumber,
+            address,
+          })
 
       if (result.user) {
         // Savunma amaçlı: pendingRegistration'a bir "DENEME" kupon kodu sızarsa backend hesabı
@@ -143,6 +155,17 @@ export default function PaymentPage() {
                 {error ? <div className="auth-feedback auth-feedback-error">{error}</div> : null}
 
                 <form id="payment-form" className="login-form" onSubmit={handleSubmit}>
+                  <input
+                    name="email"
+                    type="email"
+                    placeholder="E-posta"
+                    aria-label="E-posta"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                  />
+
                   <input
                     name="identityNumber"
                     type="text"
