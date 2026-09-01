@@ -23,17 +23,18 @@ const TOPIC_NAME = 'Branş Denemeleri'
 const QUESTIONS_PER_DENEME = 10
 
 // deneme no -> cevap dizisi (10 harf) veya null (henüz girilmedi)
+// Kaynağın "Cevap Anahtarı" sayfasından; Deneme 2-9 iki ayrı fotoğrafla çapraz doğrulandı.
 const DENEMELER = {
-  1: null,
-  2: null,
-  3: null,
-  4: null,
-  5: null,
-  6: null,
-  7: null,
-  8: null,
-  9: null,
-  10: null,
+  1: 'DADADBCDBC',
+  2: 'DCCBDBCDAA',
+  3: 'CABDCDDBDA',
+  4: 'ABDBCDCDBA',
+  5: 'CBDBADDAAD',
+  6: 'BDBDDACDAC',
+  7: 'CCBDCBDBAA',
+  8: 'CCDBABDCAD',
+  9: 'BAADBDBDDB',
+  10: 'BCADCBCAAA',
 }
 
 async function main() {
