@@ -85,8 +85,10 @@ function ResultBadge({ result }) {
   )
 }
 
-function TestSection({ test, answers, result, photos, photoMode, onSelect, onRemove, onCapture, onOpenGallery }) {
-  const locked = Boolean(result)
+function TestSection({ test, answers, result, photos, photoMode, canRegrade, onSelect, onRemove, onCapture, onOpenGallery }) {
+  // Öğrenci akışında değerlendirilen test kilitlenir; veli (canRegrade) yanlış aktarılmış
+  // bir optiği düzeltebilsin diye kilit açık kalır.
+  const locked = Boolean(result) && !canRegrade
   return (
     <div className="min-w-0 rounded-2xl border border-panel-border p-2.5">
       <div className="flex items-start justify-between gap-1.5">
@@ -226,7 +228,7 @@ function TestSection({ test, answers, result, photos, photoMode, onSelect, onRem
   )
 }
 
-export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'edit', studentId, onClose, onSaved }) {
+export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'edit', studentId, canRegrade = false, onClose, onSaved }) {
   const [tests, setTests] = useState(null)
   const [error, setError] = useState('')
   const [answersByTest, setAnswersByTest] = useState({})
@@ -264,10 +266,11 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
   }, [task.id, studentId])
 
   const totalQuestions = useMemo(() => (tests || []).reduce((sum, test) => sum + test.questionCount, 0), [tests])
-  const allLocked = useMemo(
+  const allGraded = useMemo(
     () => Boolean(tests?.length) && tests.every((test) => Boolean(resultsByTest[test.id])),
     [tests, resultsByTest],
   )
+  const allLocked = allGraded && !canRegrade
 
   const handleSelect = (testId, orderNo, label) => {
     setAnswersByTest((prev) => {
@@ -283,7 +286,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
     setError('')
     try {
       const payload = (tests || []).map((test) => ({ testId: test.id, answers: answersByTest[test.id] || {} }))
-      const updatedTask = await saveTaskAnswers(task.id, payload)
+      const updatedTask = await saveTaskAnswers(task.id, payload, studentId)
       setResultsByTest(updatedTask.testResults || {})
       onSaved(updatedTask)
     } catch (err) {
@@ -298,7 +301,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
     setRemoveSaving(true)
     setRemoveError('')
     try {
-      const updatedTask = await removeTaskTest(task.id, removingTest.id)
+      const updatedTask = await removeTaskTest(task.id, removingTest.id, studentId)
       setTests((prev) => (prev || []).filter((test) => test.id !== removingTest.id))
       setAnswersByTest((prev) => {
         const next = { ...prev }
@@ -401,7 +404,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
     setNoteSaving(true)
     setError('')
     try {
-      const updatedTask = await patchTask(task.id, { notes: note })
+      const updatedTask = await patchTask(task.id, { notes: note }, studentId)
       setNoteDirty(false)
       onSaved(updatedTask)
     } catch (err) {
@@ -429,6 +432,12 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3">
           {error ? <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div> : null}
 
+          {canRegrade && allGraded ? (
+            <div className="mb-3 rounded-xl bg-panel-blue-soft px-4 py-3 text-sm text-panel-blue">
+              Öğrencinin işaretlediği cevapları düzeltip <strong>Yeniden Değerlendir</strong> ile sonucu güncelleyebilirsiniz.
+            </div>
+          ) : null}
+
           {tests === null ? (
             <LoadingState label="Testler yükleniyor..." />
           ) : tests.length === 0 ? (
@@ -443,6 +452,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
                   result={resultsByTest[test.id]}
                   photos={photosByTest[test.id]}
                   photoMode={photoMode}
+                  canRegrade={canRegrade}
                   onSelect={(orderNo, label) => handleSelect(test.id, orderNo, label)}
                   onRemove={setRemovingTest}
                   onCapture={(orderNo) => setCapturingQuestion({ testId: test.id, orderNo, reopenGallery: true })}
@@ -488,7 +498,13 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
               disabled={saving || allLocked}
               className="w-full rounded-xl bg-student-theme-primary px-4 py-3 text-sm font-semibold text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary disabled:opacity-60"
             >
-              {saving ? 'Kaydediliyor...' : allLocked ? 'Tüm testler değerlendirildi' : `Kaydet (${totalQuestions} soru)`}
+              {saving
+                ? 'Kaydediliyor...'
+                : allLocked
+                  ? 'Tüm testler değerlendirildi'
+                  : canRegrade && allGraded
+                    ? 'Yeniden Değerlendir'
+                    : `Kaydet (${totalQuestions} soru)`}
             </button>
           </div>
         ) : null}
