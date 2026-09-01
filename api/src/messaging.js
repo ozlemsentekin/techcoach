@@ -9,17 +9,6 @@ function toISODate(value) {
   return value instanceof Date ? value.toISOString().slice(0, 10) : value
 }
 
-function sanitizeMessage(record) {
-  return {
-    id: record.id,
-    studentId: record.student_id,
-    from: record.from_role,
-    text: record.text,
-    createdAt: record.created_at,
-    readAt: record.read_at,
-  }
-}
-
 function sanitizeCoachNote(record) {
   return {
     id: record.id,
@@ -39,116 +28,6 @@ function sanitizeStudentRequest(record) {
     proposedTime: record.proposed_time,
     status: record.status,
     createdAt: record.created_at,
-  }
-}
-
-async function listMessagesHandler(request) {
-  try {
-    const { error, studentId } = await requireStudentContext(request)
-    if (error) {
-      return error
-    }
-
-    const requestDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-    })
-    const result = await requestDb.query(`
-      SELECT id, student_id, from_role, text, read_at, created_at
-      FROM (
-        SELECT TOP (200) id, student_id, from_role, text, read_at, created_at
-        FROM dbo.Messages
-        WHERE student_id = @studentId
-        ORDER BY created_at DESC
-      ) recent
-      ORDER BY created_at ASC;
-    `)
-
-    return json(200, { messages: result.recordset.map(sanitizeMessage) })
-  } catch (error) {
-    if (isConfigError(error)) {
-      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
-    }
-
-    if (isSessionError(error)) {
-      return json(401, { error: 'Oturum geçersiz.' })
-    }
-
-    console.error('listMessagesHandler failed', error)
-    return json(500, { error: 'Mesajlar yüklenemedi.' })
-  }
-}
-
-async function sendMessageHandler(request) {
-  try {
-    const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
-    if (error) {
-      return error
-    }
-
-    const from = payload?.from
-    const text = payload?.text?.trim()
-
-    if (from !== 'ebeveyn' && from !== 'ogrenci') {
-      return json(400, { error: 'Geçersiz gönderen.' })
-    }
-    if (!text) {
-      return json(400, { error: 'Mesaj metni boş olamaz.' })
-    }
-
-    const requestDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-      from: { type: sql.NVarChar(20), value: from },
-      text: { type: sql.NVarChar(2000), value: text },
-    })
-    const result = await requestDb.query(`
-      INSERT INTO dbo.Messages (student_id, from_role, text)
-      OUTPUT inserted.id, inserted.student_id, inserted.from_role, inserted.text, inserted.read_at, inserted.created_at
-      VALUES (@studentId, @from, @text);
-    `)
-
-    return json(201, { message: sanitizeMessage(result.recordset[0]) })
-  } catch (error) {
-    if (isConfigError(error)) {
-      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
-    }
-
-    console.error('sendMessageHandler failed', error)
-    return json(500, { error: 'Mesaj gönderilemedi.' })
-  }
-}
-
-async function markMessagesReadHandler(request) {
-  try {
-    const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentContext(request, { studentId: payload?.studentId })
-    if (error) {
-      return error
-    }
-
-    const from = payload?.from
-    if (from !== 'ebeveyn' && from !== 'ogrenci') {
-      return json(400, { error: 'Geçersiz gönderen.' })
-    }
-
-    const requestDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-      from: { type: sql.NVarChar(20), value: from },
-    })
-    await requestDb.query(`
-      UPDATE dbo.Messages
-      SET read_at = SYSUTCDATETIME()
-      WHERE student_id = @studentId AND from_role <> @from AND read_at IS NULL;
-    `)
-
-    return json(200, { success: true })
-  } catch (error) {
-    if (isConfigError(error)) {
-      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
-    }
-
-    console.error('markMessagesReadHandler failed', error)
-    return json(500, { error: 'Mesajlar güncellenemedi.' })
   }
 }
 
@@ -299,9 +178,6 @@ async function updateStudentRequestHandler(request) {
 }
 
 module.exports = {
-  listMessagesHandler,
-  sendMessageHandler,
-  markMessagesReadHandler,
   listCoachNotesHandler,
   addCoachNoteHandler,
   listStudentRequestsHandler,
