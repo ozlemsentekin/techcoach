@@ -6,9 +6,9 @@ import { addSession } from '../../../services/studySessionService'
 import { addHomework } from '../../../services/homeworkService'
 import { buildTeacherLessonTasksForDate, getTeacherLessonSchedule } from '../../../services/weeklyPlanService'
 import { sendMessage, addCoachNote } from '../../../services/messageService'
-import { todayISODate, getMonthDates } from '../../../utils/time'
+import { todayISODate, addDaysISO } from '../../../utils/time'
 import { getNextTask } from '../../../utils/taskSelectors'
-import { getAssignmentStatus } from '../../../utils/assignmentStatus'
+import { isBacklogTask } from '../../../utils/backlogTasks'
 import { FOCUS_TASK_TYPES } from '../../../data/taskTypes'
 import useVisiblePolling from '../../../hooks/useVisiblePolling'
 import StudentWelcomeBanner from '../components/StudentWelcomeBanner'
@@ -54,9 +54,8 @@ function buildCompletionUpdates(task, updates) {
   }
 }
 
-function isUnfinishedFlowTask(task) {
-  return getAssignmentStatus(task).filterKey === 'pending'
-}
+// Veli panelindeki "Biriken Görev" ile aynı geriye dönük pencere (bkz. getBacklogTasks).
+const BACKLOG_LOOKBACK_DAYS = 30
 
 export default function TodayPage() {
   const { authUser } = useAuth()
@@ -74,7 +73,10 @@ export default function TodayPage() {
   const [historyTasks, setHistoryTasks] = useState({})
   const [teacherLessonSchedule, setTeacherLessonSchedule] = useState([])
 
-  const historyDays = useMemo(() => getMonthDates(date).filter((day) => day < date), [])
+  const historyDays = useMemo(
+    () => Array.from({ length: BACKLOG_LOOKBACK_DAYS }, (_, index) => addDaysISO(date, -(index + 1))),
+    [],
+  )
 
   useEffect(() => {
     let ignore = false
@@ -167,7 +169,7 @@ export default function TodayPage() {
 
   const listTasks = useMemo(
     () => [
-      ...historyDays.flatMap((day) => (historyTasks[day] || []).filter(isUnfinishedFlowTask)),
+      ...historyDays.flatMap((day) => (historyTasks[day] || []).filter(isBacklogTask)),
       ...buildTeacherLessonTasksForDate(teacherLessonSchedule, date),
       ...tasks,
     ],
