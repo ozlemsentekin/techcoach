@@ -293,6 +293,14 @@ export async function getTeacherStudentTasksForDate(studentTeacherId, date) {
   return data.tasks
 }
 
+/** Öğretmenin kapsamındaki tamamlanmamış plan görevlerini kronolojik döner. @returns {Promise<Array>} */
+export async function getTeacherStudentPendingTasks(studentTeacherId) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/tasks?pending=true`, {
+    method: 'GET',
+  })
+  return data.tasks || []
+}
+
 /** Ödev kaydına bağlı olmayan (öğrenci/veli eklemiş) bir plan görevini öğretmenin yeniden planlaması. */
 export async function updateTeacherStudentTask(studentTeacherId, taskId, { date, startTime, durationMinutes }) {
   const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/tasks/${taskId}`, {

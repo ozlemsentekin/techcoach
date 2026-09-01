@@ -377,6 +377,7 @@ export default function StudentDetailPage() {
               onEditTask={handleEditTask}
               onViewAnswerSheet={setAnswerSheetTask}
               onManageLessonSlot={(slot) => setManagingSlot(slot)}
+              canEditTask={(task) => task.createdBy === 'ogretmen' || isManageableStandaloneTask(task)}
             />
           )}
         </div>

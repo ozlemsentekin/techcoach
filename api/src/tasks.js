@@ -154,6 +154,34 @@ const FIELD_MAP = {
 
 const STUDENT_ACTIVITY_ACTOR_ROLE = 'ogrenci'
 const SYSTEM_ACTIVITY_ACTOR_ROLE = 'sistem'
+
+// Haftalık plandaki bir görevin "tanımı": kim/ne/ne zaman/hangi kaynak. Bu alanlara dokunmak
+// görevi düzenlemek demektir ve yalnızca görevi ekleyen (ya da veli) yapabilir. Listede olmayan
+// alanlar (status, timer_*, answers, correct/wrong/blank, difficulty, emotion, completed_sub_goals…)
+// öğrencinin kendi ilerlemesidir; onları görevi kim eklemiş olursa olsun öğrenci güncelleyebilir.
+const PLAN_DEFINITION_FIELDS = new Set([
+  'title',
+  'taskType',
+  'subject',
+  'subjectId',
+  'topic',
+  'date',
+  'assignedDate',
+  'isUnscheduled',
+  'startTime',
+  'endTime',
+  'durationMinutes',
+  'priority',
+  'description',
+  'parentNote',
+  'isDraft',
+  'targetQuestionCount',
+  'targetPageCount',
+  'resourceBookId',
+  'schoolResourceId',
+  'studentTeacherId',
+  'selectedTestIds',
+])
 const DONE_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
 const BREAK_TASK_TYPES = new Set(['mola', 'dinlenme', 'yemek', 'yemek-dinlenme'])
 // "Diğer" kategorisindeki (ders dışı) görev türleri: mola/yemek + serbest zaman/spor/sosyal
@@ -583,9 +611,15 @@ async function getTaskHandler(request) {
 async function createTaskHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
+    const { error, studentId, actorRole } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
+    }
+
+    // created_by istemciden değil oturumdan belirlenir — haftalık plandaki "… ekledi" etiketi
+    // ve düzenleme yetkisi buna dayanır. Öğretmenin eklediği görevler ayrı uçlardan geçer.
+    if (payload) {
+      payload.createdBy = actorRole === STUDENT_ACTIVITY_ACTOR_ROLE ? 'ogrenci' : 'ebeveyn'
     }
 
     if (!payload?.date || !payload?.title || !payload?.taskType) {
@@ -677,6 +711,20 @@ async function updateTaskHandler(request) {
       return json(404, { error: 'Görev bulunamadı.' })
     }
 
+    // Öğrenci yalnızca kendi eklediği görevin tanımını düzenleyebilir; öğretmen/veli eklediği
+    // görevlerde sadece kendi ilerlemesini güncelleyebilir. Veli (ebeveyn) tüm görevleri düzenler.
+    if (actorRole === STUDENT_ACTIVITY_ACTOR_ROLE && previousRecord.created_by !== 'ogrenci') {
+      const editsDefinition = Object.keys(payload || {}).some(
+        (key) => PLAN_DEFINITION_FIELDS.has(key) && payload[key] !== undefined,
+      )
+      if (editsDefinition) {
+        return json(403, {
+          error: 'Bu görevi yalnızca ekleyen kişi düzenleyebilir.',
+          code: 'NOT_TASK_CREATOR',
+        })
+      }
+    }
+
     if (payload?.studentTeacherId) {
       const teacherRecord = await resolveActiveParentPrivateTeacher(studentId, payload.studentTeacherId)
       if (!teacherRecord) {
@@ -738,9 +786,27 @@ async function updateTaskHandler(request) {
 async function deleteTaskHandler(request) {
   try {
     const taskId = request.params.taskId
-    const { error, studentId } = await requireStudentWriteContext(request)
+    const { error, studentId, actorRole } = await requireStudentWriteContext(request)
     if (error) {
       return error
+    }
+
+    // Öğrenci yalnızca kendi eklediği görevi silebilir (veli tüm görevleri silebilir).
+    const existingDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const existing = await existingDb.query(`
+      SELECT created_by FROM dbo.Tasks WHERE id = @id AND student_id = @studentId;
+    `)
+    if (!existing.recordset.length) {
+      return json(404, { error: 'Görev bulunamadı.' })
+    }
+    if (actorRole === STUDENT_ACTIVITY_ACTOR_ROLE && existing.recordset[0].created_by !== 'ogrenci') {
+      return json(403, {
+        error: 'Bu görevi yalnızca ekleyen kişi silebilir.',
+        code: 'NOT_TASK_CREATOR',
+      })
     }
 
     const requestDb = await withRequest({

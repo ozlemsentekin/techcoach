@@ -41,6 +41,7 @@ function sanitizeUser(record) {
     createdAt: record.created_at,
     needsConsent: !record.aydinlatma_accepted_at || !record.kvkk_accepted_at,
     themeId: record.theme_id || null,
+    grade: record.role === 'ogrenci' ? (record.grade || null) : undefined,
     teacherSubjectIds: record.role === 'ogretmen' ? parseTeacherSubjectIdsJson(record.teacher_subject_ids_json) : undefined,
   }
 }
@@ -302,6 +303,7 @@ async function loginHandler(request) {
         u.kvkk_accepted_at,
         u.teacher_subject_ids_json,
         sp.theme_id,
+        sp.grade,
         e.status AS entitlement_status, e.source AS entitlement_source,
         e.current_period_end AS entitlement_current_period_end
       FROM dbo.Users u
@@ -396,6 +398,7 @@ async function meHandler(request) {
         u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.last_login_at, u.created_at,
         u.aydinlatma_accepted_at, u.kvkk_accepted_at, u.funded_by_teacher_id, u.teacher_subject_ids_json,
         sp.theme_id,
+        sp.grade,
         e.status AS entitlement_status, e.source AS entitlement_source,
         e.current_period_end AS entitlement_current_period_end
       FROM dbo.Users u

@@ -459,7 +459,7 @@ export default function TodayPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
-      <StudentWelcomeBanner studentName={authUser?.fullName || ''} tasks={tasks} checkIn={checkIn} />
+      <StudentWelcomeBanner studentId={authUser?.id} studentName={authUser?.fullName || ''} grade={authUser?.grade} tasks={tasks} checkIn={checkIn} />
 
       {loadError ? (
         <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{loadError}</div>

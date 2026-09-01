@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
+  AlertTriangle,
   BookOpen,
   CalendarClock,
   CalendarDays,
+  ClipboardList,
   GraduationCap,
   IdCard,
   Phone,
@@ -14,25 +16,32 @@ import {
   Trash2,
   TrendingUp,
   Users,
+  X,
 } from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import EmptyState from '../../shared/EmptyState'
 import LoadingState from '../../shared/LoadingState'
 import { SuccessRateBadge } from '../../shared/ResourceBookCard'
+import TaskTypeIcon from '../../shared/TaskTypeIcon'
 import ActionsMenu from '../../ui/ActionsMenu'
+import Badge from '../../ui/Badge'
 import Button from '../../ui/Button'
 import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
 import TeacherStudentProfileModal from '../components/TeacherStudentProfileModal'
 import {
   deleteTeacherStudent,
   getTeacherEntitlement,
+  getTeacherStudentPendingTasks,
   getTeacherStudents,
   updateTeacherStudentGrade,
   updateTeacherStudentStatus,
 } from '../../../services/teacherService'
 import { formatDateShort } from '../../../utils/time'
 import { LIBRARY_GRADES } from '../../shared/library/libraryConstants'
+import { TASK_TYPES, STATUS_LABELS } from '../../../data/taskTypes'
+import { isBacklogTask } from '../../../utils/backlogTasks'
+import { getSortedTasks } from '../../../utils/taskSelectors'
 
 const STATUS_FILTERS = [
   { value: 'active', label: 'Aktif' },
@@ -68,6 +77,219 @@ function schoolText(student) {
   const grade = student.studentGrade
   const gradeText = grade ? (/^\d+$/.test(grade) ? `${grade}. Sınıf` : grade) : null
   return [student.schoolName, gradeText].filter(Boolean).join(' · ') || null
+}
+
+function formatTaskDate(dateISO) {
+  if (!dateISO) return 'Tarih eklenmedi'
+  return new Date(`${dateISO}T00:00:00`).toLocaleDateString('tr-TR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    weekday: 'long',
+  })
+}
+
+function formatTaskTime(task) {
+  if (task.startTime && task.endTime) return `${task.startTime}-${task.endTime}`
+  if (task.startTime) return task.startTime
+  return 'Saat eklenmedi'
+}
+
+function taskTitle(task) {
+  return task.description || task.title || 'Görev detayı eklenmemiş'
+}
+
+function taskProgressText(task) {
+  if (task.targetQuestionCount > 0) {
+    return `${task.completedQuestionCount || 0}/${task.targetQuestionCount} soru`
+  }
+  if (task.targetPageCount > 0) {
+    return `${task.completedPageCount || 0}/${task.targetPageCount} sayfa`
+  }
+  return null
+}
+
+function taskSourceText(task) {
+  if (task.resourceBookName) {
+    return [task.publisherName, task.resourceBookName].filter(Boolean).join(' · ')
+  }
+  return task.schoolResourceName || task.subject || null
+}
+
+function PendingStatusBadge({ status }) {
+  const className =
+    {
+      bekliyor: 'bg-panel-blue-soft text-panel-blue',
+      'devam-ediyor': 'bg-panel-sage-soft text-panel-sage',
+      'yardim-bekliyor': 'bg-panel-accent-soft text-panel-warm',
+    }[status] || 'bg-panel-surface-soft text-panel-text-muted'
+
+  return (
+    <span className={`inline-flex min-h-6 items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${className}`}>
+      {STATUS_LABELS[status] || status || 'Bekliyor'}
+    </span>
+  )
+}
+
+function PendingTaskItem({ task }) {
+  const backlog = isBacklogTask(task)
+  const type = TASK_TYPES[task.taskType]
+  const typeLabel = type?.label || 'Görev'
+  const progress = taskProgressText(task)
+  const source = taskSourceText(task)
+
+  return (
+    <li
+      className={`rounded-lg border p-3.5 ${
+        backlog ? 'border-panel-red/35 bg-panel-red-soft/25' : 'border-panel-border bg-white'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+            backlog ? 'bg-panel-red-soft text-panel-red' : 'bg-panel-blue-soft text-panel-blue'
+          }`}
+        >
+          {backlog ? (
+            <AlertTriangle size={19} strokeWidth={2.2} aria-hidden="true" />
+          ) : (
+            <TaskTypeIcon name={type?.icon} size={19} />
+          )}
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge tone={backlog ? 'red' : 'blue'} className="text-[11px] font-bold">
+              {typeLabel}
+            </Badge>
+            {backlog ? (
+              <Badge tone="red" className="gap-1 text-[11px] font-extrabold">
+                <AlertTriangle size={11} aria-hidden="true" />
+                Biriken Görev
+              </Badge>
+            ) : null}
+            <PendingStatusBadge status={task.status} />
+          </div>
+
+          <p className="mt-2 line-clamp-2 text-sm font-bold leading-snug text-panel-text" title={taskTitle(task)}>
+            {taskTitle(task)}
+          </p>
+
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-panel-text-muted">
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <CalendarDays size={13} className="shrink-0" aria-hidden="true" />
+              <span className="truncate">{formatTaskDate(task.date)}</span>
+            </span>
+            <span className="inline-flex shrink-0 items-center gap-1.5">
+              <CalendarClock size={13} aria-hidden="true" />
+              {formatTaskTime(task)}
+            </span>
+          </div>
+
+          {source || progress ? (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-panel-text-muted">
+              {source ? (
+                <span className="max-w-full truncate rounded-lg bg-panel-surface-soft px-2 py-1 font-semibold">
+                  {source}
+                </span>
+              ) : null}
+              {progress ? (
+                <span className="shrink-0 rounded-lg bg-panel-surface-soft px-2 py-1 font-semibold">{progress}</span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </li>
+  )
+}
+
+function PendingTasksModal({ student, onClose }) {
+  const [tasks, setTasks] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let ignore = false
+
+    getTeacherStudentPendingTasks(student.studentTeacherId)
+      .then((data) => {
+        if (!ignore) setTasks(getSortedTasks(data || []))
+      })
+      .catch((err) => {
+        if (!ignore) setError(err.message)
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [student.studentTeacherId])
+
+  const backlogCount = tasks ? tasks.filter(isBacklogTask).length : 0
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+      <div className="flex max-h-[92vh] w-full max-w-2xl flex-col rounded-t-2xl border border-panel-border bg-panel-surface shadow-panel-1 sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-4 p-5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
+                <ClipboardList size={19} aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-bold text-panel-text">Bekleyen Görevler</h2>
+                <p className="mt-0.5 truncate text-sm text-panel-text-muted">
+                  {student.studentFullName} · {student.subjectName || 'Ders seçilmedi'}
+                </p>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            aria-label="Kapat"
+            onClick={onClose}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-panel-text-muted transition-colors hover:bg-panel-surface-soft hover:text-panel-text"
+          >
+            <X size={19} aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="min-h-0 overflow-y-auto border-t border-panel-border p-4 sm:p-5">
+          {error ? (
+            <div className="rounded-lg bg-panel-accent-soft px-4 py-3 text-sm font-semibold text-panel-warm">{error}</div>
+          ) : tasks === null ? (
+            <LoadingState label="Görevler yükleniyor..." />
+          ) : tasks.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-panel-border bg-panel-surface-soft px-6 py-10 text-center">
+              <ClipboardList size={28} className="text-panel-text-muted" aria-hidden="true" />
+              <h3 className="mt-3 text-base font-bold text-panel-text">Bekleyen görev yok</h3>
+              <p className="mt-1 max-w-sm text-sm text-panel-text-muted">
+                Bu öğrenci için öğretmen kapsamınızda tamamlanmamış görev bulunmuyor.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-panel-text-muted">
+                <span className="rounded-full bg-panel-surface-soft px-2.5 py-1">
+                  {tasks.length} tamamlanmamış görev
+                </span>
+                {backlogCount > 0 ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-panel-red-soft px-2.5 py-1 text-panel-red">
+                    <AlertTriangle size={12} aria-hidden="true" />
+                    {backlogCount} biriken görev
+                  </span>
+                ) : null}
+              </div>
+              <ul className="flex flex-col gap-2.5">
+                {tasks.map((task) => (
+                  <PendingTaskItem key={task.id} task={task} />
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // Öğretmen tarafından eklenen öğrencilerin sınıfı boş kalabiliyor; sınıfı olmayan öğrenci
@@ -137,6 +359,7 @@ export default function StudentsPage() {
   const [error, setError] = useState('')
   const [libraryStudent, setLibraryStudent] = useState(null)
   const [profileStudent, setProfileStudent] = useState(null)
+  const [pendingTasksStudent, setPendingTasksStudent] = useState(null)
   const [deleteStudent, setDeleteStudent] = useState(null)
   const [actionStudentId, setActionStudentId] = useState(null)
   const [openActionsStudentId, setOpenActionsStudentId] = useState(null)
@@ -276,7 +499,7 @@ export default function StudentsPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {students.map((student) => {
             const lesson = nextLessonText(student)
             const school = schoolText(student)
@@ -310,8 +533,8 @@ export default function StudentsPage() {
                     goToDetail()
                   }
                 }}
-                className={`flex flex-col gap-4 rounded-2xl border border-panel-border p-5 shadow-panel-1 ${
-                  student.isActive ? 'bg-panel-surface cursor-pointer' : 'bg-panel-surface-soft'
+                className={`flex flex-col gap-4 rounded-2xl border border-panel-border p-5 shadow-panel-1 transition duration-150 ${
+                  student.isActive ? 'bg-panel-surface cursor-pointer hover:-translate-y-0.5 hover:shadow-sm' : 'bg-panel-surface-soft'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -377,17 +600,17 @@ export default function StudentsPage() {
                   </p>
                 </div>
 
-                <div className="mt-auto flex flex-col gap-1.5" onClick={(event) => event.stopPropagation()}>
+                <div className="mt-auto grid grid-cols-1 gap-2 xl:grid-cols-2" onClick={(event) => event.stopPropagation()}>
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
                     onClick={() => setProfileStudent(student)}
                     disabled={!student.isActive || isBusy}
-                    className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+                    className="h-10 w-full justify-start rounded-lg px-3 text-left text-[13px] font-semibold"
                   >
                     <IdCard size={16} className="shrink-0" aria-hidden="true" />
-                    Profil Kartı
+                    <span className="min-w-0 truncate">Profil Kartı</span>
                   </Button>
                   <Button
                     type="button"
@@ -395,21 +618,21 @@ export default function StudentsPage() {
                     size="sm"
                     onClick={() => navigate(`/teacher/students/${student.studentTeacherId}`)}
                     disabled={!student.isActive || isBusy}
-                    className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+                    className="h-10 w-full justify-start rounded-lg px-3 text-left text-[13px] font-semibold"
                   >
                     <CalendarClock size={16} className="shrink-0" aria-hidden="true" />
-                    Çalışma Takvimi
+                    <span className="min-w-0 truncate">Çalışma Takvimi</span>
                   </Button>
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
-                    onClick={() => setLibraryStudent(student)}
+                    onClick={() => setPendingTasksStudent(student)}
                     disabled={!student.isActive || isBusy}
-                    className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+                    className="h-10 w-full justify-start rounded-lg border-panel-blue-soft px-3 text-left text-[13px] font-semibold text-panel-blue"
                   >
-                    <BookOpen size={16} className="shrink-0" aria-hidden="true" />
-                    Kaynaklar
+                    <ClipboardList size={16} className="shrink-0" aria-hidden="true" />
+                    <span className="min-w-0 truncate">Bekleyen Görevler</span>
                   </Button>
                   <Button
                     type="button"
@@ -417,10 +640,21 @@ export default function StudentsPage() {
                     size="sm"
                     onClick={() => navigate(`/teacher/students/${student.studentTeacherId}?tab=mistakes`)}
                     disabled={!student.isActive || isBusy}
-                    className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+                    className="h-10 w-full justify-start rounded-lg px-3 text-left text-[13px] font-semibold"
                   >
                     <AlertCircle size={16} className="shrink-0" aria-hidden="true" />
-                    Hata Defteri
+                    <span className="min-w-0 truncate">Dijital Hata Defteri</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setLibraryStudent(student)}
+                    disabled={!student.isActive || isBusy}
+                    className="h-10 w-full justify-start rounded-lg px-3 text-left text-[13px] font-semibold"
+                  >
+                    <BookOpen size={16} className="shrink-0" aria-hidden="true" />
+                    <span className="min-w-0 truncate">Kaynaklar</span>
                   </Button>
                   <Button
                     type="button"
@@ -428,10 +662,10 @@ export default function StudentsPage() {
                     size="sm"
                     onClick={() => navigate(`/teacher/students/${student.studentTeacherId}?tab=analysis`)}
                     disabled={!student.isActive || isBusy}
-                    className="h-auto w-full justify-start gap-2.5 px-3 py-2"
+                    className="h-10 w-full justify-start rounded-lg px-3 text-left text-[13px] font-semibold"
                   >
                     <TrendingUp size={16} className="shrink-0" aria-hidden="true" />
-                    Gelişim Analizi
+                    <span className="min-w-0 truncate">Gelişim Analizi</span>
                   </Button>
                 </div>
               </div>
@@ -468,6 +702,14 @@ export default function StudentsPage() {
               .then(setStudents)
               .catch((err) => setError(err.message))
           }}
+        />
+      ) : null}
+
+      {pendingTasksStudent ? (
+        <PendingTasksModal
+          key={pendingTasksStudent.studentTeacherId}
+          student={pendingTasksStudent}
+          onClose={() => setPendingTasksStudent(null)}
         />
       ) : null}
 

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays, Clock, Sparkles } from 'lucide-react'
+import { CalendarDays, Clock, Sparkles, X } from 'lucide-react'
 import { dateToISO, formatDateLong, formatTime, getGreetingByHour, pickGreeting } from '../../../utils/time'
 import { calculateProgress, getProgressMessage } from '../../../utils/progress'
 import { resolveDisplayedMotivationMessage } from '../../../services/motivationMessageService'
 import { getPublicGreetingRules } from '../../../services/contentService'
+import { readJSON, writeJSON } from '../../../services/storage'
 
 const LGS_DATE = new Date(2027, 5, 13)
+const LGS_HIDDEN_STORAGE_KEY = 'student:lgs_countdown_hidden'
 
 function daysUntil(targetDate, currentDate) {
   const startOfCurrent = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
@@ -13,8 +15,28 @@ function daysUntil(targetDate, currentDate) {
   return Math.ceil((startOfTarget.getTime() - startOfCurrent.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-export default function StudentWelcomeBanner({ studentName, tasks = [], checkIn }) {
+export default function StudentWelcomeBanner({ studentId, studentName, grade, tasks = [], checkIn }) {
+  // LGS geri sayım banner'ı yalnızca 8. sınıf öğrencilerinde gösterilir.
+  const showLgsCountdown = String(grade ?? '').trim() === '8'
   const [currentDate, setCurrentDate] = useState(() => new Date())
+
+  // Bazı öğrenciler geri sayımı görünce stres oluyor; kartı kapatabilsinler.
+  // Tercih öğrenci bazında (aynı tarayıcıda birden fazla öğrenci olabilir) saklanır.
+  const lgsHiddenKey = studentId || 'anon'
+  const [lgsHidden, setLgsHidden] = useState(
+    () => readJSON(LGS_HIDDEN_STORAGE_KEY, {})[lgsHiddenKey] === true,
+  )
+
+  const setLgsHiddenPref = (hidden) => {
+    setLgsHidden(hidden)
+    const map = readJSON(LGS_HIDDEN_STORAGE_KEY, {}) || {}
+    if (hidden) {
+      map[lgsHiddenKey] = true
+    } else {
+      delete map[lgsHiddenKey]
+    }
+    writeJSON(LGS_HIDDEN_STORAGE_KEY, map)
+  }
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -67,11 +89,16 @@ export default function StudentWelcomeBanner({ studentName, tasks = [], checkIn 
       : lgsRemainingDays === 0
         ? 'Bugün'
         : 'Tamamlandı'
+  const lgsCountdownVisible = showLgsCountdown && !lgsHidden
 
   return (
     <section className="panel-card overflow-hidden">
       <div className="h-2 w-full bg-student-theme-primary" aria-hidden="true" />
-      <div className="grid gap-5 bg-gradient-to-br from-student-theme-soft/50 via-transparent to-transparent p-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+      <div
+        className={`grid gap-5 bg-gradient-to-br from-student-theme-soft/50 via-transparent to-transparent p-5 lg:items-start ${
+          lgsCountdownVisible ? 'lg:grid-cols-[minmax(0,1fr)_320px]' : ''
+        }`}
+      >
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-2 rounded-full bg-panel-sage-soft px-3 py-1 text-sm font-medium text-panel-sage">
@@ -82,6 +109,16 @@ export default function StudentWelcomeBanner({ studentName, tasks = [], checkIn 
               <Clock size={14} aria-hidden="true" />
               {formatTime(currentDate)}
             </span>
+            {showLgsCountdown && lgsHidden ? (
+              <button
+                type="button"
+                onClick={() => setLgsHiddenPref(false)}
+                className="inline-flex items-center gap-2 rounded-full border border-panel-border bg-panel-surface px-3 py-1 text-sm font-medium text-panel-text-muted transition hover:text-panel-text"
+              >
+                <CalendarDays size={14} aria-hidden="true" />
+                LGS geri sayımını göster
+              </button>
+            ) : null}
           </div>
 
           <div className="mt-4 flex flex-col gap-2">
@@ -95,23 +132,34 @@ export default function StudentWelcomeBanner({ studentName, tasks = [], checkIn 
           </div>
         </div>
 
-        <div className="flex min-w-0 items-center gap-3 rounded-xl border border-panel-border bg-panel-surface px-4 py-3 shadow-sm">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
-            <CalendarDays size={18} aria-hidden="true" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <p className="text-xs font-medium text-panel-text-muted">LGS 2027</p>
-              <p className="text-xs font-semibold text-panel-text-muted">13 Haziran 2027</p>
-            </div>
-            <div className="mt-1 flex items-end gap-2">
-              <p className="text-3xl font-bold leading-none text-panel-text">{lgsText}</p>
-              {lgsRemainingDays > 0 ? (
-                <p className="pb-0.5 text-sm font-bold text-panel-blue">kaldı</p>
-              ) : null}
+        {lgsCountdownVisible ? (
+          <div className="relative flex min-w-0 items-center gap-3 rounded-xl border border-panel-border bg-panel-surface px-4 py-3 pl-5 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setLgsHiddenPref(true)}
+              aria-label="LGS geri sayımını gizle"
+              title="LGS geri sayımını gizle"
+              className="absolute -left-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-panel-border bg-panel-surface text-panel-text-muted shadow-sm transition hover:text-panel-text"
+            >
+              <X size={13} aria-hidden="true" />
+            </button>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
+              <CalendarDays size={18} aria-hidden="true" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <p className="text-xs font-medium text-panel-text-muted">LGS 2027</p>
+                <p className="text-xs font-semibold text-panel-text-muted">13 Haziran 2027</p>
+              </div>
+              <div className="mt-1 flex items-end gap-2">
+                <p className="text-3xl font-bold leading-none text-panel-text">{lgsText}</p>
+                {lgsRemainingDays > 0 ? (
+                  <p className="pb-0.5 text-sm font-bold text-panel-blue">kaldı</p>
+                ) : null}
+              </div>
             </div>
           </div>
-        </div>
+        ) : null}
       </div>
 
       <div className="border-t border-panel-border bg-panel-surface-soft/60 p-4 sm:p-5">

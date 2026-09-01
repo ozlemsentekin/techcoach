@@ -21,6 +21,7 @@ import {
   Star,
   Timer,
   UploadCloud,
+  UserRound,
   XCircle,
 } from 'lucide-react'
 import { HOMEWORK_TASK_TYPES, TASK_TYPES } from '../../../data/taskTypes'
@@ -256,6 +257,43 @@ function formatCompletionDuration(totalSeconds) {
   if (hours && minutes) return `${hours} sa ${minutes} dk`
   if (hours) return `${hours} sa`
   return `${totalMinutes} dk`
+}
+
+// Görevi haftalık plana kimin eklediği (Tasks.created_by). Öğretmenin sabit ders programı
+// slotları gerçek görev olmadığından burada yer almaz.
+const CREATOR_LABELS = {
+  ebeveyn: 'Veli',
+  ogrenci: 'Öğrenci',
+  ogretmen: 'Öğretmen',
+  koc: 'Koç',
+  sistem: 'Sistem',
+}
+
+function formatCreatedStamp(isoString) {
+  if (!isoString) return null
+  const date = new Date(isoString)
+  if (Number.isNaN(date.getTime())) return null
+
+  const datePart = date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })
+  const timePart = date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+  return `${datePart} ${timePart}`
+}
+
+// Kartın en altında küçük bir etiket: "Öğretmen ekledi · 28 Ağu 14:30". Kim ekledi bilgisi
+// düzenleme yetkisini de belirler (bkz. canEditTask); etiket her panelde görünür.
+function CreatorNote({ task }) {
+  const label = CREATOR_LABELS[task.createdBy]
+  if (!label) return null
+  const stamp = formatCreatedStamp(task.createdAt)
+
+  return (
+    <span className="mt-1 flex items-center gap-1 px-1 text-[10px] font-semibold leading-snug text-panel-text-muted">
+      <UserRound size={11} className="shrink-0" aria-hidden="true" />
+      <span className="truncate">
+        {label} ekledi{stamp ? ` · ${stamp}` : ''}
+      </span>
+    </span>
+  )
 }
 
 function formatCompletionTimestamp(isoString) {
@@ -519,7 +557,7 @@ function SchoolSlotCard({ task, muted = false }) {
   )
 }
 
-function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onManageLessonSlot, muted = false }) {
+function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onManageLessonSlot, canEditTask, muted = false }) {
   const [showBreakMenu, setShowBreakMenu] = useState(false)
 
   if (task.isScheduleSlot) return <ScheduleSlotCard task={task} muted={muted} onManage={muted ? undefined : onManageLessonSlot} />
@@ -541,7 +579,10 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onMana
   const graded = isTaskGraded(task)
   const completionTimerInfo = isHomework ? getCompletionTimerInfo(task) : null
   const completionTimestampLabel = isHomework ? getCompletionTimestampLabel(task) : null
-  const canOpenTask = typeof onEditTask === 'function'
+  // Kartı düzenlemek için tıklanabilir yapmadan önce yetki kontrolü: veli tüm görevleri,
+  // öğretmen/öğrenci yalnızca kendi eklediklerini düzenleyebilir (bkz. panel bazlı canEditTask).
+  const canOpenTask =
+    typeof onEditTask === 'function' && (typeof canEditTask !== 'function' || canEditTask(task))
   // Görev tipini konudan bağımsız her zaman ayırt edilebilir kılmak için (bkz. özel ders/spor
   // gibi konu etiketiyle renklenmeyen türler) stil tanımına sol renkli çizgi + üstte tip
   // etiketi ekliyoruz; barClassName tanımlı olmayan türlerde bu görsel hiç render edilmez.
@@ -715,6 +756,7 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onMana
 
       {graded ? <GradeSummaryBar task={task} onViewAnswerSheet={onViewAnswerSheet} /> : null}
       <CompletionTimerNote info={completionTimerInfo} completedAtLabel={completionTimestampLabel} />
+      <CreatorNote task={task} />
     </div>
   )
 }
@@ -778,6 +820,7 @@ export default function WeeklyPlannerGrid({
   onQuickAddBreak,
   onViewAnswerSheet,
   onManageLessonSlot,
+  canEditTask,
 }) {
   const [expandedActionDate, setExpandedActionDate] = useState(null)
   const currentDate = todayISODate()
@@ -984,6 +1027,7 @@ export default function WeeklyPlannerGrid({
                 onEditTask={onEditTask}
                 onViewAnswerSheet={onViewAnswerSheet}
                 onManageLessonSlot={onManageLessonSlot}
+                canEditTask={canEditTask}
                 muted={isPastDay}
                 onQuickAddBreak={
                   isPastDay || typeof onQuickAddBreak !== 'function' || task.isScheduleSlot || task.isSchoolSlot

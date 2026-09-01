@@ -93,6 +93,16 @@ const TEACHER_TASK_IN_SCOPE = `(
   )
 )`
 
+// Bekleyen görevler özeti, haftalık takvimdeki bağlamsal "spor / başka özel ders" kartlarından
+// daha dar olmalı: sadece bu öğretmenin kendi ders/görev ilişkisi ve takip ettiği kaynaklar.
+const TEACHER_PENDING_TASK_IN_SCOPE = `(
+  t.student_teacher_id = @studentTeacherId
+  OR EXISTS (
+    SELECT 1 FROM dbo.StudentTeacherResourceBooks strb
+    WHERE strb.teacher_id = @studentTeacherId AND strb.resource_book_id = t.resource_book_id
+  )
+)`
+
 function parseScheduleJson(value) {
   if (!value) return []
   try {
@@ -2430,10 +2440,42 @@ async function deleteTeacherHomeworkHandler(request) {
   }
 }
 
+function maskOtherTeacherPrivateLessons(tasks, studentTeacherId) {
+  const normalizedStudentTeacherId = String(studentTeacherId).toLowerCase()
+  return tasks.map((task) => {
+    // Başka öğretmenin özel dersi ise öğretmen adını gizle — sadece ders adıyla göster.
+    if (
+      task.taskType === 'ozel-ders' &&
+      String(task.studentTeacherId || '').toLowerCase() !== normalizedStudentTeacherId
+    ) {
+      return { ...task, teacherFullName: undefined, studentTeacherId: undefined }
+    }
+    return task
+  })
+}
+
 async function listTeacherStudentTasksHandler(request) {
   try {
     const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
     if (error) return error
+
+    const pendingOnly = request.query.get('pending') === 'true'
+    if (pendingOnly) {
+      const requestDb = await withRequest({
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+        studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+      })
+      const result = await requestDb.query(`
+        ${SELECT_TASK}
+        WHERE t.student_id = @studentId AND t.date IS NOT NULL AND t.is_draft = 0 AND t.is_unscheduled = 0
+          AND t.status IN ('bekliyor', 'devam-ediyor', 'yardim-bekliyor')
+          AND ${TEACHER_PENDING_TASK_IN_SCOPE}
+        ORDER BY t.date ASC, CASE WHEN t.start_time IS NULL THEN 0 ELSE 1 END ASC, t.start_time ASC, t.created_at ASC;
+      `)
+
+      return json(200, { tasks: maskOtherTeacherPrivateLessons(result.recordset.map(sanitizeTask), studentTeacherId) })
+    }
 
     const date = request.query.get('date')
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -2458,17 +2500,7 @@ async function listTeacherStudentTasksHandler(request) {
       ORDER BY t.start_time ASC;
     `)
 
-    const normalizedStudentTeacherId = String(studentTeacherId).toLowerCase()
-    const tasks = result.recordset.map(sanitizeTask).map((task) => {
-      // Başka öğretmenin özel dersi ise öğretmen adını gizle — sadece ders adıyla göster.
-      if (
-        task.taskType === 'ozel-ders' &&
-        String(task.studentTeacherId || '').toLowerCase() !== normalizedStudentTeacherId
-      ) {
-        return { ...task, teacherFullName: undefined, studentTeacherId: undefined }
-      }
-      return task
-    })
+    const tasks = maskOtherTeacherPrivateLessons(result.recordset.map(sanitizeTask), studentTeacherId)
 
     return json(200, { tasks })
   } catch (error) {

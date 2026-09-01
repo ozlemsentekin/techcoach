@@ -726,6 +726,7 @@ async function enterStudentHandler(request) {
       SELECT TOP 1
         u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at, u.funded_by_teacher_id,
         sp.theme_id,
+        sp.grade,
         e.status AS entitlement_status, e.source AS entitlement_source,
         e.current_period_end AS entitlement_current_period_end
       FROM dbo.Users u

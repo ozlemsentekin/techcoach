@@ -5,6 +5,7 @@ import { FOCUS_TASK_TYPES } from '../../../data/taskTypes'
 const CREATED_BY_LABELS = {
   ebeveyn: 'Ebeveyn',
   ogrenci: 'Kendim',
+  ogretmen: 'Öğretmen',
   koc: 'Koç',
 }
 
