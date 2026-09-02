@@ -1175,7 +1175,7 @@ export default function WeeklyPlannerGrid({
               className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#f07b31] bg-[#f07b31] px-3 text-sm font-bold text-white shadow-sm transition-colors duration-150 hover:bg-[#d9691f]"
             >
               <Plus size={18} aria-hidden="true" />
-              Ödev Ekle
+              Görev Ekle
             </button>
           )}
 

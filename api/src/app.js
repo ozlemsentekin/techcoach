@@ -88,6 +88,7 @@ const {
   updateTeacherProfileHandler,
   createTeacherStudentHandler,
 } = require('./teacher')
+const { getTeacherClassAnalysisHandler } = require('./classAnalysis')
 const { listProvincesHandler, listDistrictsHandler, listSchoolsHandler } = require('./geo')
 const {
   listSubjectsHandler,
@@ -513,6 +514,13 @@ app.http('panel-teacher-entitlement', {
   methods: ['GET'],
   route: 'panel-teacher/entitlement',
   handler: getTeacherEntitlementHandler,
+})
+
+app.http('panel-teacher-class-analysis', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/class-analysis',
+  handler: getTeacherClassAnalysisHandler,
 })
 
 app.http('panel-teacher-profile-update', {

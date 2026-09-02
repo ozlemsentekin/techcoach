@@ -214,6 +214,7 @@ export default function WeeklyPlanPage() {
             lessonSchedule={lessonSchedule}
             schoolSchedule={schoolSchedule}
             schoolHolidays={schoolHolidays}
+            onAddHomework={(date) => setDrawerState({ defaultDate: date })}
             onAddTask={(date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}
             onEditTask={(task) => setDrawerState({ initialTask: task })}
             onQuickAddBreak={handleQuickAddBreak}

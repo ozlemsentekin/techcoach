@@ -13,7 +13,6 @@ import {
   saveTaskForDay,
   publishDay,
 } from '../../../services/weeklyPlanService'
-import { addHomework } from '../../../services/homeworkService'
 import { preloadPanelHomeworkResourceBooks } from '../../../services/resourceBookService'
 import { getUnscheduledTasks, patchTask, removeTask } from '../../../services/taskService'
 import { addDaysISO, addMinutesToTime, getMondayOfWeek, todayISODate } from '../../../utils/time'
@@ -23,7 +22,6 @@ import LoadingState from '../../shared/LoadingState'
 import WeeklyPlannerGrid from '../components/WeeklyPlannerGrid'
 import TaskAnswerSheetModal from '../../student/components/TaskAnswerSheetModal'
 import AddTaskDrawer from '../components/AddTaskDrawer'
-import AssignHomeworkModal from '../components/AssignHomeworkModal'
 import ParentLessonSlotModal from '../components/ParentLessonSlotModal'
 import UnscheduledTasksPanel from '../../shared/UnscheduledTasksPanel'
 
@@ -54,7 +52,6 @@ export default function WeeklyPlanPage() {
   const [drawerState, setDrawerState] = useState(null)
   const [managingSlot, setManagingSlot] = useState(null)
   const [answerSheetTask, setAnswerSheetTask] = useState(null)
-  const [homeworkModalDate, setHomeworkModalDate] = useState('')
   const [banner, setBanner] = useState('')
 
   // authUser.id'ye bağlı: admin bir veliyi impersonate ettiğinde ParentApp yeniden mount
@@ -196,19 +193,6 @@ export default function WeeklyPlanPage() {
     showBanner('Görev silindi.')
   }
 
-  const handleSaveHomework = async (payload) => {
-    const scheduledDate = payload.taskDate || homeworkModalDate
-    await addHomework({
-      ...payload,
-      dueDate: scheduledDate || payload.dueDate,
-      taskDate: scheduledDate,
-      studentId: selectedStudentId,
-    })
-    await refresh()
-    setHomeworkModalDate('')
-    showBanner('Ödev eklendi ve haftalık plana kaydedildi.')
-  }
-
   const handlePublishDay = async (date) => {
     await publishDay(date, { studentId: selectedStudentId })
     await refresh()
@@ -341,7 +325,7 @@ export default function WeeklyPlanPage() {
             lessonSchedule={lessonSchedule}
             schoolSchedule={schoolSchedule}
             schoolHolidays={schoolHolidays}
-            onAddHomework={(date) => setHomeworkModalDate(date)}
+            onAddHomework={(date) => setDrawerState({ defaultDate: date })}
             onAddTask={(date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}
             onEditTask={(task) => setDrawerState({ initialTask: task })}
             onViewAnswerSheet={setAnswerSheetTask}
@@ -402,15 +386,6 @@ export default function WeeklyPlanPage() {
             />
           ) : null}
 
-          {homeworkModalDate ? (
-            <AssignHomeworkModal
-              defaultTaskDate={homeworkModalDate}
-              schoolSchedule={schoolSchedule}
-              schoolHolidays={schoolHolidays}
-              onSave={handleSaveHomework}
-              onClose={() => setHomeworkModalDate('')}
-            />
-          ) : null}
         </>
       )}
     </div>
