@@ -109,6 +109,8 @@ function sanitizeUser(record) {
     parentName: record.parent_full_name,
     lastLoginAt: record.last_login_at,
     createdAt: record.created_at,
+    lockoutUntil: record.lockout_until || null,
+    failedLoginCount: record.failed_login_count ?? 0,
     teacherSubjectIds: record.role === 'ogretmen' ? parseTeacherSubjectIdsJson(record.teacher_subject_ids_json) : undefined,
   }
 }
@@ -123,7 +125,8 @@ async function listUsersHandler(request) {
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
       SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.parent_id,
-             p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json
+             p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json,
+             u.failed_login_count, u.lockout_until
       FROM dbo.Users u
       LEFT JOIN dbo.Users p ON p.id = u.parent_id
       ORDER BY u.created_at ASC;
@@ -235,7 +238,8 @@ async function updateUserHandler(request) {
       WHERE id = @id;
 
       SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.parent_id,
-             p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json
+             p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json,
+             u.failed_login_count, u.lockout_until
       FROM dbo.Users u
       LEFT JOIN dbo.Users p ON p.id = u.parent_id
       WHERE u.id = @id;
@@ -514,6 +518,50 @@ async function returnToAdminHandler(request) {
   }
 }
 
+// Şifreyi arka arkaya yanlış girip geçici olarak kilitlenen (failed_login_count >= 5,
+// lockout_until gelecekte) bir hesabın kilidini admin panelinden hemen kaldırır.
+async function unlockUserHandler(request) {
+  try {
+    const { error } = await requireAdmin(request)
+    if (error) {
+      return error
+    }
+
+    const userId = request.params.userId
+    const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: userId } })
+    const result = await requestDb.query(`
+      UPDATE dbo.Users
+      SET failed_login_count = 0, lockout_until = NULL
+      WHERE id = @id;
+
+      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.parent_id,
+             p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json,
+             u.failed_login_count, u.lockout_until
+      FROM dbo.Users u
+      LEFT JOIN dbo.Users p ON p.id = u.parent_id
+      WHERE u.id = @id;
+    `)
+
+    const updated = result.recordset[0]
+    if (!updated) {
+      return json(404, { error: 'Kullanıcı bulunamadı.' })
+    }
+
+    return json(200, { user: sanitizeUser(updated) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('unlockUserHandler failed', error)
+    return json(500, { error: 'Hesap kilidi kaldırılamadı.' })
+  }
+}
+
 module.exports = {
   listUsersHandler,
   requireAdmin,
@@ -524,4 +572,5 @@ module.exports = {
   impersonateUserHandler,
   returnToAdminHandler,
   grantTeacherEntitlementHandler,
+  unlockUserHandler,
 }

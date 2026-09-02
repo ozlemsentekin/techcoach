@@ -7,6 +7,7 @@ const {
   impersonateUserHandler,
   returnToAdminHandler,
   grantTeacherEntitlementHandler,
+  unlockUserHandler,
 } = require('./admin')
 const {
   listStudentsHandler,
@@ -324,6 +325,13 @@ app.http('panel-admin-users-impersonate', {
   methods: ['POST'],
   route: 'panel-admin/users/{userId}/impersonate',
   handler: impersonateUserHandler,
+})
+
+app.http('panel-admin-users-unlock', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-admin/users/{userId}/unlock',
+  handler: unlockUserHandler,
 })
 
 app.http('panel-admin-return-to-admin', {
