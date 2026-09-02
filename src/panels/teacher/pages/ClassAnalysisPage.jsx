@@ -1,13 +1,11 @@
 import { createElement, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  AlarmClock,
   BookOpenCheck,
   CalendarCheck,
   ChevronRight,
   GraduationCap,
   Layers3,
-  ListChecks,
   Target,
   TrendingUp,
   Users,
@@ -106,22 +104,6 @@ function analyzeStudent(entry, range, today) {
     taskCounts: { total: tasks.length, onTime, late, backlog, pending },
     lastActive,
   }
-}
-
-function KpiCard({ icon, label, value, hint, tone = 'neutral' }) {
-  const toneCls = RATE_TONES[tone] || RATE_TONES.neutral
-  return (
-    <div className="flex flex-col gap-1.5 rounded-xl border border-panel-border bg-panel-surface p-4 shadow-sm">
-      <div className="flex items-center gap-2">
-        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${toneCls.chip}`}>
-          {createElement(icon, { size: 16, 'aria-hidden': true })}
-        </span>
-        <span className="min-w-0 truncate text-sm font-semibold text-panel-text-muted">{label}</span>
-      </div>
-      <span className="text-2xl font-bold leading-tight text-panel-text">{value}</span>
-      {hint ? <span className="text-[11px] font-medium text-panel-text-muted">{hint}</span> : null}
-    </div>
-  )
 }
 
 function Card({ title, subtitle, icon, children }) {
@@ -390,19 +372,7 @@ export default function ClassAnalysisPage() {
 }
 
 function ClassAnalysisBody({ analysis, sortedStudents, sortKey, onSortChange, onOpenStudent }) {
-  const {
-    students,
-    classTotals,
-    classTasks,
-    onTimeRate,
-    classAccuracy,
-    avgStudentAccuracy,
-    resourceRows,
-    hardestTopics,
-    hardestBooks,
-    dailyActivity,
-    activeDays,
-  } = analysis
+  const { students, classTotals, classTasks, resourceRows, hardestTopics, hardestBooks, dailyActivity } = analysis
 
   const studentBars = students
     .map((student) => ({
@@ -421,44 +391,6 @@ function ClassAnalysisBody({ analysis, sortedStudents, sortKey, onSortChange, on
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        <KpiCard icon={Users} label="Öğrenci" value={formatNumber(students.length)} hint={`${activeDays} aktif gün`} />
-        <KpiCard
-          icon={BookOpenCheck}
-          label="Çözülen soru"
-          value={formatNumber(classTotals.questions)}
-          hint={`${formatNumber(classTotals.correct)} doğru · ${formatNumber(classTotals.wrong)} yanlış`}
-        />
-        <KpiCard
-          icon={Target}
-          label="Sınıf başarısı"
-          value={pct(classAccuracy)}
-          hint={`Öğrenci ort. ${pct(avgStudentAccuracy)}`}
-          tone={toneFor(classAccuracy)}
-        />
-        <KpiCard
-          icon={TrendingUp}
-          label="Net"
-          value={formatNet(calculateNet(classTotals.correct, classTotals.wrong))}
-          hint={`${formatNumber(classTotals.blank)} boş`}
-        />
-        <KpiCard icon={ListChecks} label="Görev" value={formatNumber(classTasks.total)} hint={`${classTasks.pending} bekleyen`} />
-        <KpiCard
-          icon={AlarmClock}
-          label="Biriken görev"
-          value={formatNumber(classTasks.backlog)}
-          hint={`${classTasks.late} geç tamamlandı`}
-          tone={classTasks.backlog > 0 ? 'red' : 'neutral'}
-        />
-        <KpiCard
-          icon={CalendarCheck}
-          label="Zamanında tamamlama"
-          value={pct(onTimeRate)}
-          hint={`${classTasks.onTime}/${classTasks.onTime + classTasks.late + classTasks.backlog} görev`}
-          tone={toneFor(onTimeRate)}
-        />
-      </div>
-
       <Card
         title="Öğrenci başarı oranları"
         subtitle="Her öğrencinin doğruluk yüzdesi — bara dokununca öğrencinin analizine gidersiniz"
