@@ -358,7 +358,7 @@ function AccuracyHeatmap({ students, columns, onSelect }) {
                     title={`${student.name} · ${col.label}\n${titleParts.join('\n')}`}
                   >
                     <span className="block text-[12px] font-bold leading-none">
-                      {hasAccuracy ? Math.round(cell.accuracy) : '–'}
+                      {hasAccuracy ? `${Math.round(cell.accuracy)}%` : '–'}
                     </span>
                     {completion !== null ? (
                       <span className="mt-1 flex items-center gap-1">
@@ -368,7 +368,7 @@ function AccuracyHeatmap({ students, columns, onSelect }) {
                             style={{ width: `${Math.round(completion * 100)}%` }}
                           />
                         </span>
-                        <span className="text-[8px] font-bold tabular-nums opacity-70">{Math.round(completion * 100)}</span>
+                        <span className="text-[8px] font-bold tabular-nums opacity-70">{Math.round(completion * 100)}%</span>
                       </span>
                     ) : null}
                   </td>
