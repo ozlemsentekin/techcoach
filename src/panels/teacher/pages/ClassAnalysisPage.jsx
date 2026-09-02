@@ -401,42 +401,54 @@ function mergeBuckets(buckets) {
 }
 
 // Öğrenci × ay tablosu (Ağu–Haz eğitim yılı). Hücre içeriğini renderCell belirler;
-// showTotal true ise sağa birleşik "Toplam" sütunu eklenir.
+// showTotal true ise sağa çizgiyle ayrılmış "Toplam" sütunu eklenir.
 function MonthlyTable({ students, months, onSelect, renderCell, showTotal }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-separate border-spacing-1 text-center text-xs">
+      <table className="w-full min-w-[720px] text-center text-xs">
         <thead>
-          <tr>
-            <th className="sticky left-0 z-10 bg-panel-surface" />
+          <tr className="border-b-2 border-panel-border">
+            <th className="sticky left-0 z-10 bg-panel-surface py-2 pr-3" />
             {months.map((month) => (
-              <th key={month.key} className="min-w-[52px] px-1 pb-1 font-semibold text-panel-text-muted" title={month.label}>
+              <th
+                key={month.key}
+                className="px-1 py-2 text-[11px] font-bold uppercase tracking-wide text-panel-text-muted"
+                title={month.label}
+              >
                 {month.short}
               </th>
             ))}
-            {showTotal ? <th className="min-w-[58px] px-1 pb-1 font-bold text-panel-text">Toplam</th> : null}
+            {showTotal ? (
+              <th className="border-l border-panel-border px-2 py-2 text-[11px] font-bold uppercase tracking-wide text-panel-text">
+                Toplam
+              </th>
+            ) : null}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-panel-border">
           {students.map((student) => {
             const buckets = months.map((month) => student.monthly.get(month.key) || null)
             return (
-              <tr key={student.key}>
-                <td
-                  className="sticky left-0 z-10 max-w-[6rem] truncate bg-panel-surface pr-2 text-left font-semibold text-panel-text"
-                  title={student.name}
-                >
-                  <button type="button" onClick={() => onSelect(student.key)} className="hover:underline">
+              <tr key={student.key} className="transition-colors hover:bg-panel-surface-soft/50">
+                <td className="sticky left-0 z-10 bg-panel-surface py-2 pr-3 text-left">
+                  <button
+                    type="button"
+                    onClick={() => onSelect(student.key)}
+                    title={student.name}
+                    className="block max-w-[7rem] truncate text-sm font-semibold text-panel-text hover:text-panel-blue hover:underline"
+                  >
                     {student.shortLabel}
                   </button>
                 </td>
                 {months.map((month, index) => (
-                  <td key={month.key} className="rounded-md p-0.5 align-middle">
+                  <td key={month.key} className="px-1 py-1.5 align-middle">
                     {renderCell(buckets[index])}
                   </td>
                 ))}
                 {showTotal ? (
-                  <td className="rounded-md bg-panel-surface-soft p-0.5 align-middle">{renderCell(mergeBuckets(buckets))}</td>
+                  <td className="border-l border-panel-border px-1.5 py-1.5 align-middle">
+                    {renderCell(mergeBuckets(buckets))}
+                  </td>
                 ) : null}
               </tr>
             )
@@ -515,12 +527,8 @@ export default function ClassAnalysisPage() {
       .map(([key, meta]) => ({ key, label: key, publisher: meta.publisher, cover: meta.cover }))
 
     const months = buildAcademicMonths(today)
-    const maxMonthly = Math.max(
-      1,
-      ...students.flatMap((student) => months.map((month) => student.monthly.get(month.key)?.questions || 0)),
-    )
 
-    return { students, resourceColumns, months, maxMonthly }
+    return { students, resourceColumns, months }
   }, [data, range, today])
 
   const sortedStudents = useMemo(() => {
@@ -634,47 +642,43 @@ const COMPOSITION_LEGEND = [
   { label: 'Boş', className: 'bg-panel-text-muted/40' },
 ]
 
-function PerfCell({ bucket, maxMonthly }) {
+// Aylık çözülen soru + o ayın başarı %'si — yumuşak tonlu stat balonu.
+function PerfCell({ bucket }) {
   if (!bucket || bucket.questions === 0) return <span className="text-panel-text-muted">–</span>
   const acc = accuracyOf(bucket.correct, bucket.wrong)
   const tone = RATE_TONES[toneFor(acc)]
-  const alpha = Math.min(58, Math.round((0.1 + 0.45 * (bucket.questions / maxMonthly)) * 100))
   return (
-    <div
-      className="flex flex-col items-center gap-0.5 rounded-md px-1 py-1"
-      style={{ backgroundColor: `color-mix(in oklab, var(--color-panel-blue) ${alpha}%, transparent)` }}
-    >
-      <span className="font-bold text-panel-text">{formatNumber(bucket.questions)}</span>
-      {Number.isFinite(acc) ? (
-        <span className={`rounded px-1 text-[10px] font-bold ${tone.chip}`}>{Math.round(acc)}%</span>
-      ) : null}
-    </div>
+    <span className={`inline-flex min-w-[46px] flex-col items-center rounded-lg px-2 py-1 leading-tight ${tone.chip}`}>
+      <span className="text-sm font-bold text-panel-text">{formatNumber(bucket.questions)}</span>
+      {Number.isFinite(acc) ? <span className="text-[10px] font-bold">{Math.round(acc)}%</span> : null}
+    </span>
   )
 }
 
+// Aylık doğru · yanlış · boş sayıları + o ayın başarı %'si.
 function ResultCell({ bucket }) {
   const total = bucket ? bucket.correct + bucket.wrong + bucket.blank : 0
   if (total === 0) return <span className="text-panel-text-muted">–</span>
   const acc = accuracyOf(bucket.correct, bucket.wrong)
+  const tone = RATE_TONES[toneFor(acc)]
   return (
-    <div
-      className="flex flex-col items-center gap-1 px-0.5 py-1"
-      title={`D ${bucket.correct} · Y ${bucket.wrong} · B ${bucket.blank}`}
+    <span
+      className="inline-flex flex-col items-center leading-tight"
+      title={`Doğru ${bucket.correct} · Yanlış ${bucket.wrong} · Boş ${bucket.blank}`}
     >
-      <span className="flex h-2 w-full max-w-[46px] overflow-hidden rounded-full bg-panel-surface-soft">
-        <span className="bg-panel-green" style={{ width: `${(bucket.correct / total) * 100}%` }} />
-        <span className="bg-panel-red" style={{ width: `${(bucket.wrong / total) * 100}%` }} />
-        <span className="bg-panel-text-muted/40" style={{ width: `${(bucket.blank / total) * 100}%` }} />
+      <span className="text-xs font-bold tabular-nums">
+        <span className="text-panel-green">{formatNumber(bucket.correct)}</span>
+        <span className="text-panel-text-muted"> · </span>
+        <span className="text-panel-red">{formatNumber(bucket.wrong)}</span>
+        {bucket.blank > 0 ? <span className="text-panel-text-muted"> · {formatNumber(bucket.blank)}</span> : null}
       </span>
-      <span className="text-[10px] font-semibold text-panel-text-muted">
-        {Number.isFinite(acc) ? `${Math.round(acc)}%` : ''}
-      </span>
-    </div>
+      {Number.isFinite(acc) ? <span className={`text-[10px] font-bold ${tone.text}`}>{Math.round(acc)}%</span> : null}
+    </span>
   )
 }
 
 function ClassAnalysisBody({ analysis, sortedStudents, sortKey, onSortChange, onOpenStudent }) {
-  const { students, resourceColumns, months, maxMonthly } = analysis
+  const { students, resourceColumns, months } = analysis
 
   const byAccuracy = [...students].sort((a, b) => safeAcc(b.accuracy) - safeAcc(a.accuracy))
   const byQuestions = [...students].sort((a, b) => b.totals.questions - a.totals.questions)
@@ -702,7 +706,7 @@ function ClassAnalysisBody({ analysis, sortedStudents, sortKey, onSortChange, on
           months={months}
           onSelect={onOpenStudent}
           showTotal
-          renderCell={(bucket) => <PerfCell bucket={bucket} maxMonthly={maxMonthly} />}
+          renderCell={(bucket) => <PerfCell bucket={bucket} />}
         />
       </Card>
 
