@@ -329,19 +329,27 @@ function TopicModal({ book, topic, topics = [], tests = [], onSaved, onDeleted, 
                 </p>
               </div>
 
-              <label className="mt-auto flex flex-col gap-1.5">
-                <span className="text-[13px] font-semibold text-[#4a3b31]">İçerik Adı</span>
-                <input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder={`Örn. ${CONTENT_TOPIC_EXAMPLE}`}
-                  className="w-full rounded-lg border border-[#d8c6b5] bg-white px-3 py-2.5 text-sm text-panel-text shadow-[0_1px_0_rgba(255,255,255,0.8)] outline-none focus:border-[#c9772f] focus:ring-2 focus:ring-[#c9772f]/15"
-                  autoFocus
-                />
+              <div className="mt-auto flex flex-col gap-1.5">
+                <label htmlFor="topic-name-input" className="text-[13px] font-semibold text-[#4a3b31]">
+                  İçerik Adı
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="topic-name-input"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder={`Örn. ${CONTENT_TOPIC_EXAMPLE}`}
+                    className="h-9 min-w-0 flex-1 rounded-lg border border-[#d8c6b5] bg-white px-3 text-sm text-panel-text shadow-[0_1px_0_rgba(255,255,255,0.8)] outline-none focus:border-[#c9772f] focus:ring-2 focus:ring-[#c9772f]/15"
+                    autoFocus
+                  />
+                  <Button type="submit" disabled={loading} size="md" className="shrink-0 rounded-lg">
+                    {loading ? 'Kaydediliyor...' : isEdit ? 'Kaydet' : 'Ekle'}
+                  </Button>
+                </div>
                 <span className="text-[11px] text-[#7d6a5a]">
                   Kitabın içindekiler bölümündeki başlığı yazın.
                 </span>
-              </label>
+              </div>
 
               <div className="mt-3 flex items-center justify-between border-t border-[#eadbc8] pt-2 text-[11px] font-medium text-[#b49c84]">
                 <span>giriş</span>
@@ -360,12 +368,6 @@ function TopicModal({ book, topic, topics = [], tests = [], onSaved, onDeleted, 
               />
             </section>
           </div>
-        </div>
-
-        <div className="mt-3 flex justify-end">
-          <Button type="submit" disabled={loading} size="md" className="h-11 w-full rounded-xl sm:w-auto sm:min-w-48">
-            {loading ? 'Kaydediliyor...' : isEdit ? 'Kaydet' : 'İçeriği Oluştur'}
-          </Button>
         </div>
       </form>
     </div>
