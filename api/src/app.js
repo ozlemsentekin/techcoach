@@ -166,6 +166,13 @@ const {
   updateStudentRequestHandler,
 } = require('./messaging')
 const {
+  createPanelRequestHandler,
+  listMyPanelRequestsHandler,
+  getPanelRequestHandler,
+  listAdminPanelRequestsHandler,
+  updateAdminPanelRequestHandler,
+} = require('./panelRequests')
+const {
   getCheckInHandler,
   saveCheckInHandler,
   listWrongQuestionsHandler,
@@ -1522,4 +1529,39 @@ app.http('panel-small-goal-set', {
   methods: ['PUT'],
   route: 'panel/small-goal',
   handler: setSmallGoalHandler,
+})
+
+app.http('panel-requests-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel/requests',
+  handler: createPanelRequestHandler,
+})
+
+app.http('panel-requests-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/requests',
+  handler: listMyPanelRequestsHandler,
+})
+
+app.http('panel-requests-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/requests/{requestId}',
+  handler: getPanelRequestHandler,
+})
+
+app.http('panel-admin-requests-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-admin/requests',
+  handler: listAdminPanelRequestsHandler,
+})
+
+app.http('panel-admin-requests-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-admin/requests/{requestId}',
+  handler: updateAdminPanelRequestHandler,
 })
