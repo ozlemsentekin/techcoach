@@ -670,12 +670,18 @@ function ClassAnalysisBody({ analysis, sortedStudents, sortKey, onSortChange, on
   )
 }
 
-function HardestCell({ row }) {
+function HardestCell({ row, withPublisher }) {
   if (!row) return <span className="text-panel-text-muted">—</span>
   const tone = RATE_TONES[toneFor(row.accuracy)]
+  const publisher = withPublisher ? row.publishers?.[0] : null
   return (
-    <span className="flex items-center gap-2">
-      <span className="min-w-0 truncate text-panel-text" title={row.label}>
+    <span className="flex min-w-0 items-center gap-2">
+      {publisher ? (
+        <span className="shrink-0 rounded bg-panel-surface-soft px-1.5 py-0.5 text-[10px] font-semibold text-panel-text-muted">
+          {publisher}
+        </span>
+      ) : null}
+      <span className="min-w-0 truncate text-panel-text" title={publisher ? `${publisher} · ${row.label}` : row.label}>
         {row.label}
       </span>
       <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-xs font-bold ${tone.chip}`}>{pct(row.accuracy)}</span>
@@ -702,7 +708,7 @@ function HardestPerStudent({ students, onOpenStudent }) {
             </span>
             <span className="flex min-w-0 items-center gap-1.5 text-sm">
               <span className="shrink-0 text-xs text-panel-text-muted sm:hidden">Kitap:</span>
-              <HardestCell row={student.hardestBook} />
+              <HardestCell row={student.hardestBook} withPublisher />
             </span>
           </button>
         </li>
