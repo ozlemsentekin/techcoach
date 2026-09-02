@@ -2758,6 +2758,57 @@ async function deleteTeacherStudentTaskHandler(request) {
   }
 }
 
+// Öğretmenin, tamamlanmış bir ödev/görevin sonucunu "kontrol edildi" olarak işaretlemesi
+// (ya da işareti geri alması). Kapsam kontrolü getTeacherTaskAnswerSheetHandler ile aynı —
+// yalnızca kendi (öğrenci, ders) kapsamındaki görevler. body: { reviewed: boolean }.
+async function setTeacherTaskReviewHandler(request) {
+  try {
+    const taskId = request.params.taskId
+    const payload = await request.json().catch(() => null)
+    const { error, studentId, subjectId, studentTeacherId, actorId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    const reviewed = Boolean(payload?.reviewed)
+
+    const scopeDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+    })
+    const scopeResult = await scopeDb.query(`
+      SELECT TOP 1 t.id, t.status
+      FROM dbo.Tasks t
+      WHERE t.id = @id AND t.student_id = @studentId AND ${TEACHER_TASK_IN_SCOPE};
+    `)
+    const scoped = scopeResult.recordset[0]
+    if (!scoped) {
+      return json(404, { error: 'Görev bulunamadı.' })
+    }
+    if (reviewed && scoped.status !== 'tamamlandi') {
+      return json(400, { error: 'Yalnızca tamamlanmış görevler kontrol edilebilir.' })
+    }
+
+    const updateDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      reviewedAt: { type: sql.DateTime2, value: reviewed ? new Date() : null },
+      reviewedBy: { type: sql.UniqueIdentifier, value: reviewed ? actorId : null },
+    })
+    await updateDb.query(`
+      UPDATE dbo.Tasks
+      SET reviewed_at = @reviewedAt, reviewed_by_user_id = @reviewedBy
+      WHERE id = @id AND student_id = @studentId;
+    `)
+
+    const fetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: taskId } })
+    const fetchResult = await fetchDb.query(`${SELECT_TASK} WHERE t.id = @id;`)
+    return json(200, { task: sanitizeTask(fetchResult.recordset[0]) })
+  } catch (error) {
+    return handleError(error, 'setTeacherTaskReviewHandler', 'Kontrol durumu güncellenemedi.')
+  }
+}
+
 // Öğretmenin bir öğrenci için gelişim/analiz ham verisini yükler; o öğrenciye verdiği tüm
 // aktif branşları birleştirir. getTeacherStudentProgressOverviewHandler ve Sınıf Analizi
 // (classAnalysis.js) ortak kullanır.
@@ -3225,6 +3276,7 @@ module.exports = {
   listTeacherStudentTasksHandler,
   updateTeacherStudentTaskHandler,
   deleteTeacherStudentTaskHandler,
+  setTeacherTaskReviewHandler,
   getTeacherStudentSchoolScheduleHandler,
   getTeacherTaskAnswerSheetHandler,
   getTeacherStudentProgressOverviewHandler,

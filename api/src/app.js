@@ -76,6 +76,7 @@ const {
   listTeacherStudentTasksHandler,
   updateTeacherStudentTaskHandler,
   deleteTeacherStudentTaskHandler,
+  setTeacherTaskReviewHandler,
   getTeacherStudentSchoolScheduleHandler,
   getTeacherTaskAnswerSheetHandler,
   getTeacherStudentProgressOverviewHandler,
@@ -710,6 +711,13 @@ app.http('panel-teacher-tasks-delete', {
   methods: ['DELETE'],
   route: 'panel-teacher/students/{studentTeacherId}/tasks/{taskId}',
   handler: deleteTeacherStudentTaskHandler,
+})
+
+app.http('panel-teacher-tasks-review-set', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-teacher/students/{studentTeacherId}/tasks/{taskId}/review',
+  handler: setTeacherTaskReviewHandler,
 })
 
 app.http('panel-teacher-student-school-schedule-get', {

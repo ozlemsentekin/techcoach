@@ -332,6 +332,15 @@ export async function deleteTeacherStudentTask(studentTeacherId, taskId) {
   await authRequest(`/api/panel-teacher/students/${studentTeacherId}/tasks/${taskId}`, { method: 'DELETE' })
 }
 
+/** Öğretmenin, tamamlanmış bir görevin sonucunu "kontrol edildi" işaretlemesi / işareti geri alması. */
+export async function setTeacherTaskReview(studentTeacherId, taskId, reviewed) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/tasks/${taskId}/review`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reviewed }),
+  })
+  return data.task
+}
+
 /** Öğrencinin okul ders saatleri + tatil takvimi — öğretmen takviminde "Okulda" kartları için. */
 export async function getTeacherStudentSchoolSchedule(studentTeacherId) {
   const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/school-schedule`, {

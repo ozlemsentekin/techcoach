@@ -15,6 +15,8 @@ import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import DailyPlanTable from '../components/DailyPlanTable'
 import AddTaskDrawer from '../components/AddTaskDrawer'
 import TaskAnswerSheetModal from '../../student/components/TaskAnswerSheetModal'
+import TaskCompletionFlow from '../components/TaskCompletionFlow'
+import { completeTaskDirect, resolveCompletionFlow } from '../../shared/taskCompletion'
 
 const date = todayISODate()
 const LOW_PRIORITY_BALANCE_WARNINGS = new Set(['Mola eklenmemiş', 'Serbest zaman yok'])
@@ -186,6 +188,7 @@ export default function DashboardPage() {
   const [drawerState, setDrawerState] = useState(null)
   const [deletingTask, setDeletingTask] = useState(null)
   const [answerSheetTask, setAnswerSheetTask] = useState(null)
+  const [completingTask, setCompletingTask] = useState(null)
   const [schoolSchedule, setSchoolSchedule] = useState([])
   const [schoolHolidays, setSchoolHolidays] = useState([])
   const [teacherLessonSchedule, setTeacherLessonSchedule] = useState([])
@@ -340,6 +343,30 @@ export default function DashboardPage() {
     }
   }
 
+  const refreshTasks = useCallback(() => {
+    if (!selectedStudentId) return
+    getTasksForDate(date, { studentId: selectedStudentId })
+      .then((tasksData) => setTasks(tasksData))
+      .catch(() => {})
+    getBacklogTasks(date, 30, { studentId: selectedStudentId })
+      .then((backlogTasksData) => setBacklogTasks(backlogTasksData))
+      .catch(() => {})
+  }, [selectedStudentId])
+
+  const handleCompleteTask = async (task) => {
+    if (resolveCompletionFlow(task) === 'direct') {
+      try {
+        await completeTaskDirect(task, selectedStudentId)
+        refreshTasks()
+        showBanner('Görev tamamlandı.')
+      } catch (err) {
+        setLoadError(err.message || 'Görev tamamlanamadı.')
+      }
+      return
+    }
+    setCompletingTask(task)
+  }
+
   const handleApproveRequest = async (request) => {
     setRequests(await updateRequestStatus(request.id, 'onaylandi', selectedStudentId))
     showBanner('Talep onaylandı.')
@@ -405,6 +432,7 @@ export default function DashboardPage() {
           onEdit={(task) => setDrawerState({ initialTask: task })}
           onDelete={(task) => setDeletingTask(task)}
           onOpenAnswerSheet={setAnswerSheetTask}
+          onCompleteTask={handleCompleteTask}
         />
 
         <TodaySidePanel
@@ -436,6 +464,18 @@ export default function DashboardPage() {
           confirmLabel="Sil"
           onConfirm={handleDeleteConfirmed}
           onCancel={() => setDeletingTask(null)}
+        />
+      ) : null}
+
+      {completingTask ? (
+        <TaskCompletionFlow
+          task={completingTask}
+          studentId={selectedStudentId}
+          onCompleted={() => refreshTasks()}
+          onClose={() => {
+            setCompletingTask(null)
+            refreshTasks()
+          }}
         />
       ) : null}
 

@@ -5,6 +5,7 @@ import LoadingState from '../LoadingState'
 import ConfirmationDialog from '../ConfirmationDialog'
 import { ResourceBookAvatar, ImagePreviewLightbox } from '../ResourceBookCard'
 import { TopicModal, TestModal, AnswerKeyFlow } from '../library/resourceBookModals'
+import ResourceSolveList from './ResourceSolveList'
 import {
   deleteBookshelfBook,
   getBookshelfBook,
@@ -323,10 +324,18 @@ function AssigneesTab({ book, onChanged }) {
   )
 }
 
-export default function BookshelfDetailModal({ resourceBookId, showAssignees = true, onClose, onChanged, onEdit }) {
+export default function BookshelfDetailModal({
+  resourceBookId,
+  showAssignees = true,
+  solveStudentId = null,
+  onClose,
+  onChanged,
+  onEdit,
+}) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
-  const [tab, setTab] = useState('content')
+  const canSolve = Boolean(solveStudentId)
+  const [tab, setTab] = useState(canSolve ? 'solve' : 'content')
   const [previewImage, setPreviewImage] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -346,6 +355,16 @@ export default function BookshelfDetailModal({ resourceBookId, showAssignees = t
   const book = data?.resourceBook || null
   // Katalog kaynaklarında atama yönetilemez → "Atananlar" sekmesi gizlenir, yalnızca içerik gösterilir.
   const canShowAssignees = showAssignees && Boolean(book?.canManageAssignees)
+  // "İçerik" sekmesi: solve modunda yalnızca düzenleyebilenlere; solve modu yoksa her zaman
+  // (shared/teacher Kitaplık bugünkü gibi salt-görüntüleme içeriği de gösterir).
+  const canShowContent = !canSolve || Boolean(book?.canEditContent)
+  const availableTabs = [
+    canSolve ? 'solve' : null,
+    canShowContent ? 'content' : null,
+    canShowAssignees ? 'assignees' : null,
+  ].filter(Boolean)
+  const activeTab = availableTabs.includes(tab) ? tab : availableTabs[0]
+  const TAB_LABELS = { solve: 'Test Sonuçları', content: 'İçerik', assignees: 'Atananlar' }
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -407,26 +426,20 @@ export default function BookshelfDetailModal({ resourceBookId, showAssignees = t
           </div>
         </div>
 
-        {canShowAssignees ? (
+        {availableTabs.length > 1 ? (
           <div className="mb-4 flex gap-1 border-b border-panel-border">
-            <button
-              type="button"
-              onClick={() => setTab('content')}
-              className={`border-b-2 px-3 pb-2.5 text-sm font-semibold transition-colors ${
-                tab === 'content' ? 'border-panel-blue text-panel-blue' : 'border-transparent text-panel-text-muted hover:text-panel-text'
-              }`}
-            >
-              İçerik
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab('assignees')}
-              className={`border-b-2 px-3 pb-2.5 text-sm font-semibold transition-colors ${
-                tab === 'assignees' ? 'border-panel-blue text-panel-blue' : 'border-transparent text-panel-text-muted hover:text-panel-text'
-              }`}
-            >
-              Atananlar
-            </button>
+            {availableTabs.map((tabKey) => (
+              <button
+                key={tabKey}
+                type="button"
+                onClick={() => setTab(tabKey)}
+                className={`border-b-2 px-3 pb-2.5 text-sm font-semibold transition-colors ${
+                  activeTab === tabKey ? 'border-panel-blue text-panel-blue' : 'border-transparent text-panel-text-muted hover:text-panel-text'
+                }`}
+              >
+                {TAB_LABELS[tabKey]}
+              </button>
+            ))}
           </div>
         ) : null}
 
@@ -435,7 +448,9 @@ export default function BookshelfDetailModal({ resourceBookId, showAssignees = t
             <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
           ) : data === null ? (
             <LoadingState label="Yükleniyor..." />
-          ) : tab === 'assignees' && canShowAssignees ? (
+          ) : activeTab === 'solve' ? (
+            <ResourceSolveList studentId={solveStudentId} book={book} />
+          ) : activeTab === 'assignees' && canShowAssignees ? (
             <AssigneesTab book={book} onChanged={() => { load(); onChanged?.() }} />
           ) : (
             <ContentTab
