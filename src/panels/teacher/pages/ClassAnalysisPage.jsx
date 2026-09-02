@@ -211,12 +211,11 @@ function LastActivity({ iso }) {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return <span className="text-panel-text-muted">—</span>
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-lg bg-panel-surface-soft px-2 py-1">
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-panel-surface-soft px-2 py-1 text-xs font-semibold text-panel-text">
       <Clock size={12} className="shrink-0 text-panel-text-muted" aria-hidden="true" />
-      <span className="leading-tight">
-        <span className="block text-xs font-semibold text-panel-text">{DATE_FMT.format(date)}</span>
-        <span className="block text-[11px] text-panel-text-muted">{TIME_FMT.format(date)}</span>
-      </span>
+      {DATE_FMT.format(date)}
+      <span className="text-panel-text-muted">·</span>
+      <span className="tabular-nums text-panel-text-muted">{TIME_FMT.format(date)}</span>
     </span>
   )
 }
@@ -274,9 +273,9 @@ function Legend({ items }) {
   )
 }
 
-// Öğrenci başına yığılı bar (doğru/yanlış/boş veya görev disiplini). rows:
-// [{ key, name, fullName, segments: [{ value, className }], total, valueLabel }]
-function StudentStackedRows({ rows, legend, onSelect }) {
+// Öğrenci başına yığılı bar (görev disiplini). rows:
+// [{ key, name, fullName, segments: [{ value, className, label }], total, valueLabel }]
+function StudentStackedRows({ rows, legend, onSelect, unit = '' }) {
   return (
     <div className="flex flex-col gap-3">
       <ul className="flex flex-col">
@@ -299,8 +298,9 @@ function StudentStackedRows({ rows, legend, onSelect }) {
                       seg.value > 0 ? (
                         <span
                           key={index}
-                          className={seg.className}
+                          className={`${seg.className} cursor-help`}
                           style={{ width: `${(seg.value / row.total) * 100}%` }}
+                          title={`${seg.label}: ${seg.value}${unit}`}
                         />
                       ) : null,
                     )
@@ -768,7 +768,11 @@ function ClassAnalysisBody({ analysis, sortedStudents, sortKey, onSortChange, on
       name: student.shortLabel,
       fullName: student.name,
       total: student.taskCounts.total,
-      segments: TASK_LEGEND.map((seg) => ({ value: student.taskCounts[seg.key], className: seg.className })),
+      segments: TASK_LEGEND.map((seg) => ({
+        value: student.taskCounts[seg.key],
+        className: seg.className,
+        label: seg.label,
+      })),
       valueLabel: `${student.taskCounts.total} görev`,
     }))
 
@@ -822,7 +826,7 @@ function ClassAnalysisBody({ analysis, sortedStudents, sortKey, onSortChange, on
         subtitle="Her öğrencinin görev tamamlama disiplini"
         icon={CalendarCheck}
       >
-        <StudentStackedRows rows={taskRows} legend={TASK_LEGEND} onSelect={onOpenStudent} />
+        <StudentStackedRows rows={taskRows} legend={TASK_LEGEND} onSelect={onOpenStudent} unit=" görev" />
       </Card>
 
       <Card
