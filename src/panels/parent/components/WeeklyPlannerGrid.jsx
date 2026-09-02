@@ -315,23 +315,25 @@ function getCompletionTimestampLabel(task) {
   return formatCompletionTimestamp(task.completedAt)
 }
 
-function getCompletionTimerInfo(task) {
+// Tamamlanan görevde sayaç tutulduysa süreyi ("12 dk") döndürür; sayaç yoksa null
+// (çağıran taraf null'ı "süre yok" olarak gösterir).
+function getCompletionDurationLabel(task) {
   if (task.status !== 'tamamlandi') return null
-  if (!task.timerStartedAt) return { tone: 'muted', label: 'Sayaç tutulmadı' }
+  if (!task.timerStartedAt) return null
 
   const savedSeconds = Number(task.timerElapsedSeconds)
   if (Number.isFinite(savedSeconds) && savedSeconds >= 0) {
-    return { tone: 'tracked', label: `Sayaç süresi: ${formatCompletionDuration(savedSeconds)}` }
+    return formatCompletionDuration(savedSeconds)
   }
 
   const startedMs = new Date(task.timerStartedAt).getTime()
   const endedMs = new Date(task.completedAt || task.timerStoppedAt).getTime()
   if (Number.isFinite(startedMs) && Number.isFinite(endedMs)) {
     const elapsedSeconds = Math.max(0, Math.round((endedMs - startedMs) / 1000))
-    return { tone: 'tracked', label: `Sayaç süresi: ${formatCompletionDuration(elapsedSeconds)}` }
+    return formatCompletionDuration(elapsedSeconds)
   }
 
-  return { tone: 'muted', label: 'Sayaç süresi hesaplanamadı' }
+  return null
 }
 
 // Ödev (soru bankası/kitap) görevleri için kart başındaki ders ikonu yerine tamamlanma
@@ -350,27 +352,20 @@ function isTaskGraded(task) {
   return HOMEWORK_TASK_TYPES.has(task.taskType) && task.status === 'tamamlandi' && task.correctCount != null
 }
 
-function CompletionTimerNote({ info, completedAtLabel }) {
-  if (!info && !completedAtLabel) return null
+// Kartın en altındaki tamamlanma satırı: "Tamamlandı: 2 Eylül · 17:03 (12 dk)".
+// Sayaç tutulmadıysa parantez içinde "süre yok" yazar. Eklenme etiketi (CreatorNote)
+// bu satırın üstünde durur.
+function CompletionTimerNote({ durationLabel, completedAtLabel }) {
+  if (!completedAtLabel) return null
 
   return (
     <span className="mt-0.5 flex flex-col gap-0.5 px-1">
-      {info ? (
-        <span
-          className={`flex items-center gap-1 text-[10px] font-semibold leading-snug ${
-            info.tone === 'tracked' ? 'text-panel-blue' : 'text-panel-text-muted'
-          }`}
-        >
-          <Timer size={11} className="shrink-0" aria-hidden="true" />
-          <span>{info.label}</span>
+      <span className="flex items-center gap-1 text-[10px] font-semibold leading-snug text-panel-text-muted">
+        <CalendarDays size={11} className="shrink-0" aria-hidden="true" />
+        <span>
+          Tamamlandı: {completedAtLabel} ({durationLabel || 'süre yok'})
         </span>
-      ) : null}
-      {completedAtLabel ? (
-        <span className="flex items-center gap-1 text-[10px] font-semibold leading-snug text-panel-text-muted">
-          <CalendarDays size={11} className="shrink-0" aria-hidden="true" />
-          <span>Tamamlandı: {completedAtLabel}</span>
-        </span>
-      ) : null}
+      </span>
     </span>
   )
 }
@@ -582,11 +577,12 @@ function CompactMetricChips({
   questionProgress,
   pageProgress,
   graded,
-  completionTimerInfo,
+  completionDurationLabel,
+  isCompleted,
   muted = false,
 }) {
   const grade = graded ? getGradeSummary(task) : null
-  const timerLabel = completionTimerInfo?.label?.replace('Sayaç süresi: ', '')
+  const timerLabel = isCompleted ? `Süre: ${completionDurationLabel || 'yok'}` : null
   const chipBaseClassName = muted
     ? 'border-slate-200 bg-white/70 text-slate-500'
     : 'border-panel-border bg-panel-surface-soft/80 text-panel-text-muted'
@@ -636,7 +632,7 @@ function CompactMetricChips({
   )
 }
 
-function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onManageLessonSlot, canEditTask, muted = false }) {
+function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onCompleteTask, onManageLessonSlot, canEditTask, muted = false }) {
   const [showBreakMenu, setShowBreakMenu] = useState(false)
   const [expanded, setExpanded] = useState(false)
 
@@ -657,8 +653,15 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onMana
   const questionProgress = getQuestionProgress(task)
   const pageProgress = getPageProgress(task)
   const graded = isTaskGraded(task)
-  const completionTimerInfo = isHomework ? getCompletionTimerInfo(task) : null
+  const completionDurationLabel = isHomework ? getCompletionDurationLabel(task) : null
   const completionTimestampLabel = isHomework ? getCompletionTimestampLabel(task) : null
+  // Veli, çocuğun bekleyen ödevini kart üzerinden tamamlayabilir (soru bankası → optik,
+  // okuma → sayfa girişi). Değerlendirilmiş / yeniden planlanmış görevde buton çıkmaz.
+  const canComplete =
+    typeof onCompleteTask === 'function' &&
+    !muted &&
+    isHomework &&
+    !['tamamlandi', 'yeniden-planlandi'].includes(task.status)
   // Kartı düzenlemek için tıklanabilir yapmadan önce yetki kontrolü: veli tüm görevleri,
   // öğretmen/öğrenci yalnızca kendi eklediklerini düzenleyebilir (bkz. panel bazlı canEditTask).
   const canOpenTask =
@@ -676,7 +679,6 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onMana
     Boolean(questionProgress) ||
     Boolean(pageProgress) ||
     graded ||
-    Boolean(completionTimerInfo) ||
     Boolean(completionTimestampLabel) ||
     Boolean(task.createdBy)
 
@@ -851,10 +853,27 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onMana
           questionProgress={questionProgress}
           pageProgress={pageProgress}
           graded={graded}
-          completionTimerInfo={completionTimerInfo}
+          completionDurationLabel={completionDurationLabel}
+          isCompleted={Boolean(completionTimestampLabel)}
           muted={muted}
         />
       </div>
+
+      {canComplete ? (
+        <div className="mt-1.5 pl-10 pr-1">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onCompleteTask(task)
+            }}
+            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-panel-sage bg-panel-sage/10 px-3 text-xs font-bold text-panel-sage transition-colors duration-150 hover:bg-panel-sage hover:text-white"
+          >
+            <CheckCircle2 size={15} aria-hidden="true" />
+            Tamamla
+          </button>
+        </div>
+      ) : null}
 
       {expanded && hasDetails ? (
         <div className="mt-2 grid gap-2 rounded-xl border border-panel-border/70 bg-panel-surface-soft/70 p-2.5">
@@ -913,8 +932,11 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onMana
           ) : null}
 
           {graded ? <GradeSummaryBar task={task} onViewAnswerSheet={onViewAnswerSheet} /> : null}
-          <CompletionTimerNote info={completionTimerInfo} completedAtLabel={completionTimestampLabel} />
           <CreatorNote task={task} />
+          <CompletionTimerNote
+            durationLabel={completionDurationLabel}
+            completedAtLabel={completionTimestampLabel}
+          />
         </div>
       ) : null}
     </div>
@@ -979,6 +1001,7 @@ export default function WeeklyPlannerGrid({
   onPublishDay,
   onQuickAddBreak,
   onViewAnswerSheet,
+  onCompleteTask,
   onManageLessonSlot,
   canEditTask,
 }) {
@@ -1186,6 +1209,7 @@ export default function WeeklyPlannerGrid({
                 task={task}
                 onEditTask={onEditTask}
                 onViewAnswerSheet={onViewAnswerSheet}
+                onCompleteTask={isPastDay ? undefined : onCompleteTask}
                 onManageLessonSlot={onManageLessonSlot}
                 canEditTask={canEditTask}
                 muted={isPastDay}

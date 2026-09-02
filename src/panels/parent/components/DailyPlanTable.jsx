@@ -661,12 +661,18 @@ function TaskAgendaItem({
   onEdit,
   onDelete,
   onOpenAnswerSheet,
+  onCompleteTask,
 }) {
   const visual = getTaskKindStyle(task)
   const taskKind = getTaskKind(task)
   const isLessonSlot = taskKind === 'lesson'
   const showStatus = taskKind !== 'break' && taskKind !== 'activity' && !isLessonSlot
   const hasActions = Boolean(onEdit || onDelete)
+  // Veli, çocuğun bekleyen ödev/çalışma görevini akıştan tamamlayabilir.
+  const canComplete =
+    typeof onCompleteTask === 'function' &&
+    (taskKind === 'homework' || taskKind === 'study') &&
+    getDailyFlowFilterKey(task) === 'pending'
 
   return (
     <article
@@ -688,6 +694,16 @@ function TaskAgendaItem({
         <div className="mt-3">
           <TaskDetail task={task} />
         </div>
+        {canComplete ? (
+          <button
+            type="button"
+            onClick={() => onCompleteTask(task)}
+            className="mt-3 flex h-9 items-center justify-center gap-1.5 rounded-xl border border-panel-sage bg-panel-sage/10 px-4 text-xs font-bold text-panel-sage transition-colors duration-150 hover:bg-panel-sage hover:text-white"
+          >
+            <CheckCircle2 size={15} aria-hidden="true" />
+            Tamamla
+          </button>
+        ) : null}
       </div>
 
       <div className="col-start-2 row-start-1 justify-self-end sm:col-start-4 sm:row-start-1">
@@ -711,7 +727,7 @@ function TaskAgendaItem({
   )
 }
 
-export default function DailyPlanTable({ tasks, backlogTasks = [], onEdit, onDelete, onAddTask, onOpenAnswerSheet }) {
+export default function DailyPlanTable({ tasks, backlogTasks = [], onEdit, onDelete, onAddTask, onOpenAnswerSheet, onCompleteTask }) {
   const [openMenuId, setOpenMenuId] = useState(null)
   const [agendaFilter, setAgendaFilter] = useState('all')
 
@@ -810,6 +826,7 @@ export default function DailyPlanTable({ tasks, backlogTasks = [], onEdit, onDel
               onEdit={onEdit ? () => onEdit(task) : undefined}
               onDelete={onDelete ? () => onDelete(task) : undefined}
               onOpenAnswerSheet={onOpenAnswerSheet}
+              onCompleteTask={task.isBacklog ? undefined : onCompleteTask}
             />
           ))}
         </div>

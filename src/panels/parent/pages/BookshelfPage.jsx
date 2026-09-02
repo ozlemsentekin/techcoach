@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, BookMarked, BookOpen, Plus, Settings2, Users } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeft, BookMarked, BookOpen, ClipboardList, Plus, Users } from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
@@ -127,8 +127,42 @@ function BookCover({ book, className = 'h-20 w-16', onClick }) {
   )
 }
 
+// Kapak genişliği ve aradaki boşluk (px): temel / sm (>=640px)
+const COVER = { base: { w: 80, gap: 12 }, sm: { w: 96, gap: 16 } }
+
+// Şerit genişliğine kaç kitap kapağı sığdığını ölçer — sabit sayı yerine pencereye göre.
+function useVisibleCoverCount(total) {
+  const ref = useRef(null)
+  const [count, setCount] = useState(total)
+
+  useLayoutEffect(() => {
+    const node = ref.current
+    if (!node) return undefined
+
+    const recompute = () => {
+      const width = node.clientWidth
+      if (!width) return
+      const { w, gap } = window.matchMedia('(min-width: 640px)').matches ? COVER.sm : COVER.base
+      const fits = Math.max(1, Math.floor((width + gap) / (w + gap)))
+      setCount(Math.min(total, fits))
+    }
+
+    recompute()
+    const observer = new ResizeObserver(recompute)
+    observer.observe(node)
+    window.addEventListener('resize', recompute)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', recompute)
+    }
+  }, [total])
+
+  return [ref, count]
+}
+
 function SubjectShelfCard({ group, onOpen }) {
-  const previewBooks = group.books.slice(0, 6)
+  const [shelfRef, visibleCount] = useVisibleCoverCount(group.books.length)
+  const previewBooks = group.books.slice(0, visibleCount)
   const completionRate = averageRate(group.books, 'completionRate')
   const successRate = averageRate(group.books, 'successRate')
 
@@ -153,7 +187,10 @@ function SubjectShelfCard({ group, onOpen }) {
         </span>
       </span>
 
-      <span className="mt-5 flex flex-wrap items-end gap-3 overflow-hidden border-b-4 border-panel-border pb-3 sm:gap-4">
+      <span
+        ref={shelfRef}
+        className="mt-5 flex items-end gap-3 overflow-hidden border-b-4 border-panel-border pb-3 sm:gap-4"
+      >
         {previewBooks.map((book) => (
           <BookCover key={book.id} book={book} className="h-28 w-20 sm:h-32 sm:w-24" />
         ))}
@@ -162,7 +199,7 @@ function SubjectShelfCard({ group, onOpen }) {
   )
 }
 
-function BookCard({ book, onPreviewImage, onManage }) {
+function BookCard({ book, onPreviewImage, onOpen }) {
   const manageable = book.scope === 'private'
 
   return (
@@ -174,7 +211,13 @@ function BookCard({ book, onPreviewImage, onManage }) {
       />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div>
-          <h3 className="line-clamp-2 text-base font-bold leading-snug text-panel-text">{book.name}</h3>
+          <button
+            type="button"
+            onClick={() => onOpen(book)}
+            className="line-clamp-2 text-left text-base font-bold leading-snug text-panel-text transition-colors hover:text-panel-blue"
+          >
+            {book.name}
+          </button>
           <p className="mt-1 truncate text-sm text-panel-text-muted">{book.publisherName || 'Yayın evi yok'}</p>
         </div>
         <div className="mt-auto flex flex-wrap items-center gap-2">
@@ -188,16 +231,14 @@ function BookCard({ book, onPreviewImage, onManage }) {
           ) : null}
         </div>
         <BookDonuts completionRate={book.completionRate} successRate={book.successRate} className="mt-3" />
-        {manageable ? (
-          <button
-            type="button"
-            onClick={() => onManage(book)}
-            className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-lg border border-panel-border px-2.5 py-1 text-xs font-semibold text-panel-text-muted transition-colors hover:border-panel-blue hover:text-panel-blue"
-          >
-            <Settings2 size={13} aria-hidden="true" />
-            İçerik ve atamaları yönet
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => onOpen(book)}
+          className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-lg bg-panel-blue px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-panel-blue/90"
+        >
+          <ClipboardList size={14} aria-hidden="true" />
+          Test sonuçlarını gir
+        </button>
       </div>
     </article>
   )
@@ -349,7 +390,7 @@ export default function ParentBookshelfPage() {
               key={book.id}
               book={book}
               onPreviewImage={setPreviewImage}
-              onManage={(target) => setDetailBookId(target.id)}
+              onOpen={(target) => setDetailBookId(target.id)}
             />
           ))}
         </div>
@@ -380,6 +421,7 @@ export default function ParentBookshelfPage() {
         <BookshelfDetailModal
           resourceBookId={detailBookId}
           showAssignees
+          solveStudentId={selectedStudentId}
           onChanged={loadBooks}
           onEdit={(book) => {
             setDetailBookId(null)

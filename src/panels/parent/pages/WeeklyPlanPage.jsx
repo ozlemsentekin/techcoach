@@ -21,6 +21,8 @@ import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
 import WeeklyPlannerGrid from '../components/WeeklyPlannerGrid'
 import TaskAnswerSheetModal from '../../student/components/TaskAnswerSheetModal'
+import TaskCompletionFlow from '../components/TaskCompletionFlow'
+import { completeTaskDirect, resolveCompletionFlow } from '../../shared/taskCompletion'
 import AddTaskDrawer from '../components/AddTaskDrawer'
 import ParentLessonSlotModal from '../components/ParentLessonSlotModal'
 import UnscheduledTasksPanel from '../../shared/UnscheduledTasksPanel'
@@ -52,6 +54,7 @@ export default function WeeklyPlanPage() {
   const [drawerState, setDrawerState] = useState(null)
   const [managingSlot, setManagingSlot] = useState(null)
   const [answerSheetTask, setAnswerSheetTask] = useState(null)
+  const [completingTask, setCompletingTask] = useState(null)
   const [banner, setBanner] = useState('')
 
   // authUser.id'ye bağlı: admin bir veliyi impersonate ettiğinde ParentApp yeniden mount
@@ -184,6 +187,16 @@ export default function WeeklyPlanPage() {
     await refresh()
     setDrawerState(null)
     showBanner(targetStatus === 'yayinlandi' ? 'Görev plana kaydedildi.' : 'Görev taslağa kaydedildi.')
+  }
+
+  const handleCompleteTask = async (task) => {
+    if (resolveCompletionFlow(task) === 'direct') {
+      await completeTaskDirect(task, selectedStudentId)
+      await refresh()
+      showBanner('Görev tamamlandı.')
+      return
+    }
+    setCompletingTask(task)
   }
 
   const handleDeleteTask = async (task) => {
@@ -329,6 +342,7 @@ export default function WeeklyPlanPage() {
             onAddTask={(date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}
             onEditTask={(task) => setDrawerState({ initialTask: task })}
             onViewAnswerSheet={setAnswerSheetTask}
+            onCompleteTask={handleCompleteTask}
             onPublishDay={handlePublishDay}
             onQuickAddBreak={handleQuickAddBreak}
             onManageLessonSlot={setManagingSlot}
@@ -368,6 +382,18 @@ export default function WeeklyPlanPage() {
               studentId={selectedStudentId}
               onSaved={handleLessonSlotSaved}
               onClose={() => setManagingSlot(null)}
+            />
+          ) : null}
+
+          {completingTask ? (
+            <TaskCompletionFlow
+              task={completingTask}
+              studentId={selectedStudentId}
+              onCompleted={() => refresh()}
+              onClose={() => {
+                setCompletingTask(null)
+                refresh()
+              }}
             />
           ) : null}
 

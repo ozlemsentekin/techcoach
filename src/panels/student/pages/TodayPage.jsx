@@ -21,38 +21,12 @@ import AddHomeworkModal from '../components/AddHomeworkModal'
 import StressSupportModal from '../components/StressSupportModal'
 import BreathingExercise from '../components/BreathingExercise'
 import LoadingState from '../../shared/LoadingState'
+import { TIMER_STOP_STATUSES, buildTimerStopUpdates, buildCompletionUpdates } from '../../shared/taskCompletion'
 
 const date = todayISODate()
 const STUDENT_SUPPORT_EVENT = 'student-support-requested'
 const STUDENT_ENERGY_UPDATED_EVENT = 'student-energy-updated'
 const PENDING_SUPPORT_KEY = 'student_support_pending'
-
-const TIMER_STOP_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
-
-function buildTimerStopUpdates(task, stoppedAt) {
-  if (!task?.timerStartedAt || task.timerStoppedAt) return {}
-
-  const startedMs = new Date(task.timerStartedAt).getTime()
-  const stoppedMs = new Date(stoppedAt).getTime()
-  const updates = { timerStoppedAt: stoppedAt }
-
-  if (Number.isFinite(startedMs) && Number.isFinite(stoppedMs)) {
-    updates.timerElapsedSeconds = Math.max(0, Math.round((stoppedMs - startedMs) / 1000))
-  }
-
-  return updates
-}
-
-function buildCompletionUpdates(task, updates) {
-  const completedAt = updates.completedAt || new Date().toISOString()
-  const shouldStopTimer = TIMER_STOP_STATUSES.has(updates.status)
-
-  return {
-    ...updates,
-    completedAt,
-    ...(shouldStopTimer ? buildTimerStopUpdates(task, completedAt) : {}),
-  }
-}
 
 // Veli panelindeki "Biriken Görev" ile aynı geriye dönük pencere (bkz. getBacklogTasks).
 const BACKLOG_LOOKBACK_DAYS = 30
