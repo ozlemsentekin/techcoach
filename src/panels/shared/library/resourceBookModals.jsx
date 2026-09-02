@@ -1,10 +1,42 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, Copy, FileText, Plus, Trash2, X } from 'lucide-react'
+import { BookOpen, ChevronRight, Copy, FileText, Plus, Trash2, X } from 'lucide-react'
 import Button from '../../ui/Button'
 import LoadingState from '../LoadingState'
 import { authRequest } from '../../../services/authClient'
 
 const CONTENT_TOPIC_EXAMPLE = '1. Ünite — Çarpanlar ve Katlar'
+
+// Kitap-açılımı modallerinin tek satırlık başlığı: "Kaynak › İçerik › işlem" gibi bir
+// breadcrumb + kapat düğmesi. Ara segmentler taşarsa kısalır, son segment (işlem) sabit.
+function ModalBreadcrumb({ segments, onClose }) {
+  return (
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <h2 className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-[#9b7a5a]">
+        {segments.filter(Boolean).map((segment, index, list) => {
+          const last = index === list.length - 1
+          return (
+            <span key={index} className="flex min-w-0 items-center gap-1.5">
+              {index > 0 ? (
+                <ChevronRight size={13} className="shrink-0 text-[#c9b4a0]" aria-hidden="true" />
+              ) : null}
+              <span className={last ? 'shrink-0 font-semibold text-panel-text' : 'min-w-0 truncate'}>
+                {segment}
+              </span>
+            </span>
+          )
+        })}
+      </h2>
+      <button
+        type="button"
+        aria-label="Kapat"
+        onClick={onClose}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-panel-text-muted hover:bg-white hover:text-panel-text"
+      >
+        <X size={20} />
+      </button>
+    </div>
+  )
+}
 
 function TopicBookPageRow({ label, page, active = false, subline, action, footer }) {
   return (
@@ -255,20 +287,10 @@ function TopicModal({
         onSubmit={handleSubmit}
         className="h-full w-full overflow-y-auto border border-panel-border bg-[#fbf4ec] p-3 shadow-panel-1 sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-2xl sm:p-5"
       >
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-[#9b7a5a]">{book?.name || 'Kaynak Kitap'}</p>
-            <h2 className="text-lg font-semibold text-panel-text">{isEdit ? 'İçerik Düzenle' : 'İçerik Ekle'}</h2>
-          </div>
-          <button
-            type="button"
-            aria-label="Kapat"
-            onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-panel-text-muted hover:bg-white hover:text-panel-text"
-          >
-            <X size={20} />
-          </button>
-        </div>
+        <ModalBreadcrumb
+          segments={[book?.name || 'Kaynak', isEdit ? 'İçerik düzenleniyor' : 'İçerik ekleniyor']}
+          onClose={onClose}
+        />
 
         {error ? (
           <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
@@ -687,20 +709,10 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onTestDel
         onSubmit={handleSubmit}
         className="h-full w-full overflow-y-auto border border-panel-border bg-[#fbf4ec] p-3 shadow-panel-1 sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-2xl sm:p-5"
       >
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-[#9b7a5a]">{book?.name || 'Kaynak Kitap'}</p>
-            <h2 className="text-lg font-semibold text-panel-text">Test Ekle</h2>
-          </div>
-          <button
-            type="button"
-            aria-label="Kapat"
-            onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-panel-text-muted hover:bg-white hover:text-panel-text"
-          >
-            <X size={20} />
-          </button>
-        </div>
+        <ModalBreadcrumb
+          segments={[book?.name || 'Kaynak', topic?.name || 'İçerik', 'test ekleniyor']}
+          onClose={onClose}
+        />
 
         {error ? (
           <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
