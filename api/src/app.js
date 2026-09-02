@@ -106,6 +106,7 @@ const {
   listResourceBookTopicsHandler,
   createResourceBookTopicHandler,
   updateResourceBookTopicHandler,
+  deleteResourceBookTopicHandler,
   listResourceBookTopicsForPanelHandler,
   markResourceBookTopicTestCompletionHandler,
   unmarkResourceBookTopicTestCompletionHandler,
@@ -1051,6 +1052,13 @@ app.http('panel-admin-resource-book-topics-update', {
   methods: ['PATCH'],
   route: 'panel-admin/resource-book-topics/{topicId}',
   handler: updateResourceBookTopicHandler,
+})
+
+app.http('panel-admin-resource-book-topics-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-admin/resource-book-topics/{topicId}',
+  handler: deleteResourceBookTopicHandler,
 })
 
 app.http('panel-resource-book-topics', {

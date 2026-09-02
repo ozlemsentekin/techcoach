@@ -939,6 +939,52 @@ async function updateResourceBookTopicHandler(request) {
   }
 }
 
+// İçerik (topic) silme: yanlış eklenen bir içeriği içindekiler listesinden kaldırır.
+// Altındaki testler, soruları, cevap anahtarları ve öğrenci çözüm/yanlış kayıtları da
+// birlikte silinir (test silme akışının kapsamının üst kümesi).
+async function deleteResourceBookTopicHandler(request) {
+  try {
+    const topicId = request.params.topicId
+    const { error } = await requireResourceBookEditor(request, await resolveBookIdFromTopic(topicId))
+    if (error) {
+      return error
+    }
+
+    const requestDb = await withRequest({
+      topicId: { type: sql.UniqueIdentifier, value: topicId },
+    })
+
+    const result = await requestDb.query(`
+      DECLARE @testIds TABLE (id UNIQUEIDENTIFIER);
+      INSERT INTO @testIds SELECT id FROM dbo.ResourceBookTopicTests WHERE topic_id = @topicId;
+
+      DELETE FROM dbo.QuestionOptions WHERE question_id IN (
+        SELECT id FROM dbo.Questions WHERE test_id IN (SELECT id FROM @testIds)
+      );
+      DELETE FROM dbo.Questions WHERE test_id IN (SELECT id FROM @testIds);
+      DELETE FROM dbo.TestAnswerKeys WHERE test_id IN (SELECT id FROM @testIds);
+      DELETE FROM dbo.WrongQuestions WHERE test_id IN (SELECT id FROM @testIds);
+      DELETE FROM dbo.StudentManualTestCompletions WHERE test_id IN (SELECT id FROM @testIds);
+      DELETE FROM dbo.ResourceBookTopicTests WHERE topic_id = @topicId;
+      DELETE FROM dbo.ResourceBookTopics WHERE id = @topicId;
+    `)
+
+    const deletedCount = result.rowsAffected[result.rowsAffected.length - 1]
+    if (!deletedCount) {
+      return json(404, { error: 'İçerik bulunamadı.' })
+    }
+
+    return json(200, { success: true })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    console.error('deleteResourceBookTopicHandler failed', error)
+    return json(500, { error: 'İçerik silinemedi.' })
+  }
+}
+
 function extractWeekNumber(name) {
   const match = /^(\d+)\s*\./.exec(name || '')
   return match ? parseInt(match[1], 10) : null
@@ -2353,6 +2399,7 @@ module.exports = {
   listResourceBookTopicsHandler,
   createResourceBookTopicHandler,
   updateResourceBookTopicHandler,
+  deleteResourceBookTopicHandler,
   listResourceBookTopicsForPanelHandler,
   markResourceBookTopicTestCompletionHandler,
   unmarkResourceBookTopicTestCompletionHandler,

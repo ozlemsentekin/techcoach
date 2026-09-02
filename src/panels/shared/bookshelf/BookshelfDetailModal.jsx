@@ -174,6 +174,7 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
           book={book}
           topics={topics}
           tests={tests}
+          onDeleted={() => onChanged()}
           onSaved={(topic) => {
             setTopicModalOpen(false)
             // Yeni içeriği hemen aç ki "Test Ekle" butonu görünür olsun.
