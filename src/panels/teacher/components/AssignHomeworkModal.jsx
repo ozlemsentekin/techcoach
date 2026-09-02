@@ -76,9 +76,18 @@ function ResourceBookCover({ book }) {
   )
 }
 
-export default function AssignHomeworkModal({ studentTeacherId, subjectName, defaultTaskDate, onSave, onClose }) {
-  const [step, setStep] = useState('type')
-  const [homeworkType, setHomeworkType] = useState('soru-bankasi-odevi')
+export default function AssignHomeworkModal({
+  studentTeacherId,
+  subjectName,
+  defaultTaskDate,
+  initialHomeworkType,
+  onSave,
+  onClose,
+}) {
+  // Öğretmen türü sabitse (özel öğretmen → soru bankası, okul öğretmeni → okul ödevi) tür
+  // seçimi adımı atlanır; doğrudan kaynak seçimiyle başlanır.
+  const [step, setStep] = useState(initialHomeworkType ? 'source' : 'type')
+  const [homeworkType, setHomeworkType] = useState(initialHomeworkType || 'soru-bankasi-odevi')
   const [resourceBookId, setResourceBookId] = useState('')
   const [schoolResourceId, setSchoolResourceId] = useState('')
   const [schoolResources, setSchoolResources] = useState(null)
@@ -287,7 +296,7 @@ export default function AssignHomeworkModal({ studentTeacherId, subjectName, def
         {/* Koyu başlık çubuğu */}
         <div className="flex shrink-0 items-center justify-between gap-3 bg-panel-blue px-4 py-3 text-white">
           <div className="flex min-w-0 items-center gap-1.5">
-            {step === 'content' || step === 'source' ? (
+            {step === 'content' || (step === 'source' && !initialHomeworkType) ? (
               <button
                 type="button"
                 onClick={step === 'content' ? handleBackToSource : handleBackToType}
