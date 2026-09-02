@@ -1328,6 +1328,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
           tests={tests}
           onSaved={handleTopicCreated}
           onDeleted={handleTopicsDeleted}
+          onTestsCreated={handleTestCreated}
           onClose={() => setTopicModalBook(null)}
         />
       ) : null}
@@ -1335,6 +1336,8 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
       {canEdit && testModalTopic ? (
         <TestModal
           topic={testModalTopic}
+          book={resourceBooks?.find((book) => book.id === testModalTopic.resourceBookId)}
+          tests={tests}
           onSaved={handleTestCreated}
           onClose={() => setTestModalTopic(null)}
         />
