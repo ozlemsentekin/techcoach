@@ -405,6 +405,7 @@ export default function StudentDetailPage() {
           studentTeacherId={studentTeacherId}
           subjectName={student.subjectName}
           defaultTaskDate={homeworkModalDate}
+          initialHomeworkType={student.teacherType === 'okul_ogretmeni' ? 'okul-odevi' : 'soru-bankasi-odevi'}
           onSave={handleSaveHomework}
           onClose={() => setHomeworkModalDate('')}
         />
