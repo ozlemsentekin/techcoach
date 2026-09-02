@@ -36,6 +36,21 @@ const RANGE_FILTERS = [
 const COMPLETED_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
 const MIN_ANSWERED_FOR_RANK = 3
 const MAX_RESOURCE_COLUMNS = 8
+const MONTH_SHORT = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
+
+// Eğitim yılı: içinde bulunduğumuz Ağustos'tan sonraki Haziran'a kadar (Ağu–Haz, 11 ay).
+function buildAcademicMonths(today) {
+  const [year, month] = today.split('-').map(Number)
+  const startYear = month >= 8 ? year : year - 1
+  const months = []
+  for (let m = 8; m <= 12; m += 1) months.push({ y: startYear, m })
+  for (let m = 1; m <= 6; m += 1) months.push({ y: startYear + 1, m })
+  return months.map(({ y, m }) => ({
+    key: `${y}-${String(m).padStart(2, '0')}`,
+    short: MONTH_SHORT[m - 1],
+    label: `${MONTH_SHORT[m - 1]} ${y}`,
+  }))
+}
 
 // "Yağmur Aydoğdu" → "Yağmur A." — grafik ekseninde her zaman sığsın diye.
 function shortName(full) {
@@ -68,11 +83,17 @@ function safeAcc(accuracy) {
 function analyzeStudent(entry, range, today) {
   const overview = entry.overview || {}
   const testsById = new Map((overview.tests || []).map((test) => [test.id, test]))
-  const records = buildActivityRecords(overview, testsById).filter((record) =>
-    dateInRange(record.date, range, today),
-  )
+  const allRecords = buildActivityRecords(overview, testsById)
+  const records = allRecords.filter((record) => dateInRange(record.date, range, today))
   const totals = sumRecords(records)
   const answered = totals.correct + totals.wrong
+
+  // Aylık soru dağılımı tarih filtresinden bağımsız — tüm kayıtlar üzerinden ay bazında toplanır.
+  const monthlyQuestions = new Map()
+  for (const record of allRecords) {
+    const monthKey = (record.date || '').slice(0, 7)
+    if (monthKey.length === 7) monthlyQuestions.set(monthKey, (monthlyQuestions.get(monthKey) || 0) + record.questions)
+  }
 
   const tasks = (overview.tasks || []).filter((task) => dateInRange(toDateKey(task.date), range, today))
   const taskCounts = { total: tasks.length, onTime: 0, late: 0, backlog: 0, pending: 0 }
@@ -110,6 +131,7 @@ function analyzeStudent(entry, range, today) {
       resourceRows.map((row) => [row.key, { accuracy: row.accuracy, answered: row.correct + row.wrong }]),
     ),
     resourceRows,
+    monthlyQuestions,
     hardestTopic: rankable(topicRows),
     hardestBook: rankable(resourceRows),
     lastActive,
@@ -236,10 +258,15 @@ function AccuracyHeatmap({ students, columns, onSelect }) {
             {columns.map((col) => (
               <th
                 key={col.key}
-                className="max-w-[84px] truncate px-1 pb-1 text-[11px] font-semibold text-panel-text-muted"
-                title={col.label}
+                className="w-[96px] min-w-[96px] px-1 pb-1 align-bottom text-[11px] font-semibold text-panel-text-muted"
+                title={col.publisher ? `${col.label} · ${col.publisher}` : col.label}
               >
-                {col.label}
+                <span className="block truncate">{col.label}</span>
+                {col.publisher ? (
+                  <span className="mt-0.5 inline-block max-w-full truncate rounded bg-panel-surface-soft px-1 py-0.5 text-[9px] font-semibold text-panel-text-muted">
+                    {col.publisher}
+                  </span>
+                ) : null}
               </th>
             ))}
           </tr>
@@ -277,6 +304,63 @@ function AccuracyHeatmap({ students, columns, onSelect }) {
               })}
             </tr>
           ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// Eğitim yılı boyunca (Ağu–Haz) öğrenci başına aylık çözülen soru — tek tabloda.
+function MonthlyQuestionsTable({ students, months, maxMonthly, onSelect }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-separate border-spacing-1 text-center text-xs">
+        <thead>
+          <tr>
+            <th className="sticky left-0 z-10 bg-panel-surface" />
+            {months.map((month) => (
+              <th key={month.key} className="min-w-[42px] px-1 pb-1 font-semibold text-panel-text-muted" title={month.label}>
+                {month.short}
+              </th>
+            ))}
+            <th className="min-w-[54px] px-1 pb-1 font-bold text-panel-text">Toplam</th>
+          </tr>
+        </thead>
+        <tbody>
+          {students.map((student) => {
+            const total = months.reduce((sum, month) => sum + (student.monthlyQuestions.get(month.key) || 0), 0)
+            return (
+              <tr key={student.key}>
+                <td
+                  className="sticky left-0 z-10 max-w-[6rem] truncate bg-panel-surface pr-2 text-left font-semibold text-panel-text"
+                  title={student.name}
+                >
+                  <button type="button" onClick={() => onSelect(student.key)} className="hover:underline">
+                    {student.shortLabel}
+                  </button>
+                </td>
+                {months.map((month) => {
+                  const value = student.monthlyQuestions.get(month.key) || 0
+                  const alpha = value > 0 ? Math.round((0.12 + 0.5 * (value / maxMonthly)) * 100) : 0
+                  return (
+                    <td
+                      key={month.key}
+                      className="rounded-md py-1.5 font-semibold text-panel-text"
+                      style={
+                        value > 0
+                          ? { backgroundColor: `color-mix(in oklab, var(--color-panel-blue) ${alpha}%, transparent)` }
+                          : undefined
+                      }
+                      title={`${student.name} · ${month.label}: ${formatNumber(value)} soru`}
+                    >
+                      {value > 0 ? formatNumber(value) : <span className="text-panel-text-muted">–</span>}
+                    </td>
+                  )
+                })}
+                <td className="rounded-md bg-panel-surface-soft py-1.5 font-bold text-panel-text">{formatNumber(total)}</td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
@@ -333,23 +417,30 @@ export default function ClassAnalysisPage() {
     if (!data) return null
     const students = (data.students || []).map((entry) => analyzeStudent(entry, range, today))
 
-    // Isı haritası sütunları: sınıfın en çok çalıştığı kaynaklar.
-    const resourceTotals = new Map()
+    // Isı haritası sütunları: sınıfın en çok çalıştığı kaynaklar (+ yayın evi etiketi).
+    const resourceMeta = new Map()
     for (const student of students) {
       for (const row of student.resourceRows) {
-        const current = resourceTotals.get(row.key) || 0
-        resourceTotals.set(row.key, current + row.correct + row.wrong)
+        const meta = resourceMeta.get(row.key) || { answered: 0, publisher: '' }
+        meta.answered += row.correct + row.wrong
+        if (!meta.publisher && row.publishers?.length) meta.publisher = row.publishers[0]
+        resourceMeta.set(row.key, meta)
       }
     }
-    const resourceColumns = [...resourceTotals.entries()]
-      .filter(([, answered]) => answered > 0)
-      .sort((a, b) => b[1] - a[1])
+    const resourceColumns = [...resourceMeta.entries()]
+      .filter(([, meta]) => meta.answered > 0)
+      .sort((a, b) => b[1].answered - a[1].answered)
       .slice(0, MAX_RESOURCE_COLUMNS)
-      .map(([key]) => ({ key, label: key }))
+      .map(([key, meta]) => ({ key, label: key, publisher: meta.publisher }))
 
     const maxQuestions = Math.max(1, ...students.map((student) => student.totals.questions))
+    const months = buildAcademicMonths(today)
+    const maxMonthly = Math.max(
+      1,
+      ...students.flatMap((student) => months.map((month) => student.monthlyQuestions.get(month.key) || 0)),
+    )
 
-    return { students, resourceColumns, maxQuestions }
+    return { students, resourceColumns, maxQuestions, months, maxMonthly }
   }, [data, range, today])
 
   const sortedStudents = useMemo(() => {
@@ -464,7 +555,7 @@ const COMPOSITION_LEGEND = [
 ]
 
 function ClassAnalysisBody({ analysis, sortedStudents, sortKey, onSortChange, onOpenStudent }) {
-  const { students, resourceColumns, maxQuestions } = analysis
+  const { students, resourceColumns, maxQuestions, months, maxMonthly } = analysis
 
   const byAccuracy = [...students].sort((a, b) => safeAcc(b.accuracy) - safeAcc(a.accuracy))
   const byQuestions = [...students].sort((a, b) => b.totals.questions - a.totals.questions)
@@ -527,6 +618,14 @@ function ClassAnalysisBody({ analysis, sortedStudents, sortKey, onSortChange, on
 
       <Card title="Çözülen soru sayısı" subtitle="Hangi öğrenci ne kadar soru çözmüş" icon={BookOpenCheck}>
         <StudentBarRows rows={questionRows} onSelect={onOpenStudent} />
+      </Card>
+
+      <Card
+        title="Aylık çözülen soru"
+        subtitle="Ağustos–Haziran · eğitim yılının tamamı (üstteki tarih filtresinden bağımsız)"
+        icon={CalendarCheck}
+      >
+        <MonthlyQuestionsTable students={byQuestions} months={months} maxMonthly={maxMonthly} onSelect={onOpenStudent} />
       </Card>
 
       <Card title="Doğru / Yanlış / Boş dağılımı" subtitle="Her öğrencinin soru dağılımı" icon={Target}>
