@@ -1990,6 +1990,8 @@ async function deleteResourceBookTopicTestHandler(request) {
       DELETE FROM dbo.QuestionOptions WHERE question_id IN (SELECT id FROM dbo.Questions WHERE test_id = @testId);
       DELETE FROM dbo.Questions WHERE test_id = @testId;
       DELETE FROM dbo.TestAnswerKeys WHERE test_id = @testId;
+      DELETE FROM dbo.WrongQuestions WHERE test_id = @testId;
+      DELETE FROM dbo.StudentManualTestCompletions WHERE test_id = @testId;
       DELETE FROM dbo.ResourceBookTopicTests WHERE id = @testId;
     `)
 

@@ -1095,6 +1095,12 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
     setAnswerKeyTest(test)
   }
 
+  // Test Ekle kitap görünümündeki satır içi silme işlemi API çağrısını kendi yapar; burada
+  // yalnızca yerel listeyi güncelliyoruz.
+  const handleTestDeletedById = (testId) => {
+    setTests((current) => (current || []).filter((item) => item.id !== testId))
+  }
+
   const handleDeleteTest = async () => {
     if (!deletingTest) return
     setDeletingTestLoading(true)
@@ -1329,6 +1335,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
           onSaved={handleTopicCreated}
           onDeleted={handleTopicsDeleted}
           onTestsCreated={handleTestCreated}
+          onTestDeleted={handleTestDeletedById}
           onClose={() => setTopicModalBook(null)}
         />
       ) : null}
@@ -1339,6 +1346,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
           book={resourceBooks?.find((book) => book.id === testModalTopic.resourceBookId)}
           tests={tests}
           onSaved={handleTestCreated}
+          onTestDeleted={handleTestDeletedById}
           onClose={() => setTestModalTopic(null)}
         />
       ) : null}

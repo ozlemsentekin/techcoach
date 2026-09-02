@@ -172,7 +172,17 @@ function TopicContentsPreview({
   )
 }
 
-function TopicModal({ book, topic, topics = [], tests = [], onSaved, onDeleted, onTestsCreated, onClose }) {
+function TopicModal({
+  book,
+  topic,
+  topics = [],
+  tests = [],
+  onSaved,
+  onDeleted,
+  onTestsCreated,
+  onTestDeleted,
+  onClose,
+}) {
   const isEdit = Boolean(topic)
   const [name, setName] = useState(topic?.name || '')
   const [error, setError] = useState('')
@@ -366,6 +376,7 @@ function TopicModal({ book, topic, topics = [], tests = [], onSaved, onDeleted, 
             onTestsCreated?.(createdTests)
             setTestEntry(null)
           }}
+          onTestDeleted={onTestDeleted}
           onClose={() => setTestEntry(null)}
         />
       ) : null}
@@ -532,9 +543,11 @@ function bumpTestName(name) {
 function buildTopicTestPreview(existingTests, draftRows) {
   const existing = existingTests.map((test) => ({
     key: `saved-${test.id}`,
+    id: test.id,
     topicName: (test.topicName || '').trim(),
     name: (test.name || '').trim(),
     page: Number(test.pageStart) || null,
+    hasAnswerKey: Boolean(test.hasAnswerKey),
     draft: false,
   }))
   const drafts = draftRows
@@ -558,10 +571,12 @@ function buildTopicTestPreview(existingTests, draftRows) {
 // Test Ekle akışı — İçerik Ekle ile aynı kitap-açılımı görseli: solda "nasıl eklenir" rehberi
 // ve pratik çok-satırlı giriş (kopyala/sil), sağda içerik başlığı + testler eklendikçe sayfa
 // sırasına göre görünen liste.
-function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onClose }) {
+function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onTestDeleted, onClose }) {
   const [rows, setRows] = useState(() => [createEmptyTestRow()])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [deletingTestId, setDeletingTestId] = useState(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
 
   const updateRow = (id, patch) => {
     setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)))
@@ -585,6 +600,22 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onClose }
         current.length === 1 && !current[0].topicName && !current[0].name && !current[0].pageStart
       return pristineSingle ? [createEmptyTestRow(seed)] : [...current, createEmptyTestRow(seed)]
     })
+  }
+
+  // Kaydedilmiş bir testi siler; endpoint testin sorularını ve (varsa) cevap anahtarını da
+  // birlikte temizler.
+  const deleteSavedTest = async (item) => {
+    setDeleteBusy(true)
+    setError('')
+    try {
+      await authRequest(`/api/panel-admin/resource-book-topic-tests/${item.id}`, { method: 'DELETE' })
+      setDeletingTestId(null)
+      onTestDeleted?.(item.id)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDeleteBusy(false)
+    }
   }
 
   const removeRow = (id) => {
@@ -716,8 +747,9 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onClose }
                 </ol>
                 <p className="mt-1.5 text-[10px] text-[#9b8574]">
                   Eklenmiş bir testi sağdaki listeden <span className="font-medium text-[#8a5a33]">kopyala</span>{' '}
-                  ile çoğaltabilirsiniz — test no +1, sayfa +2 gelir, düzenleyebilirsiniz. Soru sayısı ve cevap
-                  anahtarını sonra ekleyebilirsiniz.
+                  ile çoğaltabilir (test no +1, sayfa +2) ya da{' '}
+                  <span className="font-medium text-[#8a5a33]">çöp kutusu</span> ile silebilirsiniz. Soru sayısı ve
+                  cevap anahtarını sonra ekleyebilirsiniz.
                 </p>
               </div>
 
@@ -815,15 +847,52 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onClose }
                         active={item.draft}
                         action={
                           item.draft ? null : (
-                            <button
-                              type="button"
-                              aria-label={`${item.name || 'Test'} testini kopyala`}
-                              onClick={() => copyFromSaved(item)}
-                              className="flex h-6 w-6 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#8a5a33]"
-                            >
-                              <Copy size={13} aria-hidden="true" />
-                            </button>
+                            <span className="flex items-center gap-0.5">
+                              <button
+                                type="button"
+                                aria-label={`${item.name || 'Test'} testini kopyala`}
+                                onClick={() => copyFromSaved(item)}
+                                className="flex h-6 w-6 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#8a5a33]"
+                              >
+                                <Copy size={13} aria-hidden="true" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`${item.name || 'Test'} testini sil`}
+                                disabled={deleteBusy}
+                                onClick={() => setDeletingTestId(item.id)}
+                                className="flex h-6 w-6 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#a23b1e] disabled:opacity-40"
+                              >
+                                <Trash2 size={13} aria-hidden="true" />
+                              </button>
+                            </span>
                           )
+                        }
+                        footer={
+                          deletingTestId === item.id ? (
+                            <div className="rounded-md bg-[#fbeee0] px-2 py-1.5 text-[11px] text-[#7a3d16]">
+                              <p className="mb-1.5">
+                                Bu test{item.hasAnswerKey ? ' ve cevap anahtarı' : ''} silinsin mi?
+                              </p>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  disabled={deleteBusy}
+                                  onClick={() => deleteSavedTest(item)}
+                                  className="rounded-md bg-[#a23b1e] px-2 py-1 font-semibold text-white disabled:opacity-50"
+                                >
+                                  {deleteBusy ? 'Siliniyor…' : 'Sil'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingTestId(null)}
+                                  className="rounded-md border border-[#d8c6b5] px-2 py-1 font-semibold text-[#7a3d16]"
+                                >
+                                  Vazgeç
+                                </button>
+                              </div>
+                            </div>
+                          ) : null
                         }
                       />
                     ))
@@ -843,7 +912,7 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onClose }
   )
 }
 
-function TestModal({ book, topic, test, tests = [], onSaved, onClose }) {
+function TestModal({ book, topic, test, tests = [], onSaved, onTestDeleted, onClose }) {
   if (test) {
     return <EditTestModal test={test} topic={topic} onSaved={onSaved} onClose={onClose} />
   }
@@ -855,6 +924,7 @@ function TestModal({ book, topic, test, tests = [], onSaved, onClose }) {
       topic={topic}
       existingTests={existingTests}
       onSaved={onSaved}
+      onTestDeleted={onTestDeleted}
       onClose={onClose}
     />
   )
