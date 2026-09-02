@@ -83,6 +83,34 @@ async function getTeacherClassAnalysisHandler(request) {
     }
     const roster = [...byStudent.values()]
 
+    // Öğrencinin TechCoach'ta işlem yaptığı en son an — branştan/öğretmenden bağımsız,
+    // tüm sistem genelinde. Tek batched sorgu.
+    const lastActivityByStudent = new Map()
+    if (roster.length) {
+      const idBindings = {}
+      const idParams = roster.map((row, i) => {
+        idBindings[`sid${i}`] = { type: sql.UniqueIdentifier, value: row.studentId }
+        return `@sid${i}`
+      })
+      const activityDb = await withRequest(idBindings)
+      const activityResult = await activityDb.query(`
+        SELECT u.id AS student_id,
+          (SELECT MAX(v) FROM (VALUES
+            (CAST(u.last_login_at AS datetime2)),
+            (CAST((SELECT MAX(t.updated_at) FROM dbo.Tasks t WHERE t.student_id = u.id) AS datetime2)),
+            (CAST((SELECT MAX(tal.created_at) FROM dbo.TaskActivityLogs tal WHERE tal.student_id = u.id) AS datetime2)),
+            (CAST((SELECT MAX(ss.created_at) FROM dbo.StudySessions ss WHERE ss.student_id = u.id) AS datetime2)),
+            (CAST((SELECT MAX(smtc.marked_at) FROM dbo.StudentManualTestCompletions smtc WHERE smtc.student_id = u.id) AS datetime2)),
+            (CAST((SELECT MAX(wq.created_at) FROM dbo.WrongQuestions wq WHERE wq.student_id = u.id) AS datetime2))
+          ) AS z(v)) AS last_activity_at
+        FROM dbo.Users u
+        WHERE u.id IN (${idParams.join(', ')});
+      `)
+      for (const row of activityResult.recordset) {
+        lastActivityByStudent.set(row.student_id, row.last_activity_at || null)
+      }
+    }
+
     // Bir öğrencinin verisi yüklenemezse (bozuk kayıt vb.) tüm sınıf sayfası düşmesin —
     // o öğrenci atlanır, loglanır, kalanlar döner.
     const students = []
@@ -110,6 +138,7 @@ async function getTeacherClassAnalysisHandler(request) {
             studentFullName: row.studentFullName,
             studentPhotoUrl: row.studentPhotoUrl,
             subjectName: row.subjectName,
+            lastActivityAt: lastActivityByStudent.get(row.studentId) || null,
             overview: outcome.value,
           })
         } else {

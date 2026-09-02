@@ -10,7 +10,7 @@ export async function getTeacherStudents(status = 'active') {
 /**
  * Sınıf Analizi: öğretmenin seçili sınıftaki tüm aktif öğrencileri için ham gelişim verisi.
  * `grade` sayısal sınıf ("8") veya sınıfsızlar için "__none__".
- * @returns {Promise<{grade: string, students: Array<{studentTeacherId: string, studentFullName: string, studentPhotoUrl: string|null, subjectName: string|null, overview: Object}>}>}
+ * @returns {Promise<{grade: string, students: Array<{studentTeacherId: string, studentFullName: string, studentPhotoUrl: string|null, subjectName: string|null, lastActivityAt: string|null, overview: Object}>}>}
  */
 export async function getTeacherClassAnalysis(grade) {
   return cachedGet(`/api/panel-teacher/class-analysis?grade=${encodeURIComponent(grade)}`)
