@@ -2758,12 +2758,10 @@ async function deleteTeacherStudentTaskHandler(request) {
   }
 }
 
-async function getTeacherStudentProgressOverviewHandler(request) {
-  try {
-    const { error, studentId, subjectId, studentTeacherId, actorId: teacherUserId } =
-      await requireTeacherStudentContext(request)
-    if (error) return error
-
+// Öğretmenin bir öğrenci için gelişim/analiz ham verisini yükler; o öğrenciye verdiği tüm
+// aktif branşları birleştirir. getTeacherStudentProgressOverviewHandler ve Sınıf Analizi
+// (classAnalysis.js) ortak kullanır.
+async function loadStudentProgressOverview({ studentId, subjectId, studentTeacherId, teacherUserId }) {
     // Öğretmenin bu öğrenciye verdiği tüm aktif branşlar. Birden çoksa "Tüm Dersler"
     // görünümü için hepsinin verisi toplanır (frontend combobox'ta tek tek de seçilebilir).
     const relationsDb = await withRequest({
@@ -2977,7 +2975,15 @@ async function getTeacherStudentProgressOverviewHandler(request) {
       Object.assign(merged.resourceBookImages, part.resourceBookImages)
     }
 
-    return json(200, merged)
+    return merged
+}
+
+async function getTeacherStudentProgressOverviewHandler(request) {
+  try {
+    const { error, studentId, subjectId, studentTeacherId, actorId: teacherUserId } =
+      await requireTeacherStudentContext(request)
+    if (error) return error
+    return json(200, await loadStudentProgressOverview({ studentId, subjectId, studentTeacherId, teacherUserId }))
   } catch (error) {
     return handleError(error, 'getTeacherStudentProgressOverviewHandler', 'Gelişim verileri yüklenemedi.')
   }
@@ -3205,6 +3211,7 @@ module.exports = {
   getTeacherStudentSchoolScheduleHandler,
   getTeacherTaskAnswerSheetHandler,
   getTeacherStudentProgressOverviewHandler,
+  loadStudentProgressOverview,
   listTeacherStudentWrongQuestionsHandler,
   getTeacherStudentWrongQuestionPhotoHandler,
   getTeacherStudentWrongQuestionTopicStatsHandler,

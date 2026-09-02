@@ -26,6 +26,7 @@ import {
   Undo2,
   Library,
   BookMarked,
+  BarChart3,
 } from 'lucide-react'
 
 const ICONS = {
@@ -56,6 +57,7 @@ const ICONS = {
   Undo2,
   Library,
   BookMarked,
+  BarChart3,
 }
 
 export default function NavIcon({ name, size = 20, className }) {
