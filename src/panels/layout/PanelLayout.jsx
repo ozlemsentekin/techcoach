@@ -6,7 +6,6 @@ import PanelHeader from './PanelHeader'
 import MobileBottomNavigation from './MobileBottomNavigation'
 import { useAuth } from '../../context/useAuth'
 import { useParentStudentsGate } from '../parent/useParentStudentsGate'
-import { useTeacherClasses } from '../teacher/useTeacherClasses'
 import {
   STUDENT_PRIMARY_NAV,
   STUDENT_MORE_NAV,
@@ -24,7 +23,6 @@ export default function PanelLayout({ role }) {
   const location = useLocation()
   const { authUser } = useAuth()
   const { hasStudents } = useParentStudentsGate()
-  const { studentCount: teacherStudentCount } = useTeacherClasses()
   const Sidebar = SIDEBAR_BY_ROLE[role] || StudentSidebar
   const isAdminSection = role === 'parent' && location.pathname.startsWith('/parent/admin')
   const canManageLibrary = Boolean(authUser?.isAdmin || authUser?.canManageLibrary)
@@ -33,7 +31,7 @@ export default function PanelLayout({ role }) {
     : role === 'parent'
       ? getParentPrimaryNav(hasStudents, canManageLibrary)
       : role === 'teacher'
-        ? getTeacherPrimaryNav(canManageLibrary, { studentCount: teacherStudentCount })
+        ? getTeacherPrimaryNav(canManageLibrary)
         : STUDENT_PRIMARY_NAV
   const moreItems = isAdminSection
     ? PARENT_ADMIN_NAV.children

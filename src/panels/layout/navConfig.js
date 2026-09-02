@@ -58,14 +58,12 @@ export function isNavItemActive(to, location) {
   return location.search.replace(/^\?/, '') === search
 }
 
-// "Sınıf Analizi" yalnızca öğretmenin ≥2 aktif öğrencisi varsa görünür (sınıf düzeyinde
-// toplu analiz için birden çok öğrenci profili gerekir).
-export function getTeacherPrimaryNav(canManageLibrary = false, { studentCount = 0 } = {}) {
+// "Sınıf Analizi" tüm öğretmenlerde görünür; sayfa, öğrencilerin sınıf bilgisinden
+// sekmeleri kendisi oluşturur (sınıf bilgisi yoksa yönlendirici bir boş durum gösterir).
+export function getTeacherPrimaryNav(canManageLibrary = false) {
   return [
     { to: '/teacher/students', label: 'Öğrencilerim', icon: 'Users' },
-    ...(studentCount >= 2
-      ? [{ to: '/teacher/class-analysis', label: 'Sınıf Analizi', icon: 'BarChart3' }]
-      : []),
+    { to: '/teacher/class-analysis', label: 'Sınıf Analizi', icon: 'BarChart3' },
     { to: '/teacher/lesson-plan', label: 'Ders Planım', icon: 'CalendarRange' },
     { to: '/teacher/parents', label: 'Velilerim', icon: 'UserRound' },
     canManageLibrary ? KUTUPHANE_TEACHER_ITEM : KITAPLIK_TEACHER_ITEM,
@@ -74,8 +72,8 @@ export function getTeacherPrimaryNav(canManageLibrary = false, { studentCount = 
 
 export const TEACHER_MORE_NAV = []
 
-export function getTeacherSidebarNav(canManageLibrary = false, options = {}) {
-  return [...getTeacherPrimaryNav(canManageLibrary, options), ...TEACHER_MORE_NAV]
+export function getTeacherSidebarNav(canManageLibrary = false) {
+  return [...getTeacherPrimaryNav(canManageLibrary), ...TEACHER_MORE_NAV]
 }
 
 export const PARENT_ADMIN_NAV = {

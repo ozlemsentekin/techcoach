@@ -1,16 +1,12 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import NavIcon from './NavIcon'
 import { useAuth } from '../../context/useAuth'
-import { useTeacherClasses } from '../teacher/useTeacherClasses'
 import { getTeacherSidebarNav, isNavItemActive } from './navConfig'
 
 export default function TeacherSidebar() {
   const location = useLocation()
   const { authUser } = useAuth()
-  const { studentCount } = useTeacherClasses()
-  const sidebarNav = getTeacherSidebarNav(Boolean(authUser?.isAdmin || authUser?.canManageLibrary), {
-    studentCount,
-  })
+  const sidebarNav = getTeacherSidebarNav(Boolean(authUser?.isAdmin || authUser?.canManageLibrary))
 
   return (
     <aside className="hidden shrink-0 flex-col bg-panel-surface px-2 py-5 shadow-panel-1 md:flex md:w-28 lg:w-64 lg:px-3">

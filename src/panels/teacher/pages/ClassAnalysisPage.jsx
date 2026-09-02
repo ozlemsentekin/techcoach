@@ -622,8 +622,8 @@ export default function ClassAnalysisPage() {
         <PageHeader title="Sınıf Analizi" subtitle="Sınıf düzeyinde toplu öğrenci analizi." />
         <EmptyState
           icon={GraduationCap}
-          title="Sınıf oluşturacak öğrenci yok"
-          description="En az iki aktif öğrenciniz olduğunda sınıflarınız burada sekme olarak görünür."
+          title="Henüz sınıf oluşmadı"
+          description="Aktif öğrencilerinizin profilinde sınıf bilgisi girildiğinde sınıflar burada sekme olarak görünür."
         />
       </div>
     )
