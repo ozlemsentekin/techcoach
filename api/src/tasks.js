@@ -69,6 +69,9 @@ function sanitizeTask(record) {
       undefined,
     notes: record.notes || undefined,
     completedAt: record.completed_at,
+    // Öğretmenin sonucu "kontrol edildi" işareti (bkz. add-task-teacher-review-schema.sql).
+    reviewedAt: record.reviewed_at || undefined,
+    reviewedByName: record.reviewed_by_full_name || undefined,
     rescheduledFrom: record.rescheduled_from,
     rescheduledTo: record.rescheduled_to,
     rescheduleReason: record.reschedule_reason,
@@ -114,6 +117,7 @@ const SELECT_TASK = `
          t.resource_book_id, t.selected_test_ids_json, t.answers_json, t.test_results_json, rb.name AS resource_book_name, rb.resource_type, rb.has_answer_key, p.name AS publisher_name,
          t.school_resource_id, scr.name AS school_resource_name, scr.image_url AS school_resource_image_url,
          t.student_teacher_id, st.teacher_full_name, cbu.full_name AS created_by_full_name,
+         t.reviewed_at, rvu.full_name AS reviewed_by_full_name,
          stu.full_name AS student_full_name, par.full_name AS parent_full_name,
          (SELECT TOP 1 rst.teacher_full_name
             FROM dbo.StudentTeacherResourceBooks strb
@@ -127,6 +131,7 @@ const SELECT_TASK = `
   LEFT JOIN dbo.SchoolClassResources scr ON scr.id = t.school_resource_id
   LEFT JOIN dbo.StudentTeachers st ON st.id = t.student_teacher_id
   LEFT JOIN dbo.Users cbu ON cbu.id = t.created_by_user_id
+  LEFT JOIN dbo.Users rvu ON rvu.id = t.reviewed_by_user_id
   LEFT JOIN dbo.Users stu ON stu.id = t.student_id
   LEFT JOIN dbo.Users par ON par.id = stu.parent_id
 `

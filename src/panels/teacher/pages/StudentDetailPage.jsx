@@ -29,6 +29,7 @@ import {
   updateTeacherStudentWrongQuestion,
   updateTeacherStudentTask,
   deleteTeacherStudentTask,
+  setTeacherTaskReview,
 } from '../../../services/teacherService'
 import { addDaysISO, getMondayOfWeek, todayISODate } from '../../../utils/time'
 import { getWeekDates } from '../../../services/weeklyPlanService'
@@ -151,6 +152,22 @@ export default function StudentDetailPage() {
 
   const handleEditTask = (task) => {
     setDetailTask(task)
+  }
+
+  // Görevin "kontrol edildi" işaretini aç/kapat. Kart ve açık optik form aynı anda
+  // güncel kalsın diye tam yeniden yükleme yerine ilgili görevi yerinde yamalıyoruz.
+  const handleToggleTaskReview = async (task, reviewed) => {
+    const updated = await setTeacherTaskReview(studentTeacherId, task.id, reviewed)
+    const patch = { reviewedAt: updated.reviewedAt, reviewedByName: updated.reviewedByName }
+    setTasksByDate((current) => {
+      const next = {}
+      for (const [date, list] of Object.entries(current)) {
+        next[date] = list.map((item) => (item.id === task.id ? { ...item, ...patch } : item))
+      }
+      return next
+    })
+    setAnswerSheetTask((current) => (current && current.id === task.id ? { ...current, ...patch } : current))
+    setDetailTask((current) => (current && current.id === task.id ? { ...current, ...patch } : current))
   }
 
   // Ödev kaydına bağlı olmayan (homeworkId yok) ama öğretmenin takip ettiği kaynağa ait,
@@ -376,6 +393,7 @@ export default function StudentDetailPage() {
               onAddHomework={(date) => setHomeworkModalDate(date)}
               onEditTask={handleEditTask}
               onViewAnswerSheet={setAnswerSheetTask}
+              onToggleReview={handleToggleTaskReview}
               onManageLessonSlot={(slot) => setManagingSlot(slot)}
               canEditTask={(task) => task.createdBy === 'ogretmen' || isManageableStandaloneTask(task)}
             />
@@ -496,6 +514,11 @@ export default function StudentDetailPage() {
         <TaskOpticalResultModal
           task={answerSheetTask}
           studentTeacherId={studentTeacherId}
+          onToggleReview={
+            HOMEWORK_TASK_TYPES.has(answerSheetTask.taskType) && answerSheetTask.status === 'tamamlandi'
+              ? (reviewed) => handleToggleTaskReview(answerSheetTask, reviewed)
+              : undefined
+          }
           onClose={() => setAnswerSheetTask(null)}
         />
       ) : null}

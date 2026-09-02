@@ -6,6 +6,7 @@ import {
   updateTeacherStudentWrongQuestion,
 } from '../../../services/teacherService'
 import LoadingState from '../../shared/LoadingState'
+import TaskReviewControl from '../../shared/TaskReviewControl'
 import WrongQuestionGalleryModal from '../../shared/WrongQuestionGalleryModal'
 
 const OPTIONS = ['A', 'B', 'C', 'D']
@@ -147,7 +148,7 @@ function TestSection({ test, photos, onOpenGallery }) {
   )
 }
 
-export default function TaskOpticalResultModal({ task, studentTeacherId, onClose }) {
+export default function TaskOpticalResultModal({ task, studentTeacherId, onToggleReview, onClose }) {
   const [tests, setTests] = useState(null)
   const [photosByTest, setPhotosByTest] = useState({})
   // { testId, items, index } — açılınca ilgili testin tüm fotoğraflı yanlışları gezilebilir.
@@ -229,6 +230,17 @@ export default function TaskOpticalResultModal({ task, studentTeacherId, onClose
             <X size={20} />
           </button>
         </div>
+
+        {typeof onToggleReview === 'function' ? (
+          <div className="border-b border-panel-border bg-panel-surface-soft/60 px-5 py-3">
+            <TaskReviewControl
+              reviewed={Boolean(task.reviewedAt)}
+              reviewedAt={task.reviewedAt}
+              reviewedByName={task.reviewedByName}
+              onToggle={onToggleReview}
+            />
+          </div>
+        ) : null}
 
         <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3">
           {error ? <div className="mb-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div> : null}

@@ -26,6 +26,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { HOMEWORK_TASK_TYPES, TASK_TYPES } from '../../../data/taskTypes'
+import TaskReviewControl from '../../shared/TaskReviewControl'
 import { parseTimeToMinutes, todayISODate, WEEKDAY_KEYS as DAY_KEYS } from '../../../utils/time'
 import { isBacklogTask } from '../../../utils/backlogTasks'
 import Badge from '../../ui/Badge'
@@ -579,6 +580,7 @@ function CompactMetricChips({
   graded,
   completionDurationLabel,
   isCompleted,
+  reviewed = false,
   muted = false,
 }) {
   const grade = graded ? getGradeSummary(task) : null
@@ -587,7 +589,7 @@ function CompactMetricChips({
     ? 'border-slate-200 bg-white/70 text-slate-500'
     : 'border-panel-border bg-panel-surface-soft/80 text-panel-text-muted'
 
-  if (!testRowCount && !questionProgress && !pageProgress && !grade && !timerLabel) return null
+  if (!testRowCount && !questionProgress && !pageProgress && !grade && !timerLabel && !reviewed) return null
 
   return (
     <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
@@ -628,11 +630,17 @@ function CompactMetricChips({
           <span className="truncate">{timerLabel}</span>
         </span>
       ) : null}
+      {reviewed ? (
+        <span className="inline-flex min-w-0 items-center gap-1 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-extrabold text-emerald-700">
+          <CheckCircle2 size={11} className="shrink-0" aria-hidden="true" />
+          <span className="truncate">Kontrol edildi</span>
+        </span>
+      ) : null}
     </div>
   )
 }
 
-function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onCompleteTask, onManageLessonSlot, canEditTask, muted = false }) {
+function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onCompleteTask, onToggleReview, onManageLessonSlot, canEditTask, muted = false }) {
   const [showBreakMenu, setShowBreakMenu] = useState(false)
   const [expanded, setExpanded] = useState(false)
 
@@ -662,6 +670,9 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
     !muted &&
     isHomework &&
     !['tamamlandi', 'yeniden-planlandi'].includes(task.status)
+  // Öğretmen görünümünde tamamlanmış ödev/görevin sonucu "kontrol edildi" işaretlenebilir
+  // (onToggleReview yalnızca öğretmen panelinden geçilir).
+  const canReview = typeof onToggleReview === 'function' && isHomework && task.status === 'tamamlandi'
   // Kartı düzenlemek için tıklanabilir yapmadan önce yetki kontrolü: veli tüm görevleri,
   // öğretmen/öğrenci yalnızca kendi eklediklerini düzenleyebilir (bkz. panel bazlı canEditTask).
   const canOpenTask =
@@ -855,6 +866,7 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
           graded={graded}
           completionDurationLabel={completionDurationLabel}
           isCompleted={Boolean(completionTimestampLabel)}
+          reviewed={canReview && Boolean(task.reviewedAt)}
           muted={muted}
         />
       </div>
@@ -932,6 +944,14 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
           ) : null}
 
           {graded ? <GradeSummaryBar task={task} onViewAnswerSheet={onViewAnswerSheet} /> : null}
+          {canReview ? (
+            <TaskReviewControl
+              reviewed={Boolean(task.reviewedAt)}
+              reviewedAt={task.reviewedAt}
+              reviewedByName={task.reviewedByName}
+              onToggle={(next) => onToggleReview(task, next)}
+            />
+          ) : null}
           <CreatorNote task={task} />
           <CompletionTimerNote
             durationLabel={completionDurationLabel}
@@ -1002,6 +1022,7 @@ export default function WeeklyPlannerGrid({
   onQuickAddBreak,
   onViewAnswerSheet,
   onCompleteTask,
+  onToggleReview,
   onManageLessonSlot,
   canEditTask,
 }) {
@@ -1210,6 +1231,7 @@ export default function WeeklyPlannerGrid({
                 onEditTask={onEditTask}
                 onViewAnswerSheet={onViewAnswerSheet}
                 onCompleteTask={isPastDay ? undefined : onCompleteTask}
+                onToggleReview={onToggleReview}
                 onManageLessonSlot={onManageLessonSlot}
                 canEditTask={canEditTask}
                 muted={isPastDay}
