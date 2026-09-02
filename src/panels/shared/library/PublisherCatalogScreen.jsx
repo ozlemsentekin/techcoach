@@ -1071,6 +1071,14 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
     setEditingTopic(null)
   }
 
+  // İçerik Ekle modalindeki içindekiler listesinden bir içerik silindiğinde: modalı kapatmadan
+  // yerel state'i güncelle (silinen topic'ler ve altındaki testler listeden düşsün).
+  const handleTopicsDeleted = (topicIds) => {
+    const idSet = new Set(topicIds)
+    setTopics((current) => (current || []).filter((item) => !idSet.has(item.id)))
+    setTests((current) => (current || []).filter((item) => !idSet.has(item.topicId)))
+  }
+
   // Testler listesini yerinde günceller; hangi diyaloğun açık olduğuna dokunmaz. Test Düzenle,
   // testler tablosundaki cevap anahtarı akışı ve soru detay modalı ortak olarak bunu kullanır.
   const applyTestUpdate = (test) => {
@@ -1319,6 +1327,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
           topics={topics}
           tests={tests}
           onSaved={handleTopicCreated}
+          onDeleted={handleTopicsDeleted}
           onClose={() => setTopicModalBook(null)}
         />
       ) : null}

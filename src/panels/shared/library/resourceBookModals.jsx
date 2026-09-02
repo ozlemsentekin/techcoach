@@ -47,19 +47,23 @@ function ContentHierarchyHint({ bookName, highlight }) {
 
 const CONTENT_TOPIC_EXAMPLE = '1. Ünite — Çarpanlar ve Katlar'
 
-function TopicBookPageRow({ label, page, active = false, subline }) {
+function TopicBookPageRow({ label, page, active = false, subline, action, footer }) {
   return (
     <div
-      className={`rounded-lg px-2.5 py-2 ${
+      className={`rounded-md px-2 py-1 ${
         active ? 'bg-[#f8e3d0] text-[#7a3d16] shadow-[inset_3px_0_0_#c9772f]' : 'text-[#6f6258]'
       }`}
     >
       <div className="flex min-w-0 items-baseline gap-2">
-        <span className={`min-w-0 break-words text-sm ${active ? 'font-semibold' : 'font-medium'}`}>{label}</span>
-        <span className="min-w-[28px] flex-1 border-b border-dotted border-[#d8c6b5]" aria-hidden="true" />
-        <span className="shrink-0 text-xs font-semibold tabular-nums">{page}</span>
+        <span className={`min-w-0 break-words text-[13px] leading-snug ${active ? 'font-semibold' : 'font-medium'}`}>
+          {label}
+        </span>
+        <span className="min-w-[20px] flex-1 border-b border-dotted border-[#d8c6b5]" aria-hidden="true" />
+        <span className="shrink-0 text-[11px] font-semibold tabular-nums">{page}</span>
+        {action ? <span className="shrink-0 self-center">{action}</span> : null}
       </div>
-      {subline ? <p className="mt-1 pl-3 text-xs text-[#8b7666]">{subline}</p> : null}
+      {subline ? <p className="mt-0.5 pl-2 text-[11px] text-[#8b7666]">{subline}</p> : null}
+      {footer ? <div className="mt-1 pl-2">{footer}</div> : null}
     </div>
   )
 }
@@ -77,11 +81,16 @@ function buildBookContents(bookTopics, bookTests) {
   })
 
   const entries = Array.from(groups.values()).map((group) => {
-    const pages = bookTests
-      .filter((test) => group.topicIds.includes(test.topicId))
+    const groupTests = bookTests.filter((test) => group.topicIds.includes(test.topicId))
+    const pages = groupTests
       .map((test) => Number(test.pageStart))
       .filter((page) => Number.isInteger(page) && page > 0)
-    return { name: group.name, page: pages.length ? Math.min(...pages) : null }
+    return {
+      name: group.name,
+      topicIds: group.topicIds,
+      testCount: groupTests.length,
+      page: pages.length ? Math.min(...pages) : null,
+    }
   })
 
   entries.sort((a, b) => {
@@ -94,60 +103,85 @@ function buildBookContents(bookTopics, bookTests) {
   return entries
 }
 
-function TopicContentsPreview({ bookName, topicName, bookContents, editingName }) {
+function TopicContentsPreview({ bookName, topicName, bookContents, editingName, onDeleteEntry, deleteBusy }) {
   const trimmed = topicName.trim()
   const isEdit = Boolean(editingName)
-
-  const rows = bookContents.map((entry) => {
-    const active = isEdit && entry.name === editingName
-    return {
-      key: entry.name,
-      label: active ? trimmed || entry.name : entry.name,
-      page: entry.page == null ? '—' : String(entry.page),
-      active,
-    }
-  })
-
-  // Yeni içerik henüz sayfa numarası taşımadığı için listenin sonuna eklenir.
-  if (!isEdit) {
-    rows.push({
-      key: '__new__',
-      label: trimmed || CONTENT_TOPIC_EXAMPLE,
-      page: trimmed ? '...' : '12',
-      active: true,
-      subline: 'Yeni içerik başlığı',
-    })
-  }
+  const [pendingKey, setPendingKey] = useState(null)
+  const canDelete = Boolean(onDeleteEntry) && !isEdit
 
   return (
-    <div className="relative flex h-full min-h-[360px] flex-col bg-[#fffdf8] px-4 py-5 sm:px-6 sm:py-6">
-      <div className="absolute inset-x-4 top-3 h-px bg-[#eadbc8] sm:inset-x-6" aria-hidden="true" />
-      <div className="mb-5 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="break-words text-xs font-medium text-[#9b7a5a]">{bookName || 'Kaynak Kitap'}</p>
-          <h3 className="mt-1 text-xl font-semibold text-[#2f2925]">İçindekiler</h3>
-        </div>
-        <span className="shrink-0 rounded-full border border-[#eadbc8] px-2.5 py-1 text-[11px] font-semibold text-[#9b7a5a]">
-          Sayfa 02
-        </span>
-      </div>
+    <div className="relative flex h-full min-h-[300px] flex-col bg-[#fffdf8] p-4 sm:p-5">
+      <div className="absolute inset-x-4 top-2.5 h-px bg-[#eadbc8] sm:inset-x-5" aria-hidden="true" />
+      <h3 className="mb-2.5 mt-1 break-words text-base font-semibold text-[#2f2925]">
+        {(bookName || 'Kaynak Kitap') + ' — İçindekiler'}
+      </h3>
 
-      <div className="flex flex-1 flex-col gap-2" aria-live="polite">
-        {rows.map((row) => (
-          <TopicBookPageRow
-            key={row.key}
-            label={row.label}
-            page={row.page}
-            active={row.active}
-            subline={row.subline}
-          />
-        ))}
-        {rows.length === 0 ? (
-          <p className="px-2.5 text-sm text-[#8b7666]">Bu kaynağa henüz içerik eklenmedi.</p>
+      <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto" aria-live="polite">
+        {bookContents.map((entry) => {
+          const active = isEdit && entry.name === editingName
+          const confirming = pendingKey === entry.name
+          return (
+            <TopicBookPageRow
+              key={entry.name}
+              label={active ? trimmed || entry.name : entry.name}
+              page={entry.page == null ? '—' : String(entry.page)}
+              active={active}
+              action={
+                canDelete ? (
+                  <button
+                    type="button"
+                    aria-label={`${entry.name} içeriğini sil`}
+                    disabled={deleteBusy}
+                    onClick={() =>
+                      entry.testCount > 0 ? setPendingKey(entry.name) : onDeleteEntry(entry)
+                    }
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#a23b1e] disabled:opacity-40"
+                  >
+                    <Trash2 size={13} aria-hidden="true" />
+                  </button>
+                ) : null
+              }
+              footer={
+                confirming ? (
+                  <div className="rounded-md bg-[#fbeee0] px-2 py-1.5 text-[11px] text-[#7a3d16]">
+                    <p className="mb-1.5">
+                      Bu içeriğin altında {entry.testCount} test var. İçerikle birlikte testler ve
+                      cevap anahtarları da silinecek.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={deleteBusy}
+                        onClick={() => onDeleteEntry(entry)}
+                        className="rounded-md bg-[#a23b1e] px-2 py-1 font-semibold text-white disabled:opacity-50"
+                      >
+                        {deleteBusy ? 'Siliniyor…' : 'Sil'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingKey(null)}
+                        className="rounded-md border border-[#d8c6b5] px-2 py-1 font-semibold text-[#7a3d16]"
+                      >
+                        Vazgeç
+                      </button>
+                    </div>
+                  </div>
+                ) : null
+              }
+            />
+          )
+        })}
+
+        {!isEdit ? (
+          <TopicBookPageRow label={trimmed || 'Yeni içerik başlığı'} page={trimmed ? '…' : '—'} active />
+        ) : null}
+
+        {bookContents.length === 0 && isEdit ? (
+          <p className="px-2 text-[13px] text-[#8b7666]">Bu kaynağa henüz içerik eklenmedi.</p>
         ) : null}
       </div>
 
-      <div className="mt-5 flex items-center justify-between border-t border-[#eadbc8] pt-3 text-[11px] font-medium text-[#b49c84]">
+      <div className="mt-3 flex items-center justify-between border-t border-[#eadbc8] pt-2 text-[11px] font-medium text-[#b49c84]">
         <span>techcoach kitaplık</span>
         <span>02</span>
       </div>
@@ -155,12 +189,12 @@ function TopicContentsPreview({ bookName, topicName, bookContents, editingName }
   )
 }
 
-function TopicModal({ book, topic, topics = [], tests = [], onSaved, onClose }) {
+function TopicModal({ book, topic, topics = [], tests = [], onSaved, onDeleted, onClose }) {
   const isEdit = Boolean(topic)
   const [name, setName] = useState(topic?.name || '')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const previewTopicName = name.trim() || CONTENT_TOPIC_EXAMPLE
+  const [deleteBusy, setDeleteBusy] = useState(false)
 
   // topics/tests bu kaynağa ait olacak şekilde önceden filtrelenmiş gelir (Kütüphane
   // katalog ekranı tüm listeyi verdiği için orada book.id'ye göre süzülür).
@@ -171,6 +205,23 @@ function TopicModal({ book, topic, topics = [], tests = [], onSaved, onClose }) 
     const bookTests = tests.filter((item) => bookTopicIds.has(item.topicId))
     return buildBookContents(bookTopics, bookTests)
   }, [bookId, topics, tests])
+
+  // İçindekiler listesinden bir içeriği (ve varsa altındaki testleri) siler. Aynı adlı
+  // birden çok topic satırı oluşmuş olabileceğinden hepsi tek tek silinir.
+  const handleDeleteEntry = async (entry) => {
+    setDeleteBusy(true)
+    setError('')
+    try {
+      for (const topicId of entry.topicIds) {
+        await authRequest(`/api/panel-admin/resource-book-topics/${topicId}`, { method: 'DELETE' })
+      }
+      onDeleted?.(entry.topicIds)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -228,68 +279,71 @@ function TopicModal({ book, topic, topics = [], tests = [], onSaved, onClose }) 
           <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
         ) : null}
 
-        <div className="relative overflow-hidden rounded-2xl border border-[#eadbc8] bg-[#e8d7c3] p-2 shadow-[0_18px_50px_rgba(92,62,35,0.18)] sm:p-3">
+        <div className="relative overflow-hidden rounded-2xl border border-[#eadbc8] bg-[#e8d7c3] p-1.5 shadow-[0_18px_50px_rgba(92,62,35,0.18)] sm:p-2">
           <div
             className="pointer-events-none absolute bottom-3 left-1/2 top-3 z-10 hidden w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-[#cdb49a] to-transparent md:block"
             aria-hidden="true"
           />
           <div className="grid overflow-hidden rounded-xl border border-[#eadbc8] bg-white shadow-[inset_0_0_34px_rgba(133,92,55,0.08)] md:grid-cols-2">
-            <section className="relative flex min-h-[360px] min-w-0 flex-col bg-[#fffaf4] px-4 py-5 sm:px-6 sm:py-6 md:border-r md:border-[#eadbc8]">
-              <div className="absolute inset-x-4 top-3 h-px bg-[#eadbc8] sm:inset-x-6" aria-hidden="true" />
-              <div className="mb-5 flex items-start gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f8e3d0] text-[#c9772f]">
-                  <BookOpen size={18} aria-hidden="true" />
+            <section className="relative flex min-h-[300px] min-w-0 flex-col bg-[#fffaf4] p-4 sm:p-5 md:border-r md:border-[#eadbc8]">
+              <div className="absolute inset-x-4 top-2.5 h-px bg-[#eadbc8] sm:inset-x-5" aria-hidden="true" />
+              <div className="mb-3 flex items-center gap-2.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8e3d0] text-[#c9772f]">
+                  <BookOpen size={16} aria-hidden="true" />
                 </span>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-[#9b7a5a]">İçerik girişi</p>
-                  <h3 className="mt-1 break-words text-xl font-semibold text-[#2f2925]">İçerik başlığı</h3>
-                </div>
+                <h3 className="min-w-0 break-words text-base font-semibold text-[#2f2925]">
+                  {isEdit ? 'İçerik başlığını düzenle' : 'Yeni içerik ekle'}
+                </h3>
               </div>
 
-              <div className="mb-4 rounded-xl border border-[#eadbc8] bg-[#fff4e6] p-3">
-                <p className="mb-2 text-xs font-semibold text-[#6d4a31]">Örnek yapı</p>
-                <div className="flex flex-col gap-1 text-xs text-[#7d6a5a]">
-                  <div className="flex items-start gap-2 rounded-lg bg-white/60 px-2 py-1.5">
-                    <BookOpen size={14} className="mt-0.5 shrink-0 text-[#c9772f]" aria-hidden="true" />
-                    <span className="min-w-0 break-words">
-                      <span className="font-semibold text-[#3d3028]">Kitap</span>
-                      {book?.name ? <span> — {book.name}</span> : null}
+              <div className="mb-3 rounded-lg border border-[#eadbc8] bg-[#fff4e6] p-2.5">
+                <p className="mb-1.5 text-xs font-semibold text-[#6d4a31]">Nasıl içerik eklenir?</p>
+                <ol className="flex flex-col gap-1.5 text-[11px] leading-snug text-[#7d6a5a]">
+                  <li className="flex gap-2">
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#f0dcc5] text-[10px] font-bold text-[#8a5a33]">
+                      1
                     </span>
-                  </div>
-                  <div className="ml-3 border-l border-[#e1c7ad] pl-3">
-                    <div className="flex items-start gap-2 rounded-lg bg-[#f8e3d0] px-2 py-1.5">
-                      <ListTree size={14} className="mt-0.5 shrink-0 text-[#c9772f]" aria-hidden="true" />
-                      <span className="min-w-0 break-words">
-                        <span className="font-semibold text-[#3d3028]">İçerik</span> — {previewTopicName}
-                      </span>
-                    </div>
-                    <div className="ml-3 border-l border-[#e1c7ad] pl-3">
-                      <div className="flex items-start gap-2 px-2 py-1.5">
-                        <FileText size={14} className="mt-0.5 shrink-0 text-[#c9772f]" aria-hidden="true" />
-                        <span className="min-w-0 break-words">
-                          <span className="font-semibold text-[#3d3028]">Test</span> — Asal Sayılar, 1. Test
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                    <span>
+                      İçeriğin kitaptaki başlığını yazın — bir bölüm ya da ünite. Örn.{' '}
+                      <span className="font-medium text-[#3d3028]">“{CONTENT_TOPIC_EXAMPLE}”</span>
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#f0dcc5] text-[10px] font-bold text-[#8a5a33]">
+                      2
+                    </span>
+                    <span>
+                      <span className="font-medium text-[#3d3028]">İçeriği Oluştur</span>’a basın; içerik
+                      sağdaki içindekiler listesine sayfa sırasına göre yerleşir.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#f0dcc5] text-[10px] font-bold text-[#8a5a33]">
+                      3
+                    </span>
+                    <span>Sonra bu içeriğe testlerini (konu, ad, başlangıç sayfası) ekleyin.</span>
+                  </li>
+                </ol>
+                <p className="mt-1.5 text-[10px] text-[#9b8574]">
+                  Yanlış eklediğiniz içeriği sağdaki listedeki çöp kutusu ile silebilirsiniz.
+                </p>
               </div>
 
-              <label className="mt-auto flex flex-col gap-2">
-                <span className="text-sm font-semibold text-[#4a3b31]">İçerik Adı</span>
+              <label className="mt-auto flex flex-col gap-1.5">
+                <span className="text-[13px] font-semibold text-[#4a3b31]">İçerik Adı</span>
                 <input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder={`Örn. ${CONTENT_TOPIC_EXAMPLE}`}
-                  className="w-full rounded-xl border border-[#d8c6b5] bg-white px-3 py-3 text-base text-panel-text shadow-[0_1px_0_rgba(255,255,255,0.8)] outline-none focus:border-[#c9772f] focus:ring-2 focus:ring-[#c9772f]/15"
+                  className="w-full rounded-lg border border-[#d8c6b5] bg-white px-3 py-2.5 text-sm text-panel-text shadow-[0_1px_0_rgba(255,255,255,0.8)] outline-none focus:border-[#c9772f] focus:ring-2 focus:ring-[#c9772f]/15"
                   autoFocus
                 />
-                <span className="text-xs text-[#7d6a5a]">
-                  Kitabın içindekiler bölümündeki başlığı yazın. Testler bir sonraki adımda bu içeriğe eklenecek.
+                <span className="text-[11px] text-[#7d6a5a]">
+                  Kitabın içindekiler bölümündeki başlığı yazın.
                 </span>
               </label>
 
-              <div className="mt-5 flex items-center justify-between border-t border-[#eadbc8] pt-3 text-[11px] font-medium text-[#b49c84]">
+              <div className="mt-3 flex items-center justify-between border-t border-[#eadbc8] pt-2 text-[11px] font-medium text-[#b49c84]">
                 <span>giriş</span>
                 <span>01</span>
               </div>
@@ -301,12 +355,14 @@ function TopicModal({ book, topic, topics = [], tests = [], onSaved, onClose }) 
                 topicName={name}
                 bookContents={bookContents}
                 editingName={topic?.name || ''}
+                onDeleteEntry={onDeleted ? handleDeleteEntry : undefined}
+                deleteBusy={deleteBusy}
               />
             </section>
           </div>
         </div>
 
-        <div className="mt-4 flex justify-end">
+        <div className="mt-3 flex justify-end">
           <Button type="submit" disabled={loading} size="md" className="h-11 w-full rounded-xl sm:w-auto sm:min-w-48">
             {loading ? 'Kaydediliyor...' : isEdit ? 'Kaydet' : 'İçeriği Oluştur'}
           </Button>
