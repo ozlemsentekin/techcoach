@@ -22,6 +22,8 @@ const StudentsPage = lazy(() => import('./pages/StudentsPage'))
 const TeachersPage = lazy(() => import('./pages/TeachersPage'))
 const LibraryPage = lazy(() => import('./pages/LibraryPage'))
 const BookshelfPage = lazy(() => import('./pages/BookshelfPage'))
+const RequestsPage = lazy(() => import('./pages/RequestsPage'))
+const AdminBookRequestsPage = lazy(() => import('./pages/AdminBookRequestsPage'))
 const TestsPage = lazy(() => import('./pages/TestsPage'))
 const MistakesPage = lazy(() => import('./pages/MistakesPage'))
 
@@ -120,6 +122,15 @@ export default function ParentApp() {
               element={<RequireStudents>{pageElement(BookshelfPage)}</RequireStudents>}
             />
             <Route path="settings" element={pageElement(SettingsPage)} />
+            <Route path="requests" element={pageElement(RequestsPage)} />
+            <Route
+              path="admin/book-requests"
+              element={
+                <RequireAdmin>
+                  {pageElement(AdminBookRequestsPage)}
+                </RequireAdmin>
+              }
+            />
             <Route
               path="admin/users"
               element={

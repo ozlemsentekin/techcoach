@@ -22,8 +22,9 @@ export const STUDENT_MORE_NAV = [
 export const STUDENT_SIDEBAR_NAV = [...STUDENT_PRIMARY_NAV, ...STUDENT_MORE_NAV]
 
 export const PARENT_STUDENTS_NAV_ITEM = { to: '/parent/students', label: 'Çocuklarım', icon: 'Users' }
+export const PARENT_REQUESTS_NAV_ITEM = { to: '/parent/requests', label: 'Taleplerim', icon: 'ClipboardList' }
 
-export const PARENT_MORE_NAV = [PARENT_STUDENTS_NAV_ITEM]
+export const PARENT_MORE_NAV = [PARENT_STUDENTS_NAV_ITEM, PARENT_REQUESTS_NAV_ITEM]
 
 // Henüz hiç çocuk profili eklenmemiş bir veli için Bugün/Haftalık Plan sayfalarının
 // hepsi boş/hatalı görünür (bunlar bir öğrenci bağlamı gerektirir); o yüzden ilk kayıtta tek
@@ -67,7 +68,9 @@ export function getTeacherPrimaryNav(canManageLibrary = false) {
   ]
 }
 
-export const TEACHER_MORE_NAV = []
+export const TEACHER_MORE_NAV = [
+  { to: '/teacher/requests', label: 'Taleplerim', icon: 'ClipboardList' },
+]
 
 export function getTeacherSidebarNav(canManageLibrary = false) {
   return [...getTeacherPrimaryNav(canManageLibrary), ...TEACHER_MORE_NAV]
@@ -80,6 +83,7 @@ export const PARENT_ADMIN_NAV = {
     { to: '/parent/admin/users', label: 'Üyeler', icon: 'Users' },
     { to: '/parent/admin/subjects', label: 'Dersler', icon: 'BookOpen' },
     { to: '/parent/admin/publishers', label: 'Yayın Evleri', icon: 'Building2' },
+    { to: '/parent/admin/book-requests', label: 'Kitap Talepleri', icon: 'ClipboardList' },
     { to: '/parent/admin/schools', label: 'Okul Yönetimi', icon: 'School' },
     { to: '/parent/admin/motivation-messages', label: 'Motivasyon Mesajları', icon: 'Sparkles' },
     { to: '/parent/admin/greetings', label: 'Selamlama Metinleri', icon: 'Clock' },

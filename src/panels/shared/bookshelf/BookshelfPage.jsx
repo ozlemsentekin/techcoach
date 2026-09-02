@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Archive, BookMarked, Plus, Search, Users } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Archive, BookMarked, FilePlus2, Plus, Search, Users } from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../LoadingState'
 import EmptyState from '../EmptyState'
@@ -11,6 +12,7 @@ import { getBookshelfBooks } from '../../../services/bookshelfService'
 import { BOOKSHELF_RESOURCE_TYPE_LABELS } from './bookshelfConstants'
 import BookFormModal from './BookFormModal'
 import BookshelfDetailModal from './BookshelfDetailModal'
+import BookAdditionRequestModal from '../requests/BookAdditionRequestModal'
 
 function groupBySubject(books) {
   const groups = new Map()
@@ -63,6 +65,8 @@ function BookCard({ book, showAssignees, showCreator, onClick }) {
 
 export default function BookshelfPage({ showAssignees = true }) {
   const { authUser } = useAuth()
+  const navigate = useNavigate()
+  const requestsPath = authUser?.role === 'ogretmen' ? '/teacher/requests' : '/parent/requests'
   // Admin Kitaplık'ta tam yetkilidir (her kaynağı görür, ekler, düzenler, atar, siler) ve
   // ayrıca ekleyen kişi / arama gibi denetim kolaylıklarını görür.
   const adminView = Boolean(authUser?.isAdmin)
@@ -73,6 +77,7 @@ export default function BookshelfPage({ showAssignees = true }) {
   const [showArchive, setShowArchive] = useState(false)
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState(false)
+  const [requesting, setRequesting] = useState(false)
   const [editingBook, setEditingBook] = useState(null)
   const [detailBookId, setDetailBookId] = useState(null)
 
@@ -122,10 +127,22 @@ export default function BookshelfPage({ showAssignees = true }) {
             : 'Öğrencilerinizle takip ettiğiniz tüm kaynaklar — katalog kitapları ve sizin eklediğiniz özel kaynaklar. Özel kaynakları buradan ekleyip yönetebilirsiniz.'
         }
         actions={
-          <Button type="button" size="md" className="gap-1.5" onClick={() => setCreating(true)}>
-            <Plus size={16} aria-hidden="true" />
-            Yeni Kitap Ekle
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="md"
+              variant="secondary"
+              className="gap-1.5"
+              onClick={() => setRequesting(true)}
+            >
+              <FilePlus2 size={16} aria-hidden="true" />
+              Kitap Ekleme Talebi Oluştur
+            </Button>
+            <Button type="button" size="md" className="gap-1.5" onClick={() => setCreating(true)}>
+              <Plus size={16} aria-hidden="true" />
+              Yeni Kitap Ekle
+            </Button>
+          </div>
         }
       />
 
@@ -235,6 +252,16 @@ export default function BookshelfPage({ showAssignees = true }) {
 
       {creating ? (
         <BookFormModal onSaved={handleCreated} onClose={() => setCreating(false)} />
+      ) : null}
+
+      {requesting ? (
+        <BookAdditionRequestModal
+          onClose={() => setRequesting(false)}
+          onGoToRequests={() => {
+            setRequesting(false)
+            navigate(requestsPath)
+          }}
+        />
       ) : null}
 
       {editingBook ? (
