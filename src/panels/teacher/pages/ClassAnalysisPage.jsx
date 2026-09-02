@@ -16,7 +16,6 @@ import LoadingState from '../../shared/LoadingState'
 import {
   aggregateBy,
   buildActivityRecords,
-  dateInRange,
   formatNet,
   formatNumber,
   sumRecords,
@@ -24,6 +23,7 @@ import {
 } from '../../shared/progressAnalytics'
 import { RATE_TONES, successRateTone } from '../../shared/rateTones'
 import { ResourceBookAvatar } from '../../shared/ResourceBookCard'
+import { cn } from '../../ui/utils'
 import { calculateNet } from '../../../utils/netCalculator'
 import { todayISODate } from '../../../utils/time'
 import { isBacklogTask } from '../../../utils/backlogTasks'
@@ -31,11 +31,6 @@ import { getTeacherClassAnalysis } from '../../../services/teacherService'
 import { useTeacherClasses } from '../useTeacherClasses'
 
 const UNSPECIFIED_KEY = '__none__'
-const RANGE_FILTERS = [
-  { id: 'all', label: 'Tüm Zamanlar' },
-  { id: 'month', label: 'Bu Ay' },
-  { id: 'week', label: 'Bu Hafta' },
-]
 const COMPLETED_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
 const MIN_ANSWERED_FOR_RANK = 3
 const MAX_RESOURCE_COLUMNS = 8
@@ -83,17 +78,16 @@ function safeAcc(accuracy) {
 
 // Öğrencinin seçili tarih aralığındaki ham gelişim verisini tek-öğrenci analiz
 // sayfasıyla aynı yardımcılarla özetler.
-function analyzeStudent(entry, range, today) {
+function analyzeStudent(entry) {
   const overview = entry.overview || {}
   const testsById = new Map((overview.tests || []).map((test) => [test.id, test]))
-  const allRecords = buildActivityRecords(overview, testsById)
-  const records = allRecords.filter((record) => dateInRange(record.date, range, today))
+  const records = buildActivityRecords(overview, testsById)
   const totals = sumRecords(records)
   const answered = totals.correct + totals.wrong
 
-  // Aylık dağılım tarih filtresinden bağımsız — tüm kayıtlar ay bazında toplanır.
+  // Aylık dağılım — tüm kayıtlar ay bazında toplanır.
   const monthly = new Map()
-  for (const record of allRecords) {
+  for (const record of records) {
     const monthKey = (record.date || '').slice(0, 7)
     if (monthKey.length !== 7) continue
     const bucket = monthly.get(monthKey) || { questions: 0, correct: 0, wrong: 0, blank: 0 }
@@ -104,7 +98,7 @@ function analyzeStudent(entry, range, today) {
     monthly.set(monthKey, bucket)
   }
 
-  const tasks = (overview.tasks || []).filter((task) => dateInRange(toDateKey(task.date), range, today))
+  const tasks = overview.tasks || []
   const taskCounts = { total: tasks.length, onTime: 0, late: 0, backlog: 0, pending: 0 }
   for (const task of tasks) {
     if (COMPLETED_STATUSES.has(task.status)) {
@@ -169,15 +163,13 @@ function analyzeStudent(entry, range, today) {
     })
   }
 
-  // Son işlem zamanı: ham zaman damgaları (görev/oturum/manuel optik/ödev) içinden
-  // seçili tarih aralığına düşen en yeni an.
+  // Son işlem zamanı: ham zaman damgaları (görev/oturum/manuel optik/ödev) içindeki en yeni an.
   let lastActivityAt = null
   const considerTs = (value) => {
     if (!value) return
     const date = value instanceof Date ? value : new Date(value)
     if (Number.isNaN(date.getTime())) return
     const iso = date.toISOString()
-    if (!dateInRange(toDateKey(iso), range, today)) return
     if (!lastActivityAt || iso > lastActivityAt) lastActivityAt = iso
   }
   for (const task of overview.tasks || []) {
@@ -226,6 +218,27 @@ function LastActivity({ iso }) {
         <span className="block text-[11px] text-panel-text-muted">{TIME_FMT.format(date)}</span>
       </span>
     </span>
+  )
+}
+
+// Öğrenci Gelişim Analizi'ndeki özet kartlarıyla aynı stil: solda ikon + başlık +
+// alt metin, sağda ayrı zeminli büyük değer.
+function SummaryMetric({ icon, title, value, description, iconClassName = 'bg-panel-blue-soft text-panel-blue', valueClassName }) {
+  return (
+    <div className="flex h-full items-stretch overflow-hidden rounded-xl border border-panel-border bg-panel-surface shadow-sm">
+      <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5 p-4">
+        <div className="flex items-center gap-2">
+          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}>
+            {createElement(icon, { size: 16, 'aria-hidden': true })}
+          </div>
+          <p className="min-w-0 truncate text-base font-bold text-panel-text">{title}</p>
+        </div>
+        <p className="text-xs text-panel-text-muted">{description}</p>
+      </div>
+      <div className="flex shrink-0 items-center justify-center border-l border-panel-border bg-panel-surface-soft px-5 py-4">
+        <p className={cn('whitespace-nowrap text-2xl font-bold leading-tight text-panel-text', valueClassName)}>{value}</p>
+      </div>
+    </div>
   )
 }
 
@@ -509,7 +522,6 @@ export default function ClassAnalysisPage() {
   const navigate = useNavigate()
   const { grades, hasUnspecified, classesLoading } = useTeacherClasses()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [range, setRange] = useState('all')
   const [loaded, setLoaded] = useState(null)
   const [failed, setFailed] = useState(null)
   const [sortKey, setSortKey] = useState('accuracyAsc')
@@ -545,7 +557,7 @@ export default function ClassAnalysisPage() {
 
   const analysis = useMemo(() => {
     if (!data) return null
-    const students = (data.students || []).map((entry) => analyzeStudent(entry, range, today))
+    const students = (data.students || []).map((entry) => analyzeStudent(entry))
 
     // Isı haritası sütunları: sınıfın en çok çalıştığı / atanmış kaynaklar.
     const resourceMeta = new Map()
@@ -566,8 +578,22 @@ export default function ClassAnalysisPage() {
 
     const months = buildAcademicMonths(today)
 
-    return { students, resourceColumns, months }
-  }, [data, range, today])
+    // Özet kartları: aktif çözüm yapmış öğrenci sayısı + öğrenci başarı ortalaması.
+    const activeStudents = students.filter((student) => Number.isFinite(student.accuracy))
+    const avgAccuracy = activeStudents.length
+      ? activeStudents.reduce((sum, student) => sum + student.accuracy, 0) / activeStudents.length
+      : NaN
+    const accuracyValues = activeStudents.map((student) => student.accuracy)
+    const summary = {
+      studentCount: students.length,
+      activeCount: activeStudents.length,
+      avgAccuracy,
+      minAccuracy: accuracyValues.length ? Math.min(...accuracyValues) : NaN,
+      maxAccuracy: accuracyValues.length ? Math.max(...accuracyValues) : NaN,
+    }
+
+    return { students, resourceColumns, months, summary }
+  }, [data, today])
 
   const sortedStudents = useMemo(() => {
     if (!analysis) return []
@@ -620,23 +646,35 @@ export default function ClassAnalysisPage() {
         </div>
       </div>
 
-      <div className="flex w-full gap-1 rounded-xl border border-panel-border bg-panel-surface-soft p-1 sm:w-auto sm:self-start">
-        {RANGE_FILTERS.map((filter) => (
-          <button
-            key={filter.id}
-            type="button"
-            aria-pressed={range === filter.id}
-            onClick={() => setRange(filter.id)}
-            className={`h-9 flex-1 rounded-lg px-3 text-xs font-bold transition-colors sm:flex-none ${
-              range === filter.id
-                ? 'bg-panel-surface text-panel-text shadow-sm'
-                : 'text-panel-text-muted hover:text-panel-text'
-            }`}
-          >
-            {filter.label}
-          </button>
-        ))}
-      </div>
+      {analysis ? (
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <SummaryMetric
+            icon={Users}
+            iconClassName="bg-panel-blue-soft text-panel-blue"
+            title="Sınıf Mevcudu"
+            value={formatNumber(analysis.summary.studentCount)}
+            description={`${formatNumber(analysis.summary.activeCount)} öğrenci aktif çözüm yaptı`}
+          />
+          <SummaryMetric
+            icon={Target}
+            iconClassName={cn('bg-panel-blue-soft', RATE_TONES[toneFor(analysis.summary.avgAccuracy)].text)}
+            valueClassName={
+              Number.isFinite(analysis.summary.avgAccuracy)
+                ? RATE_TONES[toneFor(analysis.summary.avgAccuracy)].text
+                : undefined
+            }
+            title="Sınıf Başarı Ortalaması"
+            value={pct(analysis.summary.avgAccuracy)}
+            description={
+              analysis.summary.activeCount
+                ? `${analysis.summary.activeCount} öğrenci · %${Math.round(analysis.summary.minAccuracy)}–%${Math.round(
+                    analysis.summary.maxAccuracy,
+                  )} arası`
+                : 'Henüz çözüm yok'
+            }
+          />
+        </div>
+      ) : null}
 
       {data?.failedStudents?.length ? (
         <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">
@@ -738,7 +776,7 @@ function ClassAnalysisBody({ analysis, sortedStudents, sortKey, onSortChange, on
     <div className="flex flex-col gap-5">
       <Card
         title="Aylara Göre Çalışma Performansı"
-        subtitle="Öğrenci başına aylık çözülen soru + o ayın başarı yüzdesi (Ağustos–Haziran, üstteki tarih filtresinden bağımsız)"
+        subtitle="Öğrenci başına aylık çözülen soru ve o ayın başarı yüzdesi (Ağustos–Haziran)"
         icon={CalendarRange}
       >
         <MonthlyTable
