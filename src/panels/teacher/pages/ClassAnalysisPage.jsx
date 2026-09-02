@@ -163,26 +163,6 @@ function analyzeStudent(entry) {
     })
   }
 
-  // Son işlem zamanı: ham zaman damgaları (görev/oturum/manuel optik/ödev) içindeki en yeni an.
-  let lastActivityAt = null
-  const considerTs = (value) => {
-    if (!value) return
-    const date = value instanceof Date ? value : new Date(value)
-    if (Number.isNaN(date.getTime())) return
-    const iso = date.toISOString()
-    if (!lastActivityAt || iso > lastActivityAt) lastActivityAt = iso
-  }
-  for (const task of overview.tasks || []) {
-    considerTs(task.completedAt)
-    considerTs(task.updatedAt)
-  }
-  for (const session of overview.sessions || []) {
-    considerTs(session.endedAt)
-    considerTs(session.startedAt)
-  }
-  for (const completion of overview.manualTestCompletions || []) considerTs(completion.markedAt)
-  for (const homework of overview.homeworks || []) considerTs(homework.updatedAt)
-
   return {
     key: entry.studentTeacherId,
     studentTeacherId: entry.studentTeacherId,
@@ -199,7 +179,8 @@ function analyzeStudent(entry) {
     monthly,
     hardestTopic: rankable(topicRows),
     hardestBook: rankable(resourceRows),
-    lastActivityAt,
+    // TechCoach genelinde (branştan bağımsız) son işlem zamanı — backend'den gelir.
+    lastActivityAt: entry.lastActivityAt || null,
   }
 }
 
