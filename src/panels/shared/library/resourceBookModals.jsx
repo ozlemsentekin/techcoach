@@ -518,6 +518,15 @@ function createEmptyTestRow(seed = {}) {
   }
 }
 
+// Test adının sonundaki (ya da içindeki son) sayıyı bir artırır: "1. Test" → "2. Test",
+// "Test 4" → "Test 5". Sayı yoksa ad olduğu gibi döner.
+function bumpTestName(name) {
+  const trimmed = (name || '').trim()
+  const match = trimmed.match(/^(.*?)(\d+)(\D*)$/)
+  if (!match) return trimmed
+  return `${match[1]}${Number(match[2]) + 1}${match[3]}`
+}
+
 // Mevcut testler + doldurulan taslak satırları tek bir sayfa sırasına göre sıralı önizleme
 // listesine dönüştürür (İçindekiler önizlemesindeki mantığın testler için karşılığı).
 function buildTopicTestPreview(existingTests, draftRows) {
@@ -562,14 +571,19 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onClose }
     setRows((current) => [...current, createEmptyTestRow()])
   }
 
-  // Aynı konudan art arda birkaç test eklemek (1. Test, 2. Test, ...) en sık yapılan işlem;
-  // konu adını yeni satıra kopyalayarak her seferinde yeniden yazmayı önler.
-  const duplicateRow = (id) => {
+  // Sağdaki listede görünen (kaydedilmiş) bir testi kopyalar: konu aynı, test no +1,
+  // sayfa +2 olacak şekilde yeni bir taslak satır ekler. Kullanıcı kaydetmeden önce
+  // istediği alanı değiştirebilir.
+  const copyFromSaved = (item) => {
+    const seed = {
+      topicName: item.topicName,
+      name: bumpTestName(item.name),
+      pageStart: item.page != null ? String(item.page + 2) : '',
+    }
     setRows((current) => {
-      const index = current.findIndex((row) => row.id === id)
-      if (index === -1) return current
-      const newRow = createEmptyTestRow({ topicName: current[index].topicName })
-      return [...current.slice(0, index + 1), newRow, ...current.slice(index + 1)]
+      const pristineSingle =
+        current.length === 1 && !current[0].topicName && !current[0].name && !current[0].pageStart
+      return pristineSingle ? [createEmptyTestRow(seed)] : [...current, createEmptyTestRow(seed)]
     })
   }
 
@@ -701,8 +715,9 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onClose }
                   )}
                 </ol>
                 <p className="mt-1.5 text-[10px] text-[#9b8574]">
-                  Aynı konudan çok test varsa <span className="font-medium text-[#8a5a33]">kopyala</span> ile konu
-                  adını yeni satıra taşıyın. Soru sayısı ve cevap anahtarını sonra ekleyebilirsiniz.
+                  Eklenmiş bir testi sağdaki listeden <span className="font-medium text-[#8a5a33]">kopyala</span>{' '}
+                  ile çoğaltabilirsiniz — test no +1, sayfa +2 gelir, düzenleyebilirsiniz. Soru sayısı ve cevap
+                  anahtarını sonra ekleyebilirsiniz.
                 </p>
               </div>
 
@@ -711,26 +726,16 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onClose }
                   <div key={row.id} className="rounded-lg border border-[#e6d5c1] bg-white p-2.5">
                     <div className="mb-1.5 flex items-center justify-between">
                       <span className="text-[11px] font-semibold text-[#9b7a5a]">{index + 1}. test</span>
-                      <div className="flex items-center gap-1">
+                      {rows.length > 1 ? (
                         <button
                           type="button"
-                          aria-label="Konuyu kopyalayarak satır ekle"
-                          onClick={() => duplicateRow(row.id)}
-                          className="flex h-6 w-6 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#8a5a33]"
+                          aria-label="Satırı sil"
+                          onClick={() => removeRow(row.id)}
+                          className="flex h-6 w-6 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#a23b1e]"
                         >
-                          <Copy size={13} aria-hidden="true" />
+                          <Trash2 size={13} aria-hidden="true" />
                         </button>
-                        {rows.length > 1 ? (
-                          <button
-                            type="button"
-                            aria-label="Satırı sil"
-                            onClick={() => removeRow(row.id)}
-                            className="flex h-6 w-6 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#a23b1e]"
-                          >
-                            <Trash2 size={13} aria-hidden="true" />
-                          </button>
-                        ) : null}
-                      </div>
+                      ) : null}
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <input
@@ -808,6 +813,18 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onClose }
                         label={[item.topicName, item.name].filter(Boolean).join(' · ') || 'Yeni test'}
                         page={item.page == null ? '…' : String(item.page)}
                         active={item.draft}
+                        action={
+                          item.draft ? null : (
+                            <button
+                              type="button"
+                              aria-label={`${item.name || 'Test'} testini kopyala`}
+                              onClick={() => copyFromSaved(item)}
+                              className="flex h-6 w-6 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#8a5a33]"
+                            >
+                              <Copy size={13} aria-hidden="true" />
+                            </button>
+                          )
+                        }
                       />
                     ))
                   )}
