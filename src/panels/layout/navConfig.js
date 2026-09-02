@@ -58,9 +58,12 @@ export function isNavItemActive(to, location) {
   return location.search.replace(/^\?/, '') === search
 }
 
+// "Sınıf Analizi" tüm öğretmenlerde görünür; sayfa, öğrencilerin sınıf bilgisinden
+// sekmeleri kendisi oluşturur (sınıf bilgisi yoksa yönlendirici bir boş durum gösterir).
 export function getTeacherPrimaryNav(canManageLibrary = false) {
   return [
     { to: '/teacher/students', label: 'Öğrencilerim', icon: 'Users' },
+    { to: '/teacher/class-analysis', label: 'Sınıf Analizi', icon: 'BarChart3' },
     { to: '/teacher/lesson-plan', label: 'Ders Planım', icon: 'CalendarRange' },
     { to: '/teacher/parents', label: 'Velilerim', icon: 'UserRound' },
     canManageLibrary ? KUTUPHANE_TEACHER_ITEM : KITAPLIK_TEACHER_ITEM,

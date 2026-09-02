@@ -6,6 +6,7 @@ import {
   BookOpen,
   CalendarClock,
   CalendarDays,
+  ChevronDown,
   ClipboardList,
   GraduationCap,
   IdCard,
@@ -343,6 +344,7 @@ export default function StudentsPage() {
   const [deleteStudent, setDeleteStudent] = useState(null)
   const [actionStudentId, setActionStudentId] = useState(null)
   const [openActionsStudentId, setOpenActionsStudentId] = useState(null)
+  const [expandedStudentId, setExpandedStudentId] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -497,6 +499,7 @@ export default function StudentsPage() {
                 onClick: () => setDeleteStudent(student),
               },
             ]
+            const isExpanded = expandedStudentId === student.studentTeacherId
             const goToDetail = () => {
               if (!student.isActive || isBusy) return
               navigate(`/teacher/students/${student.studentTeacherId}`)
@@ -513,7 +516,7 @@ export default function StudentsPage() {
                     goToDetail()
                   }
                 }}
-                className={`flex flex-col gap-4 rounded-2xl border border-panel-border p-5 shadow-panel-1 transition duration-150 ${
+                className={`flex flex-col gap-3 rounded-2xl border border-panel-border p-4 shadow-panel-1 transition duration-150 ${
                   student.isActive ? 'bg-panel-surface cursor-pointer hover:-translate-y-0.5 hover:shadow-sm' : 'bg-panel-surface-soft'
                 }`}
               >
@@ -553,17 +556,25 @@ export default function StudentsPage() {
                 </div>
 
                 <div className="flex flex-col gap-1.5 text-sm text-panel-text-muted">
-                  {student.studentPhone ? (
-                    <p className="inline-flex items-center gap-1.5">
-                      <Phone size={14} className="shrink-0" aria-hidden="true" />
-                      <span className="truncate">{student.studentPhone}</span>
-                    </p>
-                  ) : null}
-                  {school ? (
-                    <p className="inline-flex items-center gap-1.5">
-                      <School size={14} className="shrink-0" aria-hidden="true" />
-                      <span className="truncate">{school}</span>
-                    </p>
+                  {school || student.studentPhone || student.resourceCount ? (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {school ? (
+                        <span className="inline-flex min-w-0 items-center gap-1.5">
+                          <School size={14} className="shrink-0" aria-hidden="true" />
+                          <span className="truncate">{school}</span>
+                        </span>
+                      ) : null}
+                      {student.studentPhone ? (
+                        <span className="inline-flex shrink-0 items-center gap-1.5">
+                          <Phone size={14} className="shrink-0" aria-hidden="true" />
+                          {student.studentPhone}
+                        </span>
+                      ) : null}
+                      <span className="inline-flex shrink-0 items-center gap-1.5">
+                        <BookOpen size={14} className="shrink-0" aria-hidden="true" />
+                        {student.resourceCount} kaynak
+                      </span>
+                    </div>
                   ) : null}
                   {!student.studentGrade ? (
                     <MissingGradeFix student={student} onSaved={handleGradeSaved} />
@@ -574,13 +585,30 @@ export default function StudentsPage() {
                       <span className="truncate">{lesson}</span>
                     </p>
                   ) : null}
-                  <p className="inline-flex items-center gap-1.5">
-                    <BookOpen size={14} className="shrink-0" aria-hidden="true" />
-                    <span className="truncate">{student.resourceCount} kaynak</span>
-                  </p>
                 </div>
 
-                <div className="mt-auto grid grid-cols-1 gap-2 xl:grid-cols-2" onClick={(event) => event.stopPropagation()}>
+                <div className="mt-auto" onClick={(event) => event.stopPropagation()}>
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    disabled={!student.isActive || isBusy}
+                    onClick={() =>
+                      setExpandedStudentId((current) =>
+                        current === student.studentTeacherId ? null : student.studentTeacherId,
+                      )
+                    }
+                    className="flex w-full items-center justify-between rounded-lg border border-panel-border bg-panel-surface-soft px-3 py-2 text-[13px] font-semibold text-panel-text transition-colors hover:bg-panel-border/40 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span>İşlemler</span>
+                    <ChevronDown
+                      size={16}
+                      aria-hidden="true"
+                      className={`shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+
+                  {isExpanded ? (
+                <div className="mt-2 grid grid-cols-1 gap-2 xl:grid-cols-2">
                   <Button
                     type="button"
                     variant="secondary"
@@ -647,6 +675,8 @@ export default function StudentsPage() {
                     <TrendingUp size={16} className="shrink-0" aria-hidden="true" />
                     <span className="min-w-0 truncate">Gelişim Analizi</span>
                   </Button>
+                </div>
+                  ) : null}
                 </div>
               </div>
             )
