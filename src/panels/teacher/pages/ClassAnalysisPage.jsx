@@ -1,8 +1,8 @@
 import { createElement, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  BookOpenCheck,
   CalendarCheck,
+  CalendarRange,
   GraduationCap,
   Layers3,
   Target,
@@ -88,11 +88,17 @@ function analyzeStudent(entry, range, today) {
   const totals = sumRecords(records)
   const answered = totals.correct + totals.wrong
 
-  // Aylık soru dağılımı tarih filtresinden bağımsız — tüm kayıtlar üzerinden ay bazında toplanır.
-  const monthlyQuestions = new Map()
+  // Aylık dağılım tarih filtresinden bağımsız — tüm kayıtlar ay bazında toplanır.
+  const monthly = new Map()
   for (const record of allRecords) {
     const monthKey = (record.date || '').slice(0, 7)
-    if (monthKey.length === 7) monthlyQuestions.set(monthKey, (monthlyQuestions.get(monthKey) || 0) + record.questions)
+    if (monthKey.length !== 7) continue
+    const bucket = monthly.get(monthKey) || { questions: 0, correct: 0, wrong: 0, blank: 0 }
+    bucket.questions += record.questions
+    bucket.correct += record.correct
+    bucket.wrong += record.wrong
+    bucket.blank += record.blank
+    monthly.set(monthKey, bucket)
   }
 
   const tasks = (overview.tasks || []).filter((task) => dateInRange(toDateKey(task.date), range, today))
@@ -131,7 +137,7 @@ function analyzeStudent(entry, range, today) {
       resourceRows.map((row) => [row.key, { accuracy: row.accuracy, answered: row.correct + row.wrong }]),
     ),
     resourceRows,
-    monthlyQuestions,
+    monthly,
     hardestTopic: rankable(topicRows),
     hardestBook: rankable(resourceRows),
     lastActive,
@@ -164,39 +170,6 @@ function Legend({ items }) {
         <li key={item.label} className="flex items-center gap-1.5">
           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${item.className}`} />
           {item.label}
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-// Öğrenci başına tek değerli yatay bar (başarı % veya çözülen soru). rows:
-// [{ key, name, fullName, fillClass, ratio (0..1), valueLabel, sub }]
-function StudentBarRows({ rows, onSelect }) {
-  return (
-    <ul className="flex flex-col">
-      {rows.map((row) => (
-        <li key={row.key}>
-          <button
-            type="button"
-            onClick={() => onSelect(row.key)}
-            className="flex w-full items-center gap-3 rounded-lg py-2 text-left transition-colors hover:bg-panel-surface-soft"
-          >
-            <span
-              className="w-20 shrink-0 truncate text-xs font-semibold text-panel-text sm:w-24 sm:text-sm"
-              title={row.fullName}
-            >
-              {row.name}
-            </span>
-            <span className="relative h-5 min-w-0 flex-1 rounded-full bg-panel-surface-soft">
-              <span
-                className={`absolute inset-y-0 left-0 rounded-full ${row.fillClass}`}
-                style={{ width: `${Math.max(2, Math.min(100, row.ratio * 100))}%` }}
-              />
-            </span>
-            <span className="w-9 shrink-0 text-right text-xs font-bold text-panel-text sm:text-sm">{row.valueLabel}</span>
-          </button>
-          {row.sub ? <p className="ml-[5.75rem] -mt-1 pb-1 text-[11px] text-panel-text-muted sm:ml-[6.75rem]">{row.sub}</p> : null}
         </li>
       ))}
     </ul>
@@ -310,8 +283,23 @@ function AccuracyHeatmap({ students, columns, onSelect }) {
   )
 }
 
-// Eğitim yılı boyunca (Ağu–Haz) öğrenci başına aylık çözülen soru — tek tabloda.
-function MonthlyQuestionsTable({ students, months, maxMonthly, onSelect }) {
+function mergeBuckets(buckets) {
+  return buckets.reduce(
+    (acc, bucket) => {
+      if (!bucket) return acc
+      acc.questions += bucket.questions
+      acc.correct += bucket.correct
+      acc.wrong += bucket.wrong
+      acc.blank += bucket.blank
+      return acc
+    },
+    { questions: 0, correct: 0, wrong: 0, blank: 0 },
+  )
+}
+
+// Öğrenci × ay tablosu (Ağu–Haz eğitim yılı). Hücre içeriğini renderCell belirler;
+// showTotal true ise sağa birleşik "Toplam" sütunu eklenir.
+function MonthlyTable({ students, months, onSelect, renderCell, showTotal }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-1 text-center text-xs">
@@ -319,16 +307,16 @@ function MonthlyQuestionsTable({ students, months, maxMonthly, onSelect }) {
           <tr>
             <th className="sticky left-0 z-10 bg-panel-surface" />
             {months.map((month) => (
-              <th key={month.key} className="min-w-[42px] px-1 pb-1 font-semibold text-panel-text-muted" title={month.label}>
+              <th key={month.key} className="min-w-[52px] px-1 pb-1 font-semibold text-panel-text-muted" title={month.label}>
                 {month.short}
               </th>
             ))}
-            <th className="min-w-[54px] px-1 pb-1 font-bold text-panel-text">Toplam</th>
+            {showTotal ? <th className="min-w-[58px] px-1 pb-1 font-bold text-panel-text">Toplam</th> : null}
           </tr>
         </thead>
         <tbody>
           {students.map((student) => {
-            const total = months.reduce((sum, month) => sum + (student.monthlyQuestions.get(month.key) || 0), 0)
+            const buckets = months.map((month) => student.monthly.get(month.key) || null)
             return (
               <tr key={student.key}>
                 <td
@@ -339,25 +327,14 @@ function MonthlyQuestionsTable({ students, months, maxMonthly, onSelect }) {
                     {student.shortLabel}
                   </button>
                 </td>
-                {months.map((month) => {
-                  const value = student.monthlyQuestions.get(month.key) || 0
-                  const alpha = value > 0 ? Math.round((0.12 + 0.5 * (value / maxMonthly)) * 100) : 0
-                  return (
-                    <td
-                      key={month.key}
-                      className="rounded-md py-1.5 font-semibold text-panel-text"
-                      style={
-                        value > 0
-                          ? { backgroundColor: `color-mix(in oklab, var(--color-panel-blue) ${alpha}%, transparent)` }
-                          : undefined
-                      }
-                      title={`${student.name} · ${month.label}: ${formatNumber(value)} soru`}
-                    >
-                      {value > 0 ? formatNumber(value) : <span className="text-panel-text-muted">–</span>}
-                    </td>
-                  )
-                })}
-                <td className="rounded-md bg-panel-surface-soft py-1.5 font-bold text-panel-text">{formatNumber(total)}</td>
+                {months.map((month, index) => (
+                  <td key={month.key} className="rounded-md p-0.5 align-middle">
+                    {renderCell(buckets[index])}
+                  </td>
+                ))}
+                {showTotal ? (
+                  <td className="rounded-md bg-panel-surface-soft p-0.5 align-middle">{renderCell(mergeBuckets(buckets))}</td>
+                ) : null}
               </tr>
             )
           })}
@@ -433,14 +410,13 @@ export default function ClassAnalysisPage() {
       .slice(0, MAX_RESOURCE_COLUMNS)
       .map(([key, meta]) => ({ key, label: key, publisher: meta.publisher }))
 
-    const maxQuestions = Math.max(1, ...students.map((student) => student.totals.questions))
     const months = buildAcademicMonths(today)
     const maxMonthly = Math.max(
       1,
-      ...students.flatMap((student) => months.map((month) => student.monthlyQuestions.get(month.key) || 0)),
+      ...students.flatMap((student) => months.map((month) => student.monthly.get(month.key)?.questions || 0)),
     )
 
-    return { students, resourceColumns, maxQuestions, months, maxMonthly }
+    return { students, resourceColumns, months, maxMonthly }
   }, [data, range, today])
 
   const sortedStudents = useMemo(() => {
@@ -554,46 +530,50 @@ const COMPOSITION_LEGEND = [
   { label: 'Boş', className: 'bg-panel-text-muted/40' },
 ]
 
+function PerfCell({ bucket, maxMonthly }) {
+  if (!bucket || bucket.questions === 0) return <span className="text-panel-text-muted">–</span>
+  const acc = accuracyOf(bucket.correct, bucket.wrong)
+  const tone = RATE_TONES[toneFor(acc)]
+  const alpha = Math.min(58, Math.round((0.1 + 0.45 * (bucket.questions / maxMonthly)) * 100))
+  return (
+    <div
+      className="flex flex-col items-center gap-0.5 rounded-md px-1 py-1"
+      style={{ backgroundColor: `color-mix(in oklab, var(--color-panel-blue) ${alpha}%, transparent)` }}
+    >
+      <span className="font-bold text-panel-text">{formatNumber(bucket.questions)}</span>
+      {Number.isFinite(acc) ? (
+        <span className={`rounded px-1 text-[10px] font-bold ${tone.chip}`}>{Math.round(acc)}%</span>
+      ) : null}
+    </div>
+  )
+}
+
+function ResultCell({ bucket }) {
+  const total = bucket ? bucket.correct + bucket.wrong + bucket.blank : 0
+  if (total === 0) return <span className="text-panel-text-muted">–</span>
+  const acc = accuracyOf(bucket.correct, bucket.wrong)
+  return (
+    <div
+      className="flex flex-col items-center gap-1 px-0.5 py-1"
+      title={`D ${bucket.correct} · Y ${bucket.wrong} · B ${bucket.blank}`}
+    >
+      <span className="flex h-2 w-full max-w-[46px] overflow-hidden rounded-full bg-panel-surface-soft">
+        <span className="bg-panel-green" style={{ width: `${(bucket.correct / total) * 100}%` }} />
+        <span className="bg-panel-red" style={{ width: `${(bucket.wrong / total) * 100}%` }} />
+        <span className="bg-panel-text-muted/40" style={{ width: `${(bucket.blank / total) * 100}%` }} />
+      </span>
+      <span className="text-[10px] font-semibold text-panel-text-muted">
+        {Number.isFinite(acc) ? `${Math.round(acc)}%` : ''}
+      </span>
+    </div>
+  )
+}
+
 function ClassAnalysisBody({ analysis, sortedStudents, sortKey, onSortChange, onOpenStudent }) {
-  const { students, resourceColumns, maxQuestions, months, maxMonthly } = analysis
+  const { students, resourceColumns, months, maxMonthly } = analysis
 
   const byAccuracy = [...students].sort((a, b) => safeAcc(b.accuracy) - safeAcc(a.accuracy))
   const byQuestions = [...students].sort((a, b) => b.totals.questions - a.totals.questions)
-
-  const accuracyRows = byAccuracy.map((student) => ({
-    key: student.key,
-    name: student.shortLabel,
-    fullName: student.name,
-    fillClass: RATE_TONES[toneFor(student.accuracy)].bar,
-    ratio: Number.isFinite(student.accuracy) ? student.accuracy / 100 : 0,
-    valueLabel: pct(student.accuracy),
-    sub: student.answered
-      ? `${formatNumber(student.answered)} soru · ${formatNumber(student.totals.correct)} doğru`
-      : 'bu aralıkta çözüm yok',
-  }))
-
-  const questionRows = byQuestions.map((student) => ({
-    key: student.key,
-    name: student.shortLabel,
-    fullName: student.name,
-    fillClass: 'bg-panel-blue',
-    ratio: student.totals.questions / maxQuestions,
-    valueLabel: formatNumber(student.totals.questions),
-    sub: `${formatNumber(student.totals.correct)} D · ${formatNumber(student.totals.wrong)} Y · ${formatNumber(student.totals.blank)} B`,
-  }))
-
-  const compositionRows = byAccuracy.map((student) => ({
-    key: student.key,
-    name: student.shortLabel,
-    fullName: student.name,
-    total: student.totals.correct + student.totals.wrong + student.totals.blank,
-    segments: [
-      { value: student.totals.correct, className: 'bg-panel-green' },
-      { value: student.totals.wrong, className: 'bg-panel-red' },
-      { value: student.totals.blank, className: 'bg-panel-text-muted/40' },
-    ],
-    valueLabel: pct(student.accuracy),
-  }))
 
   const taskRows = [...students]
     .sort((a, b) => b.taskCounts.backlog - a.taskCounts.backlog || b.taskCounts.total - a.taskCounts.total)
@@ -609,27 +589,34 @@ function ClassAnalysisBody({ analysis, sortedStudents, sortKey, onSortChange, on
   return (
     <div className="flex flex-col gap-5">
       <Card
-        title="Öğrenci başarı oranları"
-        subtitle="Her öğrencinin doğruluk yüzdesi — satıra dokununca öğrencinin analizine gidersiniz"
-        icon={GraduationCap}
+        title="Aylara Göre Çalışma Performansı"
+        subtitle="Öğrenci başına aylık çözülen soru + o ayın başarı yüzdesi (Ağustos–Haziran, üstteki tarih filtresinden bağımsız)"
+        icon={CalendarRange}
       >
-        <StudentBarRows rows={accuracyRows} onSelect={onOpenStudent} />
-      </Card>
-
-      <Card title="Çözülen soru sayısı" subtitle="Hangi öğrenci ne kadar soru çözmüş" icon={BookOpenCheck}>
-        <StudentBarRows rows={questionRows} onSelect={onOpenStudent} />
+        <MonthlyTable
+          students={byQuestions}
+          months={months}
+          onSelect={onOpenStudent}
+          showTotal
+          renderCell={(bucket) => <PerfCell bucket={bucket} maxMonthly={maxMonthly} />}
+        />
       </Card>
 
       <Card
-        title="Aylık çözülen soru"
-        subtitle="Ağustos–Haziran · eğitim yılının tamamı (üstteki tarih filtresinden bağımsız)"
-        icon={CalendarCheck}
+        title="Aylık Sonuç Analizi"
+        subtitle="Öğrenci başına aylık doğru / yanlış / boş dağılımı ve o ayın başarı yüzdesi"
+        icon={Target}
       >
-        <MonthlyQuestionsTable students={byQuestions} months={months} maxMonthly={maxMonthly} onSelect={onOpenStudent} />
-      </Card>
-
-      <Card title="Doğru / Yanlış / Boş dağılımı" subtitle="Her öğrencinin soru dağılımı" icon={Target}>
-        <StudentStackedRows rows={compositionRows} legend={COMPOSITION_LEGEND} onSelect={onOpenStudent} />
+        <MonthlyTable
+          students={byAccuracy}
+          months={months}
+          onSelect={onOpenStudent}
+          showTotal
+          renderCell={(bucket) => <ResultCell bucket={bucket} />}
+        />
+        <div className="mt-3">
+          <Legend items={COMPOSITION_LEGEND} />
+        </div>
       </Card>
 
       <Card
