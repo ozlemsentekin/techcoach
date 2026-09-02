@@ -176,6 +176,7 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
           tests={tests}
           onDeleted={() => onChanged()}
           onTestsCreated={() => onChanged()}
+          onTestDeleted={() => onChanged()}
           onSaved={(topic) => {
             setTopicModalOpen(false)
             // Yeni içeriği hemen aç ki "Test Ekle" butonu görünür olsun.
@@ -207,6 +208,7 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
             setTestModalTopic(null)
             onChanged()
           }}
+          onTestDeleted={() => onChanged()}
           onClose={() => setTestModalTopic(null)}
         />
       ) : null}
