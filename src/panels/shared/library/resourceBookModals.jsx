@@ -67,6 +67,7 @@ function TopicBookPageRow({ label, page, active = false, subline }) {
 // Kaynağa eklenmiş içerikleri (aynı adlı satırları birleştirerek) başlangıç sayfasına göre
 // sıralı bir "İçindekiler" listesine dönüştürür. Bir içeriğin başlangıç sayfası, o içeriğe
 // bağlı testlerin en küçük başlangıç sayfasıdır; hiç testi yoksa sayfa bilinmiyor demektir.
+// bookTopics / bookTests bu kaynağa göre önceden filtrelenmiş olarak beklenir.
 function buildBookContents(bookTopics, bookTests) {
   const groups = new Map()
   bookTopics.forEach((topic) => {
@@ -161,10 +162,11 @@ function TopicModal({ book, topic, topics = [], tests = [], onSaved, onClose }) 
   const [loading, setLoading] = useState(false)
   const previewTopicName = name.trim() || CONTENT_TOPIC_EXAMPLE
 
+  // topics/tests bu kaynağa ait olacak şekilde önceden filtrelenmiş gelir (Kütüphane
+  // katalog ekranı tüm listeyi verdiği için orada book.id'ye göre süzülür).
   const bookId = book?.id
   const bookContents = useMemo(() => {
-    if (!bookId) return []
-    const bookTopics = topics.filter((item) => item.resourceBookId === bookId)
+    const bookTopics = topics.filter((item) => item.resourceBookId == null || item.resourceBookId === bookId)
     const bookTopicIds = new Set(bookTopics.map((item) => item.id))
     const bookTests = tests.filter((item) => bookTopicIds.has(item.topicId))
     return buildBookContents(bookTopics, bookTests)
