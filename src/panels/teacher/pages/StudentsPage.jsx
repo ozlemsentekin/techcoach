@@ -6,6 +6,7 @@ import {
   BookOpen,
   CalendarClock,
   CalendarDays,
+  ChevronDown,
   ClipboardList,
   GraduationCap,
   IdCard,
@@ -343,6 +344,7 @@ export default function StudentsPage() {
   const [deleteStudent, setDeleteStudent] = useState(null)
   const [actionStudentId, setActionStudentId] = useState(null)
   const [openActionsStudentId, setOpenActionsStudentId] = useState(null)
+  const [expandedStudentId, setExpandedStudentId] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -497,6 +499,7 @@ export default function StudentsPage() {
                 onClick: () => setDeleteStudent(student),
               },
             ]
+            const isExpanded = expandedStudentId === student.studentTeacherId
             const goToDetail = () => {
               if (!student.isActive || isBusy) return
               navigate(`/teacher/students/${student.studentTeacherId}`)
@@ -580,7 +583,28 @@ export default function StudentsPage() {
                   </p>
                 </div>
 
-                <div className="mt-auto grid grid-cols-1 gap-2 xl:grid-cols-2" onClick={(event) => event.stopPropagation()}>
+                <div className="mt-auto" onClick={(event) => event.stopPropagation()}>
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    disabled={!student.isActive || isBusy}
+                    onClick={() =>
+                      setExpandedStudentId((current) =>
+                        current === student.studentTeacherId ? null : student.studentTeacherId,
+                      )
+                    }
+                    className="flex w-full items-center justify-between rounded-lg border border-panel-border bg-panel-surface-soft px-3 py-2 text-[13px] font-semibold text-panel-text transition-colors hover:bg-panel-border/40 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span>İşlemler</span>
+                    <ChevronDown
+                      size={16}
+                      aria-hidden="true"
+                      className={`shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+
+                  {isExpanded ? (
+                <div className="mt-2 grid grid-cols-1 gap-2 xl:grid-cols-2">
                   <Button
                     type="button"
                     variant="secondary"
@@ -647,6 +671,8 @@ export default function StudentsPage() {
                     <TrendingUp size={16} className="shrink-0" aria-hidden="true" />
                     <span className="min-w-0 truncate">Gelişim Analizi</span>
                   </Button>
+                </div>
+                  ) : null}
                 </div>
               </div>
             )

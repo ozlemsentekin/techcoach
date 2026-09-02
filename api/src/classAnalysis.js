@@ -8,9 +8,10 @@ const { loadStudentProgressOverview } = require('./teacher')
 // Sınıfsız öğrenciler için sekme/sorgu sentineli (frontend ile ortak).
 const UNSPECIFIED_GRADE = '__none__'
 
-// DB bağlantı havuzunu zorlamamak için öğrenci gelişim yüklemelerini bu kadarlık
-// parçalar halinde paralel çalıştırır.
-const CHUNK_SIZE = 4
+// Her öğrenci gelişim yüklemesi ~10 alt sorgu (7'si eşzamanlı) açtığından, sınıftaki
+// öğrenciler bu kadarlık gruplar halinde işlenir — aksi halde 5+ kişilik sınıflarda
+// DB bağlantı havuzu (max 30) tıkanıp istek zaman aşımına düşüyordu.
+const CHUNK_SIZE = 2
 
 function handleError(error, label, fallback) {
   if (isConfigError(error)) {
@@ -21,15 +22,6 @@ function handleError(error, label, fallback) {
   }
   console.error(`${label} failed`, error)
   return json(500, { error: fallback })
-}
-
-async function inChunks(items, size, worker) {
-  const results = []
-  for (let index = 0; index < items.length; index += size) {
-    const slice = items.slice(index, index + size)
-    results.push(...(await Promise.all(slice.map(worker))))
-  }
-  return results
 }
 
 /**
@@ -78,20 +70,40 @@ async function getTeacherClassAnalysisHandler(request) {
       return true
     })
 
-    const students = await inChunks(roster, CHUNK_SIZE, async (row) => ({
-      studentTeacherId: row.student_teacher_id,
-      studentFullName: row.student_full_name,
-      studentPhotoUrl: row.student_photo_url || null,
-      subjectName: row.subject_name || null,
-      overview: await loadStudentProgressOverview({
-        studentId: row.student_id,
-        subjectId: row.subject_id,
-        studentTeacherId: row.student_teacher_id,
-        teacherUserId,
-      }),
-    }))
+    // Bir öğrencinin verisi yüklenemezse (bozuk kayıt vb.) tüm sınıf sayfası düşmesin —
+    // o öğrenci atlanır, loglanır, kalanlar döner.
+    const students = []
+    const failedStudents = []
+    for (let index = 0; index < roster.length; index += CHUNK_SIZE) {
+      const slice = roster.slice(index, index + CHUNK_SIZE)
+      const settled = await Promise.allSettled(
+        slice.map((row) =>
+          loadStudentProgressOverview({
+            studentId: row.student_id,
+            subjectId: row.subject_id,
+            studentTeacherId: row.student_teacher_id,
+            teacherUserId,
+          }),
+        ),
+      )
+      settled.forEach((outcome, sliceIndex) => {
+        const row = slice[sliceIndex]
+        if (outcome.status === 'fulfilled') {
+          students.push({
+            studentTeacherId: row.student_teacher_id,
+            studentFullName: row.student_full_name,
+            studentPhotoUrl: row.student_photo_url || null,
+            subjectName: row.subject_name || null,
+            overview: outcome.value,
+          })
+        } else {
+          failedStudents.push(row.student_full_name)
+          console.error('getTeacherClassAnalysisHandler: student load failed', row.student_id, outcome.reason)
+        }
+      })
+    }
 
-    return json(200, { grade, students })
+    return json(200, { grade, students, failedStudents })
   } catch (error) {
     return handleError(error, 'getTeacherClassAnalysisHandler', 'Sınıf analizi yüklenemedi.')
   }

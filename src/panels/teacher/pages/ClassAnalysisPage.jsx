@@ -421,6 +421,13 @@ export default function ClassAnalysisPage() {
         ))}
       </div>
 
+      {data?.failedStudents?.length ? (
+        <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">
+          {data.failedStudents.length} öğrencinin verisi yüklenemedi ({data.failedStudents.join(', ')}); kalan öğrenciler
+          aşağıda gösteriliyor.
+        </div>
+      ) : null}
+
       {error ? (
         <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
       ) : !analysis ? (
