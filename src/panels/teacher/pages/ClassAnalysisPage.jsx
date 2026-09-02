@@ -693,8 +693,8 @@ function PerfCell({ bucket }) {
   )
 }
 
-// Aylık sonuç: o ayın başarı %'si (belirgin) + altında doğru/yanlış/boş sayıları
-// (renk kodlu). Ayrıntı ipucu (tooltip) hücrenin üzerinde.
+// Aylık sonuç: o ayın başarı %'si (etiket stili — Performans tablosuyla aynı) +
+// altında doğru/yanlış/boş sayıları. Ayrıntı ipucu hücrenin üzerinde.
 function ResultCell({ bucket }) {
   const total = bucket ? bucket.correct + bucket.wrong + bucket.blank : 0
   if (total === 0) return <span className="text-panel-text-muted">–</span>
@@ -702,16 +702,12 @@ function ResultCell({ bucket }) {
   const tone = RATE_TONES[toneFor(acc)]
   return (
     <span
-      className="inline-flex flex-col items-center gap-0.5 leading-none"
+      className={`inline-flex min-w-[46px] flex-col items-center rounded-lg px-2 py-1 leading-tight ${tone.chip}`}
       title={`Doğru: ${formatNumber(bucket.correct)}\nYanlış: ${formatNumber(bucket.wrong)}\nBoş: ${formatNumber(
         bucket.blank,
       )}\nBaşarı oranı: ${Number.isFinite(acc) ? `${Math.round(acc)}%` : '—'}`}
     >
-      {Number.isFinite(acc) ? (
-        <span className={`text-[13px] font-bold ${tone.text}`}>{Math.round(acc)}%</span>
-      ) : (
-        <span className="text-panel-text-muted">—</span>
-      )}
+      <span className="text-sm font-bold text-panel-text">{Number.isFinite(acc) ? `${Math.round(acc)}%` : '—'}</span>
       <span className="flex items-center gap-1.5 text-[10px] font-bold tabular-nums">
         <span className="text-panel-green">{formatNumber(bucket.correct)}</span>
         <span className="text-panel-red">{formatNumber(bucket.wrong)}</span>
