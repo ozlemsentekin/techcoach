@@ -2761,26 +2761,41 @@ async function deleteTeacherStudentTaskHandler(request) {
 // Öğretmenin bir öğrenci için gelişim/analiz ham verisini yükler; o öğrenciye verdiği tüm
 // aktif branşları birleştirir. getTeacherStudentProgressOverviewHandler ve Sınıf Analizi
 // (classAnalysis.js) ortak kullanır.
-async function loadStudentProgressOverview({ studentId, subjectId, studentTeacherId, teacherUserId }) {
-    // Öğretmenin bu öğrenciye verdiği tüm aktif branşlar. Birden çoksa "Tüm Dersler"
-    // görünümü için hepsinin verisi toplanır (frontend combobox'ta tek tek de seçilebilir).
-    const relationsDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
-    })
-    const relationsResult = await relationsDb.query(`
-      SELECT st.id, st.subject_id
-      FROM dbo.StudentTeachers st
-      WHERE st.teacher_user_id = @teacherUserId AND st.student_id = @studentId AND st.is_active = 1;
-    `)
-    const relations = relationsResult.recordset.length
-      ? relationsResult.recordset
-      : [{ id: studentTeacherId, subject_id: subjectId }]
+//
+// options.includeWrongQuestions=false: Hata Defteri verisini (ve onun gerektirdiği branş adı
+//   sorgusunu) atlar — Sınıf Analizi bunu kullanmıyor, öğrenci başına 2 sorgu tasarrufu.
+// options.relations: [{ id, subject_id }] verilirse ilişki sorgusu atlanır (Sınıf Analizi
+//   tüm sınıfın ilişkilerini tek roster sorgusundan zaten biliyor).
+async function loadStudentProgressOverview(
+  { studentId, subjectId, studentTeacherId, teacherUserId },
+  { includeWrongQuestions = true, relations: providedRelations } = {},
+) {
+    let relations = providedRelations
+    if (!relations) {
+      // Öğretmenin bu öğrenciye verdiği tüm aktif branşlar. Birden çoksa "Tüm Dersler"
+      // görünümü için hepsinin verisi toplanır.
+      const relationsDb = await withRequest({
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+      })
+      const relationsResult = await relationsDb.query(`
+        SELECT st.id, st.subject_id
+        FROM dbo.StudentTeachers st
+        WHERE st.teacher_user_id = @teacherUserId AND st.student_id = @studentId AND st.is_active = 1;
+      `)
+      relations = relationsResult.recordset.length
+        ? relationsResult.recordset
+        : [{ id: studentTeacherId, subject_id: subjectId }]
+    }
+    if (!relations.length) relations = [{ id: studentTeacherId, subject_id: subjectId }]
 
     const loadForRelation = async (relationSubjectId, relationStudentTeacherId) => {
-    const subjectDb = await withRequest({ subjectId: { type: sql.UniqueIdentifier, value: relationSubjectId } })
-    const subjectResult = await subjectDb.query(`SELECT TOP 1 name FROM dbo.Subjects WHERE id = @subjectId;`)
-    const subjectName = subjectResult.recordset[0]?.name || ''
+    let subjectName = ''
+    if (includeWrongQuestions) {
+      const subjectDb = await withRequest({ subjectId: { type: sql.UniqueIdentifier, value: relationSubjectId } })
+      const subjectResult = await subjectDb.query(`SELECT TOP 1 name FROM dbo.Subjects WHERE id = @subjectId;`)
+      subjectName = subjectResult.recordset[0]?.name || ''
+    }
 
     const bindings = {
       studentId: { type: sql.UniqueIdentifier, value: studentId },
@@ -2900,15 +2915,17 @@ async function loadStudentProgressOverview({ studentId, subjectId, studentTeache
             ORDER BY h.date DESC;
           `),
         ),
-        withRequest(wrongQuestionBindings).then((requestDb) =>
-          requestDb.query(`
-            SELECT id, student_id, task_id, subject, topic, question_number, error_type, student_note, mistake_reason,
-                   review_status, resolved_at, created_at
-            FROM dbo.WrongQuestions
-            WHERE student_id = @studentId AND subject = @subject
-            ORDER BY created_at DESC;
-          `),
-        ),
+        includeWrongQuestions
+          ? withRequest(wrongQuestionBindings).then((requestDb) =>
+              requestDb.query(`
+                SELECT id, student_id, task_id, subject, topic, question_number, error_type, student_note, mistake_reason,
+                       review_status, resolved_at, created_at
+                FROM dbo.WrongQuestions
+                WHERE student_id = @studentId AND subject = @subject
+                ORDER BY created_at DESC;
+              `),
+            )
+          : Promise.resolve({ recordset: [] }),
         withRequest(bindings).then((requestDb) =>
           requestDb.query(`
             SELECT smtc.test_id, smtc.correct_count, smtc.wrong_count, smtc.blank_count, smtc.marked_at,

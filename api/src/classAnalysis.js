@@ -8,10 +8,10 @@ const { loadStudentProgressOverview } = require('./teacher')
 // Sınıfsız öğrenciler için sekme/sorgu sentineli (frontend ile ortak).
 const UNSPECIFIED_GRADE = '__none__'
 
-// Her öğrenci gelişim yüklemesi ~10 alt sorgu (7'si eşzamanlı) açtığından, sınıftaki
-// öğrenciler bu kadarlık gruplar halinde işlenir — aksi halde 5+ kişilik sınıflarda
-// DB bağlantı havuzu (max 30) tıkanıp istek zaman aşımına düşüyordu.
-const CHUNK_SIZE = 2
+// Her öğrenci gelişim yüklemesi ~7 alt sorgu (6'sı eşzamanlı) açtığından, sınıftaki
+// öğrenciler bu kadarlık gruplar halinde işlenir — DB bağlantı havuzu (max 30) tıkanmasın
+// (chunk × ~9 bağlantı ≤ 27).
+const CHUNK_SIZE = 3
 
 function handleError(error, label, fallback) {
   if (isConfigError(error)) {
@@ -61,14 +61,27 @@ async function getTeacherClassAnalysisHandler(request) {
       ORDER BY u.full_name ASC;
     `)
 
-    // Aynı öğrencinin birden çok branşı olabilir; öğrenci başına tek kayıt bırak
-    // (loadStudentProgressOverview zaten o öğrencinin tüm aktif branşlarını birleştiriyor).
-    const seen = new Set()
-    const roster = result.recordset.filter((row) => {
-      if (seen.has(row.student_id)) return false
-      seen.add(row.student_id)
-      return true
-    })
+    // Aynı öğrencinin birden çok branşı (StudentTeachers satırı) olabilir; öğrenci başına
+    // tek kayıtta topla ve tüm (studentTeacherId, subjectId) ilişkilerini yükleyiciye
+    // doğrudan ver — böylece loadStudentProgressOverview ilişki sorgusunu atlar.
+    const byStudent = new Map()
+    for (const row of result.recordset) {
+      let entry = byStudent.get(row.student_id)
+      if (!entry) {
+        entry = {
+          studentId: row.student_id,
+          studentFullName: row.student_full_name,
+          studentPhotoUrl: row.student_photo_url || null,
+          subjectName: row.subject_name || null,
+          studentTeacherId: row.student_teacher_id,
+          subjectId: row.subject_id,
+          relations: [],
+        }
+        byStudent.set(row.student_id, entry)
+      }
+      entry.relations.push({ id: row.student_teacher_id, subject_id: row.subject_id })
+    }
+    const roster = [...byStudent.values()]
 
     // Bir öğrencinin verisi yüklenemezse (bozuk kayıt vb.) tüm sınıf sayfası düşmesin —
     // o öğrenci atlanır, loglanır, kalanlar döner.
@@ -78,27 +91,30 @@ async function getTeacherClassAnalysisHandler(request) {
       const slice = roster.slice(index, index + CHUNK_SIZE)
       const settled = await Promise.allSettled(
         slice.map((row) =>
-          loadStudentProgressOverview({
-            studentId: row.student_id,
-            subjectId: row.subject_id,
-            studentTeacherId: row.student_teacher_id,
-            teacherUserId,
-          }),
+          loadStudentProgressOverview(
+            {
+              studentId: row.studentId,
+              subjectId: row.subjectId,
+              studentTeacherId: row.studentTeacherId,
+              teacherUserId,
+            },
+            { includeWrongQuestions: false, relations: row.relations },
+          ),
         ),
       )
       settled.forEach((outcome, sliceIndex) => {
         const row = slice[sliceIndex]
         if (outcome.status === 'fulfilled') {
           students.push({
-            studentTeacherId: row.student_teacher_id,
-            studentFullName: row.student_full_name,
-            studentPhotoUrl: row.student_photo_url || null,
-            subjectName: row.subject_name || null,
+            studentTeacherId: row.studentTeacherId,
+            studentFullName: row.studentFullName,
+            studentPhotoUrl: row.studentPhotoUrl,
+            subjectName: row.subjectName,
             overview: outcome.value,
           })
         } else {
-          failedStudents.push(row.student_full_name)
-          console.error('getTeacherClassAnalysisHandler: student load failed', row.student_id, outcome.reason)
+          failedStudents.push(row.studentFullName)
+          console.error('getTeacherClassAnalysisHandler: student load failed', row.studentId, outcome.reason)
         }
       })
     }

@@ -1,4 +1,4 @@
-import { createElement, useEffect, useMemo, useState } from 'react'
+import { createElement, useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -318,10 +318,17 @@ function StudentStackedRows({ rows, legend, onSelect, unit = '' }) {
   )
 }
 
-// Fare imlecini takip eden kitap "profil" balonu (kapak + yayın evi + ad).
+// Sütun başlığının altında açılan kitap "profil" balonu (kapak + yayın evi + ad).
+// Konum, başlığın ekran koordinatlarından bir kez hesaplanır (mousemove dinlenmez).
 function BookHoverCard({ tip }) {
   if (!tip) return null
-  const style = { position: 'fixed', left: Math.min(tip.x + 14, window.innerWidth - 220), top: tip.y + 14, zIndex: 80 }
+  const { rect, col } = tip
+  const style = {
+    position: 'fixed',
+    left: Math.max(8, Math.min(rect.left, window.innerWidth - 224)),
+    top: rect.bottom + 6,
+    zIndex: 80,
+  }
   return createPortal(
     <div
       style={style}
@@ -329,15 +336,15 @@ function BookHoverCard({ tip }) {
     >
       <div className="flex gap-3">
         <div className="w-16 shrink-0">
-          <ResourceBookAvatar book={{ imageUrl: tip.col.cover, name: tip.col.label }} size="lg" />
+          <ResourceBookAvatar book={{ imageUrl: col.cover, name: col.label }} size="lg" />
         </div>
         <div className="min-w-0 flex-1">
-          {tip.col.publisher ? (
+          {col.publisher ? (
             <span className="inline-block rounded bg-panel-surface-soft px-1.5 py-0.5 text-[10px] font-semibold text-panel-text-muted">
-              {tip.col.publisher}
+              {col.publisher}
             </span>
           ) : null}
-          <p className="mt-1 text-sm font-bold leading-snug text-panel-text">{tip.col.label}</p>
+          <p className="mt-1 text-sm font-bold leading-snug text-panel-text">{col.label}</p>
         </div>
       </div>
     </div>,
@@ -359,7 +366,7 @@ function AccuracyHeatmap({ students, columns, onSelect }) {
               <th
                 key={col.key}
                 className="w-[104px] min-w-[104px] px-1 pb-1 align-bottom"
-                onMouseMove={(event) => setTip({ x: event.clientX, y: event.clientY, col })}
+                onMouseEnter={(event) => setTip({ rect: event.currentTarget.getBoundingClientRect(), col })}
                 onMouseLeave={() => setTip((current) => (current?.col === col ? null : current))}
               >
                 {col.publisher ? (
@@ -536,6 +543,11 @@ export default function ClassAnalysisPage() {
   const gradeParam = searchParams.get('grade')
   const activeKey = tabs.some((tab) => tab.key === gradeParam) ? gradeParam : tabs[0]?.key || null
 
+  const openStudent = useCallback(
+    (id) => navigate(`/teacher/students/${id}?tab=analysis`),
+    [navigate],
+  )
+
   useEffect(() => {
     if (!activeKey) return undefined
     let ignore = false
@@ -699,7 +711,7 @@ export default function ClassAnalysisPage() {
           sortedStudents={sortedStudents}
           sortKey={sortKey}
           onSortChange={setSortKey}
-          onOpenStudent={(id) => navigate(`/teacher/students/${id}?tab=analysis`)}
+          onOpenStudent={openStudent}
         />
       )}
     </div>
@@ -758,23 +770,33 @@ function ResultCell({ bucket }) {
 function ClassAnalysisBody({ analysis, sortedStudents, sortKey, onSortChange, onOpenStudent }) {
   const { students, resourceColumns, months } = analysis
 
-  const byAccuracy = [...students].sort((a, b) => safeAcc(b.accuracy) - safeAcc(a.accuracy))
-  const byQuestions = [...students].sort((a, b) => b.totals.questions - a.totals.questions)
-
-  const taskRows = [...students]
-    .sort((a, b) => b.taskCounts.backlog - a.taskCounts.backlog || b.taskCounts.total - a.taskCounts.total)
-    .map((student) => ({
-      key: student.key,
-      name: student.shortLabel,
-      fullName: student.name,
-      total: student.taskCounts.total,
-      segments: TASK_LEGEND.map((seg) => ({
-        value: student.taskCounts[seg.key],
-        className: seg.className,
-        label: seg.label,
-      })),
-      valueLabel: `${student.taskCounts.total} görev`,
-    }))
+  // sortKey / ısı haritası hover'ı gibi tekrar render'larda yeniden hesaplanmasın.
+  const byAccuracy = useMemo(
+    () => [...students].sort((a, b) => safeAcc(b.accuracy) - safeAcc(a.accuracy)),
+    [students],
+  )
+  const byQuestions = useMemo(
+    () => [...students].sort((a, b) => b.totals.questions - a.totals.questions),
+    [students],
+  )
+  const taskRows = useMemo(
+    () =>
+      [...students]
+        .sort((a, b) => b.taskCounts.backlog - a.taskCounts.backlog || b.taskCounts.total - a.taskCounts.total)
+        .map((student) => ({
+          key: student.key,
+          name: student.shortLabel,
+          fullName: student.name,
+          total: student.taskCounts.total,
+          segments: TASK_LEGEND.map((seg) => ({
+            value: student.taskCounts[seg.key],
+            className: seg.className,
+            label: seg.label,
+          })),
+          valueLabel: `${student.taskCounts.total} görev`,
+        })),
+    [students],
+  )
 
   return (
     <div className="flex flex-col gap-5">
