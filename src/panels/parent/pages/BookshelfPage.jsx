@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, BookMarked, BookOpen, ClipboardList, Plus, Users } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, BookMarked, BookOpen, ClipboardList, FilePlus2, Plus, Users } from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
@@ -11,6 +12,7 @@ import { ImagePreviewLightbox } from '../../shared/ResourceBookCard'
 import { BOOKSHELF_RESOURCE_TYPE_LABELS } from '../../shared/bookshelf/bookshelfConstants'
 import BookFormModal from '../../shared/bookshelf/BookFormModal'
 import BookshelfDetailModal from '../../shared/bookshelf/BookshelfDetailModal'
+import BookAdditionRequestModal from '../../shared/requests/BookAdditionRequestModal'
 
 function groupBySubject(books) {
   const groups = new Map()
@@ -245,6 +247,7 @@ function BookCard({ book, onPreviewImage, onOpen }) {
 }
 
 export default function ParentBookshelfPage() {
+  const navigate = useNavigate()
   const [students, setStudents] = useState(null)
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [books, setBooks] = useState(null)
@@ -253,6 +256,7 @@ export default function ParentBookshelfPage() {
   const [selectedSubjectId, setSelectedSubjectId] = useState(null)
   const [previewImage, setPreviewImage] = useState(null)
   const [creating, setCreating] = useState(false)
+  const [requesting, setRequesting] = useState(false)
   const [editingBook, setEditingBook] = useState(null)
   const [detailBookId, setDetailBookId] = useState(null)
 
@@ -347,10 +351,22 @@ export default function ParentBookshelfPage() {
               Dersler
             </Button>
           ) : (
-            <Button type="button" size="md" className="gap-1.5" onClick={() => setCreating(true)}>
-              <Plus size={16} aria-hidden="true" />
-              Yeni Kitap Ekle
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="md"
+                variant="secondary"
+                className="gap-1.5"
+                onClick={() => setRequesting(true)}
+              >
+                <FilePlus2 size={16} aria-hidden="true" />
+                Kitap Ekleme Talebi Oluştur
+              </Button>
+              <Button type="button" size="md" className="gap-1.5" onClick={() => setCreating(true)}>
+                <Plus size={16} aria-hidden="true" />
+                Yeni Kitap Ekle
+              </Button>
+            </div>
           )
         }
       />
@@ -404,6 +420,16 @@ export default function ParentBookshelfPage() {
 
       {creating ? (
         <BookFormModal onSaved={handleCreated} onClose={() => setCreating(false)} />
+      ) : null}
+
+      {requesting ? (
+        <BookAdditionRequestModal
+          onClose={() => setRequesting(false)}
+          onGoToRequests={() => {
+            setRequesting(false)
+            navigate('/parent/requests')
+          }}
+        />
       ) : null}
 
       {editingBook ? (
