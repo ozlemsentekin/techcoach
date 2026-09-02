@@ -1,4 +1,5 @@
 import { createElement, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   CalendarCheck,
@@ -21,6 +22,7 @@ import {
   toDateKey,
 } from '../../shared/progressAnalytics'
 import { RATE_TONES, successRateTone } from '../../shared/rateTones'
+import { ResourceBookAvatar } from '../../shared/ResourceBookCard'
 import { calculateNet } from '../../../utils/netCalculator'
 import { todayISODate } from '../../../utils/time'
 import { isBacklogTask } from '../../../utils/backlogTasks'
@@ -120,6 +122,52 @@ function analyzeStudent(entry, range, today) {
   const rankable = (rows) =>
     rows.filter((row) => row.correct + row.wrong >= MIN_ANSWERED_FOR_RANK).sort((a, b) => a.accuracy - b.accuracy)[0] || null
 
+  // Kitap tamamlanma oranı: kitaptaki toplam test sayısına karşı öğrencinin sonuç
+  // girdiği (manuel optik + görev/oturum test sonuçları) benzersiz test sayısı.
+  const bookTestTotals = new Map()
+  for (const test of overview.tests || []) {
+    if (test.resourceBookId) bookTestTotals.set(test.resourceBookId, (bookTestTotals.get(test.resourceBookId) || 0) + 1)
+  }
+  const completedTestIds = new Set()
+  for (const completion of overview.manualTestCompletions || []) {
+    if (completion.testId) completedTestIds.add(completion.testId)
+  }
+  for (const source of [...(overview.tasks || []), ...(overview.sessions || [])]) {
+    for (const testId of Object.keys(source.testResults || {})) completedTestIds.add(testId)
+  }
+  const bookCompleted = new Map()
+  for (const test of overview.tests || []) {
+    if (test.resourceBookId && completedTestIds.has(test.id)) {
+      bookCompleted.set(test.resourceBookId, (bookCompleted.get(test.resourceBookId) || 0) + 1)
+    }
+  }
+  const bookImages = overview.resourceBookImages || {}
+
+  // Kaynak adı → { doğruluk, çözülen soru, tamamlanma, kapak, yayın evi }
+  const resources = new Map()
+  for (const row of resourceRows) {
+    resources.set(row.key, {
+      accuracy: row.accuracy,
+      answered: row.correct + row.wrong,
+      cover: row.resourceImageUrl || null,
+      publisher: row.publishers?.[0] || '',
+    })
+  }
+  for (const book of overview.resourceBooks || []) {
+    const total = bookTestTotals.get(book.id) || 0
+    const done = bookCompleted.get(book.id) || 0
+    const existing = resources.get(book.name) || { answered: 0 }
+    resources.set(book.name, {
+      accuracy: existing.accuracy,
+      answered: existing.answered || 0,
+      completionRate: total > 0 ? done / total : NaN,
+      completedTests: done,
+      totalTests: total,
+      cover: bookImages[book.id] || existing.cover || null,
+      publisher: book.publisherName || existing.publisher || '',
+    })
+  }
+
   const lastActive = records.reduce((max, record) => (record.date > max ? record.date : max), '')
 
   return {
@@ -133,9 +181,7 @@ function analyzeStudent(entry, range, today) {
     accuracy: accuracyOf(totals.correct, totals.wrong),
     net: calculateNet(totals.correct, totals.wrong),
     taskCounts,
-    resourceAccuracy: new Map(
-      resourceRows.map((row) => [row.key, { accuracy: row.accuracy, answered: row.correct + row.wrong }]),
-    ),
+    resources,
     resourceRows,
     monthly,
     hardestTopic: rankable(topicRows),
@@ -220,8 +266,37 @@ function StudentStackedRows({ rows, legend, onSelect }) {
   )
 }
 
-// Öğrenci × kaynak başarı ısı haritası. columns: [{ key, label }].
+// Fare imlecini takip eden kitap "profil" balonu (kapak + yayın evi + ad).
+function BookHoverCard({ tip }) {
+  if (!tip) return null
+  const style = { position: 'fixed', left: Math.min(tip.x + 14, window.innerWidth - 220), top: tip.y + 14, zIndex: 80 }
+  return createPortal(
+    <div
+      style={style}
+      className="pointer-events-none w-52 rounded-xl border border-panel-border bg-panel-surface p-3 shadow-xl"
+    >
+      <div className="flex gap-3">
+        <div className="w-16 shrink-0">
+          <ResourceBookAvatar book={{ imageUrl: tip.col.cover, name: tip.col.label }} size="lg" />
+        </div>
+        <div className="min-w-0 flex-1">
+          {tip.col.publisher ? (
+            <span className="inline-block rounded bg-panel-surface-soft px-1.5 py-0.5 text-[10px] font-semibold text-panel-text-muted">
+              {tip.col.publisher}
+            </span>
+          ) : null}
+          <p className="mt-1 text-sm font-bold leading-snug text-panel-text">{tip.col.label}</p>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+// Öğrenci × kaynak ısı haritası. Hücre: o kitaptaki doğruluk % + tamamlanma çubuğu.
 function AccuracyHeatmap({ students, columns, onSelect }) {
+  const [tip, setTip] = useState(null)
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-1 text-center">
@@ -231,15 +306,18 @@ function AccuracyHeatmap({ students, columns, onSelect }) {
             {columns.map((col) => (
               <th
                 key={col.key}
-                className="w-[96px] min-w-[96px] px-1 pb-1 align-bottom text-[11px] font-semibold text-panel-text-muted"
-                title={col.publisher ? `${col.label} · ${col.publisher}` : col.label}
+                className="w-[104px] min-w-[104px] px-1 pb-1 align-bottom"
+                onMouseMove={(event) => setTip({ x: event.clientX, y: event.clientY, col })}
+                onMouseLeave={() => setTip((current) => (current?.col === col ? null : current))}
               >
-                <span className="block truncate">{col.label}</span>
                 {col.publisher ? (
-                  <span className="mt-0.5 inline-block max-w-full truncate rounded bg-panel-surface-soft px-1 py-0.5 text-[9px] font-semibold text-panel-text-muted">
+                  <span className="mb-0.5 block max-w-full truncate rounded bg-panel-surface-soft px-1 py-0.5 text-[9px] font-semibold text-panel-text-muted">
                     {col.publisher}
                   </span>
                 ) : null}
+                <span className="block max-w-full truncate rounded bg-panel-blue-soft px-1 py-0.5 text-[10px] font-semibold text-panel-blue">
+                  {col.label}
+                </span>
               </th>
             ))}
           </tr>
@@ -256,22 +334,43 @@ function AccuracyHeatmap({ students, columns, onSelect }) {
                 </button>
               </td>
               {columns.map((col) => {
-                const cell = student.resourceAccuracy.get(col.key)
-                if (!cell || !Number.isFinite(cell.accuracy)) {
+                const cell = student.resources.get(col.key)
+                const hasAccuracy = cell && Number.isFinite(cell.accuracy)
+                const completion = cell && Number.isFinite(cell.completionRate) ? cell.completionRate : null
+                if (!hasAccuracy && completion === null) {
                   return (
-                    <td key={col.key} className="rounded-md bg-panel-surface-soft/60 py-2 text-[11px] text-panel-text-muted">
+                    <td key={col.key} className="rounded-md bg-panel-surface-soft/50 py-2 text-[11px] text-panel-text-muted">
                       –
                     </td>
                   )
                 }
-                const tone = RATE_TONES[toneFor(cell.accuracy)]
+                const tone = hasAccuracy ? RATE_TONES[toneFor(cell.accuracy)] : RATE_TONES.neutral
+                const titleParts = [
+                  hasAccuracy ? `Doğruluk ${pct(cell.accuracy)} (${formatNumber(cell.answered)} soru)` : 'Henüz çözüm yok',
+                ]
+                if (completion !== null) {
+                  titleParts.push(`Tamamlanma ${Math.round(completion * 100)}% (${cell.completedTests}/${cell.totalTests} test)`)
+                }
                 return (
                   <td
                     key={col.key}
-                    className={`rounded-md py-2 text-[11px] font-bold ${tone.chip}`}
-                    title={`${student.name} · ${col.label}: ${pct(cell.accuracy)} (${formatNumber(cell.answered)} soru)`}
+                    className={`rounded-md px-1 py-1 ${tone.chip}`}
+                    title={`${student.name} · ${col.label}\n${titleParts.join('\n')}`}
                   >
-                    {Math.round(cell.accuracy)}
+                    <span className="block text-[12px] font-bold leading-none">
+                      {hasAccuracy ? Math.round(cell.accuracy) : '–'}
+                    </span>
+                    {completion !== null ? (
+                      <span className="mt-1 flex items-center gap-1">
+                        <span className="h-1 flex-1 overflow-hidden rounded-full bg-black/10">
+                          <span
+                            className="block h-1 rounded-full bg-panel-blue"
+                            style={{ width: `${Math.round(completion * 100)}%` }}
+                          />
+                        </span>
+                        <span className="text-[8px] font-bold tabular-nums opacity-70">{Math.round(completion * 100)}</span>
+                      </span>
+                    ) : null}
                   </td>
                 )
               })}
@@ -279,6 +378,10 @@ function AccuracyHeatmap({ students, columns, onSelect }) {
           ))}
         </tbody>
       </table>
+      <p className="mt-2 text-[11px] text-panel-text-muted">
+        Büyük sayı = doğruluk %’si · alttaki mavi çubuk = kitabın tamamlanma oranı · sütun başlığına gelin: kitap kapağı
+      </p>
+      <BookHoverCard tip={tip} />
     </div>
   )
 }
@@ -394,21 +497,22 @@ export default function ClassAnalysisPage() {
     if (!data) return null
     const students = (data.students || []).map((entry) => analyzeStudent(entry, range, today))
 
-    // Isı haritası sütunları: sınıfın en çok çalıştığı kaynaklar (+ yayın evi etiketi).
+    // Isı haritası sütunları: sınıfın en çok çalıştığı / atanmış kaynaklar.
     const resourceMeta = new Map()
     for (const student of students) {
-      for (const row of student.resourceRows) {
-        const meta = resourceMeta.get(row.key) || { answered: 0, publisher: '' }
-        meta.answered += row.correct + row.wrong
-        if (!meta.publisher && row.publishers?.length) meta.publisher = row.publishers[0]
-        resourceMeta.set(row.key, meta)
+      for (const [name, info] of student.resources) {
+        const meta = resourceMeta.get(name) || { weight: 0, publisher: '', cover: null }
+        meta.weight += (info.answered || 0) + (info.totalTests || 0)
+        if (!meta.publisher && info.publisher) meta.publisher = info.publisher
+        if (!meta.cover && info.cover) meta.cover = info.cover
+        resourceMeta.set(name, meta)
       }
     }
     const resourceColumns = [...resourceMeta.entries()]
-      .filter(([, meta]) => meta.answered > 0)
-      .sort((a, b) => b[1].answered - a[1].answered)
+      .filter(([, meta]) => meta.weight > 0)
+      .sort((a, b) => b[1].weight - a[1].weight)
       .slice(0, MAX_RESOURCE_COLUMNS)
-      .map(([key, meta]) => ({ key, label: key, publisher: meta.publisher }))
+      .map(([key, meta]) => ({ key, label: key, publisher: meta.publisher, cover: meta.cover }))
 
     const months = buildAcademicMonths(today)
     const maxMonthly = Math.max(
@@ -621,7 +725,7 @@ function ClassAnalysisBody({ analysis, sortedStudents, sortKey, onSortChange, on
 
       <Card
         title="Kaynaklara göre başarı"
-        subtitle="Öğrenci × kaynak — hücredeki sayı o öğrencinin o kitaptaki doğruluk yüzdesi"
+        subtitle="Öğrenci × kaynak — her hücrede o kitaptaki doğruluk yüzdesi ve tamamlanma oranı"
         icon={Layers3}
       >
         {resourceColumns.length ? (
