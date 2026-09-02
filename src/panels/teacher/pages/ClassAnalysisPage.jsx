@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   CalendarCheck,
   CalendarRange,
+  Clock,
   GraduationCap,
   Layers3,
   Target,
@@ -168,7 +169,27 @@ function analyzeStudent(entry, range, today) {
     })
   }
 
-  const lastActive = records.reduce((max, record) => (record.date > max ? record.date : max), '')
+  // Son işlem zamanı: ham zaman damgaları (görev/oturum/manuel optik/ödev) içinden
+  // seçili tarih aralığına düşen en yeni an.
+  let lastActivityAt = null
+  const considerTs = (value) => {
+    if (!value) return
+    const date = value instanceof Date ? value : new Date(value)
+    if (Number.isNaN(date.getTime())) return
+    const iso = date.toISOString()
+    if (!dateInRange(toDateKey(iso), range, today)) return
+    if (!lastActivityAt || iso > lastActivityAt) lastActivityAt = iso
+  }
+  for (const task of overview.tasks || []) {
+    considerTs(task.completedAt)
+    considerTs(task.updatedAt)
+  }
+  for (const session of overview.sessions || []) {
+    considerTs(session.endedAt)
+    considerTs(session.startedAt)
+  }
+  for (const completion of overview.manualTestCompletions || []) considerTs(completion.markedAt)
+  for (const homework of overview.homeworks || []) considerTs(homework.updatedAt)
 
   return {
     key: entry.studentTeacherId,
@@ -186,8 +207,26 @@ function analyzeStudent(entry, range, today) {
     monthly,
     hardestTopic: rankable(topicRows),
     hardestBook: rankable(resourceRows),
-    lastActive,
+    lastActivityAt,
   }
+}
+
+const DATE_FMT = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })
+const TIME_FMT = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit' })
+
+function LastActivity({ iso }) {
+  if (!iso) return <span className="text-panel-text-muted">—</span>
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return <span className="text-panel-text-muted">—</span>
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-lg bg-panel-surface-soft px-2 py-1">
+      <Clock size={12} className="shrink-0 text-panel-text-muted" aria-hidden="true" />
+      <span className="leading-tight">
+        <span className="block text-xs font-semibold text-panel-text">{DATE_FMT.format(date)}</span>
+        <span className="block text-[11px] text-panel-text-muted">{TIME_FMT.format(date)}</span>
+      </span>
+    </span>
+  )
 }
 
 function Card({ title, subtitle, icon, children }) {
@@ -254,7 +293,7 @@ function StudentStackedRows({ rows, legend, onSelect }) {
                     )
                   : null}
               </span>
-              <span className="w-14 shrink-0 text-right text-xs font-bold text-panel-text sm:text-sm">
+              <span className="w-[68px] shrink-0 whitespace-nowrap text-right text-xs font-bold text-panel-text sm:w-[76px] sm:text-sm">
                 {row.valueLabel}
               </span>
             </button>
@@ -852,7 +891,7 @@ function StudentComparison({ students, sortKey, onSortChange, onOpenStudent }) {
               <th className="px-3 py-3 text-right">Başarı</th>
               <th className="px-3 py-3 text-right">Net</th>
               <th className="px-3 py-3 text-right">Biriken</th>
-              <th className="px-5 py-3 text-right">Son aktivite</th>
+              <th className="px-5 py-3 text-right">Son işlem zamanı</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-panel-border">
@@ -881,7 +920,9 @@ function StudentComparison({ students, sortKey, onSortChange, onOpenStudent }) {
                   >
                     {student.taskCounts.backlog}
                   </td>
-                  <td className="px-5 py-3 text-right text-panel-text-muted">{student.lastActive || '—'}</td>
+                  <td className="px-5 py-3 text-right">
+                    <LastActivity iso={student.lastActivityAt} />
+                  </td>
                 </tr>
               )
             })}
@@ -912,6 +953,16 @@ function StudentComparison({ students, sortKey, onSortChange, onOpenStudent }) {
                     {student.taskCounts.backlog} biriken
                   </span>
                 </div>
+                {student.lastActivityAt ? (
+                  <div className="text-[11px] text-panel-text-muted">
+                    Son işlem: {new Date(student.lastActivityAt).toLocaleString('tr-TR', {
+                      day: 'numeric',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </div>
+                ) : null}
               </button>
             </li>
           )
