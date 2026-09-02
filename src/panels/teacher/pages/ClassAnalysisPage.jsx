@@ -345,23 +345,25 @@ function AccuracyHeatmap({ students, columns, onSelect }) {
                   )
                 }
                 const tone = hasAccuracy ? RATE_TONES[toneFor(cell.accuracy)] : RATE_TONES.neutral
-                const titleParts = [
-                  hasAccuracy ? `Doğruluk ${pct(cell.accuracy)} (${formatNumber(cell.answered)} soru)` : 'Henüz çözüm yok',
-                ]
-                if (completion !== null) {
-                  titleParts.push(`Tamamlanma ${Math.round(completion * 100)}% (${cell.completedTests}/${cell.totalTests} test)`)
-                }
                 return (
-                  <td
-                    key={col.key}
-                    className={`rounded-md px-1 py-1 ${tone.chip}`}
-                    title={`${student.name} · ${col.label}\n${titleParts.join('\n')}`}
-                  >
-                    <span className="block text-[12px] font-bold leading-none">
+                  <td key={col.key} className={`rounded-md px-1 py-1 ${tone.chip}`}>
+                    <span
+                      className="block text-[12px] font-bold leading-none"
+                      title={
+                        hasAccuracy
+                          ? `${student.shortLabel} · ${col.label}\nBaşarı oranı: ${Math.round(cell.accuracy)}% (${formatNumber(cell.answered)} soru çözüldü)`
+                          : `${student.shortLabel} · ${col.label}\nHenüz çözüm yok`
+                      }
+                    >
                       {hasAccuracy ? `${Math.round(cell.accuracy)}%` : '–'}
                     </span>
                     {completion !== null ? (
-                      <span className="mt-1 flex items-center gap-1">
+                      <span
+                        className="mt-1 flex items-center gap-1"
+                        title={`${student.shortLabel} · ${col.label}\nKitap tamamlanma oranı: ${Math.round(
+                          completion * 100,
+                        )}% (${cell.completedTests}/${cell.totalTests} test)`}
+                      >
                         <span className="h-1 flex-1 overflow-hidden rounded-full bg-black/10">
                           <span
                             className="block h-1 rounded-full bg-panel-blue"
@@ -378,9 +380,6 @@ function AccuracyHeatmap({ students, columns, onSelect }) {
           ))}
         </tbody>
       </table>
-      <p className="mt-2 text-[11px] text-panel-text-muted">
-        Büyük sayı = doğruluk %’si · alttaki mavi çubuk = kitabın tamamlanma oranı · sütun başlığına gelin: kitap kapağı
-      </p>
       <BookHoverCard tip={tip} />
     </div>
   )
@@ -405,14 +404,14 @@ function mergeBuckets(buckets) {
 function MonthlyTable({ students, months, onSelect, renderCell, showTotal }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] text-center text-xs">
+      <table className="w-full min-w-[820px] text-center text-xs">
         <thead>
           <tr className="border-b-2 border-panel-border">
             <th className="sticky left-0 z-10 bg-panel-surface py-2 pr-3" />
             {months.map((month) => (
               <th
                 key={month.key}
-                className="px-1 py-2 text-[11px] font-bold uppercase tracking-wide text-panel-text-muted"
+                className="min-w-[54px] px-1 py-2 text-[11px] font-bold uppercase tracking-wide text-panel-text-muted"
                 title={month.label}
               >
                 {month.short}
@@ -441,12 +440,12 @@ function MonthlyTable({ students, months, onSelect, renderCell, showTotal }) {
                   </button>
                 </td>
                 {months.map((month, index) => (
-                  <td key={month.key} className="px-1 py-1.5 align-middle">
+                  <td key={month.key} className="px-1 py-2 align-middle">
                     {renderCell(buckets[index])}
                   </td>
                 ))}
                 {showTotal ? (
-                  <td className="border-l border-panel-border px-1.5 py-1.5 align-middle">
+                  <td className="border-l border-panel-border px-1.5 py-2 align-middle">
                     {renderCell(mergeBuckets(buckets))}
                   </td>
                 ) : null}
@@ -655,7 +654,8 @@ function PerfCell({ bucket }) {
   )
 }
 
-// Aylık doğru · yanlış · boş sayıları + o ayın başarı %'si.
+// Aylık sonuç: o ayın başarı %'si (belirgin) + altında doğru/yanlış/boş sayıları
+// (renk kodlu). Ayrıntı ipucu (tooltip) hücrenin üzerinde.
 function ResultCell({ bucket }) {
   const total = bucket ? bucket.correct + bucket.wrong + bucket.blank : 0
   if (total === 0) return <span className="text-panel-text-muted">–</span>
@@ -663,16 +663,21 @@ function ResultCell({ bucket }) {
   const tone = RATE_TONES[toneFor(acc)]
   return (
     <span
-      className="inline-flex flex-col items-center leading-tight"
-      title={`Doğru ${bucket.correct} · Yanlış ${bucket.wrong} · Boş ${bucket.blank}`}
+      className="inline-flex flex-col items-center gap-0.5 leading-none"
+      title={`Doğru: ${formatNumber(bucket.correct)}\nYanlış: ${formatNumber(bucket.wrong)}\nBoş: ${formatNumber(
+        bucket.blank,
+      )}\nBaşarı oranı: ${Number.isFinite(acc) ? `${Math.round(acc)}%` : '—'}`}
     >
-      <span className="text-xs font-bold tabular-nums">
+      {Number.isFinite(acc) ? (
+        <span className={`text-[13px] font-bold ${tone.text}`}>{Math.round(acc)}%</span>
+      ) : (
+        <span className="text-panel-text-muted">—</span>
+      )}
+      <span className="flex items-center gap-1.5 text-[10px] font-bold tabular-nums">
         <span className="text-panel-green">{formatNumber(bucket.correct)}</span>
-        <span className="text-panel-text-muted"> · </span>
         <span className="text-panel-red">{formatNumber(bucket.wrong)}</span>
-        {bucket.blank > 0 ? <span className="text-panel-text-muted"> · {formatNumber(bucket.blank)}</span> : null}
+        <span className="text-panel-text-muted">{formatNumber(bucket.blank)}</span>
       </span>
-      {Number.isFinite(acc) ? <span className={`text-[10px] font-bold ${tone.text}`}>{Math.round(acc)}%</span> : null}
     </span>
   )
 }
