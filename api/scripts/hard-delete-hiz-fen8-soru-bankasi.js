@@ -60,7 +60,17 @@ async function main() {
     `)
     const g = guard.recordset[0]
     console.log('Bağımlı kayıt sayıları:', g)
-    const blocking = Object.entries(g).filter(([, v]) => v > 0)
+    // student_books (öğrencinin rafına eklemesi) tek başına engel değil — aktivite yoksa
+    // rafla birlikte siliyoruz. Gerçek öğrenci/öğretmen çalışması varsa dur.
+    const activityKeys = [
+      'tasks',
+      'homeworks',
+      'teacher_books',
+      'questions',
+      'manual_completions',
+      'wrong_questions',
+    ]
+    const blocking = activityKeys.filter((k) => g[k] > 0).map((k) => [k, g[k]])
     if (blocking.length) {
       throw new Error(`Bağımlı kayıt var, silme durduruldu: ${blocking.map(([k, v]) => `${k}=${v}`).join(', ')}`)
     }
@@ -84,6 +94,7 @@ async function main() {
        WHERE t.resource_book_id = @b;`,
     )
     await del('ResourceBookTopics', `DELETE FROM dbo.ResourceBookTopics WHERE resource_book_id = @b;`)
+    await del('StudentResourceBooks', `DELETE FROM dbo.StudentResourceBooks WHERE resource_book_id = @b;`)
     await del('ResourceBooks', `DELETE FROM dbo.ResourceBooks WHERE id = @b;`)
 
     await tx.commit()

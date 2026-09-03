@@ -11,6 +11,7 @@ import { verifyMistakePhotoQuestionNumber } from '../../../services/mistakePhoto
 import { getWrongQuestionPhoto, updateWrongQuestion } from '../../../services/wrongQuestionService'
 import LoadingState from '../../shared/LoadingState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
+import ConfettiBurst from '../../shared/ConfettiBurst'
 import WrongQuestionGalleryModal from '../../shared/WrongQuestionGalleryModal'
 import MistakePhotoCaptureModal from './MistakePhotoCaptureModal'
 
@@ -246,6 +247,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
   const [capturingQuestion, setCapturingQuestion] = useState(null)
   // { testId, items, index } — bir testin fotoğraflı yanlışları arasında gezinilen hata analizi galerisi.
   const [gallery, setGallery] = useState(null)
+  const [celebrate, setCelebrate] = useState(false)
 
   useEffect(() => {
     let ignore = false
@@ -289,7 +291,16 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
     try {
       const payload = (tests || []).map((test) => ({ testId: test.id, answers: answersByTest[test.id] || {} }))
       const updatedTask = await saveTaskAnswers(task.id, payload, studentId)
-      setResultsByTest(updatedTask.testResults || {})
+      const nextResults = updatedTask.testResults || {}
+      setResultsByTest(nextResults)
+      // Tüm testler eksiksiz doğru (%100) ise küçük bir konfeti kutlaması.
+      const gradedResults = Object.values(nextResults)
+      if (
+        gradedResults.length > 0 &&
+        gradedResults.every((r) => r && Number(r.wrong) === 0 && Number(r.blank) === 0)
+      ) {
+        setCelebrate(true)
+      }
       onSaved(updatedTask)
     } catch (err) {
       setError(err.message)
@@ -536,6 +547,8 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
           onSave={handleSavePhoto}
         />
       ) : null}
+
+      {celebrate ? <ConfettiBurst onDone={() => setCelebrate(false)} /> : null}
 
       {gallery && !capturingQuestion && gallery.items.length > 0 ? (
         <WrongQuestionGalleryModal

@@ -670,3 +670,31 @@ button {
   outline: 2px solid var(--color-panel-blue);
   outline-offset: 2px;
 }
+
+/* %100 başarı kutlaması: ekranın ortasından yukarı fırlayıp savrulan emoji parçacıkları. */
+@keyframes confetti-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--confetti-dx)), calc(-50% + var(--confetti-dy))) scale(1)
+      rotate(var(--confetti-rot));
+  }
+}
+
+.confetti-piece {
+  animation: confetti-pop 1400ms ease-out forwards;
+  animation-delay: var(--confetti-delay, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confetti-piece {
+    animation-duration: 900ms;
+    animation-timing-function: ease-out;
+  }
+}

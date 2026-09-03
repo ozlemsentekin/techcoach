@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from 'react'
-import { Camera, ImagePlus, Info, Loader2, X } from 'lucide-react'
+import { Camera, ImagePlus, Info, Loader2, Pencil, X } from 'lucide-react'
 import { downscalePhoto, extractImageFromClipboard } from '../../../utils/photoDownscale'
+import RequestPhotoEditor from './RequestPhotoEditor'
 
 const PHOTO_QUALITY_HINT =
   'Fotoğraflar net ve yakından çekilmiş olsun: yazılar okunaklı, sayfanın tamamı kadrajda, iyi ışıkta; bulanık, eğik veya gölgeli olmasın.'
@@ -23,6 +24,7 @@ export default function RequestPhotoField({
   const pasteRef = useRef(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [editIndex, setEditIndex] = useState(null)
 
   const limit = single ? 1 : max
   const isFull = photos.length >= limit
@@ -69,6 +71,11 @@ export default function RequestPhotoField({
     setError('')
   }
 
+  const saveEdited = (dataUrl) => {
+    onChange(photos.map((photo, i) => (i === editIndex ? dataUrl : photo)))
+    setEditIndex(null)
+  }
+
   return (
     <div
       ref={pasteRef}
@@ -90,7 +97,18 @@ export default function RequestPhotoField({
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {photos.map((photo, index) => (
             <div key={index} className="relative aspect-square overflow-hidden rounded-lg border border-panel-border bg-white">
-              <img src={photo} alt={`${label} ${index + 1}`} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+              <button
+                type="button"
+                onClick={() => setEditIndex(index)}
+                aria-label={`${label} ${index + 1} — büyüt ve düzenle`}
+                className="block h-full w-full cursor-zoom-in"
+              >
+                <img src={photo} alt={`${label} ${index + 1}`} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+              </button>
+              <span className="pointer-events-none absolute bottom-1 left-1 inline-flex items-center gap-1 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                <Pencil size={10} aria-hidden="true" />
+                Düzenle
+              </span>
               <button
                 type="button"
                 aria-label="Fotoğrafı kaldır"
@@ -156,6 +174,15 @@ export default function RequestPhotoField({
       </div>
 
       {error ? <p className="text-xs text-panel-warm">{error}</p> : null}
+
+      {editIndex != null && photos[editIndex] ? (
+        <RequestPhotoEditor
+          src={photos[editIndex]}
+          title={`${label} ${editIndex + 1}`}
+          onSave={saveEdited}
+          onClose={() => setEditIndex(null)}
+        />
+      ) : null}
     </div>
   )
 }
