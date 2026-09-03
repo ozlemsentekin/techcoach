@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
   AlertTriangle,
@@ -29,6 +29,7 @@ import ActionsMenu from '../../ui/ActionsMenu'
 import Button from '../../ui/Button'
 import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
 import TeacherStudentProfileModal from '../components/TeacherStudentProfileModal'
+import TeacherSeatPurchaseModal from '../components/TeacherSeatPurchaseModal'
 import {
   deleteTeacherStudent,
   getTeacherEntitlement,
@@ -345,7 +346,15 @@ export default function StudentsPage() {
   const [actionStudentId, setActionStudentId] = useState(null)
   const [openActionsStudentId, setOpenActionsStudentId] = useState(null)
   const [expandedStudentId, setExpandedStudentId] = useState(null)
+  const [showSeatPurchase, setShowSeatPurchase] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [seatPurchaseBanner] = useState(() => searchParams.get('koltuk') === 'eklendi')
   const navigate = useNavigate()
+
+  const loadEntitlement = () => getTeacherEntitlement().then((data) => {
+    setEntitlement(data)
+    return data
+  })
 
   useEffect(() => {
     let ignore = false
@@ -363,20 +372,20 @@ export default function StudentsPage() {
     }
   }, [statusFilter])
 
+  // iyzico öğretmen-koltuğu ödemesi başarıyla dönünce /teacher/students?koltuk=eklendi olur:
+  // kotayı tazele, URL'i temizle, banner göster ve hak açıldıysa öğrenci ekleme modalını aç.
   useEffect(() => {
-    let ignore = false
-
-    getTeacherEntitlement()
-      .then((data) => {
-        if (!ignore) setEntitlement(data)
-      })
-      .catch((err) => {
-        if (!ignore) setError(err.message)
-      })
-
-    return () => {
-      ignore = true
+    const justPurchased = searchParams.get('koltuk') === 'eklendi'
+    if (justPurchased) {
+      searchParams.delete('koltuk')
+      setSearchParams(searchParams, { replace: true })
     }
+    loadEntitlement()
+      .then((data) => {
+        if (justPurchased && data?.isActive && data.remainingSeats > 0) setProfileStudent('new')
+      })
+      .catch((err) => setError(err.message))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleStatusChange = async (student, isActive) => {
@@ -427,20 +436,40 @@ export default function StudentsPage() {
     }
   }
 
+  // "Öğrenci Ekle" her zaman görünür. Kullanılabilir hakkı olan öğretmen doğrudan ekleme
+  // modalını açar; hakkı olmayan (hiç aboneliği yok veya kotası dolu) öğretmen önce ek öğrenci
+  // koltuğu (öğrenci başı 299 TL/ay) satın alma modalına yönlenir.
+  const handleAddStudent = () => {
+    if (entitlement && (!entitlement.isActive || entitlement.remainingSeats <= 0)) {
+      setShowSeatPurchase(true)
+    } else {
+      setProfileStudent('new')
+    }
+  }
+
+  const handleSeatPurchaseClose = () => {
+    setShowSeatPurchase(false)
+    loadEntitlement().catch(() => {})
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Öğrencilerim"
         subtitle="Size panel erişimi verilen öğrenciler."
         actions={
-          entitlement?.isActive ? (
-            <Button type="button" onClick={() => setProfileStudent('new')}>
-              <Plus size={16} aria-hidden="true" />
-              Öğrenci Ekle
-            </Button>
-          ) : null
+          <Button type="button" onClick={handleAddStudent}>
+            <Plus size={16} aria-hidden="true" />
+            Öğrenci Ekle
+          </Button>
         }
       />
+
+      {seatPurchaseBanner ? (
+        <div className="rounded-xl bg-panel-sage-soft px-4 py-3 text-sm text-panel-text" role="status">
+          Ödemeniz alındı. Yeni öğrencinizi şimdi ekleyebilirsiniz.
+        </div>
+      ) : null}
 
       <div className="inline-flex w-fit rounded-xl border border-panel-border bg-panel-surface p-1 shadow-sm">
         {STATUS_FILTERS.map((filter) => {
@@ -711,9 +740,12 @@ export default function StudentsPage() {
             getTeacherStudents(statusFilter)
               .then(setStudents)
               .catch((err) => setError(err.message))
+            loadEntitlement().catch(() => {})
           }}
         />
       ) : null}
+
+      {showSeatPurchase ? <TeacherSeatPurchaseModal onClose={handleSeatPurchaseClose} /> : null}
 
       {pendingTasksStudent ? (
         <PendingTasksModal
