@@ -8,7 +8,7 @@ import { buildTeacherLessonTasksForDate, getTeacherLessonSchedule } from '../../
 import { addCoachNote } from '../../../services/messageService'
 import { todayISODate, addDaysISO } from '../../../utils/time'
 import { getNextTask } from '../../../utils/taskSelectors'
-import { isBacklogTask } from '../../../utils/backlogTasks'
+import { isBacklogTask, isCompletedOnDate } from '../../../utils/backlogTasks'
 import { FOCUS_TASK_TYPES } from '../../../data/taskTypes'
 import useVisiblePolling from '../../../hooks/useVisiblePolling'
 import StudentWelcomeBanner from '../components/StudentWelcomeBanner'
@@ -143,7 +143,11 @@ export default function TodayPage() {
 
   const listTasks = useMemo(
     () => [
-      ...historyDays.flatMap((day) => (historyTasks[day] || []).filter(isBacklogTask)),
+      // Bekleyen gecikmiş görevler + tarihi bugün olmasa da bugün tamamlanan biriken görevler
+      // ("Tamamlanan" sekmesi bugün kapatılanları da göstersin diye).
+      ...historyDays.flatMap((day) =>
+        (historyTasks[day] || []).filter((task) => isBacklogTask(task) || isCompletedOnDate(task, date)),
+      ),
       ...buildTeacherLessonTasksForDate(teacherLessonSchedule, date),
       ...tasks,
     ],
