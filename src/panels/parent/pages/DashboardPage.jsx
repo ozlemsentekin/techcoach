@@ -3,7 +3,7 @@ import { useAuth } from '../../../context/useAuth'
 import { AlertTriangle, CalendarDays, Plus, Sparkles, Users } from 'lucide-react'
 import { cachedGet } from '../../../services/authClient'
 import { getTasksForDate, patchTask, createTask, removeTask } from '../../../services/taskService'
-import { getSchoolSchedule, getBacklogTasks, getTeacherLessonSchedule, buildTeacherLessonTasksForDate } from '../../../services/weeklyPlanService'
+import { getSchoolSchedule, getBacklogTasks, getTasksCompletedOn, getTeacherLessonSchedule, buildTeacherLessonTasksForDate } from '../../../services/weeklyPlanService'
 import { getRequests, updateRequestStatus } from '../../../services/studentRequestService'
 import { evaluateDayBalance } from '../../../utils/planInsights'
 import { getSortedTasks } from '../../../utils/taskSelectors'
@@ -182,6 +182,7 @@ export default function DashboardPage() {
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [tasks, setTasks] = useState([])
   const [backlogTasks, setBacklogTasks] = useState([])
+  const [completedBacklogTasks, setCompletedBacklogTasks] = useState([])
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -227,13 +228,15 @@ export default function DashboardPage() {
     Promise.all([
       getTasksForDate(date, { studentId: selectedStudentId }),
       getBacklogTasks(date, 30, { studentId: selectedStudentId }),
+      getTasksCompletedOn(date, 30, { studentId: selectedStudentId }),
       getRequests({ studentId: selectedStudentId }),
       getTeacherLessonSchedule({ studentId: selectedStudentId }).catch(() => []),
     ])
-      .then(([tasksData, backlogTasksData, requestsData, teacherLessonScheduleData]) => {
+      .then(([tasksData, backlogTasksData, completedBacklogData, requestsData, teacherLessonScheduleData]) => {
         if (ignore) return
         setTasks(tasksData)
         setBacklogTasks(backlogTasksData)
+        setCompletedBacklogTasks(completedBacklogData)
         setRequests(requestsData)
         setTeacherLessonSchedule(teacherLessonScheduleData)
       })
@@ -259,6 +262,9 @@ export default function DashboardPage() {
       .catch(() => {})
     getBacklogTasks(date, 30, { studentId: selectedStudentId })
       .then((backlogTasksData) => setBacklogTasks(backlogTasksData))
+      .catch(() => {})
+    getTasksCompletedOn(date, 30, { studentId: selectedStudentId })
+      .then((completedBacklogData) => setCompletedBacklogTasks(completedBacklogData))
       .catch(() => {})
   }, 30000)
 
@@ -298,6 +304,12 @@ export default function DashboardPage() {
   const dailyFlowTasks = useMemo(
     () => [...tasks, ...buildTeacherLessonTasksForDate(teacherLessonSchedule, date)],
     [tasks, teacherLessonSchedule],
+  )
+
+  // "Biriken Görev" akışı: hâlâ bekleyen gecikmiş görevler + tarihi bugün olmasa da bugün tamamlananlar.
+  const backlogFlowTasks = useMemo(
+    () => [...backlogTasks, ...completedBacklogTasks],
+    [backlogTasks, completedBacklogTasks],
   )
 
   const getExistingTasksForDrawer = useCallback(
@@ -350,6 +362,9 @@ export default function DashboardPage() {
       .catch(() => {})
     getBacklogTasks(date, 30, { studentId: selectedStudentId })
       .then((backlogTasksData) => setBacklogTasks(backlogTasksData))
+      .catch(() => {})
+    getTasksCompletedOn(date, 30, { studentId: selectedStudentId })
+      .then((completedBacklogData) => setCompletedBacklogTasks(completedBacklogData))
       .catch(() => {})
   }, [selectedStudentId])
 
@@ -427,7 +442,7 @@ export default function DashboardPage() {
       >
         <DailyPlanTable
           tasks={dailyFlowTasks}
-          backlogTasks={backlogTasks}
+          backlogTasks={backlogFlowTasks}
           onAddTask={() => setDrawerState({ defaultDate: date })}
           onEdit={(task) => setDrawerState({ initialTask: task })}
           onDelete={(task) => setDeletingTask(task)}

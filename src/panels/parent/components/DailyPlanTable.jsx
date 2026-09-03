@@ -607,6 +607,9 @@ function formatBacklogTooltip(task) {
   const dateLabel = formatDateShort(task.date)
   const timeLabel = task.startTime && task.endTime ? `${task.startTime} - ${task.endTime}` : task.startTime || ''
   const whenLabel = timeLabel ? `${dateLabel}, ${timeLabel}` : dateLabel
+  if (task.status === 'tamamlandi') {
+    return `${whenLabel} için planlanmıştı, bugün tamamlandı.`
+  }
   return `${whenLabel} için planlanmıştı, zamanında yapılmadı.`
 }
 
@@ -623,6 +626,8 @@ function BacklogTag({ task }) {
     return () => document.removeEventListener('pointerdown', handlePointerDown)
   }, [open])
 
+  const completed = task.status === 'tamamlandi'
+
   return (
     <span ref={wrapperRef} className="relative inline-flex">
       <button
@@ -634,8 +639,8 @@ function BacklogTag({ task }) {
         aria-expanded={open}
         aria-label="Biriken görev detayı"
       >
-        <Badge tone="red" className="cursor-pointer gap-1 text-[10px] font-extrabold">
-          <AlertTriangle size={11} aria-hidden="true" />
+        <Badge tone={completed ? 'sage' : 'red'} className="cursor-pointer gap-1 text-[10px] font-extrabold">
+          {completed ? <CheckCircle2 size={11} aria-hidden="true" /> : <AlertTriangle size={11} aria-hidden="true" />}
           Biriken Görev
         </Badge>
       </button>

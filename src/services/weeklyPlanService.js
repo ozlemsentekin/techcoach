@@ -3,7 +3,7 @@ import { getHomeworks } from './homeworkService'
 import { authRequest, cachedGet } from './authClient'
 import { HOMEWORK_TASK_TYPES } from '../data/taskTypes'
 import { addDaysISO, getMondayOfWeek, getWeekdayKey, parseTimeToMinutes } from '../utils/time'
-import { isBacklogTask } from '../utils/backlogTasks'
+import { isBacklogTask, isCompletedOnDate } from '../utils/backlogTasks'
 
 /**
  * @typedef {'taslak'|'yayinlandi'|'guncellendi'|'arsivlendi'} PlanStatus
@@ -120,6 +120,18 @@ export async function getBacklogTasks(beforeDateISO, lookbackDays = 30, { studen
   const toDate = addDaysISO(beforeDateISO, -1)
   const tasks = await getTasksForDateRange(fromDate, toDate, { studentId })
   return tasks.filter(isBacklogTask)
+}
+
+/**
+ * `onDateISO` gününden önce (son `lookbackDays` gün içinde) planlanmış ama o gün tamamlanmış
+ * görevleri döner — "Günün Akışı"nın "Tamamlanan" sekmesinde, tarihi bugün olmayan ama bugün
+ * kapatılan biriken görevleri de göstermek için kullanılır.
+ */
+export async function getTasksCompletedOn(onDateISO, lookbackDays = 30, { studentId } = {}) {
+  const fromDate = addDaysISO(onDateISO, -lookbackDays)
+  const toDate = addDaysISO(onDateISO, -1)
+  const tasks = await getTasksForDateRange(fromDate, toDate, { studentId })
+  return tasks.filter((task) => isCompletedOnDate(task, onDateISO))
 }
 
 /** Bir günün canlı görevlerini, varsa bekleyen taslak eklemeleriyle birlikte döner (taslak canlıyı gizlemez). */
