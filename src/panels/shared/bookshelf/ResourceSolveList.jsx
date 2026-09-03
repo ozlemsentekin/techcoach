@@ -3,7 +3,7 @@ import { Check, ChevronDown, ChevronRight, ImageOff, Pencil, RotateCcw, Search, 
 import Badge from '../../ui/Badge'
 import Button from '../../ui/Button'
 import LoadingState from '../LoadingState'
-import ConfettiBurst from '../ConfettiBurst'
+import SuccessCelebration from '../SuccessCelebration'
 import { authRequest } from '../../../services/authClient'
 import { verifyMistakePhotoQuestionNumber } from '../../../services/mistakePhotoService'
 import ManualOpticalAnswerModal from '../ManualOpticalAnswerModal'
@@ -318,7 +318,7 @@ export default function ResourceSolveList({ studentId, book }) {
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      {celebrate ? <ConfettiBurst onDone={() => setCelebrate(false)} /> : null}
+      {celebrate ? <SuccessCelebration onClose={() => setCelebrate(false)} /> : null}
       <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div className="relative min-w-0">
           <Search

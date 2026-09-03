@@ -11,7 +11,7 @@ import { verifyMistakePhotoQuestionNumber } from '../../../services/mistakePhoto
 import { getWrongQuestionPhoto, updateWrongQuestion } from '../../../services/wrongQuestionService'
 import LoadingState from '../../shared/LoadingState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
-import ConfettiBurst from '../../shared/ConfettiBurst'
+import SuccessCelebration from '../../shared/SuccessCelebration'
 import WrongQuestionGalleryModal from '../../shared/WrongQuestionGalleryModal'
 import MistakePhotoCaptureModal from './MistakePhotoCaptureModal'
 
@@ -548,7 +548,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
         />
       ) : null}
 
-      {celebrate ? <ConfettiBurst onDone={() => setCelebrate(false)} /> : null}
+      {celebrate ? <SuccessCelebration onClose={() => setCelebrate(false)} /> : null}
 
       {gallery && !capturingQuestion && gallery.items.length > 0 ? (
         <WrongQuestionGalleryModal
