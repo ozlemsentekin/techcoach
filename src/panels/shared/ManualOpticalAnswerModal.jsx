@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { X, CheckCircle2, XCircle, MinusCircle, Camera, Check } from 'lucide-react'
 import Badge from '../ui/Badge'
 import ConfirmationDialog from './ConfirmationDialog'
-import ConfettiBurst from './ConfettiBurst'
+import SuccessCelebration from './SuccessCelebration'
 import MistakePhotoCaptureModal from '../student/components/MistakePhotoCaptureModal'
 
 const OPTIONS = ['A', 'B', 'C', 'D']
@@ -54,7 +54,8 @@ export default function ManualOpticalAnswerModal({
   const [photosByQuestion, setPhotosByQuestion] = useState(() => ({ ...(initialPhotos || {}) }))
   const [capturingOrderNo, setCapturingOrderNo] = useState(null)
   const [photoReminderOpen, setPhotoReminderOpen] = useState(false)
-  const [celebrate, setCelebrate] = useState(false)
+  // null | 'stay' (sadece kutla) | 'close' (kutlama kapanınca formu da kapat)
+  const [celebrate, setCelebrate] = useState(null)
   const submitSeqRef = useRef(0)
 
   const questionNumbers = Array.from({ length: test.questionCount }, (_, index) => index + 1)
@@ -64,7 +65,7 @@ export default function ManualOpticalAnswerModal({
   // Aynı anda birden fazla submit isteği yarışabilir (bkz. aşağıdaki mount-time sessiz yeniden
   // notlama). Sıra numarasıyla, ekrana her zaman en SON atılan isteğin sonucu yansır; geç dönen
   // eski bir yanıt taze bir kaydı ezmesin diye yok sayılır.
-  const submit = async (submittedAnswers, { celebrateOnSuccess = false } = {}) => {
+  const submit = async (submittedAnswers, { celebrateMode = null } = {}) => {
     const seq = ++submitSeqRef.current
     setSaving(true)
     setError('')
@@ -73,9 +74,9 @@ export default function ManualOpticalAnswerModal({
       if (seq !== submitSeqRef.current) return false
       setResult({ correctCount: data.correctCount, wrongCount: data.wrongCount, blankCount: data.blankCount })
       setCorrectLabels(data.correctLabels || null)
-      // Tam puan (%100) ise küçük bir konfeti kutlaması — sadece kullanıcının kaydında.
-      if (celebrateOnSuccess && Number(data.wrongCount) === 0 && Number(data.blankCount) === 0) {
-        setCelebrate(true)
+      // Tam puan (%100) ise konfeti + motivasyon kutlaması — sadece kullanıcının kaydında.
+      if (celebrateMode && Number(data.wrongCount) === 0 && Number(data.blankCount) === 0) {
+        setCelebrate(celebrateMode)
       }
       onSaved(test.id, {
         completionSource: 'manual',
@@ -113,7 +114,7 @@ export default function ManualOpticalAnswerModal({
     })
   }
 
-  const handleSave = () => submit(answers, { celebrateOnSuccess: true })
+  const handleSave = () => submit(answers, { celebrateMode: 'stay' })
 
   const hasMissingMistakePhotos = (savedData) => {
     if (!savedData || (Number(savedData.wrongCount) <= 0 && Number(savedData.blankCount) <= 0)) return false
@@ -125,17 +126,14 @@ export default function ManualOpticalAnswerModal({
   }
 
   const handleSaveAndClose = async () => {
-    const savedData = await submit(answers, { celebrateOnSuccess: true })
+    const savedData = await submit(answers, { celebrateMode: 'close' })
     if (!savedData) return
+
+    // Tam puan: kutlama gösterildi; kullanıcı "Tamam"a basınca form da kapanır.
+    if (Number(savedData.wrongCount) === 0 && Number(savedData.blankCount) === 0) return
 
     if (hasMissingMistakePhotos(savedData)) {
       setPhotoReminderOpen(true)
-      return
-    }
-
-    if (Number(savedData.wrongCount) === 0 && Number(savedData.blankCount) === 0) {
-      // Konfetinin görünmesi için kapanışı kısa bir süre geciktir.
-      setTimeout(onClose, 1200)
       return
     }
 
@@ -312,7 +310,15 @@ export default function ManualOpticalAnswerModal({
         </div>
       </div>
 
-      {celebrate ? <ConfettiBurst onDone={() => setCelebrate(false)} /> : null}
+      {celebrate ? (
+        <SuccessCelebration
+          onClose={() => {
+            const shouldCloseForm = celebrate === 'close'
+            setCelebrate(null)
+            if (shouldCloseForm) onClose()
+          }}
+        />
+      ) : null}
 
       {capturingOrderNo ? (
         <MistakePhotoCaptureModal
