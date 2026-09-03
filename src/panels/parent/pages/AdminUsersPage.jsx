@@ -38,6 +38,17 @@ function formatDate(value) {
   })
 }
 
+function formatDateTime(value) {
+  if (!value) return '—'
+  return new Date(value).toLocaleString('tr-TR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 function formatPhone(value) {
   if (!value) return null
   const digits = value.replace(/\D/g, '').replace(/^90/, '')
@@ -302,7 +313,7 @@ function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpers
         <RoleBadge user={user} />
       </td>
       <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.createdAt)}</td>
-      <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.lastLoginAt)}</td>
+      <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDateTime(user.lastLoginAt)}</td>
       <td className="px-4 py-3 text-right">
         <RowActions
           user={user}
@@ -352,7 +363,7 @@ function UserMobileCard({ user, indent = false, isSelf, impersonating, onEdit, o
           Kayıt: {formatDate(user.createdAt)}
         </span>
         <span className="rounded-full bg-[#f8f7fb] px-2.5 py-1 text-[11px] font-semibold text-[#667475]">
-          Son giriş: {formatDate(user.lastLoginAt)}
+          Son giriş: {formatDateTime(user.lastLoginAt)}
         </span>
       </div>
     </article>
@@ -402,7 +413,7 @@ function GroupRow({ user, students, isSelf, impersonating, onEdit, onImpersonate
           <RoleBadge user={user} />
         </td>
         <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.createdAt)}</td>
-        <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.lastLoginAt)}</td>
+        <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDateTime(user.lastLoginAt)}</td>
         <td className="px-4 py-3 text-right" onClick={(event) => event.stopPropagation()}>
           <RowActions
             user={user}
@@ -493,7 +504,7 @@ function GroupMobileCard({ user, students, isSelf, impersonating, onEdit, onImpe
             Kayıt: {formatDate(user.createdAt)}
           </span>
           <span className="rounded-full bg-[#f8f7fb] px-2.5 py-1 text-[11px] font-semibold text-[#667475]">
-            Son giriş: {formatDate(user.lastLoginAt)}
+            Son giriş: {formatDateTime(user.lastLoginAt)}
           </span>
         </div>
       </article>
