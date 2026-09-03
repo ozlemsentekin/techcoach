@@ -126,7 +126,9 @@ function TestSection({ test, answers, result, photos, photoMode, canRegrade, onS
           const photoEntry = getPhotoEntry(photos?.[key])
           const hasPhoto = hasPhotoEntry(photoEntry)
           const canViewPhoto = hasViewablePhoto(photoEntry)
-          const shouldShowPhotoButton = isMistake && (photoMode === 'view' ? canViewPhoto : true)
+          // Yanlış her soruda foto butonu görünür: fotoğrafı olan açar, olmayan
+          // (veli "view" modu dahil) yeni fotoğraf ekleyebilir.
+          const shouldShowPhotoButton = isMistake
           return (
             <div
               key={key}
@@ -208,10 +210,10 @@ function TestSection({ test, answers, result, photos, photoMode, canRegrade, onS
                       title={canViewPhoto ? 'Fotoğrafı aç ve hata analizi yap' : 'Fotoğraf ekle'}
                       onClick={() => (canViewPhoto ? onOpenGallery(orderNo) : onCapture(orderNo))}
                       className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${
-                        photoMode === 'view'
-                          ? 'border border-panel-blue bg-white text-panel-blue hover:bg-panel-blue hover:text-white'
-                          : hasPhoto
-                            ? 'bg-student-theme-primary text-student-theme-button-text'
+                        hasPhoto
+                          ? photoMode === 'view'
+                            ? 'border border-panel-blue bg-white text-panel-blue hover:bg-panel-blue hover:text-white'
+                            : 'bg-student-theme-primary text-student-theme-button-text'
                           : 'bg-white text-panel-text-muted hover:bg-student-theme-soft hover:text-student-theme-text'
                       }`}
                     >
@@ -369,7 +371,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
     if (!capturingQuestion) return
     const { testId, orderNo, reopenGallery } = capturingQuestion
     const key = String(orderNo)
-    const wrongQuestion = await saveWrongQuestionPhoto(task.id, testId, key, dataUrl)
+    const wrongQuestion = await saveWrongQuestionPhoto(task.id, testId, key, dataUrl, studentId)
     const photoUrl = wrongQuestion.photoUrl || dataUrl
     const nextPhotos = {
       ...photosByTest,
