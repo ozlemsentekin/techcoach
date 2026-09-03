@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { X, CheckCircle2, XCircle, MinusCircle, Camera, Check } from 'lucide-react'
 import Badge from '../ui/Badge'
 import ConfirmationDialog from './ConfirmationDialog'
+import ConfettiBurst from './ConfettiBurst'
 import MistakePhotoCaptureModal from '../student/components/MistakePhotoCaptureModal'
 
 const OPTIONS = ['A', 'B', 'C', 'D']
@@ -53,6 +54,7 @@ export default function ManualOpticalAnswerModal({
   const [photosByQuestion, setPhotosByQuestion] = useState(() => ({ ...(initialPhotos || {}) }))
   const [capturingOrderNo, setCapturingOrderNo] = useState(null)
   const [photoReminderOpen, setPhotoReminderOpen] = useState(false)
+  const [celebrate, setCelebrate] = useState(false)
   const submitSeqRef = useRef(0)
 
   const questionNumbers = Array.from({ length: test.questionCount }, (_, index) => index + 1)
@@ -62,7 +64,7 @@ export default function ManualOpticalAnswerModal({
   // Aynı anda birden fazla submit isteği yarışabilir (bkz. aşağıdaki mount-time sessiz yeniden
   // notlama). Sıra numarasıyla, ekrana her zaman en SON atılan isteğin sonucu yansır; geç dönen
   // eski bir yanıt taze bir kaydı ezmesin diye yok sayılır.
-  const submit = async (submittedAnswers) => {
+  const submit = async (submittedAnswers, { celebrateOnSuccess = false } = {}) => {
     const seq = ++submitSeqRef.current
     setSaving(true)
     setError('')
@@ -71,6 +73,10 @@ export default function ManualOpticalAnswerModal({
       if (seq !== submitSeqRef.current) return false
       setResult({ correctCount: data.correctCount, wrongCount: data.wrongCount, blankCount: data.blankCount })
       setCorrectLabels(data.correctLabels || null)
+      // Tam puan (%100) ise küçük bir konfeti kutlaması — sadece kullanıcının kaydında.
+      if (celebrateOnSuccess && Number(data.wrongCount) === 0 && Number(data.blankCount) === 0) {
+        setCelebrate(true)
+      }
       onSaved(test.id, {
         completionSource: 'manual',
         correctCount: data.correctCount,
@@ -107,7 +113,7 @@ export default function ManualOpticalAnswerModal({
     })
   }
 
-  const handleSave = () => submit(answers)
+  const handleSave = () => submit(answers, { celebrateOnSuccess: true })
 
   const hasMissingMistakePhotos = (savedData) => {
     if (!savedData || (Number(savedData.wrongCount) <= 0 && Number(savedData.blankCount) <= 0)) return false
@@ -119,11 +125,17 @@ export default function ManualOpticalAnswerModal({
   }
 
   const handleSaveAndClose = async () => {
-    const savedData = await submit(answers)
+    const savedData = await submit(answers, { celebrateOnSuccess: true })
     if (!savedData) return
 
     if (hasMissingMistakePhotos(savedData)) {
       setPhotoReminderOpen(true)
+      return
+    }
+
+    if (Number(savedData.wrongCount) === 0 && Number(savedData.blankCount) === 0) {
+      // Konfetinin görünmesi için kapanışı kısa bir süre geciktir.
+      setTimeout(onClose, 1200)
       return
     }
 
@@ -299,6 +311,8 @@ export default function ManualOpticalAnswerModal({
           </div>
         </div>
       </div>
+
+      {celebrate ? <ConfettiBurst onDone={() => setCelebrate(false)} /> : null}
 
       {capturingOrderNo ? (
         <MistakePhotoCaptureModal
