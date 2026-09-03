@@ -172,6 +172,7 @@ const {
   createPanelRequestHandler,
   listMyPanelRequestsHandler,
   getPanelRequestHandler,
+  addPanelRequestMessageHandler,
   listAdminPanelRequestsHandler,
   updateAdminPanelRequestHandler,
 } = require('./panelRequests')
@@ -1582,6 +1583,13 @@ app.http('panel-requests-get', {
   methods: ['GET'],
   route: 'panel/requests/{requestId}',
   handler: getPanelRequestHandler,
+})
+
+app.http('panel-requests-messages-add', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel/requests/{requestId}/messages',
+  handler: addPanelRequestMessageHandler,
 })
 
 app.http('panel-admin-requests-list', {

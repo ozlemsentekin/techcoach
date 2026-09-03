@@ -5,20 +5,21 @@ import { authRequest } from '../../../services/authClient'
 import { getPanelRequest, PANEL_REQUEST_TYPE_LABELS } from '../../../services/panelRequestService'
 import { formatRequestDate, roleLabel } from './requestFormat'
 import { PhotoGrid, RequestStatusBadge } from './requestPresentation'
+import RequestMessageThread from './RequestMessageThread'
 
 function InfoRow({ label, value }) {
   if (!value) return null
   return (
     <div className="flex gap-2 text-sm">
       <span className="w-24 shrink-0 text-panel-text-muted">{label}</span>
-      <span className="text-panel-text">{value}</span>
+      <span className="whitespace-pre-wrap text-panel-text">{value}</span>
     </div>
   )
 }
 
 /**
- * Bir talebin tüm ayrıntısı (bilgiler + fotoğraflar). `renderActions` verilirse (admin
- * "Kitap Talepleri" ekranı) footer'da aksiyonlar gösterilir.
+ * Bir talebin tüm ayrıntısı (bilgiler + fotoğraflar + yazışma). `renderActions` verilirse
+ * (admin "Talepler" ekranı) footer'da aksiyonlar gösterilir.
  */
 export default function RequestDetailModal({ requestId, showRequester = false, renderActions, onClose }) {
   const [detail, setDetail] = useState(null)
@@ -44,6 +45,7 @@ export default function RequestDetailModal({ requestId, showRequester = false, r
     }
   }, [requestId])
 
+  const isGeneral = detail?.type === 'genel'
   const book = detail?.book || {}
   const subjectName = subjects.find((subject) => subject.id === book.subjectId)?.name || null
 
@@ -53,12 +55,15 @@ export default function RequestDetailModal({ requestId, showRequester = false, r
         <div className="flex items-start justify-between gap-3 border-b border-panel-border p-4 sm:p-5">
           <div className="min-w-0">
             <h2 className="text-lg font-bold text-panel-text">
-              {PANEL_REQUEST_TYPE_LABELS[detail?.type] || 'Talep'}
+              {isGeneral
+                ? detail.title || 'Genel talep'
+                : PANEL_REQUEST_TYPE_LABELS[detail?.type] || 'Talep'}
             </h2>
             {detail ? (
               <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-panel-text-muted">
                 <RequestStatusBadge status={detail.status} />
-                <span>{formatRequestDate(detail.createdAt)}</span>
+                <span>{PANEL_REQUEST_TYPE_LABELS[detail.type]}</span>
+                <span>· {formatRequestDate(detail.createdAt)}</span>
               </div>
             ) : null}
           </div>
@@ -81,14 +86,20 @@ export default function RequestDetailModal({ requestId, showRequester = false, r
                     value={[detail.requesterName, roleLabel(detail.createdByRole)].filter(Boolean).join(' · ')}
                   />
                 ) : null}
-                <InfoRow label="Kitap adı" value={book.bookName} />
-                <InfoRow label="Yayınevi" value={book.publisherName} />
-                <InfoRow label="Ders" value={subjectName} />
-                <InfoRow label="Sınıf" value={book.grade ? `${book.grade}. sınıf` : null} />
-                <InfoRow label="Not" value={book.note} />
-                {!book.bookName && !book.publisherName && !book.grade && !book.note ? (
-                  <p className="text-sm text-panel-text-muted">Ek bilgi girilmemiş — fotoğraflara bakın.</p>
-                ) : null}
+                {isGeneral ? (
+                  <InfoRow label="Açıklama" value={detail.description} />
+                ) : (
+                  <>
+                    <InfoRow label="Kitap adı" value={book.bookName} />
+                    <InfoRow label="Yayınevi" value={book.publisherName} />
+                    <InfoRow label="Ders" value={subjectName} />
+                    <InfoRow label="Sınıf" value={book.grade ? `${book.grade}. sınıf` : null} />
+                    <InfoRow label="Not" value={book.note} />
+                    {!book.bookName && !book.publisherName && !book.grade && !book.note ? (
+                      <p className="text-sm text-panel-text-muted">Ek bilgi girilmemiş — fotoğraflara bakın.</p>
+                    ) : null}
+                  </>
+                )}
               </div>
 
               {detail.adminNote ? (
@@ -98,9 +109,17 @@ export default function RequestDetailModal({ requestId, showRequester = false, r
                 </div>
               ) : null}
 
-              <PhotoGrid title="Kapak" photos={detail.photos?.kapak} />
-              <PhotoGrid title="İçindekiler" photos={detail.photos?.icindekiler} />
-              <PhotoGrid title="Cevap anahtarı" photos={detail.photos?.cevapAnahtari} />
+              {!isGeneral ? (
+                <>
+                  <PhotoGrid title="Kapak" photos={detail.photos?.kapak} />
+                  <PhotoGrid title="İçindekiler" photos={detail.photos?.icindekiler} />
+                  <PhotoGrid title="Cevap anahtarı" photos={detail.photos?.cevapAnahtari} />
+                </>
+              ) : null}
+
+              <div className="border-t border-panel-border pt-4">
+                <RequestMessageThread requestId={detail.id} messages={detail.messages || []} />
+              </div>
             </div>
           )}
         </div>

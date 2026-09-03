@@ -17,6 +17,7 @@ export const STUDENT_PRIMARY_NAV = [
 export const STUDENT_MORE_NAV = [
   { to: '/student/courses', label: 'Derslerim', icon: 'BookOpen' },
   { to: '/student/teachers', label: 'Öğretmenlerim', icon: 'GraduationCap' },
+  { to: '/student/requests', label: 'Taleplerim', icon: 'ClipboardList' },
 ]
 
 export const STUDENT_SIDEBAR_NAV = [...STUDENT_PRIMARY_NAV, ...STUDENT_MORE_NAV]
@@ -86,7 +87,7 @@ export const PARENT_ADMIN_NAV = {
     { to: '/parent/admin/users', label: 'Üyeler', icon: 'Users' },
     { to: '/parent/admin/subjects', label: 'Dersler', icon: 'BookOpen' },
     { to: '/parent/admin/publishers', label: 'Yayın Evleri', icon: 'Building2' },
-    { to: '/parent/admin/book-requests', label: 'Kitap Talepleri', icon: 'ClipboardList' },
+    { to: '/parent/admin/book-requests', label: 'Talepler', icon: 'ClipboardList' },
     { to: '/parent/admin/schools', label: 'Okul Yönetimi', icon: 'School' },
     { to: '/parent/admin/motivation-messages', label: 'Motivasyon Mesajları', icon: 'Sparkles' },
     { to: '/parent/admin/greetings', label: 'Selamlama Metinleri', icon: 'Clock' },

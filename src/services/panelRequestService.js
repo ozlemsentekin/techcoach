@@ -1,12 +1,14 @@
 import { authRequest } from './authClient'
 
-// Panel talep sistemi (bkz. api/src/panelRequests.js). Şimdilik tek tür: 'kitap-ekleme'.
-// Veli / öğretmen / öğrenci bir kitabın fotoğraflarını yükleyip kütüphaneye eklenmesini
-// talep eder; sonucu "Taleplerim" menüsünden takip eder. Admin "Kitap Talepleri"
-// ekranından tamamlandı / iptal işaretler.
+// Panel talep sistemi (bkz. api/src/panelRequests.js). İki tür: 'kitap-ekleme' (kapak +
+// içindekiler + cevap anahtarı fotoğraflarıyla kütüphaneye kitap eklenmesi talebi) ve
+// 'genel' (serbest konu + açıklama). Sonuç "Taleplerim" menüsünden takip edilir; her talep
+// üzerinde talep sahibi ile yönetici karşılıklı not yazışır. Admin "Talepler" ekranından
+// tamamlandı / iptal işaretler veya yeniden açar.
 
 export const PANEL_REQUEST_TYPE_LABELS = {
   'kitap-ekleme': 'Kitap ekleme talebi',
+  genel: 'Genel talep',
 }
 
 export const PANEL_REQUEST_STATUS_LABELS = {
@@ -22,6 +24,22 @@ export async function createPanelRequest(payload) {
     body: JSON.stringify(payload),
   })
   return data.request
+}
+
+export async function createGeneralPanelRequest({ title, description }) {
+  const data = await authRequest('/api/panel/requests', {
+    method: 'POST',
+    body: JSON.stringify({ type: 'genel', title, description }),
+  })
+  return data.request
+}
+
+export async function addPanelRequestMessage(requestId, body) {
+  const data = await authRequest(`/api/panel/requests/${requestId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  })
+  return data.message
 }
 
 export async function getMyPanelRequests() {
