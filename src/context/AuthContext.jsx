@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { authRequest, invalidateCache, setConsentRequiredHandler } from '../services/authClient'
+import { authRequest, invalidateCache, setAccountDisabledHandler, setConsentRequiredHandler } from '../services/authClient'
 import AuthContext from './authContextObject'
 
 export function AuthProvider({ children }) {
@@ -16,7 +16,16 @@ export function AuthProvider({ children }) {
     setConsentRequiredHandler(() => {
       setAuthUser((current) => (current && !current.needsConsent ? { ...current, needsConsent: true } : current))
     })
-    return () => setConsentRequiredHandler(null)
+    // Hesap admin panelinden pasife alındıysa (ACCOUNT_DISABLED) oturumu anında kapat.
+    setAccountDisabledHandler(() => {
+      setAuthUser(null)
+      invalidateCache()
+      setAuthError('Hesabınız pasife alınmış. Erişim için site yöneticisiyle iletişime geçin.')
+    })
+    return () => {
+      setConsentRequiredHandler(null)
+      setAccountDisabledHandler(null)
+    }
   }, [])
 
   useEffect(() => {

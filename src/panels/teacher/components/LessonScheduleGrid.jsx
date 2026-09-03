@@ -22,6 +22,8 @@ export default function LessonScheduleGrid({ recurringEntries, oneTimeEntries, w
     const dayIndex = WEEKDAYS.findIndex((day) => day.id === entry.dayOfWeek)
     const occurrenceDate = dayIndex >= 0 ? weekDates?.[dayIndex] : null
     if (occurrenceDate && entry.skipDates?.includes(occurrenceDate)) return
+    // Ders, öğretmenin eklediği tarihten önceki haftalarda görünmesin.
+    if (occurrenceDate && entry.startDate && occurrenceDate < entry.startDate) return
     const list = entriesByDay.get(entry.dayOfWeek)
     if (list) list.push({ ...entry, isOneTime: false, occurrenceDate })
   })

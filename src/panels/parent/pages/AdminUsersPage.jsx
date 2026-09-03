@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronRight, Library, LogIn, Pencil, Search, ShieldCheck, Trash2, X } from 'lucide-react'
+import { Ban, ChevronDown, ChevronRight, Library, LogIn, Pencil, RotateCcw, Search, ShieldCheck, Trash2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { useAuth } from '../../../context/useAuth'
 import PageHeader from '../../layout/PageHeader'
@@ -72,6 +72,12 @@ function LibraryBadge({ user }) {
   )
 }
 
+// Admin panelinden pasife alınmış üye için rozet — bu üye giriş yapamaz, açık oturumu kapanır.
+function PassiveBadge({ user }) {
+  if (user.isActive !== false) return null
+  return <Badge tone="neutral">Pasif</Badge>
+}
+
 function ContactCell({ user }) {
   if (!user.email && !user.phone) {
     return <span className="text-sm text-[#667475]">—</span>
@@ -101,7 +107,7 @@ function EditUserModal({ user, isSelf, onSaved, onClose }) {
     let ignore = false
     authRequest('/api/panel-admin/subjects', { method: 'GET' })
       .then((data) => {
-        if (!ignore) setAllSubjects(data.subjects)
+        if (!ignore) setAllSubjects((data.subjects || []).filter((s) => s.isActive !== false))
       })
       .catch((err) => {
         if (!ignore) setError(err.message)
@@ -253,9 +259,21 @@ function EditUserModal({ user, isSelf, onSaved, onClose }) {
   )
 }
 
-function RowActions({ user, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
+function RowActions({ user, isSelf, impersonating, onEdit, onImpersonate, onToggleActive, onDelete }) {
+  const passive = user.isActive === false
   return (
     <div className="flex items-center justify-end gap-3">
+      {!isSelf ? (
+        <button
+          type="button"
+          aria-label={passive ? 'Üyeyi aktife al' : 'Üyeyi pasife al'}
+          title={passive ? 'Aktife Al' : 'Pasife Al'}
+          className={passive ? 'text-[#2f7a57] hover:text-[#245f43]' : 'text-[#87a3a5] hover:text-panel-warm'}
+          onClick={() => onToggleActive(user)}
+        >
+          {passive ? <RotateCcw size={14} aria-hidden="true" /> : <Ban size={14} aria-hidden="true" />}
+        </button>
+      ) : null}
       {!isSelf && PANEL_PATH_BY_ROLE[user.role] ? (
         <button
           type="button"
@@ -291,7 +309,7 @@ function RowActions({ user, isSelf, impersonating, onEdit, onImpersonate, onDele
   )
 }
 
-function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
+function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpersonate, onToggleActive, onDelete }) {
   return (
     <tr className="hover:bg-[#f8f7fb]">
       <td className="px-4 py-3 text-[#253d3e]">
@@ -304,6 +322,7 @@ function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpers
             </Badge>
           ) : null}
           <LibraryBadge user={user} />
+          <PassiveBadge user={user} />
         </div>
       </td>
       <td className="px-4 py-3">
@@ -321,6 +340,7 @@ function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpers
           impersonating={impersonating}
           onEdit={onEdit}
           onImpersonate={onImpersonate}
+          onToggleActive={onToggleActive}
           onDelete={onDelete}
         />
       </td>
@@ -328,7 +348,7 @@ function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpers
   )
 }
 
-function UserMobileCard({ user, indent = false, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
+function UserMobileCard({ user, indent = false, isSelf, impersonating, onEdit, onImpersonate, onToggleActive, onDelete }) {
   return (
     <article className={`rounded-xl border border-panel-border bg-white p-4 shadow-sm ${indent ? 'ml-4 border-dashed' : ''}`}>
       <div className="flex items-start justify-between gap-3">
@@ -342,6 +362,7 @@ function UserMobileCard({ user, indent = false, isSelf, impersonating, onEdit, o
               </Badge>
             ) : null}
             <LibraryBadge user={user} />
+            <PassiveBadge user={user} />
           </div>
           <div className="mt-1">
             <ContactCell user={user} />
@@ -353,6 +374,7 @@ function UserMobileCard({ user, indent = false, isSelf, impersonating, onEdit, o
           impersonating={impersonating}
           onEdit={onEdit}
           onImpersonate={onImpersonate}
+          onToggleActive={onToggleActive}
           onDelete={onDelete}
         />
       </div>
@@ -370,7 +392,7 @@ function UserMobileCard({ user, indent = false, isSelf, impersonating, onEdit, o
   )
 }
 
-function GroupRow({ user, students, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
+function GroupRow({ user, students, isSelf, impersonating, onEdit, onImpersonate, onToggleActive, onDelete }) {
   const [expanded, setExpanded] = useState(false)
   const hasStudents = students.length > 0
 
@@ -399,6 +421,7 @@ function GroupRow({ user, students, isSelf, impersonating, onEdit, onImpersonate
               </Badge>
             ) : null}
             <LibraryBadge user={user} />
+            <PassiveBadge user={user} />
             {hasStudents ? (
               <span className="inline-flex items-center rounded-full bg-[#f8f7fb] px-2.5 py-1 text-xs font-medium text-[#1c2b5e]">
                 {students.length} öğrenci
@@ -421,6 +444,7 @@ function GroupRow({ user, students, isSelf, impersonating, onEdit, onImpersonate
             impersonating={impersonating}
             onEdit={onEdit}
             onImpersonate={onImpersonate}
+            onToggleActive={onToggleActive}
             onDelete={onDelete}
           />
         </td>
@@ -435,6 +459,7 @@ function GroupRow({ user, students, isSelf, impersonating, onEdit, onImpersonate
               impersonating={impersonating}
               onEdit={onEdit}
               onImpersonate={onImpersonate}
+              onToggleActive={onToggleActive}
               onDelete={onDelete}
             />
           ))
@@ -443,7 +468,7 @@ function GroupRow({ user, students, isSelf, impersonating, onEdit, onImpersonate
   )
 }
 
-function GroupMobileCard({ user, students, isSelf, impersonating, onEdit, onImpersonate, onDelete }) {
+function GroupMobileCard({ user, students, isSelf, impersonating, onEdit, onImpersonate, onToggleActive, onDelete }) {
   const [expanded, setExpanded] = useState(false)
   const hasStudents = students.length > 0
 
@@ -476,6 +501,7 @@ function GroupMobileCard({ user, students, isSelf, impersonating, onEdit, onImpe
                   </Badge>
                 ) : null}
                 <LibraryBadge user={user} />
+                <PassiveBadge user={user} />
                 {hasStudents ? (
                   <span className="inline-flex items-center rounded-full bg-[#f8f7fb] px-2.5 py-1 text-xs font-medium text-[#1c2b5e]">
                     {students.length} öğrenci
@@ -494,6 +520,7 @@ function GroupMobileCard({ user, students, isSelf, impersonating, onEdit, onImpe
             impersonating={impersonating}
             onEdit={onEdit}
             onImpersonate={onImpersonate}
+            onToggleActive={onToggleActive}
             onDelete={onDelete}
           />
         </div>
@@ -519,6 +546,7 @@ function GroupMobileCard({ user, students, isSelf, impersonating, onEdit, onImpe
               impersonating={impersonating}
               onEdit={onEdit}
               onImpersonate={onImpersonate}
+              onToggleActive={onToggleActive}
               onDelete={onDelete}
             />
           ))
@@ -541,6 +569,9 @@ export default function AdminUsersPage() {
   const [deletingUser, setDeletingUser] = useState(null)
   const [deletingUserError, setDeletingUserError] = useState('')
   const [deletingUserLoading, setDeletingUserLoading] = useState(false)
+  const [togglingUser, setTogglingUser] = useState(null)
+  const [togglingUserError, setTogglingUserError] = useState('')
+  const [togglingUserLoading, setTogglingUserLoading] = useState(false)
 
   useEffect(() => {
     let ignore = false
@@ -593,6 +624,27 @@ export default function AdminUsersPage() {
       setDeletingUserError(err.message)
     } finally {
       setDeletingUserLoading(false)
+    }
+  }
+
+  const handleToggleActive = async () => {
+    if (!togglingUser) return
+    const nextActive = togglingUser.isActive === false
+    setTogglingUserLoading(true)
+    setTogglingUserError('')
+    try {
+      const data = await authRequest(`/api/panel-admin/users/${togglingUser.id}/active`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: nextActive }),
+      })
+      setUsers((current) =>
+        (current || []).map((item) => (item.id === data.user.id ? { ...item, ...data.user } : item)),
+      )
+      setTogglingUser(null)
+    } catch (err) {
+      setTogglingUserError(err.message)
+    } finally {
+      setTogglingUserLoading(false)
     }
   }
 
@@ -727,6 +779,7 @@ export default function AdminUsersPage() {
                     impersonating={Boolean(impersonatingId)}
                     onEdit={setEditingUser}
                     onImpersonate={handleImpersonate}
+                    onToggleActive={setTogglingUser}
                     onDelete={setDeletingUser}
                   />
                 ))}
@@ -738,6 +791,7 @@ export default function AdminUsersPage() {
                     impersonating={Boolean(impersonatingId)}
                     onEdit={setEditingUser}
                     onImpersonate={handleImpersonate}
+                    onToggleActive={setTogglingUser}
                     onDelete={setDeletingUser}
                   />
                 ))}
@@ -765,6 +819,7 @@ export default function AdminUsersPage() {
                       impersonating={Boolean(impersonatingId)}
                       onEdit={setEditingUser}
                       onImpersonate={handleImpersonate}
+                      onToggleActive={setTogglingUser}
                       onDelete={setDeletingUser}
                     />
                   ))}
@@ -776,6 +831,7 @@ export default function AdminUsersPage() {
                       impersonating={Boolean(impersonatingId)}
                       onEdit={setEditingUser}
                       onImpersonate={handleImpersonate}
+                      onToggleActive={setTogglingUser}
                       onDelete={setDeletingUser}
                     />
                   ))}
@@ -809,6 +865,31 @@ export default function AdminUsersPage() {
           onCancel={() => {
             setDeletingUser(null)
             setDeletingUserError('')
+          }}
+        />
+      ) : null}
+
+      {togglingUser ? (
+        <ConfirmationDialog
+          title={togglingUser.isActive === false ? 'Üyeyi Aktife Al' : 'Üyeyi Pasife Al'}
+          description={
+            togglingUserError ||
+            (togglingUser.isActive === false
+              ? `"${togglingUser.fullName}" tekrar giriş yapabilecek ve paneline erişebilecek. Devam edilsin mi?`
+              : `"${togglingUser.fullName}" bir daha giriş yapamayacak; açık oturumu varsa kapatılacak. Üyenin verileri (öğrenci, ödev, ders programı) silinmez, istediğinizde tekrar aktife alabilirsiniz.`)
+          }
+          confirmLabel={
+            togglingUserLoading
+              ? 'Kaydediliyor...'
+              : togglingUser.isActive === false
+                ? 'Aktife Al'
+                : 'Pasife Al'
+          }
+          cancelLabel="Vazgeç"
+          onConfirm={handleToggleActive}
+          onCancel={() => {
+            setTogglingUser(null)
+            setTogglingUserError('')
           }}
         />
       ) : null}

@@ -50,7 +50,22 @@ function clearSessionHeaders() {
   }
 }
 
+// Admin panelinden pasife alınmış (is_active = 0) bir kullanıcının açık oturumuyla
+// yaptığı isteklere verilen ortak yanıt. code: 'ACCOUNT_DISABLED' istemcide global
+// olarak yakalanıp oturumu kapatır; Set-Cookie ile çerez de hemen temizlenir.
+function accountDisabledResponse() {
+  return json(
+    403,
+    {
+      error: 'Hesabınız pasife alınmış. Erişim için site yöneticisiyle iletişime geçin.',
+      code: 'ACCOUNT_DISABLED',
+    },
+    clearSessionHeaders(),
+  )
+}
+
 module.exports = {
+  accountDisabledResponse,
   clearSessionHeaders,
   createSessionHeaders,
   getClientIp,

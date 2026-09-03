@@ -5,7 +5,7 @@ const { isSessionError } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
 const { recordTaskActivities } = require('./taskActivity')
 const { sanitizeWrongQuestion } = require('./progress')
-const { sanitizeAnswers, gradeTestAnswers } = require('./testGrading')
+const { sanitizeAnswers, gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGrading')
 const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
 
 function toISODate(value) {
@@ -1217,6 +1217,16 @@ async function saveTaskAnswersHandler(request) {
           completed_at = @completedAt
       WHERE id = @id;
     `)
+
+    // Yanlış işaretlenip fotoğrafı çekilen bir soru bu düzeltmede doğru cevaplandıysa,
+    // ilgili kayıt (ve fotoğrafı) Hata Defteri'nden düşsün.
+    await Promise.all(
+      gradedTests
+        .filter(({ result }) => result)
+        .map(({ testId, result }) =>
+          pruneCorrectedWrongQuestions(studentId, testId, answers[testId] || {}, result.correctLabels, { taskId }),
+        ),
+    )
 
     const fetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: taskId } })
     const fetchResult = await fetchDb.query(`${SELECT_TASK} WHERE t.id = @id;`)

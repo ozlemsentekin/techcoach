@@ -5,6 +5,7 @@ import { cn } from '../ui/utils'
 const MISTAKE_REASON_OPTIONS = [
   { value: 'dikkat-hatasi', label: 'Dikkat Hatası' },
   { value: 'bilgi-eksikligi', label: 'Bilgi Eksikliği' },
+  { value: 'soruyu-anlamadim', label: 'Soruyu Anlamadım' },
 ]
 
 function InfoField({ icon, label, value }) {
@@ -190,28 +191,30 @@ export default function WrongQuestionGalleryModal({
 
       <div className="flex shrink-0 flex-col items-center gap-2 px-3 pb-2">
         <div className="w-full max-w-2xl rounded-2xl border-2 border-panel-accent bg-panel-surface px-4 py-3 shadow-panel-2">
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
+          <div className="flex flex-col items-center gap-2">
             <span className="flex items-center gap-2 text-base font-extrabold uppercase tracking-wide text-panel-warm sm:text-lg">
               <HelpCircle size={22} className="shrink-0" aria-hidden="true" />
               Bu soruyu neden yanlış yaptın?
             </span>
-            {MISTAKE_REASON_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={item.mistakeReason === option.value}
-                disabled={savingReason}
-                onClick={() => handleSelectReason(option.value)}
-                className={cn(
-                  'rounded-full border-2 px-4 py-2 text-sm font-bold transition-colors disabled:opacity-50',
-                  item.mistakeReason === option.value
-                    ? 'border-panel-blue bg-panel-blue text-white'
-                    : 'border-panel-border text-panel-text hover:border-panel-blue hover:text-panel-blue',
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
+              {MISTAKE_REASON_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={item.mistakeReason === option.value}
+                  disabled={savingReason}
+                  onClick={() => handleSelectReason(option.value)}
+                  className={cn(
+                    'rounded-full border-2 px-4 py-2 text-center text-sm font-bold transition-colors disabled:opacity-50',
+                    item.mistakeReason === option.value
+                      ? 'border-panel-blue bg-panel-blue text-white'
+                      : 'border-panel-border text-panel-text hover:border-panel-blue hover:text-panel-blue',
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {onUpdateMistakeMeta ? (

@@ -1,5 +1,5 @@
 const { sql, withRequest } = require('./db')
-const { json } = require('./http')
+const { accountDisabledResponse, json } = require('./http')
 const { readSessionToken, verifySessionToken } = require('./security')
 
 /**
@@ -17,11 +17,14 @@ async function requireTeacherSession(request) {
     id: { type: sql.UniqueIdentifier, value: session.sub },
   })
   const result = await requestDb.query(`
-    SELECT TOP 1 id, role, full_name, phone_number, is_admin FROM dbo.Users WHERE id = @id;
+    SELECT TOP 1 id, role, full_name, phone_number, is_admin, is_active FROM dbo.Users WHERE id = @id;
   `)
   const record = result.recordset[0]
   if (!record) {
     return { error: json(401, { error: 'Oturum geçersiz.' }) }
+  }
+  if (record.is_active === false) {
+    return { error: accountDisabledResponse() }
   }
   if (record.role !== 'ogretmen') {
     return { error: json(403, { error: 'Bu alana erişim yetkiniz yok.' }) }

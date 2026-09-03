@@ -7,6 +7,7 @@ import { getSchoolSchedule, getBacklogTasks, getTasksCompletedOn, getTeacherLess
 import { getRequests, updateRequestStatus } from '../../../services/studentRequestService'
 import { evaluateDayBalance } from '../../../utils/planInsights'
 import { getSortedTasks } from '../../../utils/taskSelectors'
+import { isEndedPrivateLessonForToday } from '../../../utils/lessonTasks'
 import { formatDateLong, todayISODate } from '../../../utils/time'
 import useVisiblePolling from '../../../hooks/useVisiblePolling'
 import LoadingState from '../../shared/LoadingState'
@@ -302,7 +303,10 @@ export default function DashboardPage() {
   }, [tasks])
 
   const dailyFlowTasks = useMemo(
-    () => [...tasks, ...buildTeacherLessonTasksForDate(teacherLessonSchedule, date)],
+    () =>
+      [...tasks, ...buildTeacherLessonTasksForDate(teacherLessonSchedule, date)].filter(
+        (task) => !isEndedPrivateLessonForToday(task, date),
+      ),
     [tasks, teacherLessonSchedule],
   )
 

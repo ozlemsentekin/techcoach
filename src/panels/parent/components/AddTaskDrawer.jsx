@@ -300,7 +300,9 @@ export default function AddTaskDrawer({
   const isPrivateLesson = form.taskType === PRIVATE_LESSON_TASK_TYPE
   const needsResource = RESOURCE_TASK_TYPES.has(form.taskType)
   const resourceRequired = REQUIRED_RESOURCE_TASK_TYPES.has(form.taskType)
-  const needsTitleInput = !TITLE_OPTIONAL_TASK_TYPES.has(form.taskType)
+  // Soru bankası ödevinde "Görev konusu" alanı gösterilmez; başlık kaynak/dersten otomatik türetilir.
+  const needsTitleInput =
+    !TITLE_OPTIONAL_TASK_TYPES.has(form.taskType) && form.taskType !== QUESTION_BANK_HOMEWORK_TASK_TYPE
   const modalMaxWidth = '48rem'
 
   const [conflict, setConflict] = useState(false)
@@ -492,9 +494,16 @@ export default function AddTaskDrawer({
   const hasValidResourceSelection = Boolean(
     resourceBookId && (filteredResourceBooks.some((book) => book.id === resourceBookId) || isOriginalResourceSelection),
   )
+  // Görev verilebilecek içerikler: tamamlanmış testleri ve testi kalmayan konuları gizle.
+  const assignableTopics = useMemo(() => {
+    if (!topics) return topics
+    return topics
+      .map((topic) => ({ ...topic, tests: topic.tests.filter((test) => !test.completed) }))
+      .filter((topic) => topic.tests.length > 0)
+  }, [topics])
   const filteredTopics = useMemo(
-    () => (topics ? filterTopicsBySearch(topics, searchQuery) : topics),
-    [topics, searchQuery],
+    () => (assignableTopics ? filterTopicsBySearch(assignableTopics, searchQuery) : assignableTopics),
+    [assignableTopics, searchQuery],
   )
   const totalQuestionCount = useMemo(
     () => sumSelectedQuestions(topics, selectedTestIds),
@@ -866,6 +875,59 @@ export default function AddTaskDrawer({
           ) : null}
 
           <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Gün</span>
+                <input
+                  required
+                  type="date"
+                  value={form.date}
+                  onChange={handleChange('date')}
+                  className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Saat (isteğe bağlı)</span>
+                <input
+                  type="time"
+                  value={form.startTime}
+                  onChange={handleChange('startTime')}
+                  className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Süre (isteğe bağlı)</span>
+                <div className="flex items-stretch gap-2">
+                  <select
+                    value={String(durationMode)}
+                    onChange={handleDurationSelectChange}
+                    className="min-w-0 flex-1 rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                  >
+                    <option value="">Süre yok</option>
+                    {DURATION_OPTIONS.map((minutes) => (
+                      <option key={minutes} value={minutes}>
+                        {minutes} dk
+                      </option>
+                    ))}
+                    <option value="custom">Özel...</option>
+                  </select>
+                  {durationMode === 'custom' ? (
+                    <input
+                      type="number"
+                      min="1"
+                      max="360"
+                      autoFocus
+                      value={form.durationMinutes}
+                      onChange={handleCustomDurationChange}
+                      aria-label="Özel süre (dk)"
+                      placeholder="dk"
+                      className="w-20 shrink-0 rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                    />
+                  ) : null}
+                </div>
+              </label>
+            </div>
+
             <label className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-panel-text-muted">Görev türü</span>
               <select
@@ -1139,59 +1201,6 @@ export default function AddTaskDrawer({
                 {topicsError ? <span className="text-xs text-panel-warm">{topicsError}</span> : null}
               </div>
             ) : null}
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Gün</span>
-                <input
-                  required
-                  type="date"
-                  value={form.date}
-                  onChange={handleChange('date')}
-                  className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-                />
-              </label>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Saat (isteğe bağlı)</span>
-                <input
-                  type="time"
-                  value={form.startTime}
-                  onChange={handleChange('startTime')}
-                  className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-                />
-              </label>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Süre (isteğe bağlı)</span>
-                <div className="flex items-stretch gap-2">
-                  <select
-                    value={String(durationMode)}
-                    onChange={handleDurationSelectChange}
-                    className="min-w-0 flex-1 rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-                  >
-                    <option value="">Süre yok</option>
-                    {DURATION_OPTIONS.map((minutes) => (
-                      <option key={minutes} value={minutes}>
-                        {minutes} dk
-                      </option>
-                    ))}
-                    <option value="custom">Özel...</option>
-                  </select>
-                  {durationMode === 'custom' ? (
-                    <input
-                      type="number"
-                      min="1"
-                      max="360"
-                      autoFocus
-                      value={form.durationMinutes}
-                      onChange={handleCustomDurationChange}
-                      aria-label="Özel süre (dk)"
-                      placeholder="dk"
-                      className="w-20 shrink-0 rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-                    />
-                  ) : null}
-                </div>
-              </label>
-            </div>
 
             <label className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-panel-text-muted">Görev açıklaması</span>

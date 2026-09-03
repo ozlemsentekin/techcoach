@@ -1,6 +1,6 @@
 const { sql, withRequest, withTransaction } = require('./db')
 const { isConfigError } = require('./config')
-const { clearSessionHeaders, createSessionHeaders, json } = require('./http')
+const { accountDisabledResponse, clearSessionHeaders, createSessionHeaders, json } = require('./http')
 const {
   createSessionToken,
   defaultPasswordForPhone,
@@ -24,12 +24,16 @@ async function requireAdmin(request) {
     id: { type: sql.UniqueIdentifier, value: session.sub },
   })
   const result = await requestDb.query(`
-    SELECT TOP 1 is_admin FROM dbo.Users WHERE id = @id;
+    SELECT TOP 1 is_admin, is_active FROM dbo.Users WHERE id = @id;
   `)
   const record = result.recordset[0]
 
   if (!record) {
     return { error: json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders()) }
+  }
+
+  if (record.is_active === false) {
+    return { error: accountDisabledResponse() }
   }
 
   if (!record.is_admin) {
@@ -52,12 +56,16 @@ async function requireCatalogStaff(request) {
     id: { type: sql.UniqueIdentifier, value: session.sub },
   })
   const result = await requestDb.query(`
-    SELECT TOP 1 is_admin, role FROM dbo.Users WHERE id = @id;
+    SELECT TOP 1 is_admin, role, is_active FROM dbo.Users WHERE id = @id;
   `)
   const record = result.recordset[0]
 
   if (!record) {
     return { error: json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders()) }
+  }
+
+  if (record.is_active === false) {
+    return { error: accountDisabledResponse() }
   }
 
   if (!record.is_admin && record.role !== 'ogretmen' && record.role !== 'ebeveyn') {
@@ -81,12 +89,16 @@ async function requireLibraryEditor(request) {
     id: { type: sql.UniqueIdentifier, value: session.sub },
   })
   const result = await requestDb.query(`
-    SELECT TOP 1 is_admin, can_manage_library FROM dbo.Users WHERE id = @id;
+    SELECT TOP 1 is_admin, can_manage_library, is_active FROM dbo.Users WHERE id = @id;
   `)
   const record = result.recordset[0]
 
   if (!record) {
     return { error: json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders()) }
+  }
+
+  if (record.is_active === false) {
+    return { error: accountDisabledResponse() }
   }
 
   if (!record.is_admin && !record.can_manage_library) {
@@ -105,6 +117,7 @@ function sanitizeUser(record) {
     role: record.role,
     isAdmin: Boolean(record.is_admin),
     canManageLibrary: Boolean(record.can_manage_library),
+    isActive: record.is_active === undefined ? true : Boolean(record.is_active),
     parentId: record.parent_id,
     parentName: record.parent_full_name,
     lastLoginAt: record.last_login_at,
@@ -122,7 +135,7 @@ async function listUsersHandler(request) {
 
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
-      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.parent_id,
+      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active, u.parent_id,
              p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json
       FROM dbo.Users u
       LEFT JOIN dbo.Users p ON p.id = u.parent_id
@@ -234,7 +247,7 @@ async function updateUserHandler(request) {
           teacher_subject_ids_json = CASE WHEN @subjectIdsProvided = 1 THEN @teacherSubjectIdsJson ELSE teacher_subject_ids_json END
       WHERE id = @id;
 
-      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.parent_id,
+      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active, u.parent_id,
              p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json
       FROM dbo.Users u
       LEFT JOIN dbo.Users p ON p.id = u.parent_id
@@ -276,6 +289,65 @@ async function updateUserHandler(request) {
 
     console.error('updateUserHandler failed', error)
     return json(500, { error: 'Kullanıcı güncellenemedi.' })
+  }
+}
+
+// Bir üyeyi pasife / aktife alır (is_active). Pasif üye giriş yapamaz; açık oturumu
+// varsa /auth/me ve panel guard'ları 403 ACCOUNT_DISABLED döndürür ve istemci oturumu
+// kapatır. Kayıt SİLİNMEZ — tüm veri (öğrenci, ödev, ders programı) korunur.
+async function setUserActiveHandler(request) {
+  try {
+    const { error, session } = await requireAdmin(request)
+    if (error) {
+      return error
+    }
+
+    const userId = request.params.userId
+    const payload = await request.json().catch(() => null)
+    if (typeof payload?.isActive !== 'boolean') {
+      return json(400, { error: 'isActive alanı zorunlu.' })
+    }
+
+    if (userId === session.sub) {
+      return json(400, { error: 'Kendi hesabınızı pasife alamazsınız.' })
+    }
+
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: userId },
+      isActive: { type: sql.Bit, value: payload.isActive },
+    })
+    const result = await requestDb.query(`
+      UPDATE dbo.Users
+      SET is_active = @isActive,
+          -- Aktife alırken varsa giriş kilidini de kaldır (pasife alınırken konmuş olabilir).
+          failed_login_count = CASE WHEN @isActive = 1 THEN 0 ELSE failed_login_count END,
+          lockout_until = CASE WHEN @isActive = 1 THEN NULL ELSE lockout_until END
+      WHERE id = @id;
+
+      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active, u.parent_id,
+             p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json
+      FROM dbo.Users u
+      LEFT JOIN dbo.Users p ON p.id = u.parent_id
+      WHERE u.id = @id;
+    `)
+
+    const updated = result.recordset[0]
+    if (!updated) {
+      return json(404, { error: 'Kullanıcı bulunamadı.' })
+    }
+
+    return json(200, { user: sanitizeUser(updated) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('setUserActiveHandler failed', error)
+    return json(500, { error: 'Kullanıcı durumu güncellenemedi.' })
   }
 }
 
@@ -350,7 +422,7 @@ async function impersonateUserHandler(request) {
 
     const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: targetId } })
     const result = await requestDb.query(`
-      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.parent_id,
+      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active, u.parent_id,
              p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json,
              sp.theme_id,
              e.status AS entitlement_status, e.source AS entitlement_source,
@@ -364,6 +436,9 @@ async function impersonateUserHandler(request) {
     const record = result.recordset[0]
     if (!record) {
       return json(404, { error: 'Kullanıcı bulunamadı.' })
+    }
+    if (record.is_active === false) {
+      return json(409, { error: 'Bu üye pasife alınmış. Önce aktife alın.' })
     }
 
     const user = sanitizeUser(record)
@@ -520,6 +595,7 @@ module.exports = {
   requireCatalogStaff,
   requireLibraryEditor,
   updateUserHandler,
+  setUserActiveHandler,
   deleteUserHandler,
   impersonateUserHandler,
   returnToAdminHandler,

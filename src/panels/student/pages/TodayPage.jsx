@@ -9,6 +9,7 @@ import { addCoachNote } from '../../../services/messageService'
 import { todayISODate, addDaysISO } from '../../../utils/time'
 import { getNextTask } from '../../../utils/taskSelectors'
 import { isBacklogTask, isCompletedOnDate } from '../../../utils/backlogTasks'
+import { isEndedPrivateLessonForToday } from '../../../utils/lessonTasks'
 import { FOCUS_TASK_TYPES } from '../../../data/taskTypes'
 import useVisiblePolling from '../../../hooks/useVisiblePolling'
 import StudentWelcomeBanner from '../components/StudentWelcomeBanner'
@@ -150,7 +151,7 @@ export default function TodayPage() {
       ),
       ...buildTeacherLessonTasksForDate(teacherLessonSchedule, date),
       ...tasks,
-    ],
+    ].filter((task) => !isEndedPrivateLessonForToday(task, date)),
     [historyDays, historyTasks, teacherLessonSchedule, tasks],
   )
 

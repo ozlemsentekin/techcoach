@@ -17,7 +17,7 @@ import { authRequest } from './authClient'
  * @property {number} [pageEnd] Testin kaynak kitaptaki bitiş sayfası (ResourceBookTopicTests.page_end).
  * @property {string} errorType
  * @property {string} [studentNote]
- * @property {string} [mistakeReason]  // 'dikkat-hatasi' | 'bilgi-eksikligi'
+ * @property {string} [mistakeReason]  // 'dikkat-hatasi' | 'bilgi-eksikligi' | 'soruyu-anlamadim'
  * @property {string} createdAt
  * @property {string} reviewStatus  // 'tekrar-bekliyor' | 'bugun-tekrar' | 'tekrar-edildi' | 'ogrenildi'
  * @property {string|null} [resolvedAt]

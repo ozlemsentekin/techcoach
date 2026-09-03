@@ -1,5 +1,5 @@
 const { sql, withRequest } = require('./db')
-const { json } = require('./http')
+const { accountDisabledResponse, json } = require('./http')
 const { readSessionToken, verifySessionToken } = require('./security')
 
 const CONSENT_REQUIRED_ERROR = {
@@ -25,12 +25,15 @@ async function requireStudentContext(request, { studentId: bodyStudentId } = {})
     id: { type: sql.UniqueIdentifier, value: session.sub },
   })
   const result = await requestDb.query(`
-    SELECT TOP 1 id, role, parent_id, funded_by_teacher_id, aydinlatma_accepted_at, kvkk_accepted_at
+    SELECT TOP 1 id, role, parent_id, funded_by_teacher_id, is_active, aydinlatma_accepted_at, kvkk_accepted_at
     FROM dbo.Users WHERE id = @id;
   `)
   const record = result.recordset[0]
   if (!record) {
     return { error: json(401, { error: 'Oturum geçersiz.' }) }
+  }
+  if (record.is_active === false) {
+    return { error: accountDisabledResponse() }
   }
 
   const actor = {

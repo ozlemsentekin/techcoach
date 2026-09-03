@@ -4,7 +4,7 @@ const { json } = require('./http')
 const { isSessionError } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
 
-const MISTAKE_REASONS = ['dikkat-hatasi', 'bilgi-eksikligi']
+const MISTAKE_REASONS = ['dikkat-hatasi', 'bilgi-eksikligi', 'soruyu-anlamadim']
 
 function toISODate(value) {
   if (!value) return null
