@@ -383,7 +383,7 @@ function ResourcesTab({ schoolId }) {
 
   useEffect(() => {
     authRequest('/api/panel-admin/subjects', { method: 'GET' })
-      .then((data) => setSubjects(data.subjects || []))
+      .then((data) => setSubjects((data.subjects || []).filter((s) => s.isActive !== false)))
       .catch((err) => setError(err.message))
   }, [])
 

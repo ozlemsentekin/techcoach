@@ -3,6 +3,7 @@ const { changePasswordHandler, loginHandler, logoutHandler, meHandler, registerH
 const {
   listUsersHandler,
   updateUserHandler,
+  setUserActiveHandler,
   deleteUserHandler,
   impersonateUserHandler,
   returnToAdminHandler,
@@ -94,6 +95,7 @@ const { listProvincesHandler, listDistrictsHandler, listSchoolsHandler } = requi
 const {
   listSubjectsHandler,
   createSubjectHandler,
+  updateSubjectHandler,
   listSubjectsForPanelHandler,
   listSubjectsForRegistrationHandler,
   listPublishersHandler,
@@ -327,6 +329,13 @@ app.http('panel-admin-users-update', {
   methods: ['PATCH'],
   route: 'panel-admin/users/{userId}',
   handler: updateUserHandler,
+})
+
+app.http('panel-admin-users-set-active', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-admin/users/{userId}/active',
+  handler: setUserActiveHandler,
 })
 
 app.http('panel-admin-users-delete', {
@@ -922,6 +931,13 @@ app.http('panel-admin-subjects-create', {
   methods: ['POST'],
   route: 'panel-admin/subjects',
   handler: createSubjectHandler,
+})
+
+app.http('panel-admin-subjects-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-admin/subjects/{subjectId}',
+  handler: updateSubjectHandler,
 })
 
 app.http('panel-subjects', {

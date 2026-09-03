@@ -1,6 +1,6 @@
 const { sql, withRequest, withTransaction } = require('./db')
 const { isCaptchaConfigured, isConfigError } = require('./config')
-const { clearSessionHeaders, createSessionHeaders, getClientIp, json } = require('./http')
+const { accountDisabledResponse, clearSessionHeaders, createSessionHeaders, getClientIp, json } = require('./http')
 const { consumeRateLimit } = require('./rate-limit')
 const { verifyTurnstileToken } = require('./turnstile')
 const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
@@ -37,6 +37,7 @@ function sanitizeUser(record) {
     role: record.role,
     isAdmin: Boolean(record.is_admin),
     canManageLibrary: Boolean(record.can_manage_library),
+    isActive: record.is_active === undefined ? true : Boolean(record.is_active),
     lastLoginAt: record.last_login_at,
     createdAt: record.created_at,
     needsConsent: !record.aydinlatma_accepted_at || !record.kvkk_accepted_at,
@@ -294,6 +295,7 @@ async function loginHandler(request) {
         u.role,
         u.is_admin,
         u.can_manage_library,
+        u.is_active,
         u.password_hash,
         u.failed_login_count,
         u.lockout_until,
@@ -315,6 +317,10 @@ async function loginHandler(request) {
     const record = result.recordset[0]
     if (!record || !record.password_hash) {
       return json(401, { error: 'Telefon numarası veya şifre hatalı.' })
+    }
+
+    if (record.is_active === false) {
+      return json(403, { error: 'Bu hesap pasife alınmış. Giriş yapılamaz.' })
     }
 
     if (record.lockout_until && new Date(record.lockout_until) > new Date()) {
@@ -395,7 +401,7 @@ async function meHandler(request) {
     })
     const result = await requestDb.query(`
       SELECT TOP 1
-        u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.last_login_at, u.created_at,
+        u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active, u.last_login_at, u.created_at,
         u.aydinlatma_accepted_at, u.kvkk_accepted_at, u.funded_by_teacher_id, u.teacher_subject_ids_json,
         sp.theme_id,
         sp.grade,
@@ -410,6 +416,10 @@ async function meHandler(request) {
 
     if (!record) {
       return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    if (record.is_active === false) {
+      return accountDisabledResponse()
     }
 
     const user = sanitizeUser(record)

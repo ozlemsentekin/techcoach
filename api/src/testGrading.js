@@ -55,4 +55,38 @@ async function gradeTestAnswers(testId, questionCount, rawAnswers) {
   }
 }
 
-module.exports = { BLANK_ANSWER_LABEL, sanitizeAnswers, gradeTestAnswers }
+// Optik form yeniden notlandığında: daha önce yanlış işaretlenip Hata Defteri'ne (fotoğrafıyla)
+// düşmüş bir soru artık doğru cevaplanmışsa, ilgili WrongQuestions satırını siler. Bu satırlar
+// yalnızca fotoğraf eklendiğinde oluşturulduğundan (saveWrongQuestionPhotoHandler ve manuel optik
+// muadilleri), satırı silmek fotoğrafı da hata defterinden kaldırır. Sadece optik kaynaklı
+// (error_type = 'cevap-kagidi') kayıtlara dokunur; taskId verilirse o göreve, verilmezse task'a
+// bağlı olmayan (bookshelf / manuel optik) kayda uygulanır.
+async function pruneCorrectedWrongQuestions(studentId, testId, answers, correctLabels, { taskId = null } = {}) {
+  const correctedQuestionNumbers = Object.keys(correctLabels || {}).filter((orderNo) => {
+    const studentLabel = answers?.[orderNo]
+    return Boolean(studentLabel) && studentLabel !== BLANK_ANSWER_LABEL && studentLabel === correctLabels[orderNo]
+  })
+  if (!correctedQuestionNumbers.length) return
+
+  const bindings = {
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    testId: { type: sql.UniqueIdentifier, value: testId },
+  }
+  if (taskId) bindings.taskId = { type: sql.UniqueIdentifier, value: taskId }
+  const placeholders = correctedQuestionNumbers.map((orderNo, index) => {
+    bindings[`q${index}`] = { type: sql.NVarChar(20), value: String(orderNo) }
+    return `@q${index}`
+  })
+
+  const db = await withRequest(bindings)
+  await db.query(`
+    DELETE FROM dbo.WrongQuestions
+    WHERE student_id = @studentId
+      AND test_id = @testId
+      AND ${taskId ? 'task_id = @taskId' : 'task_id IS NULL'}
+      AND error_type = 'cevap-kagidi'
+      AND question_number IN (${placeholders.join(', ')});
+  `)
+}
+
+module.exports = { BLANK_ANSWER_LABEL, sanitizeAnswers, gradeTestAnswers, pruneCorrectedWrongQuestions }

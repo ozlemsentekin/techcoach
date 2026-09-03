@@ -4,7 +4,7 @@ const { clearSessionHeaders, json } = require('./http')
 const { requireAdmin, requireCatalogStaff, requireLibraryEditor } = require('./admin')
 const { isSessionError, readSessionToken, verifySessionToken } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
-const { gradeTestAnswers } = require('./testGrading')
+const { gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGrading')
 const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
 const { sanitizeWrongQuestion } = require('./progress')
 
@@ -12,6 +12,7 @@ function sanitizeSubject(record) {
   return {
     id: record.id,
     name: record.name,
+    isActive: record.is_active === undefined || record.is_active === null ? true : Boolean(record.is_active),
     createdAt: record.created_at,
   }
 }
@@ -168,8 +169,9 @@ async function listSubjectsHandler(request) {
     }
 
     const requestDb = await withRequest({})
+    // Admin ekranı pasif dersleri de görür (tekrar aktife alabilmek için).
     const result = await requestDb.query(`
-      SELECT id, name, created_at FROM dbo.Subjects ORDER BY name ASC;
+      SELECT id, name, is_active, created_at FROM dbo.Subjects ORDER BY name ASC;
     `)
 
     return json(200, { subjects: result.recordset.map(sanitizeSubject) })
@@ -184,6 +186,51 @@ async function listSubjectsHandler(request) {
 
     console.error('listSubjectsHandler failed', error)
     return json(500, { error: 'Dersler yüklenemedi.' })
+  }
+}
+
+// Bir dersi aktif/pasif yapar. Pasif dersler kayıt ve panel ders seçicilerinde
+// görünmez; mevcut atamalar ve kaynaklar etkilenmez (ders silme yok).
+async function updateSubjectHandler(request) {
+  try {
+    const { error } = await requireAdmin(request)
+    if (error) {
+      return error
+    }
+
+    const subjectId = request.params.subjectId
+    const payload = await request.json().catch(() => null)
+    if (typeof payload?.isActive !== 'boolean') {
+      return json(400, { error: 'isActive alanı zorunlu.' })
+    }
+
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: subjectId },
+      isActive: { type: sql.Bit, value: payload.isActive },
+    })
+    const result = await requestDb.query(`
+      UPDATE dbo.Subjects SET is_active = @isActive
+      OUTPUT inserted.id, inserted.name, inserted.is_active, inserted.created_at
+      WHERE id = @id;
+    `)
+
+    const record = result.recordset[0]
+    if (!record) {
+      return json(404, { error: 'Ders bulunamadı.' })
+    }
+
+    return json(200, { subject: sanitizeSubject(record) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    console.error('updateSubjectHandler failed', error)
+    return json(500, { error: 'Ders güncellenemedi.' })
   }
 }
 
@@ -234,7 +281,7 @@ async function listSubjectsForPanelHandler(request) {
 
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
-      SELECT id, name, created_at FROM dbo.Subjects ORDER BY name ASC;
+      SELECT id, name, is_active, created_at FROM dbo.Subjects WHERE is_active = 1 ORDER BY name ASC;
     `)
 
     return json(200, { subjects: result.recordset.map(sanitizeSubject) })
@@ -256,7 +303,7 @@ async function listSubjectsForRegistrationHandler() {
   try {
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
-      SELECT id, name, created_at FROM dbo.Subjects ORDER BY name ASC;
+      SELECT id, name, is_active, created_at FROM dbo.Subjects WHERE is_active = 1 ORDER BY name ASC;
     `)
 
     return json(200, { subjects: result.recordset.map(sanitizeSubject) })
@@ -1481,6 +1528,10 @@ async function submitManualOpticalAnswersHandler(request) {
         VALUES (@studentId, @testId, @markedByUserId, @correctCount, @wrongCount, @blankCount, @answersJson);
     `)
 
+    // Yanlış işaretlenip fotoğrafı çekilen bir soru bu düzeltmede doğru cevaplandıysa,
+    // ilgili kayıt (ve fotoğrafı) hata defterinden düşsün.
+    await pruneCorrectedWrongQuestions(studentId, testId, answers, result.correctLabels)
+
     return json(200, {
       success: true,
       completionSource: 'manual',
@@ -2383,6 +2434,7 @@ async function bulkImportSchoolsHandler(request) {
 module.exports = {
   listSubjectsHandler,
   createSubjectHandler,
+  updateSubjectHandler,
   listSubjectsForPanelHandler,
   listSubjectsForRegistrationHandler,
   listPublishersHandler,

@@ -62,7 +62,7 @@ const {
   fetchResourceBookImagesByIds,
   MISTAKE_REASONS,
 } = require('./progress')
-const { gradeTestAnswers } = require('./testGrading')
+const { gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGrading')
 const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
 
 const TEACHER_TYPE_LABELS = {
@@ -129,6 +129,16 @@ function normalizeStudentStatusFilter(value) {
   return STUDENT_STATUS_FILTERS.has(status) ? status : 'active'
 }
 
+// Tekrarlayan bir ders yuvasının, verilen günde (todayISO) ya da sonrasında ilk kez
+// gerçekleşeceği tarih. Öğretmen dersi eklediği günden önceki haftalara işlenmesin diye
+// schedule_json içindeki her yuvaya startDate yazılır.
+function firstOccurrenceOnOrAfter(dayOfWeek, fromISO) {
+  const targetIdx = WEEKDAY_IDS.indexOf(dayOfWeek)
+  if (targetIdx === -1) return fromISO
+  const fromIdx = WEEKDAY_IDS.indexOf(weekdayIdForDate(fromISO))
+  return addDaysISO(fromISO, (targetIdx - fromIdx + 7) % 7)
+}
+
 function nextRecurringOccurrence(schedule, todayISO, nowHHMM) {
   if (!schedule?.length) return null
   const todayWeekdayIdx = WEEKDAY_IDS.indexOf(weekdayIdForDate(todayISO))
@@ -138,7 +148,8 @@ function nextRecurringOccurrence(schedule, todayISO, nowHHMM) {
     if (targetIdx === -1) return
     let diff = (targetIdx - todayWeekdayIdx + 7) % 7
     if (diff === 0 && slot.startTime <= nowHHMM) diff = 7
-    const date = addDaysISO(todayISO, diff)
+    let date = addDaysISO(todayISO, diff)
+    if (slot.startDate && date < slot.startDate) date = addDaysISO(date, 7)
     if (!best || date < best.date || (date === best.date && slot.startTime < best.startTime)) {
       best = { date, startTime: slot.startTime, endTime: slot.endTime }
     }
@@ -1170,6 +1181,7 @@ async function fetchRecurringLessonEntries(teacherUserId) {
       dayOfWeek: slot.dayOfWeek,
       startTime: slot.startTime,
       endTime: slot.endTime,
+      startDate: slot.startDate || null,
       studentTeacherId: record.student_teacher_id,
       studentFullName: record.student_full_name,
       subjectName: record.subject_name || null,
@@ -1268,7 +1280,8 @@ async function addTeacherRecurringLessonSlotHandler(request) {
       SELECT schedule_json FROM dbo.StudentTeachers WHERE id = @id;
     `)
     const schedule = parseScheduleJson(currentResult.recordset[0]?.schedule_json)
-    schedule.push({ dayOfWeek, startTime, endTime })
+    const startDate = firstOccurrenceOnOrAfter(dayOfWeek, new Date().toISOString().slice(0, 10))
+    schedule.push({ dayOfWeek, startTime, endTime, startDate })
     schedule.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
 
     const updateDb = await withRequest({
@@ -1343,7 +1356,11 @@ async function updateTeacherRecurringLessonSlotHandler(request) {
       return json(409, { error: 'Bu saatte planlanmış başka bir dersiniz var.' })
     }
 
-    schedule[slotIndex] = { dayOfWeek, startTime, endTime }
+    const todayISO = new Date().toISOString().slice(0, 10)
+    const prevStartDate = schedule[slotIndex].startDate
+    const anchor = prevStartDate && prevStartDate > todayISO ? prevStartDate : todayISO
+    const startDate = firstOccurrenceOnOrAfter(dayOfWeek, anchor)
+    schedule[slotIndex] = { dayOfWeek, startTime, endTime, startDate }
     schedule.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
 
     const updateDb = await withRequest({
@@ -1697,6 +1714,9 @@ async function updateTeacherOneTimeLessonHandler(request) {
 
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return json(400, { error: 'Geçerli bir tarih seçilmeli.' })
+    }
+    if (date < new Date().toISOString().slice(0, 10)) {
+      return json(400, { error: 'Geçmiş bir tarihe ders eklenemez.' })
     }
     if (!isValidTime(startTime)) {
       return json(400, { error: 'Geçerli bir başlangıç saati seçilmeli.' })
@@ -2105,6 +2125,10 @@ async function submitTeacherManualOpticalAnswersHandler(request) {
         INSERT (student_id, test_id, marked_by_user_id, correct_count, wrong_count, blank_count, answers_json)
         VALUES (@studentId, @testId, @markedByUserId, @correctCount, @wrongCount, @blankCount, @answersJson);
     `)
+
+    // Yanlış işaretlenip fotoğrafı çekilen bir soru bu düzeltmede doğru cevaplandıysa,
+    // ilgili kayıt (ve fotoğrafı) hata defterinden düşsün.
+    await pruneCorrectedWrongQuestions(studentId, testId, answers, result.correctLabels)
 
     return json(200, {
       success: true,
@@ -2532,8 +2556,13 @@ function maskOtherTeacherPrivateLessons(tasks, studentTeacherId) {
 
 async function listTeacherStudentTasksHandler(request) {
   try {
-    const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
+    const { error, studentId, subjectId, studentTeacherId, teacherType } = await requireTeacherStudentContext(request)
     if (error) return error
+
+    // Özel öğretmen bir öğrencinin takvimine baktığında "Okul Ödevi" tipindeki görevler
+    // (okul öğretmeninin/velinin okul kaynağı ödevleri) bağlamsız olduğundan gizlenir.
+    const hideSchoolHomeworkClause =
+      teacherType === 'ozel_ogretmen' ? " AND t.task_type <> 'okul-odevi'" : ''
 
     const pendingOnly = request.query.get('pending') === 'true'
     if (pendingOnly) {
@@ -2545,7 +2574,7 @@ async function listTeacherStudentTasksHandler(request) {
       const result = await requestDb.query(`
         ${SELECT_TASK}
         WHERE t.student_id = @studentId AND t.date IS NOT NULL AND t.is_draft = 0 AND t.is_unscheduled = 0
-          AND t.status IN ('bekliyor', 'devam-ediyor', 'yardim-bekliyor')
+          AND t.status IN ('bekliyor', 'devam-ediyor', 'yardim-bekliyor')${hideSchoolHomeworkClause}
           AND ${TEACHER_PENDING_TASK_IN_SCOPE}
         ORDER BY t.date ASC, CASE WHEN t.start_time IS NULL THEN 0 ELSE 1 END ASC, t.start_time ASC, t.created_at ASC;
       `)
@@ -2566,7 +2595,7 @@ async function listTeacherStudentTasksHandler(request) {
     })
     const result = await requestDb.query(`
       ${SELECT_TASK}
-      WHERE t.student_id = @studentId AND t.date = @date AND t.is_draft = 0 AND t.is_unscheduled = 0
+      WHERE t.student_id = @studentId AND t.date = @date AND t.is_draft = 0 AND t.is_unscheduled = 0${hideSchoolHomeworkClause}
         AND (
           ${TEACHER_TASK_IN_SCOPE}
           -- Branştan bağımsız plan öğeleri: öğrencinin spor ve (başka öğretmenlerden gelen)

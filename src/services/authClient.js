@@ -4,11 +4,18 @@ const DEFAULT_CACHE_TTL_MS = 30000
 const getCache = new Map() // path -> { expiresAt, promise }
 
 let consentRequiredHandler = null
+let accountDisabledHandler = null
 
 /** AuthContext, backend'in herhangi bir istekte CONSENT_REQUIRED döndüğü anı yakalayıp
  * authUser.needsConsent'i güncelleyebilmek için burada bir dinleyici kaydeder. */
 export function setConsentRequiredHandler(handler) {
   consentRequiredHandler = handler
+}
+
+/** AuthContext, backend'in herhangi bir istekte ACCOUNT_DISABLED döndüğü anı yakalayıp
+ * (admin panelinden pasife alınmış hesap) oturumu anında kapatabilmek için dinleyici kaydeder. */
+export function setAccountDisabledHandler(handler) {
+  accountDisabledHandler = handler
 }
 
 /**
@@ -71,6 +78,10 @@ export async function authRequest(path, options = {}) {
 
       if (data.code === 'CONSENT_REQUIRED') {
         consentRequiredHandler?.()
+      }
+
+      if (data.code === 'ACCOUNT_DISABLED') {
+        accountDisabledHandler?.()
       }
 
       const requestError = new Error(data.error || fallbackMessage)

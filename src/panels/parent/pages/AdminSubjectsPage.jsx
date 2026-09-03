@@ -232,13 +232,14 @@ function BookRow({ book, publishersById, onEditBook, onToggleActive, onPreviewIm
   )
 }
 
-function SubjectRow({ subject, books, publishersById, onToggleActive, onEditBook, onAddBook, onPreviewImage }) {
+function SubjectRow({ subject, books, publishersById, onToggleActive, onToggleSubjectActive, onEditBook, onAddBook, onPreviewImage }) {
   const [expanded, setExpanded] = useState(false)
+  const isActive = subject.isActive !== false
 
   return (
     <div>
       <div
-        className="flex flex-wrap items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#f8f7fb] sm:grid sm:grid-cols-[minmax(0,1fr)_140px_180px] sm:items-center sm:gap-3"
+        className="flex flex-wrap items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#f8f7fb] sm:grid sm:grid-cols-[minmax(0,1fr)_140px_260px] sm:items-center sm:gap-3"
         onClick={() => setExpanded((value) => !value)}
       >
         <div className="flex min-w-0 items-center gap-2.5">
@@ -247,8 +248,13 @@ function SubjectRow({ subject, books, publishersById, onToggleActive, onEditBook
           ) : (
             <ChevronRight size={15} className="shrink-0 text-[#87a3a5]" aria-hidden="true" />
           )}
-          <BookOpen size={16} className="shrink-0 text-[#253d3e]" aria-hidden="true" />
-          <span className="truncate text-sm font-semibold text-[#253d3e]">{subject.name}</span>
+          <BookOpen size={16} className={`shrink-0 ${isActive ? 'text-[#253d3e]' : 'text-[#a9b3b4]'}`} aria-hidden="true" />
+          <span className={`truncate text-sm font-semibold ${isActive ? 'text-[#253d3e]' : 'text-[#8a8a92]'}`}>
+            {subject.name}
+          </span>
+          {!isActive ? (
+            <span className="shrink-0 rounded-full bg-[#f1f1f3] px-2 py-0.5 text-[11px] font-medium text-[#8a8a92]">Pasif</span>
+          ) : null}
         </div>
         <div>
           <span className="inline-flex items-center rounded-full bg-[#f8f7fb] px-2.5 py-1 text-xs font-medium text-[#1c2b5e]">
@@ -256,6 +262,14 @@ function SubjectRow({ subject, books, publishersById, onToggleActive, onEditBook
           </span>
         </div>
         <div className="flex items-center justify-start gap-2 sm:justify-end" onClick={(event) => event.stopPropagation()}>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-[34px] rounded-[9px] border-[#dfe4e5] bg-white text-[#253d3e] hover:bg-[#f8f7fb]"
+            onClick={() => onToggleSubjectActive(subject)}
+          >
+            {isActive ? 'Pasife Al' : 'Aktife Al'}
+          </Button>
           <Button
             variant="secondary"
             size="sm"
@@ -324,6 +338,20 @@ export default function AdminSubjectsPage() {
     setEditingBook(null)
   }
 
+  const handleToggleSubjectActive = async (subject) => {
+    try {
+      const data = await authRequest(`/api/panel-admin/subjects/${subject.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: subject.isActive === false }),
+      })
+      setSubjects((current) =>
+        (current || []).map((item) => (item.id === data.subject.id ? data.subject : item)),
+      )
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const handleToggleActive = async (book) => {
     try {
       const data = await authRequest(`/api/panel-admin/resource-books/${book.id}`, {
@@ -363,7 +391,7 @@ export default function AdminSubjectsPage() {
       ) : (
         <div className="fade-slide-in">
           <DataTable>
-            <div className="hidden items-center gap-3 bg-[#f8f7fb] px-4 py-3 text-[13px] font-semibold text-[#1c2b5e] sm:grid sm:grid-cols-[minmax(0,1fr)_140px_180px]">
+            <div className="hidden items-center gap-3 bg-[#f8f7fb] px-4 py-3 text-[13px] font-semibold text-[#1c2b5e] sm:grid sm:grid-cols-[minmax(0,1fr)_140px_260px]">
               <span>Ders Adı</span>
               <span>Kaynak</span>
               <span>İşlem</span>
@@ -376,6 +404,7 @@ export default function AdminSubjectsPage() {
                   books={resourceBooks.filter((book) => book.subjectId === subject.id)}
                   publishersById={publishersById}
                   onToggleActive={handleToggleActive}
+                  onToggleSubjectActive={handleToggleSubjectActive}
                   onEditBook={setEditingBook}
                   onAddBook={setAddBookSubject}
                   onPreviewImage={setPreviewImage}

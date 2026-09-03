@@ -29,6 +29,7 @@ import { HOMEWORK_TASK_TYPES, TASK_TYPES } from '../../../data/taskTypes'
 import TaskReviewControl from '../../shared/TaskReviewControl'
 import { parseTimeToMinutes, todayISODate, WEEKDAY_KEYS as DAY_KEYS } from '../../../utils/time'
 import { isBacklogTask } from '../../../utils/backlogTasks'
+import { isEndedPrivateLessonForToday } from '../../../utils/lessonTasks'
 import Badge from '../../ui/Badge'
 import { isSchoolHoliday } from '../../../services/weeklyPlanService'
 
@@ -39,39 +40,6 @@ const DAY_SHORT_LABELS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
 
 // student.schedule (bkz. StudentTeacherModal) dayOfWeek'i bu Türkçe slug'larla saklar;
 // weekDates her zaman Pazartesi'den başladığı için index eşlemesi doğrudan yapılabilir.
-
-const QUICK_ADD_TEMPLATES = {
-  lesson: {
-    label: 'Soru Bankası Ödevi',
-    task: {
-      title: 'Soru Bankası Ödevi',
-      taskType: 'soru-bankasi-odevi',
-      startTime: '15:00',
-      endTime: '16:00',
-      durationMinutes: 60,
-    },
-  },
-  break: {
-    label: 'Mola',
-    task: {
-      title: 'Mola',
-      taskType: 'mola',
-      startTime: '11:00',
-      endTime: '11:30',
-      durationMinutes: 30,
-    },
-  },
-  activity: {
-    label: 'Serbest Zaman',
-    task: {
-      title: 'Serbest Zaman',
-      taskType: 'serbest-zaman',
-      startTime: '18:00',
-      endTime: '19:00',
-      durationMinutes: 60,
-    },
-  },
-}
 
 const TASK_STYLES = {
   turkish: {
@@ -759,9 +727,27 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
     </>
   )
 
+  // Kartın herhangi bir boş alanına tıklanınca da detay açılıp kapansın; iç içe buton/link
+  // gibi etkileşimli öğelere yapılan tıklamalar kendi işlerini görsün diye hariç tutulur.
+  const handleCardActivate = (event) => {
+    if (!hasDetails) return
+    if (event.target.closest('button, a, input, textarea, select, label')) return
+    setExpanded((current) => !current)
+  }
+
   return (
     <div
-      className={`group relative flex min-h-[66px] w-full flex-col gap-1.5 rounded-xl border py-2.5 pr-2 transition duration-150 ${hasTypeAccent ? 'pl-4' : 'pl-2.5'} ${cardToneClassName} ${showBreakMenu ? 'z-30' : ''}`}
+      onClick={handleCardActivate}
+      onKeyDown={(event) => {
+        if (hasDetails && (event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) {
+          event.preventDefault()
+          setExpanded((current) => !current)
+        }
+      }}
+      role={hasDetails ? 'button' : undefined}
+      tabIndex={hasDetails ? 0 : undefined}
+      aria-expanded={hasDetails ? expanded : undefined}
+      className={`group relative flex min-h-[66px] w-full flex-col gap-1.5 rounded-xl border py-2.5 pr-2 transition duration-150 ${hasTypeAccent ? 'pl-4' : 'pl-2.5'} ${cardToneClassName} ${showBreakMenu ? 'z-30' : ''} ${hasDetails ? 'cursor-pointer' : ''}`}
     >
       {hasTypeAccent ? (
         <span className={`absolute inset-y-2 left-1.5 w-1 rounded-full ${style.barClassName}`} aria-hidden="true" />
@@ -1016,7 +1002,6 @@ export default function WeeklyPlannerGrid({
   schoolSchedule,
   schoolHolidays,
   onAddHomework,
-  onAddTask,
   onEditTask,
   onPublishDay,
   onQuickAddBreak,
@@ -1026,7 +1011,6 @@ export default function WeeklyPlannerGrid({
   onManageLessonSlot,
   canEditTask,
 }) {
-  const [expandedActionDate, setExpandedActionDate] = useState(null)
   const currentDate = todayISODate()
   const isCurrentWeekView = weekDates.includes(currentDate)
   const weekKey = weekDates.join('|')
@@ -1048,19 +1032,11 @@ export default function WeeklyPlannerGrid({
 
   const handleAddHomework = (date) => {
     if (date < currentDate || typeof onAddHomework !== 'function') return
-    setExpandedActionDate(null)
     onAddHomework(date)
-  }
-
-  const handleAddTask = (date, initialTemplate) => {
-    if (date < currentDate || typeof onAddTask !== 'function') return
-    setExpandedActionDate(null)
-    onAddTask(date, initialTemplate)
   }
 
   const handlePublishDay = (date) => {
     if (typeof onPublishDay !== 'function') return
-    setExpandedActionDate(null)
     onPublishDay(date)
   }
 
@@ -1079,6 +1055,7 @@ export default function WeeklyPlannerGrid({
   const renderDayColumn = (date, index) => {
     const scheduleSlots = (lessonSchedule || [])
       .filter((slot) => slot.dayOfWeek === DAY_KEYS[index] && slot.startTime)
+      .filter((slot) => !slot.startDate || date >= slot.startDate)
       .filter(
         (slot) =>
           !(lessonScheduleExceptions || []).some(
@@ -1118,14 +1095,14 @@ export default function WeeklyPlannerGrid({
             },
           ]
         : []
-    const tasks = [...(tasksByDate?.[date] || []), ...scheduleSlots, ...schoolSlots, ...holidaySlots].sort((a, b) =>
-      (a.startTime || '').localeCompare(b.startTime || ''),
-    )
+    const tasks = [...(tasksByDate?.[date] || []), ...scheduleSlots, ...schoolSlots, ...holidaySlots]
+      // Bugün planlanmış bir özel ders bitiş saatini geçtiyse akıştan otomatik düşer.
+      .filter((task) => date !== currentDate || !isEndedPrivateLessonForToday(task, date))
+      .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
     const isPastDay = date < currentDate
     const isToday = date === currentDate
     const isPastDayExpanded = expandedPastDates.has(date)
     const isCollapsed = isPastDay && isCurrentWeekView && !isPastDayExpanded
-    const isActionsExpanded = expandedActionDate === date && !isPastDay
     const dayStatus = dayStatusByDate?.[date]
     const hasPendingDraft = dayStatus === 'taslak'
     const shellTone = isPastDay
@@ -1254,63 +1231,16 @@ export default function WeeklyPlannerGrid({
             )}
           </div>
 
-          {!isPastDay && typeof onAddTask === 'function' ? (
-          <div className="mt-auto grid gap-2">
+          {!isPastDay && hasPendingDraft && typeof onPublishDay === 'function' ? (
+          <div className="mt-auto">
             <button
               type="button"
-              aria-expanded={isActionsExpanded}
-              onClick={() => setExpandedActionDate(isActionsExpanded ? null : date)}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3 text-xs font-bold text-panel-text shadow-sm transition-colors duration-150 hover:bg-panel-surface-soft"
+              onClick={() => handlePublishDay(date)}
+              className="flex h-10 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-panel-blue-soft bg-panel-blue-soft/60 px-3 text-xs font-bold text-panel-blue transition-colors duration-150 hover:bg-panel-blue-soft"
             >
-              Diğer
-              <ChevronDown
-                size={16}
-                className={`transition-transform duration-150 ${isActionsExpanded ? 'rotate-180' : ''}`}
-                aria-hidden="true"
-              />
+              <UploadCloud size={16} aria-hidden="true" />
+              <span className="min-w-0 truncate">Bu Günü Yayımla</span>
             </button>
-
-            {isActionsExpanded ? (
-              <div className="grid gap-2 rounded-xl border border-panel-border bg-panel-surface-soft p-2">
-                {hasPendingDraft ? (
-                  <button
-                    type="button"
-                    onClick={() => handlePublishDay(date)}
-                    className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-panel-blue-soft bg-panel-blue-soft/60 px-3 text-xs font-bold text-panel-blue transition-colors duration-150 hover:bg-panel-blue-soft"
-                  >
-                    <UploadCloud size={16} aria-hidden="true" />
-                    <span className="min-w-0 truncate">Bu Günü Yayımla</span>
-                  </button>
-                ) : null}
-
-              <button
-                type="button"
-                onClick={() => handleAddTask(date, QUICK_ADD_TEMPLATES.lesson)}
-                className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 text-xs font-bold text-panel-blue transition-colors duration-150 hover:bg-slate-100/70"
-              >
-                <NotebookPen size={16} aria-hidden="true" />
-                <span className="min-w-0 truncate">Soru Bankası Ödevi</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleAddTask(date, QUICK_ADD_TEMPLATES.break)}
-                className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-amber-100 bg-amber-50/70 px-3 text-xs font-bold text-panel-warm transition-colors duration-150 hover:bg-amber-100/70"
-              >
-                <Coffee size={16} aria-hidden="true" />
-                <span className="min-w-0 truncate">Mola Ekle</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleAddTask(date, QUICK_ADD_TEMPLATES.activity)}
-                className="flex h-10 min-w-0 items-center justify-start gap-2 rounded-lg border border-emerald-100 bg-emerald-50/80 px-3 text-xs font-bold text-emerald-700 transition-colors duration-150 hover:bg-emerald-100/70"
-              >
-                <Star size={16} aria-hidden="true" />
-                <span className="min-w-0 truncate">Aktivite Ekle</span>
-              </button>
-              </div>
-            ) : null}
           </div>
           ) : null}
         </div>
