@@ -76,8 +76,8 @@ export async function getTaskAnswerSheet(taskId, studentId) {
 }
 
 /** Yanlış işaretlenmiş bir soru için öğrencinin çektiği/seçtiği fotoğrafı kaydeder (Hata Defterim'de görünür). */
-export async function saveWrongQuestionPhoto(taskId, testId, orderNo, photoDataUrl) {
-  const data = await authRequest(`/api/panel/tasks/${taskId}/mistakes/${testId}/${orderNo}`, {
+export async function saveWrongQuestionPhoto(taskId, testId, orderNo, photoDataUrl, studentId) {
+  const data = await authRequest(withStudentId(`/api/panel/tasks/${taskId}/mistakes/${testId}/${orderNo}`, studentId), {
     method: 'PUT',
     body: JSON.stringify({ photo: photoDataUrl }),
   })
