@@ -20,7 +20,7 @@ export async function initiateChildSeatCheckout({ billingCycle, email, identityN
 }
 
 /**
- * Oturum açmış bir öğretmen için ek öğrenci koltuğu (öğrenci başı aylık 299 TL / yıllık 2.990 TL)
+ * Oturum açmış bir öğretmen için ek öğrenci koltuğu (öğrenci başı aylık 499 TL / yıllık 4.990 TL)
  * checkout formunu başlatır. Yalnızca kullanılabilir öğrenci hakkı kalmadığında kullanılır.
  * @returns {Promise<{checkoutFormContent: string, token: string}>}
  */

@@ -6,8 +6,8 @@ import { initiateTeacherSeatCheckout } from '../../../services/paymentService'
 import { injectCheckoutFormContent } from '../../../marketing/iyzicoCheckoutForm'
 
 const BILLING_OPTIONS = {
-  monthly: { price: '299', period: 'TL / öğrenci / ay' },
-  yearly: { price: '2.990', period: 'TL / öğrenci / yıl', badge: '2 ay bedava' },
+  monthly: { price: '499', period: 'TL / öğrenci / ay' },
+  yearly: { price: '4.990', period: 'TL / öğrenci / yıl', badge: '2 ay bedava' },
 }
 
 const INCLUDED_FEATURES = [

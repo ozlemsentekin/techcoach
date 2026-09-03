@@ -208,7 +208,7 @@ async function revenuecatWebhookHandler(request) {
 // böylece kota ile gerçek öğrenci sayısı hiçbir zaman birbirinden kopmaz (drift riski yok).
 async function getTeacherQuota(teacherId) {
   const requestDb = await withRequest({ teacherId: { type: sql.UniqueIdentifier, value: teacherId } })
-  // TeacherEntitlements satırı olmayabilir (öğretmen sadece 299 TL'lik ek öğrenci koltuğu almış
+  // TeacherEntitlements satırı olmayabilir (öğretmen sadece 499 TL'lik ek öğrenci koltuğu almış
   // olabilir) — bu yüzden skaler alt sorgular kullanıyoruz, satır yoksa NULL döner.
   const result = await requestDb.query(`
     SELECT
@@ -422,7 +422,7 @@ async function updateChildSeatSubscriptionFromIyzico({ subscriptionReferenceCode
   `)
 }
 
-// Öğretmen ek öğrenci koltuğu (299 TL/ay) abonelikleri — ChildSeatSubscriptions helper'larının
+// Öğretmen ek öğrenci koltuğu (499 TL/ay) abonelikleri — ChildSeatSubscriptions helper'larının
 // öğretmen karşılığı.
 async function insertTeacherSeatSubscription({
   teacherId,

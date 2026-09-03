@@ -171,7 +171,7 @@ function getIyzicoConfig() {
     childYearlyPlanRef: getOptionalEnv('IYZICO_CHILD_YEARLY_PLAN_REF', {
       placeholders: ['replace-with-iyzico-child-yearly-plan-ref'],
     }),
-    // Öğretmenin ek öğrenci koltuğu (öğrenci başı aylık 299 TL / yıllık 2.990 TL) paketi.
+    // Öğretmenin ek öğrenci koltuğu (öğrenci başı aylık 499 TL / yıllık 4.990 TL) paketi.
     // Planlar iyzico panelinde oluşturulunca gerçek reference code'lar app settings'e girilir.
     // Opsiyonel: set edilmediyse null döner (öğretmen-koltuğu satın alma handler'ı 503 verir),
     // diğer iyzico akışları etkilenmez.

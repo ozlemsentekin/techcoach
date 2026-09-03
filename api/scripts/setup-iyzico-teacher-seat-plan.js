@@ -1,5 +1,5 @@
 // One-off helper: creates the "TechCoach Öğretmen Ek Öğrenci Paketi" iyzico subscription product
-// and its monthly/yearly pricing plans (öğrenci başı aylık 299 TL / yıllık 2.990 TL), then prints
+// and its monthly/yearly pricing plans (öğrenci başı aylık 499 TL / yıllık 4.990 TL), then prints
 // the reference codes to paste into local.settings.json / Azure App Settings as
 // IYZICO_TEACHER_SEAT_MONTHLY_PLAN_REF / IYZICO_TEACHER_SEAT_YEARLY_PLAN_REF.
 // Usage: node api/scripts/setup-iyzico-teacher-seat-plan.js
@@ -52,7 +52,7 @@ async function main() {
     conversationId: 'techcoach-setup-teacher-seat-plan-monthly',
     productReferenceCode: product.data.referenceCode,
     name: 'Öğretmen Ek Öğrenci Aylık',
-    price: '299',
+    price: '499',
     currencyCode: Iyzipay.CURRENCY.TRY,
     paymentInterval: 'MONTHLY',
     paymentIntervalCount: 1,
@@ -66,7 +66,7 @@ async function main() {
     conversationId: 'techcoach-setup-teacher-seat-plan-yearly',
     productReferenceCode: product.data.referenceCode,
     name: 'Öğretmen Ek Öğrenci Yıllık',
-    price: '2990',
+    price: '4990',
     currencyCode: Iyzipay.CURRENCY.TRY,
     paymentInterval: 'YEARLY',
     paymentIntervalCount: 1,

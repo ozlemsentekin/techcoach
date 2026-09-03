@@ -54,7 +54,7 @@ function isChildSeatPlanRef(config, pricingPlanReferenceCode) {
   )
 }
 
-// Öğretmen ek öğrenci koltuğu (öğrenci başı aylık 299 TL / yıllık 2.990 TL) paketi.
+// Öğretmen ek öğrenci koltuğu (öğrenci başı aylık 499 TL / yıllık 4.990 TL) paketi.
 const TEACHER_SEAT_BILLING_CYCLES = {
   monthly: (config) => config.teacherSeatMonthlyPlanRef,
   yearly: (config) => config.teacherSeatYearlyPlanRef,
@@ -267,7 +267,7 @@ async function initiateChildSeatCheckoutHandler(request) {
   }
 }
 
-// Bir öğretmen için ek öğrenci koltuğu (öğrenci başı aylık 299 TL / yıllık 2.990 TL) satın alma
+// Bir öğretmen için ek öğrenci koltuğu (öğrenci başı aylık 499 TL / yıllık 4.990 TL) satın alma
 // akışını başlatır. Öğretmenin taban paneli olsun olmasın çalışır; sadece kullanılabilir öğrenci
 // hakkı kalmadığında izin verir. conversationId = öğretmenin Users.id'si; ödeme onaylanınca
 // iyzicoCheckoutCallbackHandler içinde TeacherSeatSubscriptions'a bir satır yazılır.
