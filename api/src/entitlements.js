@@ -208,23 +208,34 @@ async function revenuecatWebhookHandler(request) {
 // böylece kota ile gerçek öğrenci sayısı hiçbir zaman birbirinden kopmaz (drift riski yok).
 async function getTeacherQuota(teacherId) {
   const requestDb = await withRequest({ teacherId: { type: sql.UniqueIdentifier, value: teacherId } })
+  // TeacherEntitlements satırı olmayabilir (öğretmen sadece 299 TL'lik ek öğrenci koltuğu almış
+  // olabilir) — bu yüzden skaler alt sorgular kullanıyoruz, satır yoksa NULL döner.
   const result = await requestDb.query(`
-    SELECT te.status, te.base_seats, te.purchased_seats,
-           (SELECT COUNT(*) FROM dbo.Users u WHERE u.funded_by_teacher_id = @teacherId) AS used_seats
-    FROM dbo.TeacherEntitlements te
-    WHERE te.teacher_id = @teacherId;
+    SELECT
+      (SELECT TOP 1 status FROM dbo.TeacherEntitlements WHERE teacher_id = @teacherId) AS status,
+      (SELECT TOP 1 base_seats FROM dbo.TeacherEntitlements WHERE teacher_id = @teacherId) AS base_seats,
+      (SELECT TOP 1 purchased_seats FROM dbo.TeacherEntitlements WHERE teacher_id = @teacherId) AS purchased_seats,
+      (SELECT COUNT(*) FROM dbo.Users u WHERE u.funded_by_teacher_id = @teacherId) AS used_seats,
+      (SELECT COUNT(*) FROM dbo.TeacherSeatSubscriptions
+         WHERE teacher_id = @teacherId AND status IN ('active', 'grace_period')) AS seat_subscriptions;
   `)
-  const record = result.recordset[0]
+  const record = result.recordset[0] || {}
 
-  const status = record?.status || 'none'
-  const totalSeats = record ? record.base_seats + record.purchased_seats : 0
-  const usedSeats = record ? Number(record.used_seats) || 0 : 0
+  const status = record.status || 'none'
+  const baseSeats = Number(record.base_seats) || 0
+  const purchasedSeats = Number(record.purchased_seats) || 0
+  const seatSubscriptions = Number(record.seat_subscriptions) || 0
+  const usedSeats = Number(record.used_seats) || 0
+  const totalSeats = baseSeats + purchasedSeats + seatSubscriptions
 
   return {
     status,
-    isActive: ACTIVE_STATUSES.has(status),
+    // Taban aboneliği aktif olmayan öğretmen de en az bir ek öğrenci koltuğu satın aldıysa
+    // öğrenci ekleyebilir.
+    isActive: ACTIVE_STATUSES.has(status) || seatSubscriptions > 0,
     totalSeats,
     usedSeats,
+    seatSubscriptions,
     remainingSeats: Math.max(totalSeats - usedSeats, 0),
   }
 }
@@ -411,9 +422,62 @@ async function updateChildSeatSubscriptionFromIyzico({ subscriptionReferenceCode
   `)
 }
 
+// Öğretmen ek öğrenci koltuğu (299 TL/ay) abonelikleri — ChildSeatSubscriptions helper'larının
+// öğretmen karşılığı.
+async function insertTeacherSeatSubscription({
+  teacherId,
+  status,
+  period,
+  productId,
+  subscriptionReferenceCode,
+  currentPeriodEnd,
+}) {
+  const db = await withRequest({
+    teacherId: { type: sql.UniqueIdentifier, value: teacherId },
+    status: { type: sql.NVarChar(20), value: status },
+    period: { type: sql.NVarChar(10), value: period || null },
+    productId: { type: sql.NVarChar(120), value: productId || null },
+    subscriptionReferenceCode: { type: sql.NVarChar(100), value: subscriptionReferenceCode || null },
+    currentPeriodEnd: { type: sql.DateTime2, value: currentPeriodEnd || null },
+  })
+  await db.query(`
+    INSERT INTO dbo.TeacherSeatSubscriptions
+      (teacher_id, status, period, product_id, subscription_reference_code, current_period_end)
+    VALUES (@teacherId, @status, @period, @productId, @subscriptionReferenceCode, @currentPeriodEnd);
+  `)
+}
+
+async function findTeacherIdByTeacherSeatSubscriptionReferenceCode(subscriptionReferenceCode) {
+  const requestDb = await withRequest({
+    subscriptionReferenceCode: { type: sql.NVarChar(100), value: subscriptionReferenceCode },
+  })
+  const result = await requestDb.query(`
+    SELECT TOP 1 teacher_id FROM dbo.TeacherSeatSubscriptions
+    WHERE subscription_reference_code = @subscriptionReferenceCode;
+  `)
+  return result.recordset[0]?.teacher_id || null
+}
+
+async function updateTeacherSeatSubscriptionFromIyzico({ subscriptionReferenceCode, status, currentPeriodEnd = null }) {
+  const db = await withRequest({
+    subscriptionReferenceCode: { type: sql.NVarChar(100), value: subscriptionReferenceCode },
+    status: { type: sql.NVarChar(20), value: status },
+    currentPeriodEnd: { type: sql.DateTime2, value: currentPeriodEnd },
+  })
+  await db.query(`
+    UPDATE dbo.TeacherSeatSubscriptions
+    SET status = @status,
+        current_period_end = COALESCE(@currentPeriodEnd, current_period_end)
+    WHERE subscription_reference_code = @subscriptionReferenceCode;
+  `)
+}
+
 module.exports = {
   revenuecatWebhookHandler,
   getTeacherQuota,
+  insertTeacherSeatSubscription,
+  findTeacherIdByTeacherSeatSubscriptionReferenceCode,
+  updateTeacherSeatSubscriptionFromIyzico,
   hasActiveParentEntitlement,
   resolveEffectiveEntitlement,
   getParentStudentQuota,

@@ -200,6 +200,7 @@ const { revenuecatWebhookHandler } = require('./entitlements')
 const {
   initiateIyzicoCheckoutHandler,
   initiateChildSeatCheckoutHandler,
+  initiateTeacherSeatCheckoutHandler,
   initiateIyzicoCheckoutForNewParentHandler,
   iyzicoCheckoutCallbackHandler,
   iyzicoWebhookHandler,
@@ -284,6 +285,13 @@ app.http('parent-payments-iyzico-child-seat-checkout-initialize', {
   methods: ['POST'],
   route: 'parent/payments/iyzico/child-seat-checkout-initialize',
   handler: initiateChildSeatCheckoutHandler,
+})
+
+app.http('panel-teacher-payments-iyzico-seat-checkout-initialize', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/payments/iyzico/seat-checkout-initialize',
+  handler: initiateTeacherSeatCheckoutHandler,
 })
 
 app.http('payments-iyzico-parent-checkout-initialize', {
