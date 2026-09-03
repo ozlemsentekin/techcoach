@@ -7,16 +7,23 @@ import Button from '../../ui/Button'
 import {
   getAdminPanelRequests,
   updateAdminPanelRequest,
+  PANEL_REQUEST_TYPE_LABELS,
 } from '../../../services/panelRequestService'
 import { formatRequestDate, roleLabel } from '../../shared/requests/requestFormat'
 import { RequestStatusBadge } from '../../shared/requests/requestPresentation'
 import RequestDetailModal from '../../shared/requests/RequestDetailModal'
 
-const TABS = [
+const STATUS_TABS = [
   { key: 'beklemede', label: 'Beklemede' },
   { key: 'tamamlandi', label: 'Tamamlandı' },
   { key: 'iptal', label: 'İptal' },
   { key: 'all', label: 'Tümü' },
+]
+
+const TYPE_FILTERS = [
+  { key: 'all', label: 'Tüm türler' },
+  { key: 'genel', label: 'Genel' },
+  { key: 'kitap-ekleme', label: 'Kitap ekleme' },
 ]
 
 function photoSummary(counts) {
@@ -30,26 +37,25 @@ function photoSummary(counts) {
     .join(' · ')
 }
 
+function cardTitle(request) {
+  if (request.type === 'genel') return request.title || 'Genel talep'
+  return request.book?.bookName || 'Kitap adı belirtilmemiş'
+}
+
 function AdminActions({ request, onDone }) {
-  const [mode, setMode] = useState(null) // 'tamamlandi' | 'iptal'
+  const [mode, setMode] = useState(null) // 'tamamlandi' | 'iptal' | 'beklemede'
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  if (request.status !== 'beklemede') {
-    return (
-      <p className="text-sm text-panel-text-muted">
-        Bu talep {request.status === 'tamamlandi' ? 'tamamlandı' : 'iptal edildi'}
-        {request.reviewedAt ? ` · ${formatRequestDate(request.reviewedAt)}` : ''}.
-      </p>
-    )
-  }
-
-  const submit = async () => {
+  const submit = async (status, requireNote) => {
     setSaving(true)
     setError('')
     try {
-      const updated = await updateAdminPanelRequest(request.id, { status: mode, adminNote: note.trim() || undefined })
+      const updated = await updateAdminPanelRequest(request.id, {
+        status,
+        adminNote: requireNote ? note.trim() || undefined : undefined,
+      })
       onDone(updated)
     } catch (err) {
       setError(err.message)
@@ -57,12 +63,31 @@ function AdminActions({ request, onDone }) {
     }
   }
 
+  if (request.status !== 'beklemede') {
+    return (
+      <div className="flex flex-col gap-2">
+        {error ? <p className="text-sm text-panel-warm">{error}</p> : null}
+        <p className="text-sm text-panel-text-muted">
+          Bu talep {request.status === 'tamamlandi' ? 'tamamlandı' : 'iptal edildi'}
+          {request.reviewedAt ? ` · ${formatRequestDate(request.reviewedAt)}` : ''}.
+        </p>
+        <div>
+          <Button variant="secondary" size="sm" onClick={() => submit('beklemede', false)} disabled={saving}>
+            {saving ? 'Açılıyor...' : 'Yeniden aç'}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   if (!mode) {
     return (
       <div className="flex flex-col gap-2">
-        <p className="text-xs text-panel-text-muted">
-          Tamamlandı işaretlemeden önce kitabı Kütüphane'ye eklediğinizden emin olun.
-        </p>
+        {request.type === 'kitap-ekleme' ? (
+          <p className="text-xs text-panel-text-muted">
+            Tamamlandı işaretlemeden önce kitabı Kütüphane'ye eklediğinizden emin olun.
+          </p>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => setMode('tamamlandi')}>Tamamlandı olarak işaretle</Button>
           <Button variant="secondary" onClick={() => setMode('iptal')}>
@@ -89,7 +114,7 @@ function AdminActions({ request, onDone }) {
         />
       </label>
       <div className="flex flex-wrap gap-2">
-        <Button onClick={submit} disabled={saving}>
+        <Button onClick={() => submit(mode, true)} disabled={saving}>
           {saving ? 'Kaydediliyor...' : mode === 'tamamlandi' ? 'Tamamlandı olarak kaydet' : 'İptal et'}
         </Button>
         <Button variant="ghost" onClick={() => setMode(null)} disabled={saving}>
@@ -102,6 +127,7 @@ function AdminActions({ request, onDone }) {
 
 export default function AdminBookRequestsPage() {
   const [tab, setTab] = useState('beklemede')
+  const [typeFilter, setTypeFilter] = useState('all')
   const [requests, setRequests] = useState(null)
   const [error, setError] = useState('')
   const [detailId, setDetailId] = useState(null)
@@ -109,7 +135,7 @@ export default function AdminBookRequestsPage() {
   const load = () => {
     setRequests(null)
     getAdminPanelRequests({
-      type: 'kitap-ekleme',
+      type: typeFilter === 'all' ? undefined : typeFilter,
       status: tab === 'all' ? undefined : tab,
     })
       .then(setRequests)
@@ -119,7 +145,7 @@ export default function AdminBookRequestsPage() {
   useEffect(() => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab])
+  }, [tab, typeFilter])
 
   const pendingCount = useMemo(
     () => (tab === 'beklemede' && requests ? requests.length : null),
@@ -134,12 +160,29 @@ export default function AdminBookRequestsPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Kitap Talepleri"
-        subtitle="Veli ve öğretmenlerin kütüphaneye eklenmesini istediği kitaplar."
+        title="Talepler"
+        subtitle="Veli, öğretmen ve öğrencilerin sistem yöneticilerine ilettiği talepler."
       />
 
+      <div className="flex flex-wrap gap-2">
+        {TYPE_FILTERS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => setTypeFilter(item.key)}
+            className={`rounded-full border px-3 py-1 text-sm font-medium transition-colors ${
+              typeFilter === item.key
+                ? 'border-panel-blue bg-panel-blue-soft/60 text-panel-blue'
+                : 'border-panel-border text-panel-text-muted hover:text-panel-text'
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
       <div className="flex gap-1 overflow-x-auto border-b border-panel-border">
-        {TABS.map((item) => (
+        {STATUS_TABS.map((item) => (
           <button
             key={item.key}
             type="button"
@@ -163,7 +206,7 @@ export default function AdminBookRequestsPage() {
       ) : requests === null ? (
         <LoadingState label="Talepler yükleniyor..." />
       ) : requests.length === 0 ? (
-        <EmptyState icon={ClipboardList} title="Talep yok" description="Bu durumda talep bulunmuyor." />
+        <EmptyState icon={ClipboardList} title="Talep yok" description="Bu filtrede talep bulunmuyor." />
       ) : (
         <div className="grid grid-cols-1 gap-3">
           {requests.map((request) => (
@@ -175,10 +218,10 @@ export default function AdminBookRequestsPage() {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-base font-semibold text-panel-text">
-                    {request.book?.bookName || 'Kitap adı belirtilmemiş'}
-                  </p>
+                  <p className="truncate text-base font-semibold text-panel-text">{cardTitle(request)}</p>
                   <p className="mt-0.5 text-xs text-panel-text-muted">
+                    {PANEL_REQUEST_TYPE_LABELS[request.type]}
+                    {' · '}
                     {[request.requesterName, roleLabel(request.createdByRole)].filter(Boolean).join(' · ')}
                     {' · '}
                     {formatRequestDate(request.createdAt)}
@@ -186,12 +229,18 @@ export default function AdminBookRequestsPage() {
                 </div>
                 <RequestStatusBadge status={request.status} />
               </div>
-              <p className="text-xs text-panel-text-muted">
-                {[request.book?.publisherName, request.book?.grade ? `${request.book.grade}. sınıf` : null]
-                  .filter(Boolean)
-                  .join(' · ')}
-                {photoSummary(request.photoCounts) ? ` — ${photoSummary(request.photoCounts)}` : ''}
-              </p>
+              {request.type === 'genel' ? (
+                request.description ? (
+                  <p className="line-clamp-2 text-xs text-panel-text-muted">{request.description}</p>
+                ) : null
+              ) : (
+                <p className="text-xs text-panel-text-muted">
+                  {[request.book?.publisherName, request.book?.grade ? `${request.book.grade}. sınıf` : null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                  {photoSummary(request.photoCounts) ? ` — ${photoSummary(request.photoCounts)}` : ''}
+                </p>
+              )}
             </button>
           ))}
         </div>

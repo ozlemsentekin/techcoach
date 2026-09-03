@@ -12,6 +12,7 @@ const CoursesPage = lazy(() => import('./pages/CoursesPage'))
 const MistakesPage = lazy(() => import('./pages/MistakesPage'))
 const ProgressPage = lazy(() => import('./pages/ProgressPage'))
 const TeachersPage = lazy(() => import('./pages/TeachersPage'))
+const RequestsPage = lazy(() => import('./pages/RequestsPage'))
 
 function pageElement(Page) {
   return (
@@ -34,6 +35,7 @@ export default function StudentApp() {
           <Route path="weekly-plan" element={pageElement(WeeklyPlanPage)} />
           <Route path="courses" element={pageElement(CoursesPage)} />
           <Route path="teachers" element={pageElement(TeachersPage)} />
+          <Route path="requests" element={pageElement(RequestsPage)} />
           {/* Ödev/görev tekilleştirme (Faz 2): ayrı "Ödevlerim" sayfası kaldırıldı; ders-tipi
               görevler artık Haftalık Plan üzerinden yönetiliyor. Eski yer imleri yönlendirilir. */}
           <Route path="homework" element={<Navigate to="/student/weekly-plan" replace />} />

@@ -23,3 +23,18 @@ export function formatRequestDate(value) {
     return ''
   }
 }
+
+export function formatRequestDateTime(value) {
+  if (!value) return ''
+  try {
+    return new Date(value).toLocaleString('tr-TR', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return ''
+  }
+}

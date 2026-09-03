@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { ClipboardList } from 'lucide-react'
+import { ClipboardList, Plus } from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../LoadingState'
 import EmptyState from '../EmptyState'
+import Button from '../../ui/Button'
 import {
   getMyPanelRequests,
   PANEL_REQUEST_TYPE_LABELS,
@@ -10,6 +11,7 @@ import {
 import { formatRequestDate } from './requestFormat'
 import { RequestStatusBadge } from './requestPresentation'
 import RequestDetailModal from './RequestDetailModal'
+import GeneralRequestModal from './GeneralRequestModal'
 
 function photoSummary(counts) {
   if (!counts) return ''
@@ -20,9 +22,12 @@ function photoSummary(counts) {
   return parts.join(' · ')
 }
 
-function RequestCard({ request, onClick }) {
-  const title = request.book?.bookName || PANEL_REQUEST_TYPE_LABELS[request.type] || 'Talep'
+function requestTitle(request) {
+  if (request.type === 'genel') return request.title || 'Genel talep'
+  return request.book?.bookName || PANEL_REQUEST_TYPE_LABELS[request.type] || 'Talep'
+}
 
+function RequestCard({ request, onClick }) {
   return (
     <button
       type="button"
@@ -31,13 +36,17 @@ function RequestCard({ request, onClick }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-base font-semibold text-panel-text">{title}</p>
+          <p className="truncate text-base font-semibold text-panel-text">{requestTitle(request)}</p>
           <p className="mt-0.5 text-xs text-panel-text-muted">
             {PANEL_REQUEST_TYPE_LABELS[request.type]} · {formatRequestDate(request.createdAt)}
           </p>
         </div>
         <RequestStatusBadge status={request.status} />
       </div>
+
+      {request.type === 'genel' && request.description ? (
+        <p className="line-clamp-2 text-xs text-panel-text-muted">{request.description}</p>
+      ) : null}
 
       {photoSummary(request.photoCounts) ? (
         <p className="text-xs text-panel-text-muted">{photoSummary(request.photoCounts)}</p>
@@ -57,11 +66,16 @@ export default function MyRequestsPage() {
   const [requests, setRequests] = useState(null)
   const [error, setError] = useState('')
   const [detailId, setDetailId] = useState(null)
+  const [creating, setCreating] = useState(false)
 
-  useEffect(() => {
+  const load = () => {
     getMyPanelRequests()
       .then(setRequests)
       .catch((err) => setError(err.message))
+  }
+
+  useEffect(() => {
+    load()
   }, [])
 
   return (
@@ -69,6 +83,12 @@ export default function MyRequestsPage() {
       <PageHeader
         title="Taleplerim"
         subtitle="Sistem yöneticilerimize ilettiğiniz talepler ve sonuçları."
+        actions={
+          <Button size="sm" onClick={() => setCreating(true)}>
+            <Plus size={16} aria-hidden="true" />
+            Talep Oluştur
+          </Button>
+        }
       />
 
       {error ? (
@@ -79,7 +99,7 @@ export default function MyRequestsPage() {
         <EmptyState
           icon={ClipboardList}
           title="Henüz talebiniz yok"
-          description="Kitaplık ekranındaki 'Kitap Ekleme Talebi Oluştur' ile bir kitabın sisteme eklenmesini isteyebilirsiniz."
+          description="'Talep Oluştur' ile yöneticilere bir konu iletebilir; Kitaplık ekranından ise bir kitabın sisteme eklenmesini isteyebilirsiniz."
         />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -91,6 +111,10 @@ export default function MyRequestsPage() {
 
       {detailId ? (
         <RequestDetailModal requestId={detailId} onClose={() => setDetailId(null)} />
+      ) : null}
+
+      {creating ? (
+        <GeneralRequestModal onClose={() => setCreating(false)} onSubmitted={load} />
       ) : null}
     </div>
   )
