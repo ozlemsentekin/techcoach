@@ -54,8 +54,7 @@ export default function ManualOpticalAnswerModal({
   const [photosByQuestion, setPhotosByQuestion] = useState(() => ({ ...(initialPhotos || {}) }))
   const [capturingOrderNo, setCapturingOrderNo] = useState(null)
   const [photoReminderOpen, setPhotoReminderOpen] = useState(false)
-  // null | 'stay' (sadece kutla) | 'close' (kutlama kapanınca formu da kapat)
-  const [celebrate, setCelebrate] = useState(null)
+  const [celebrate, setCelebrate] = useState(false)
   const submitSeqRef = useRef(0)
 
   const questionNumbers = Array.from({ length: test.questionCount }, (_, index) => index + 1)
@@ -65,7 +64,7 @@ export default function ManualOpticalAnswerModal({
   // Aynı anda birden fazla submit isteği yarışabilir (bkz. aşağıdaki mount-time sessiz yeniden
   // notlama). Sıra numarasıyla, ekrana her zaman en SON atılan isteğin sonucu yansır; geç dönen
   // eski bir yanıt taze bir kaydı ezmesin diye yok sayılır.
-  const submit = async (submittedAnswers, { celebrateMode = null } = {}) => {
+  const submit = async (submittedAnswers, { celebrateOnPerfect = false } = {}) => {
     const seq = ++submitSeqRef.current
     setSaving(true)
     setError('')
@@ -74,9 +73,9 @@ export default function ManualOpticalAnswerModal({
       if (seq !== submitSeqRef.current) return false
       setResult({ correctCount: data.correctCount, wrongCount: data.wrongCount, blankCount: data.blankCount })
       setCorrectLabels(data.correctLabels || null)
-      // Tam puan (%100) ise konfeti + motivasyon kutlaması — sadece kullanıcının kaydında.
-      if (celebrateMode && Number(data.wrongCount) === 0 && Number(data.blankCount) === 0) {
-        setCelebrate(celebrateMode)
+      // Tam puan (%100) ise konfeti + motivasyon kutlaması — yalnızca "Kaydet"te.
+      if (celebrateOnPerfect && Number(data.wrongCount) === 0 && Number(data.blankCount) === 0) {
+        setCelebrate(true)
       }
       onSaved(test.id, {
         completionSource: 'manual',
@@ -114,7 +113,7 @@ export default function ManualOpticalAnswerModal({
     })
   }
 
-  const handleSave = () => submit(answers, { celebrateMode: 'stay' })
+  const handleSave = () => submit(answers, { celebrateOnPerfect: true })
 
   const hasMissingMistakePhotos = (savedData) => {
     if (!savedData || (Number(savedData.wrongCount) <= 0 && Number(savedData.blankCount) <= 0)) return false
@@ -126,11 +125,10 @@ export default function ManualOpticalAnswerModal({
   }
 
   const handleSaveAndClose = async () => {
-    const savedData = await submit(answers, { celebrateMode: 'close' })
+    // Kutlama yalnızca "Kaydet"te gösterilir; "Kaydet Kapat" sessizce kapatır
+    // (aksi halde form kapanmadığı için mesaj her basışta yeniden çıkıyordu).
+    const savedData = await submit(answers)
     if (!savedData) return
-
-    // Tam puan: kutlama gösterildi; kullanıcı "Tamam"a basınca form da kapanır.
-    if (Number(savedData.wrongCount) === 0 && Number(savedData.blankCount) === 0) return
 
     if (hasMissingMistakePhotos(savedData)) {
       setPhotoReminderOpen(true)
@@ -310,15 +308,7 @@ export default function ManualOpticalAnswerModal({
         </div>
       </div>
 
-      {celebrate ? (
-        <SuccessCelebration
-          onClose={() => {
-            const shouldCloseForm = celebrate === 'close'
-            setCelebrate(null)
-            if (shouldCloseForm) onClose()
-          }}
-        />
-      ) : null}
+      {celebrate ? <SuccessCelebration onClose={() => setCelebrate(false)} /> : null}
 
       {capturingOrderNo ? (
         <MistakePhotoCaptureModal
