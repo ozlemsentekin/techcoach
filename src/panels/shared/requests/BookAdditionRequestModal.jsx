@@ -97,7 +97,7 @@ export default function BookAdditionRequestModal({ onClose, onGoToRequests, onSu
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
-      <div className="flex h-full w-full flex-col overflow-hidden border border-panel-border bg-panel-surface shadow-panel-1 sm:h-auto sm:max-h-[92vh] sm:max-w-2xl sm:rounded-2xl">
+      <div className="flex h-full w-full flex-col overflow-hidden border border-panel-border bg-panel-surface shadow-panel-1 sm:h-[88vh] sm:max-h-[760px] sm:max-w-2xl sm:rounded-2xl">
         <div className="flex items-start justify-between gap-3 border-b border-panel-border p-4 sm:p-5">
           <div>
             <h2 className="text-lg font-bold text-panel-text">Kitap Ekleme Talebi</h2>
