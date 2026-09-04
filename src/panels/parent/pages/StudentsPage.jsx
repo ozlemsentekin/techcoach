@@ -15,11 +15,12 @@ import {
   X,
 } from 'lucide-react'
 import { authRequest, cachedGet, invalidateCache } from '../../../services/authClient'
+import { useAuth } from '../../../context/useAuth'
+import { readJSON, writeJSON } from '../../../services/storage'
 import { useParentStudentsGate } from '../useParentStudentsGate'
 import { THEMES } from '../../../theme/themes'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
-import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
 import StudentTeacherModal from '../components/StudentTeacherModal'
 import StudentProfileModal, { InterestPicker } from '../components/StudentProfileModal'
@@ -32,6 +33,22 @@ import { COMMON_ARTS, COMMON_SPORTS } from '../components/studentInterestCatalog
 import { BirthDateField, FieldIcon, WizardSteps } from '../components/StudentWizardShared'
 import { GENDER_OPTIONS, GRADE_OPTIONS, WIZARD_STEPS, getGradeBirthYearRange } from '../components/studentWizardConstants'
 import ChildSeatPurchaseModal from '../components/ChildSeatPurchaseModal'
+import ParentWelcome from '../components/ParentWelcome'
+import ParentWelcomeModal from '../components/ParentWelcomeModal'
+
+const WELCOME_SEEN_KEY = 'parentWelcomeSeen'
+
+function hasSeenWelcome(parentId) {
+  if (!parentId) return true
+  const map = readJSON(WELCOME_SEEN_KEY, {})
+  return Boolean(map && map[parentId])
+}
+
+function markWelcomeSeen(parentId) {
+  if (!parentId) return
+  const map = readJSON(WELCOME_SEEN_KEY, {}) || {}
+  writeJSON(WELCOME_SEEN_KEY, { ...map, [parentId]: true })
+}
 
 const INITIAL_FORM = {
   firstName: '',
@@ -61,9 +78,11 @@ function StudentAvatar({ student }) {
   )
 }
 
-function AddStudentModal({ onCreated, onClose }) {
+function AddStudentModal({ onCreated, onClose, onAssignResources }) {
+  const navigate = useNavigate()
   const [step, setStep] = useState(1)
   const [studentId, setStudentId] = useState(null)
+  const [createdStudent, setCreatedStudent] = useState(null)
   const [form, setForm] = useState(INITIAL_FORM)
   const [photoUrl, setPhotoUrl] = useState('')
   const [provinceId, setProvinceId] = useState(null)
@@ -150,6 +169,7 @@ function AddStudentModal({ onCreated, onClose }) {
       })
       invalidateCache('/api/parent/students')
       setStudentId(data.student.id)
+      setCreatedStudent(data.student)
       onCreated(data.student)
       setStep(2)
     } catch (err) {
@@ -270,12 +290,17 @@ function AddStudentModal({ onCreated, onClose }) {
     setLoading(true)
     try {
       await saveProfile()
-      onClose()
+      setStep(6)
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleAssignResourcesNow = () => {
+    onClose()
+    if (createdStudent && onAssignResources) onAssignResources(createdStudent)
   }
 
   const defaultThemeLabel = form.gender === 'kiz' ? 'Mor Tema' : form.gender === 'erkek' ? 'Mavi Tema' : 'cinsiyete göre'
@@ -285,12 +310,14 @@ function AddStudentModal({ onCreated, onClose }) {
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
       <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden bg-white shadow-panel-2 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
         <div className="flex items-center justify-between gap-4 px-4 pb-3 pt-3 sm:px-6 sm:pb-3.5 sm:pt-4">
-          <h2 className="text-lg font-semibold text-panel-text">Çocuk Ekle</h2>
+          <h2 className="text-lg font-semibold text-panel-text">
+            {step === 6 ? 'Profil hazır' : 'Çocuk Ekle'}
+          </h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
             <X size={20} />
           </button>
         </div>
-        <WizardSteps step={step} steps={WIZARD_STEPS} />
+        {step !== 6 ? <WizardSteps step={step} steps={WIZARD_STEPS} /> : null}
 
         <div className="min-h-0 flex-1 overflow-y-auto border-t border-[#edf0f1] px-4 py-4 sm:min-h-[460px] sm:px-6 sm:py-5">
           {error ? (
@@ -512,6 +539,38 @@ function AddStudentModal({ onCreated, onClose }) {
               />
             </div>
           ) : null}
+
+          {step === 6 ? (
+            <div className="flex flex-col items-center gap-4 py-6 text-center">
+              <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-panel-sage-soft text-panel-sage">
+                <GraduationCap size={30} aria-hidden="true" />
+              </span>
+              <div>
+                <h3 className="text-xl font-bold text-panel-text">
+                  {(createdStudent?.fullName || form.firstName || 'Çocuğunuz').trim().split(/\s+/)[0]} için profil hazır
+                </h3>
+                <p className="mx-auto mt-1.5 max-w-sm text-sm leading-6 text-panel-text-muted">
+                  Sırada kaynak atamak ve haftalık planı kurmak var. “Bugün” ekranındaki
+                  başlangıç rehberi kalan adımlarda size yol gösterecek.
+                </p>
+              </div>
+              <div className="mt-1 flex w-full max-w-sm flex-col gap-2">
+                <Button type="button" size="md" onClick={handleAssignResourcesNow}>
+                  <BookOpen size={16} aria-hidden="true" />
+                  Kaynak / Kitap Ata
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="md"
+                  onClick={() => navigate('/parent/weekly-plan')}
+                >
+                  <TrendingUp size={16} aria-hidden="true" />
+                  Haftalık Planı Kur
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-col items-stretch gap-2 border-t border-[#edf0f1] px-4 py-3 sm:flex-row sm:items-center sm:justify-end sm:px-6 sm:py-4">
@@ -573,13 +632,19 @@ function AddStudentModal({ onCreated, onClose }) {
               <Button type="button" variant="secondary" size="md" onClick={() => setStep(4)} disabled={loading}>
                 Geri
               </Button>
-              <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={loading}>
+              <Button type="button" variant="secondary" size="md" onClick={() => setStep(6)} disabled={loading}>
                 Atla ve Bitir
               </Button>
               <Button type="button" size="md" onClick={handleFinish} disabled={loading}>
                 {loading ? 'Kaydediliyor...' : 'Kaydet ve Bitir'}
               </Button>
             </>
+          ) : null}
+
+          {step === 6 ? (
+            <Button type="button" variant="secondary" size="md" onClick={onClose}>
+              Panele git
+            </Button>
           ) : null}
         </div>
       </div>
@@ -672,6 +737,8 @@ function StudentCard({ student, onOpenLibrary, onOpenProfile, onOpenTeachers }) 
 
 export default function StudentsPage() {
   const { markHasStudents } = useParentStudentsGate()
+  const { authUser } = useAuth()
+  const parentId = authUser?.id
   const [searchParams, setSearchParams] = useSearchParams()
   const [students, setStudents] = useState(null)
   const [quota, setQuota] = useState(null)
@@ -682,6 +749,7 @@ export default function StudentsPage() {
   const [libraryModalStudent, setLibraryModalStudent] = useState(null)
   const [teacherModalStudent, setTeacherModalStudent] = useState(null)
   const [profileModalStudent, setProfileModalStudent] = useState(null)
+  const [showWelcome, setShowWelcome] = useState(false)
 
   const loadStudents = ({ force } = {}) => {
     if (force) invalidateCache('/api/parent/students')
@@ -704,9 +772,36 @@ export default function StudentsPage() {
     }
     loadStudents({ force: justPurchased }).then((data) => {
       if (justPurchased && data?.quota?.hasRemaining) setShowModal(true)
+      const list = data?.students || []
+      if (!justPurchased && list.length === 0 && !authUser?.isAdmin && !hasSeenWelcome(parentId)) {
+        setShowWelcome(true)
+      }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Başlangıç rehberindeki adımlar buraya "?action=profile|resources|teachers&studentId=..."
+  // ile derin bağlantı verir; öğrenciler yüklendiğinde ilgili modal bir kez açılır.
+  useEffect(() => {
+    if (!students || students.length === 0) return
+    const action = searchParams.get('action')
+    if (!action) return
+    const targetId = searchParams.get('studentId')
+    const target = students.find((student) => student.id === targetId) || students[0]
+    if (!target) return
+    if (action === 'profile') setProfileModalStudent(target)
+    else if (action === 'resources') setLibraryModalStudent(target)
+    else if (action === 'teachers') setTeacherModalStudent(target)
+    searchParams.delete('action')
+    searchParams.delete('studentId')
+    setSearchParams(searchParams, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [students])
+
+  const handleCloseWelcome = () => {
+    markWelcomeSeen(parentId)
+    setShowWelcome(false)
+  }
 
   const handleAddChild = () => {
     if (quota && !quota.hasRemaining) {
@@ -743,10 +838,12 @@ export default function StudentsPage() {
         title="Çocuklarım"
         subtitle="Çocuklarınızın profillerini yönetin, gelişimlerini takip edin ve onlara özel kaynaklara ulaşın."
         actions={
-          <Button onClick={handleAddChild}>
-            <Plus size={16} aria-hidden="true" />
-            Çocuk Profili Ekle
-          </Button>
+          students && students.length > 0 ? (
+            <Button onClick={handleAddChild}>
+              <Plus size={16} aria-hidden="true" />
+              Çocuk Profili Ekle
+            </Button>
+          ) : null
         }
       />
 
@@ -761,11 +858,7 @@ export default function StudentsPage() {
       ) : students === null ? (
         <LoadingState label="Çocuklar yükleniyor..." />
       ) : students.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title="İlk çocuk profilinizi oluşturun"
-          description="Çocuğunuza özel içerik ve gelişim takibi için bir profil ekleyerek başlayın."
-        />
+        <ParentWelcome parentName={authUser?.fullName} onAddChild={handleAddChild} />
       ) : (
         <div className="fade-slide-in">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -782,7 +875,16 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {showModal ? <AddStudentModal onCreated={handleCreated} onClose={handleWizardClose} /> : null}
+      {showWelcome ? (
+        <ParentWelcomeModal parentName={authUser?.fullName} onClose={handleCloseWelcome} />
+      ) : null}
+      {showModal ? (
+        <AddStudentModal
+          onCreated={handleCreated}
+          onClose={handleWizardClose}
+          onAssignResources={setLibraryModalStudent}
+        />
+      ) : null}
       {showSeatPurchase ? <ChildSeatPurchaseModal onClose={handleSeatPurchaseClose} /> : null}
       {libraryModalStudent ? (
         <StudentResourceLibraryModal student={libraryModalStudent} onClose={() => setLibraryModalStudent(null)} />
