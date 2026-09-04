@@ -14,6 +14,7 @@ import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import DailyPlanTable from '../components/DailyPlanTable'
+import OnboardingChecklist from '../components/OnboardingChecklist'
 import AddTaskDrawer from '../components/AddTaskDrawer'
 import TaskAnswerSheetModal from '../../student/components/TaskAnswerSheetModal'
 import TaskCompletionFlow from '../components/TaskCompletionFlow'
@@ -438,6 +439,8 @@ export default function DashboardPage() {
           setSelectedStudentId(studentId)
         }}
       />
+
+      <OnboardingChecklist students={students} selectedStudentId={selectedStudentId} />
 
       <div
         className={`grid gap-4 xl:items-start ${
