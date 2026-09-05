@@ -1402,105 +1402,6 @@ async function removeTaskTestHandler(request) {
   }
 }
 
-async function getWeeklyPlanStatusHandler(request) {
-  try {
-    const { error, studentId } = await requireStudentContext(request)
-    if (error) {
-      return error
-    }
-
-    const weekStart = request.query.get('weekStart')
-    if (!weekStart) {
-      return json(400, { error: 'weekStart zorunludur.' })
-    }
-
-    const requestDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-      weekStart: { type: sql.Date, value: weekStart },
-    })
-    const result = await requestDb.query(`
-      SELECT TOP 1 status FROM dbo.WeeklyPlanStatuses WHERE student_id = @studentId AND week_start_date = @weekStart;
-    `)
-
-    if (result.recordset[0]) {
-      return json(200, { status: result.recordset[0].status })
-    }
-
-    const weekEnd = new Date(weekStart)
-    weekEnd.setUTCDate(weekEnd.getUTCDate() + 6)
-
-    const liveDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-      weekStart: { type: sql.Date, value: weekStart },
-      weekEnd: { type: sql.Date, value: weekEnd.toISOString().slice(0, 10) },
-    })
-    const liveResult = await liveDb.query(`
-      SELECT TOP 1 id FROM dbo.Tasks
-      WHERE student_id = @studentId AND is_draft = 0 AND date BETWEEN @weekStart AND @weekEnd;
-    `)
-
-    return json(200, { status: liveResult.recordset[0] ? 'yayinlandi' : 'taslak' })
-  } catch (error) {
-    if (isConfigError(error)) {
-      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
-    }
-
-    if (isSessionError(error)) {
-      return json(401, { error: 'Oturum geçersiz.' })
-    }
-
-    console.error('getWeeklyPlanStatusHandler failed', error)
-    return json(500, { error: 'Haftalık plan durumu yüklenemedi.' })
-  }
-}
-
-async function setWeeklyPlanStatusHandler(request) {
-  try {
-    const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
-    if (error) {
-      return error
-    }
-
-    const weekStart = payload?.weekStart
-    const status = payload?.status
-    if (!weekStart || !status) {
-      return json(400, { error: 'weekStart ve status zorunludur.' })
-    }
-
-    const requestDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: studentId },
-      weekStart: { type: sql.Date, value: weekStart },
-      status: { type: sql.NVarChar(20), value: status },
-    })
-    const updateResult = await requestDb.query(`
-      UPDATE dbo.WeeklyPlanStatuses SET status = @status
-      WHERE student_id = @studentId AND week_start_date = @weekStart;
-    `)
-
-    if (!updateResult.rowsAffected[0]) {
-      const insertDb = await withRequest({
-        studentId: { type: sql.UniqueIdentifier, value: studentId },
-        weekStart: { type: sql.Date, value: weekStart },
-        status: { type: sql.NVarChar(20), value: status },
-      })
-      await insertDb.query(`
-        INSERT INTO dbo.WeeklyPlanStatuses (student_id, week_start_date, status)
-        VALUES (@studentId, @weekStart, @status);
-      `)
-    }
-
-    return json(200, { status })
-  } catch (error) {
-    if (isConfigError(error)) {
-      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
-    }
-
-    console.error('setWeeklyPlanStatusHandler failed', error)
-    return json(500, { error: 'Plan durumu güncellenemedi.' })
-  }
-}
-
 module.exports = {
   listTasksHandler,
   getTaskHandler,
@@ -1511,8 +1412,6 @@ module.exports = {
   saveTaskAnswersHandler,
   saveWrongQuestionPhotoHandler,
   removeTaskTestHandler,
-  getWeeklyPlanStatusHandler,
-  setWeeklyPlanStatusHandler,
   fetchTaskAnswerSheetData,
   SELECT_TASK,
   sanitizeTask,

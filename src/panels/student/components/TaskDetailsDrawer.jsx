@@ -6,7 +6,7 @@ const CREATED_BY_LABELS = {
   ebeveyn: 'Ebeveyn',
   ogrenci: 'Kendim',
   ogretmen: 'Öğretmen',
-  koc: 'Koç',
+  koc: 'Öğretmen',
 }
 
 const ACTIVE_STATUSES = new Set(['bekliyor', 'devam-ediyor', 'yardim-bekliyor'])

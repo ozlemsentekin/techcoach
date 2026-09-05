@@ -773,7 +773,6 @@ async function hardDeleteFundedStudent(requestInTransaction, bindings) {
     DELETE FROM dbo.StudentRequests WHERE student_id = @studentId;
     DELETE FROM dbo.CoachNotes WHERE student_id = @studentId;
     DELETE FROM dbo.Messages WHERE student_id = @studentId;
-    DELETE FROM dbo.WeeklyPlanStatuses WHERE student_id = @studentId;
     DELETE FROM dbo.Tasks WHERE student_id = @studentId;
     DELETE FROM dbo.Homeworks WHERE student_id = @studentId;
     DELETE FROM dbo.StudentTeachers WHERE student_id = @studentId;

@@ -1,6 +1,6 @@
 import { Sparkles } from 'lucide-react'
 
-export default function EmptyState({ title, description, icon }) {
+export default function EmptyState({ title, description, icon, action }) {
   const Icon = icon || Sparkles
 
   return (
@@ -12,6 +12,7 @@ export default function EmptyState({ title, description, icon }) {
       {description ? (
         <p className="max-w-sm text-base text-panel-text-muted">{description}</p>
       ) : null}
+      {action ? <div className="mt-2">{action}</div> : null}
     </div>
   )
 }

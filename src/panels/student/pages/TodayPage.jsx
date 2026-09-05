@@ -422,7 +422,7 @@ export default function TodayPage() {
 
     if (optionId === 'note-coach') {
       await addCoachNote(`Yardıma ihtiyacım var: ${nextTask?.title || 'genel destek'}`)
-      setBanner('Koçuna not bırakıldı.')
+      setBanner('Öğretmenine not bırakıldı.')
     }
   }
 

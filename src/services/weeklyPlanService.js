@@ -1,15 +1,9 @@
-import { getTasksForDate, getTasksForDateRange, postTask, patchTask, removeTask } from './taskService'
-import { getHomeworks } from './homeworkService'
+import { getTasksForDateRange, postTask } from './taskService'
 import { authRequest, cachedGet } from './authClient'
 import { HOMEWORK_TASK_TYPES } from '../data/taskTypes'
 import { addDaysISO, getMondayOfWeek, getWeekdayKey, parseTimeToMinutes } from '../utils/time'
 import { isBacklogTask, isCompletedOnDate } from '../utils/backlogTasks'
 
-/**
- * @typedef {'taslak'|'yayinlandi'|'guncellendi'|'arsivlendi'} PlanStatus
- */
-
-const MAX_DAILY_ACADEMIC_MINUTES = 240
 const STUDY_TASK_TYPES = new Set([
   'ders-calisma',
   'test-cozme',
@@ -50,27 +44,6 @@ export function getWeekDates(weekStartDateISO) {
   return Array.from({ length: 7 }, (_, index) => addDaysISO(weekStartDateISO, index))
 }
 
-export async function getPlanStatus(weekStartDateISO) {
-  const data = await authRequest(`/api/panel/weekly-plan-status?weekStart=${weekStartDateISO}`, { method: 'GET' })
-  return data.status
-}
-
-export async function setPlanStatus(weekStartDateISO, status) {
-  const data = await authRequest('/api/panel/weekly-plan-status', {
-    method: 'PUT',
-    body: JSON.stringify({ weekStart: weekStartDateISO, status }),
-  })
-  return data.status
-}
-
-async function fetchDayTasks(date, studentId) {
-  const [draftTasks, liveTasks] = await Promise.all([
-    getTasksForDate(date, { isDraft: true, studentId }),
-    getTasksForDate(date, { isDraft: false, studentId }),
-  ])
-  return { draftTasks, liveTasks }
-}
-
 function groupTasksByDate(tasks, dates) {
   const tasksByDate = Object.fromEntries(dates.map((date) => [date, []]))
   tasks.forEach((task) => {
@@ -79,36 +52,11 @@ function groupTasksByDate(tasks, dates) {
   return tasksByDate
 }
 
-async function fetchWeekTaskLists(weekStartDateISO, studentId) {
+export async function getWeekPlans(weekStartDateISO, { studentId } = {}) {
   const weekDates = getWeekDates(weekStartDateISO)
   const weekEndDateISO = weekDates[weekDates.length - 1]
-  const [draftTasks, liveTasks] = await Promise.all([
-    getTasksForDateRange(weekStartDateISO, weekEndDateISO, { isDraft: true, studentId }),
-    getTasksForDateRange(weekStartDateISO, weekEndDateISO, { isDraft: false, studentId }),
-  ])
-
-  return {
-    weekDates,
-    draftTasks,
-    liveTasks,
-    draftTasksByDate: groupTasksByDate(draftTasks, weekDates),
-    liveTasksByDate: groupTasksByDate(liveTasks, weekDates),
-  }
-}
-
-export async function getWeekPlans(weekStartDateISO, { studentId } = {}) {
-  const { weekDates, draftTasksByDate, liveTasksByDate } = await fetchWeekTaskLists(weekStartDateISO, studentId)
-  const tasksByDate = {}
-  const dayStatusByDate = {}
-
-  weekDates.forEach((date) => {
-    const draftTasks = draftTasksByDate[date] || []
-    const liveTasks = liveTasksByDate[date] || []
-    tasksByDate[date] = [...liveTasks, ...draftTasks]
-    dayStatusByDate[date] = draftTasks.length > 0 ? 'taslak' : liveTasks.length > 0 ? 'yayinlandi' : 'bos'
-  })
-
-  return { tasksByDate, dayStatusByDate }
+  const tasks = await getTasksForDateRange(weekStartDateISO, weekEndDateISO, { studentId })
+  return { tasksByDate: groupTasksByDate(tasks, weekDates) }
 }
 
 /**
@@ -134,204 +82,19 @@ export async function getTasksCompletedOn(onDateISO, lookbackDays = 30, { studen
   return tasks.filter((task) => isCompletedOnDate(task, onDateISO))
 }
 
-/** Bir günün canlı görevlerini, varsa bekleyen taslak eklemeleriyle birlikte döner (taslak canlıyı gizlemez). */
-export async function getDraftTasksForDate(date, { studentId } = {}) {
-  const { draftTasks, liveTasks } = await fetchDayTasks(date, studentId)
-  return [...liveTasks, ...draftTasks]
-}
-
-/**
- * Bir günün gösterilecek görevlerini (canlı + bekleyen taslak) ve yayın durumunu döner:
- * 'taslak' (yayınlanmamış bekleyen ekleme/değişiklik var), 'yayinlandi' (tüm görevler canlı),
- * 'bos' (o gün için hiç görev yok).
- */
-export async function getDayPlan(date, { studentId } = {}) {
-  const { draftTasks, liveTasks } = await fetchDayTasks(date, studentId)
-  const status = draftTasks.length > 0 ? 'taslak' : liveTasks.length > 0 ? 'yayinlandi' : 'bos'
-  return { tasks: [...liveTasks, ...draftTasks], status }
-}
-
-/**
- * Bir günün taslak görevlerini canlıya taşır. Var olan canlı görevlere DOKUNMAZ, silmez —
- * sadece taslakları canlıya ekleyerek senkronize eder (taslak yoksa hiçbir şey yapmaz).
- */
-async function publishDayTasks(date, studentId) {
-  const draftTasks = await getTasksForDate(date, { isDraft: true, studentId })
-  if (draftTasks.length === 0) return
-  await Promise.all(draftTasks.map((task) => patchTask(task.id, { isDraft: false }, studentId)))
-}
-
-/** Tek bir günü yayınlar ve o günün güncel (canlı) halini döner. */
-export async function publishDay(date, { studentId } = {}) {
-  await publishDayTasks(date, studentId)
-  return getDayPlan(date, { studentId })
-}
-
-/**
- * Bir gün için yeni görev kaydeder: gün zaten yayındaysa doğrudan canlıya yazar
- * (yayınlanmış bir günde yapılan değişiklik anında plana yansır), aksi halde taslağa yazar.
- */
-export async function saveTaskForDay(date, taskData, dayStatus, { studentId } = {}) {
-  if (dayStatus === 'yayinlandi') {
-    return postTask(
-      {
-        status: 'bekliyor',
-        priority: 'orta',
-        // createdBy gönderilmez: sunucu oturumdan belirler (veli → ebeveyn, öğrenci → ogrenci).
-        // taskData zaten bir createdBy taşıyorsa (kopyalama/yeniden planlama) o korunur.
-        ...taskData,
-        date,
-        isDraft: false,
-      },
-      studentId,
-    )
-  }
-  return saveDraftTask(date, taskData, { studentId })
-}
-
-export async function saveDraftTask(date, taskData, { studentId } = {}) {
+/** Bir gün için yeni görev kaydeder — görev doğrudan canlı plana yazılır. */
+export async function saveTaskForDay(date, taskData, { studentId } = {}) {
   return postTask(
     {
       status: 'bekliyor',
       priority: 'orta',
+      // createdBy gönderilmez: sunucu oturumdan belirler (veli → ebeveyn, öğrenci → ogrenci).
+      // taskData zaten bir createdBy taşıyorsa (kopyalama/yeniden planlama) o korunur.
       ...taskData,
       date,
-      isDraft: true,
     },
     studentId,
   )
-}
-
-export async function updateDraftTask(date, taskId, updates) {
-  await patchTask(taskId, updates)
-  return getTasksForDate(date, { isDraft: true })
-}
-
-export async function deleteDraftTask(date, taskId) {
-  await removeTask(taskId)
-  return getTasksForDate(date, { isDraft: true })
-}
-
-/** Taslağı olan her günü canlıya yazar ve haftanın durumunu 'yayinlandi' yapar. */
-export async function publishWeek(weekStartDateISO) {
-  const { draftTasks } = await fetchWeekTaskLists(weekStartDateISO)
-  await Promise.all(draftTasks.map((task) => patchTask(task.id, { isDraft: false })))
-
-  return setPlanStatus(weekStartDateISO, 'yayinlandi')
-}
-
-/** Bir önceki haftanın canlı görevlerini 7 gün kaydırıp bu haftanın taslağına yazar. */
-export async function copyPreviousWeek(weekStartDateISO) {
-  const previousWeekStart = addDaysISO(weekStartDateISO, -7)
-  const previousWeekDates = getWeekDates(previousWeekStart)
-  const weekDates = getWeekDates(weekStartDateISO)
-  const previousWeekEnd = previousWeekDates[previousWeekDates.length - 1]
-  const weekEnd = weekDates[weekDates.length - 1]
-
-  const [sourceTasks, existingDraftTasks] = await Promise.all([
-    getTasksForDateRange(previousWeekStart, previousWeekEnd, { isDraft: false }),
-    getTasksForDateRange(weekStartDateISO, weekEnd, { isDraft: true }),
-  ])
-  const sourceTasksByDate = groupTasksByDate(sourceTasks, previousWeekDates)
-
-  await Promise.all(existingDraftTasks.map((task) => removeTask(task.id)))
-  await Promise.all(
-    previousWeekDates.flatMap((sourceDate, index) => {
-      const targetDate = weekDates[index]
-      return (sourceTasksByDate[sourceDate] || []).map((task) =>
-        postTask({
-          ...task,
-          id: undefined,
-          date: targetDate,
-          isDraft: true,
-          status: 'bekliyor',
-          // Kopyalanan görev yeni bir haftanın taze kaydı: geçen haftaya ait tüm
-          // ilerleme/teslim verisi (cevaplar, notlar, sonuçlar, eski ödev bağlantısı)
-          // sıfırlanmalı — aksi halde soru bankası testleri "zaten değerlendirilmiş"
-          // görünüp öğrenci bu haftaki testi bir daha çözemez (bkz. tasks.js
-          // saveTaskAnswersHandler: `if (results[testId]) return`).
-          homeworkId: undefined,
-          completedAt: null,
-          completedQuestionCount: task.targetQuestionCount ? 0 : undefined,
-          completedPageCount: task.targetPageCount ? 0 : undefined,
-          currentPageNumber: undefined,
-          correctCount: undefined,
-          wrongCount: undefined,
-          blankCount: undefined,
-          difficulty: undefined,
-          emotion: undefined,
-          notes: undefined,
-          parentNote: undefined,
-          reflectionAnswers: undefined,
-          completedSubGoals: undefined,
-          answers: undefined,
-          testResults: undefined,
-          rescheduledFrom: null,
-          rescheduledTo: null,
-          rescheduleReason: null,
-        }),
-      )
-    }),
-  )
-
-  await setPlanStatus(weekStartDateISO, 'taslak')
-  const copiedDraftTasks = await getTasksForDateRange(weekStartDateISO, weekEnd, { isDraft: true })
-  const copiedDraftTasksByDate = groupTasksByDate(copiedDraftTasks, weekDates)
-  return weekDates.map((date) => copiedDraftTasksByDate[date] || [])
-}
-
-/**
- * Basit, düzenlenebilir bir haftalık taslak önerisi üretir: bekleyen ödevleri
- * hafta içine dağıtır, günlük azami akademik süreyi aşmamaya çalışır, mola/serbest
- * zaman bloğu olmayan günlere ekler. Sonuç yalnızca taslağa yazılır, canlıyı etkilemez.
- */
-export async function suggestWeekPlan(weekStartDateISO) {
-  const weekDates = getWeekDates(weekStartDateISO)
-  const homeworks = await getHomeworks()
-  const pendingHomeworks = homeworks.filter((homework) => homework.status !== 'tamamlandi')
-
-  const dayMinutes = Object.fromEntries(weekDates.map((date) => [date, 0]))
-
-  for (const homework of pendingHomeworks) {
-    const remainingQuestions = homework.totalQuestionCount - homework.completedQuestionCount
-    if (remainingQuestions <= 0) continue
-
-    const targetDate = weekDates.find((date) => dayMinutes[date] < MAX_DAILY_ACADEMIC_MINUTES) || weekDates[0]
-    const durationMinutes = Math.min(60, Math.max(20, remainingQuestions))
-    const startMinutes = 16 * 60
-    const endMinutes = startMinutes + durationMinutes
-
-    await saveDraftTask(targetDate, {
-      title: `${homework.subject} Ödevi`,
-      description: homework.title,
-      subject: homework.subject,
-      taskType: 'odev',
-      startTime: '16:00',
-      endTime: `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`,
-      durationMinutes,
-      targetQuestionCount: remainingQuestions,
-      completedQuestionCount: 0,
-    })
-    dayMinutes[targetDate] += durationMinutes
-  }
-
-  for (const date of weekDates) {
-    const tasks = await getDraftTasksForDate(date)
-    const hasRestBlock = tasks.some((task) => ['mola', 'dinlenme', 'serbest-zaman'].includes(task.taskType))
-    if (!hasRestBlock) {
-      await saveDraftTask(date, {
-        title: 'Serbest Zaman',
-        description: 'Dinlenmek ve keyif aldığın şeyleri yapmak da planının bir parçası.',
-        taskType: 'serbest-zaman',
-        startTime: '18:00',
-        endTime: '19:00',
-        durationMinutes: 60,
-      })
-    }
-  }
-
-  await setPlanStatus(weekStartDateISO, 'taslak')
-  return Promise.all(weekDates.map((date) => getDraftTasksForDate(date)))
 }
 
 /** Bir günün toplam akademik çalışma süresini (dakika) hesaplar. */
@@ -433,7 +196,6 @@ export function buildTeacherLessonTasksForDate(lessonSchedule, dateISO) {
       priority: 'orta',
       status: 'bekliyor',
       createdBy: 'ogretmen',
-      isDraft: false,
       isTeacherLessonSlot: true,
     }))
 }
