@@ -6,7 +6,7 @@ const OPTIONS = [
   { id: 'break', label: '5 dakika ara ver' },
   { id: 'shrink-plan', label: 'Bugünkü planı küçült' },
   { id: 'easy-task', label: 'Kolay bir görevle başla' },
-  { id: 'note-coach', label: 'Koçuma mesaj bırak' },
+  { id: 'note-coach', label: 'Öğretmenime mesaj bırak' },
 ]
 
 export default function StressSupportModal({ onSelectOption, onClose }) {

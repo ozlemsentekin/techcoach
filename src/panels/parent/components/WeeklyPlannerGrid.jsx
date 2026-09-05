@@ -21,7 +21,6 @@ import {
   School,
   Star,
   Timer,
-  UploadCloud,
   UserRound,
   XCircle,
 } from 'lucide-react'
@@ -235,7 +234,7 @@ const CREATOR_LABELS = {
   ebeveyn: 'Veli',
   ogrenci: 'Öğrenci',
   ogretmen: 'Öğretmen',
-  koc: 'Koç',
+  koc: 'Öğretmen',
   sistem: 'Sistem',
 }
 
@@ -996,14 +995,12 @@ function GradeSummaryBar({ task, onViewAnswerSheet }) {
 export default function WeeklyPlannerGrid({
   weekDates,
   tasksByDate,
-  dayStatusByDate,
   lessonSchedule,
   lessonScheduleExceptions,
   schoolSchedule,
   schoolHolidays,
   onAddHomework,
   onEditTask,
-  onPublishDay,
   onQuickAddBreak,
   onViewAnswerSheet,
   onCompleteTask,
@@ -1033,11 +1030,6 @@ export default function WeeklyPlannerGrid({
   const handleAddHomework = (date) => {
     if (date < currentDate || typeof onAddHomework !== 'function') return
     onAddHomework(date)
-  }
-
-  const handlePublishDay = (date) => {
-    if (typeof onPublishDay !== 'function') return
-    onPublishDay(date)
   }
 
   const togglePastDay = (date) => {
@@ -1103,8 +1095,6 @@ export default function WeeklyPlannerGrid({
     const isToday = date === currentDate
     const isPastDayExpanded = expandedPastDates.has(date)
     const isCollapsed = isPastDay && isCurrentWeekView && !isPastDayExpanded
-    const dayStatus = dayStatusByDate?.[date]
-    const hasPendingDraft = dayStatus === 'taslak'
     const shellTone = isPastDay
       ? 'border-slate-200 bg-slate-50/80 shadow-none'
       : 'border-panel-border bg-panel-surface shadow-[0_2px_10px_rgba(49,42,92,0.06)]'
@@ -1161,11 +1151,6 @@ export default function WeeklyPlannerGrid({
             <div className="flex shrink-0 items-center gap-1.5">
               {isToday ? (
                 <span className="rounded-full bg-white/15 px-2 py-1 text-[10px] font-extrabold text-white">Bugün</span>
-              ) : null}
-              {hasPendingDraft ? (
-                <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-extrabold text-amber-700">
-                  Taslak
-                </span>
               ) : null}
               {isPastDay ? (
                 <button
@@ -1230,19 +1215,6 @@ export default function WeeklyPlannerGrid({
               </div>
             )}
           </div>
-
-          {!isPastDay && hasPendingDraft && typeof onPublishDay === 'function' ? (
-          <div className="mt-auto">
-            <button
-              type="button"
-              onClick={() => handlePublishDay(date)}
-              className="flex h-10 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-panel-blue-soft bg-panel-blue-soft/60 px-3 text-xs font-bold text-panel-blue transition-colors duration-150 hover:bg-panel-blue-soft"
-            >
-              <UploadCloud size={16} aria-hidden="true" />
-              <span className="min-w-0 truncate">Bu Günü Yayımla</span>
-            </button>
-          </div>
-          ) : null}
         </div>
         )}
       </div>

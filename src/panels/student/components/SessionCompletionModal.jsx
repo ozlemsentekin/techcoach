@@ -168,7 +168,7 @@ export default function SessionCompletionModal({ task, initialCompletedQuestionC
           </div>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-panel-text-muted">Koçuma not bırak (isteğe bağlı)</span>
+            <span className="text-sm font-medium text-panel-text-muted">Öğretmenime not bırak (isteğe bağlı)</span>
             <textarea
               rows={2}
               value={note}

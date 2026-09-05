@@ -25,17 +25,12 @@ function groupTasksByDate(tasks, dates) {
   return tasksByDate
 }
 
-function getDayStatusByDate(tasksByDate, dates) {
-  return Object.fromEntries(dates.map((date) => [date, tasksByDate[date]?.length ? 'yayinlandi' : 'bos']))
-}
-
 export default function WeeklyPlanPage() {
   const [weekOffset, setWeekOffset] = useState(0)
   const weekStart = useMemo(() => addDaysISO(currentWeekStart, weekOffset * 7), [weekOffset])
   const weekDates = useMemo(() => getWeekDates(weekStart), [weekStart])
 
   const [tasksByDate, setTasksByDate] = useState({})
-  const [dayStatusByDate, setDayStatusByDate] = useState({})
   const [lessonSchedule, setLessonSchedule] = useState([])
   const [schoolSchedule, setSchoolSchedule] = useState([])
   const [schoolHolidays, setSchoolHolidays] = useState([])
@@ -63,13 +58,13 @@ export default function WeeklyPlanPage() {
     } else if (initialTask) {
       // Gün değişince görev yeniden oluşturulur — orijinal ekleyen korunmalı.
       await removeTask(initialTask.id)
-      await saveTaskForDay(
-        taskData.date,
-        { ...taskData, createdBy: initialTask.createdBy, createdByUserId: initialTask.createdByUserId },
-        'yayinlandi',
-      )
+      await saveTaskForDay(taskData.date, {
+        ...taskData,
+        createdBy: initialTask.createdBy,
+        createdByUserId: initialTask.createdByUserId,
+      })
     } else {
-      await saveTaskForDay(taskData.date, taskData, 'yayinlandi')
+      await saveTaskForDay(taskData.date, taskData)
     }
 
     reload()
@@ -86,17 +81,13 @@ export default function WeeklyPlanPage() {
 
   const handleQuickAddBreak = async (date, afterTask, minutes) => {
     const breakStart = afterTask.endTime
-    await saveTaskForDay(
-      date,
-      {
-        title: 'Mola',
-        taskType: 'mola',
-        startTime: breakStart,
-        endTime: addMinutesToTime(breakStart, minutes),
-        durationMinutes: minutes,
-      },
-      'yayinlandi',
-    )
+    await saveTaskForDay(date, {
+      title: 'Mola',
+      taskType: 'mola',
+      startTime: breakStart,
+      endTime: addMinutesToTime(breakStart, minutes),
+      durationMinutes: minutes,
+    })
     reload()
     showBanner(`${minutes} dakikalık mola eklendi.`)
   }
@@ -128,9 +119,7 @@ export default function WeeklyPlanPage() {
     ])
       .then(([tasks, teacherLessons, school]) => {
         if (ignore) return
-        const nextTasksByDate = groupTasksByDate(tasks, weekDates)
-        setTasksByDate(nextTasksByDate)
-        setDayStatusByDate(getDayStatusByDate(nextTasksByDate, weekDates))
+        setTasksByDate(groupTasksByDate(tasks, weekDates))
         setLessonSchedule(teacherLessons)
         setSchoolSchedule(school.entries || [])
         setSchoolHolidays(school.holidays || [])
@@ -140,7 +129,6 @@ export default function WeeklyPlanPage() {
       .catch((err) => {
         if (ignore) return
         setTasksByDate({})
-        setDayStatusByDate({})
         setLoadError(err.message)
         setLoadedWeekStart(weekStart)
       })
@@ -210,12 +198,10 @@ export default function WeeklyPlanPage() {
           <WeeklyPlannerGrid
             weekDates={weekDates}
             tasksByDate={tasksByDate}
-            dayStatusByDate={dayStatusByDate}
             lessonSchedule={lessonSchedule}
             schoolSchedule={schoolSchedule}
             schoolHolidays={schoolHolidays}
             onAddHomework={(date) => setDrawerState({ defaultDate: date })}
-            onAddTask={(date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}
             onEditTask={(task) => setDrawerState({ initialTask: task })}
             onQuickAddBreak={handleQuickAddBreak}
             canEditTask={(task) => task.createdBy === 'ogrenci'}
@@ -226,7 +212,6 @@ export default function WeeklyPlanPage() {
           {drawerState ? (
             <AddTaskDrawer
               initialTask={drawerState.initialTask}
-              initialTemplate={drawerState.initialTemplate}
               defaultDate={drawerState.defaultDate}
               getExistingTasksForDate={getExistingTasksForDrawer}
               schoolSchedule={schoolSchedule}

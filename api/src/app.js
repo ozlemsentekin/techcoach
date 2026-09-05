@@ -157,8 +157,6 @@ const {
   saveTaskAnswersHandler,
   saveWrongQuestionPhotoHandler,
   removeTaskTestHandler,
-  getWeeklyPlanStatusHandler,
-  setWeeklyPlanStatusHandler,
 } = require('./tasks')
 const { verifyMistakePhotoQuestionNumberHandler } = require('./mistakePhoto')
 const { listTaskActivityLogsHandler } = require('./taskActivity')
@@ -1387,20 +1385,6 @@ app.http('panel-school-resources-get', {
   methods: ['GET'],
   route: 'panel/school-resources',
   handler: getPanelSchoolResourcesHandler,
-})
-
-app.http('panel-weekly-plan-status-get', {
-  authLevel: 'anonymous',
-  methods: ['GET'],
-  route: 'panel/weekly-plan-status',
-  handler: getWeeklyPlanStatusHandler,
-})
-
-app.http('panel-weekly-plan-status-set', {
-  authLevel: 'anonymous',
-  methods: ['PUT'],
-  route: 'panel/weekly-plan-status',
-  handler: setWeeklyPlanStatusHandler,
 })
 
 app.http('panel-coach-notes-list', {

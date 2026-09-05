@@ -5,13 +5,11 @@ import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Info, Users } f
 import { cachedGet, invalidateCache } from '../../../services/authClient'
 import {
   getWeekDates,
-  getDraftTasksForDate,
   getWeekPlans,
   getSchoolSchedule,
   getTeacherLessonSchedule,
   getPrivateLessonTeachers,
   saveTaskForDay,
-  publishDay,
 } from '../../../services/weeklyPlanService'
 import { preloadPanelHomeworkResourceBooks } from '../../../services/resourceBookService'
 import { getUnscheduledTasks, patchTask, removeTask } from '../../../services/taskService'
@@ -43,7 +41,6 @@ export default function WeeklyPlanPage() {
   const hasMultipleStudents = (students?.length || 0) > 1
 
   const [tasksByDate, setTasksByDate] = useState({})
-  const [dayStatusByDate, setDayStatusByDate] = useState({})
   const [unscheduledTasks, setUnscheduledTasks] = useState([])
   const [lessonSchedule, setLessonSchedule] = useState([])
   const [privateTeachers, setPrivateTeachers] = useState([])
@@ -90,7 +87,6 @@ export default function WeeklyPlanPage() {
 
   const applyWeekPlans = useCallback((plans) => {
     setTasksByDate(plans.tasksByDate)
-    setDayStatusByDate(plans.dayStatusByDate)
   }, [])
 
   const loadUnscheduled = useCallback(() => {
@@ -165,10 +161,8 @@ export default function WeeklyPlanPage() {
 
   const handleSaveDrawerTask = async (taskData) => {
     const initialTask = drawerState?.initialTask
-    const targetStatus = dayStatusByDate[taskData.date]
 
     if (initialTask && taskData.date === initialTask.date) {
-      // Aynı gün içinde düzenleme: görev zaten hangi durumdaysa (taslak/canlı) o durumda kalır.
       await patchTask(initialTask.id, taskData, selectedStudentId)
     } else if (initialTask) {
       // Gün değişince görev silinip yeniden oluşturulur — orijinal ekleyen (ör. öğretmen)
@@ -177,16 +171,15 @@ export default function WeeklyPlanPage() {
       await saveTaskForDay(
         taskData.date,
         { ...taskData, createdBy: initialTask.createdBy, createdByUserId: initialTask.createdByUserId },
-        targetStatus,
         { studentId: selectedStudentId },
       )
     } else {
-      await saveTaskForDay(taskData.date, taskData, targetStatus, { studentId: selectedStudentId })
+      await saveTaskForDay(taskData.date, taskData, { studentId: selectedStudentId })
     }
 
     await refresh()
     setDrawerState(null)
-    showBanner(targetStatus === 'yayinlandi' ? 'Görev plana kaydedildi.' : 'Görev taslağa kaydedildi.')
+    showBanner('Görev plana kaydedildi.')
   }
 
   const handleCompleteTask = async (task) => {
@@ -206,12 +199,6 @@ export default function WeeklyPlanPage() {
     showBanner('Görev silindi.')
   }
 
-  const handlePublishDay = async (date) => {
-    await publishDay(date, { studentId: selectedStudentId })
-    await refresh()
-    showBanner('Gün yayınlandı.')
-  }
-
   const managingTeacher = managingSlot
     ? privateTeachers.find((teacher) => teacher.id === managingSlot.studentTeacherId) || null
     : null
@@ -228,7 +215,6 @@ export default function WeeklyPlanPage() {
   const handleQuickAddBreak = async (date, afterTask, minutes) => {
     const breakStart = afterTask.endTime
     const breakEnd = addMinutesToTime(breakStart, minutes)
-    const targetStatus = dayStatusByDate[date]
 
     await saveTaskForDay(
       date,
@@ -239,7 +225,6 @@ export default function WeeklyPlanPage() {
         endTime: breakEnd,
         durationMinutes: minutes,
       },
-      targetStatus,
       { studentId: selectedStudentId },
     )
 
@@ -248,8 +233,8 @@ export default function WeeklyPlanPage() {
   }
 
   const getExistingTasksForDrawer = useCallback(
-    (date) => tasksByDate[date] || getDraftTasksForDate(date, { studentId: selectedStudentId }),
-    [tasksByDate, selectedStudentId],
+    (date) => tasksByDate[date] || [],
+    [tasksByDate],
   )
 
   return (
@@ -334,16 +319,13 @@ export default function WeeklyPlanPage() {
           <WeeklyPlannerGrid
             weekDates={weekDates}
             tasksByDate={tasksByDate}
-            dayStatusByDate={dayStatusByDate}
             lessonSchedule={lessonSchedule}
             schoolSchedule={schoolSchedule}
             schoolHolidays={schoolHolidays}
             onAddHomework={(date) => setDrawerState({ defaultDate: date })}
-            onAddTask={(date, initialTemplate) => setDrawerState({ defaultDate: date, initialTemplate })}
             onEditTask={(task) => setDrawerState({ initialTask: task })}
             onViewAnswerSheet={setAnswerSheetTask}
             onCompleteTask={handleCompleteTask}
-            onPublishDay={handlePublishDay}
             onQuickAddBreak={handleQuickAddBreak}
             onManageLessonSlot={setManagingSlot}
           />
@@ -364,7 +346,6 @@ export default function WeeklyPlanPage() {
           {drawerState ? (
             <AddTaskDrawer
               initialTask={drawerState.initialTask}
-              initialTemplate={drawerState.initialTemplate}
               defaultDate={drawerState.defaultDate}
               getExistingTasksForDate={getExistingTasksForDrawer}
               schoolSchedule={schoolSchedule}

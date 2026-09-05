@@ -63,7 +63,7 @@ async function listCoachNotesHandler(request) {
     }
 
     console.error('listCoachNotesHandler failed', error)
-    return json(500, { error: 'Koç notları yüklenemedi.' })
+    return json(500, { error: 'Öğretmen notları yüklenemedi.' })
   }
 }
 

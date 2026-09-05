@@ -408,9 +408,10 @@ export default function SignUpPage() {
                 <input name="acceptKvkk" type="checkbox" checked={form.acceptKvkk} onChange={handleInputChange} />
                 <span>
                   <button type="button" className="inline-link" onClick={() => setInfoModal('kvkk')}>
-                    KVKK
+                    KVKK Açık Rıza Metni
                   </button>{' '}
-                  kapsamında kişisel verilerimin işlenmesine izin veriyorum.
+                  kapsamında açık rıza gerektiren işlemlere (yurt dışına aktarım, kişiselleştirme ve
+                  ticari elektronik ileti) onay veriyorum.
                 </span>
               </label>
 
