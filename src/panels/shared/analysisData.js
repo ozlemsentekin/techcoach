@@ -189,8 +189,10 @@ export function analyzeEntity({
 }
 
 // entities listesini ısı haritası sütunları + eğitim yılı ayları + özet metrikleriyle
-// birlikte hazırlar.
-export function buildAnalysis(entities, today) {
+// birlikte hazırlar. maxResources: ısı haritasındaki kaynak sayısı üst sınırı — öğretmen
+// Sınıf Analizi'nde kaynaklar SÜTUN olduğu için 8'de kesilir; veli Gelişim Analizi'nde
+// kaynaklar SATIR olduğundan çocuğun tüm kaynakları gösterilir (Infinity).
+export function buildAnalysis(entities, today, { maxResources = MAX_RESOURCE_COLUMNS } = {}) {
   const resourceMeta = new Map()
   for (const entity of entities) {
     for (const [name, info] of entity.resources) {
@@ -204,7 +206,7 @@ export function buildAnalysis(entities, today) {
   const resourceColumns = [...resourceMeta.entries()]
     .filter(([, meta]) => meta.weight > 0)
     .sort((a, b) => b[1].weight - a[1].weight)
-    .slice(0, MAX_RESOURCE_COLUMNS)
+    .slice(0, maxResources)
     .map(([key, meta]) => ({ key, label: key, publisher: meta.publisher, cover: meta.cover }))
 
   const months = buildAcademicMonths(today)
