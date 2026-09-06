@@ -241,7 +241,7 @@ async function verifyOtpHandler(request) {
         id: { type: sql.UniqueIdentifier, value: userRecord.id },
       })
       await touchDb.query(`
-        UPDATE dbo.Users SET last_login_at = SYSUTCDATETIME() WHERE id = @id;
+        UPDATE dbo.Users SET last_login_at = SYSUTCDATETIME(), last_seen_at = SYSUTCDATETIME() WHERE id = @id;
       `)
       status = 200
     }
