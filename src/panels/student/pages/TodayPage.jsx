@@ -23,6 +23,7 @@ import StressSupportModal from '../components/StressSupportModal'
 import BreathingExercise from '../components/BreathingExercise'
 import LoadingState from '../../shared/LoadingState'
 import { TIMER_STOP_STATUSES, buildTimerStopUpdates, buildCompletionUpdates } from '../../shared/taskCompletion'
+import { useBillingGate } from '../../../context/useBillingGate'
 
 const date = todayISODate()
 const STUDENT_SUPPORT_EVENT = 'student-support-requested'
@@ -34,6 +35,7 @@ const BACKLOG_LOOKBACK_DAYS = 30
 
 export default function TodayPage() {
   const { authUser } = useAuth()
+  const { restricted: billingRestricted, promptPayment } = useBillingGate()
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -474,7 +476,7 @@ export default function TodayPage() {
           onStartTimer={handleFocusTimerStart}
           onToggleSubGoal={handleToggleSubGoal}
           onSubmitReflection={handleSubmitReflection}
-          onOpenHomeworkModal={() => setShowHomeworkModal(true)}
+          onOpenHomeworkModal={() => (billingRestricted ? promptPayment() : setShowHomeworkModal(true))}
         />
       ) : null}
 

@@ -11,7 +11,7 @@ const { requireTeacherSession, requireTeacherStudentContext } = require('./teach
 const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
 const { fetchTeacherResourceBooks, verifySubjectExists } = require('./students')
 const { fetchStudentProfile, validateGeoSelection, sanitizePhotoUrl } = require('./studentProfile')
-const { getTeacherQuota, hasActiveParentEntitlement } = require('./entitlements')
+const { getTeacherQuota, hasActiveParentEntitlement, billingRestrictedResponse } = require('./entitlements')
 const {
   SELECT_HOMEWORK,
   HOMEWORK_TASK_TYPES_SQL,
@@ -2278,6 +2278,11 @@ async function createTeacherHomeworkHandler(request) {
       })
     if (error) return error
 
+    // Öğretmenin bir koltuğunun ödemesi gecikip panel salt-görüntülemeye düştüyse yeni ödev eklenemez.
+    if ((await getTeacherQuota(teacherUserId)).billingState === 'restricted') {
+      return billingRestrictedResponse()
+    }
+
     const isSchoolHomework = payload?.homeworkType === 'okul-odevi' || Boolean(payload?.schoolResourceId)
     const resourceBookId = isSchoolHomework ? null : payload?.resourceBookId || null
     const schoolResourceId = isSchoolHomework ? payload?.schoolResourceId || null : null
@@ -2375,10 +2380,16 @@ async function assignTeacherHomeworkTaskHandler(request) {
   try {
     const homeworkId = request.params.homeworkId
     const payload = await request.json().catch(() => null)
-    const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request, {
-      studentTeacherId: payload?.studentTeacherId,
-    })
+    const { error, studentId, subjectId, studentTeacherId, actorId: teacherUserId } =
+      await requireTeacherStudentContext(request, {
+        studentTeacherId: payload?.studentTeacherId,
+      })
     if (error) return error
+
+    // Ödeme gecikmesi salt-görüntüleme moduna düştüyse ödevden yeni görev planlanamaz.
+    if ((await getTeacherQuota(teacherUserId)).billingState === 'restricted') {
+      return billingRestrictedResponse()
+    }
 
     const date = payload?.date
     const startTime = payload?.startTime

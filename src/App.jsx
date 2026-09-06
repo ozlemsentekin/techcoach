@@ -17,8 +17,6 @@ const StudentApp = lazy(() => import('./panels/student/StudentApp'))
 const ParentApp = lazy(() => import('./panels/parent/ParentApp'))
 const TeacherApp = lazy(() => import('./panels/teacher/TeacherApp'))
 
-const ALLOWED_ENTITLEMENT_STATUSES = new Set(['active', 'trial', 'grace_period'])
-
 function RootRoute() {
   const { authUser, sessionLoading } = useAuth()
 
@@ -60,13 +58,8 @@ function RequireRole({ role, children }) {
     return <Navigate to={panelPathForRole(authUser.role)} replace />
   }
 
-  // Öğretmen ödeme yapan taraf değil (öğrencinin velisi ödüyor) — admin gibi paywall'dan muaf.
-  // Admin bir üyenin panelini "Panele Giriş Yap" ile görüntülüyorsa (actingAdmin) da muaf tutulur.
-  const bypassPaywall = authUser.isAdmin || authUser.role === 'ogretmen' || Boolean(authUser.actingAdmin)
-  if (!bypassPaywall && !ALLOWED_ENTITLEMENT_STATUSES.has(authUser.entitlement?.status)) {
-    return <Navigate to="/paywall" replace />
-  }
-
+  // Ödeme gecikmesi artık sert kilit değil: hesap panele girer, uyarı bandı gösterilir ve
+  // ödeme çözülene kadar yeni görev ekleme kapanır (bkz. BillingBanner / BillingGateProvider).
   return children
 }
 

@@ -3,6 +3,7 @@ const { isConfigError } = require('./config')
 const { json } = require('./http')
 const { isSessionError } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
+const { getUserBillingState, billingRestrictedResponse } = require('./entitlements')
 
 // ── Ödev/Görev tekilleştirme (Faz 1) ──────────────────────────────────────────
 // "Ödev" artık ayrı bir tablo değil, ders-tipi bir dbo.Tasks satırıdır.
@@ -353,6 +354,11 @@ async function createHomeworkHandler(request) {
       return error
     }
 
+    // Ödeme gecikmesi salt-görüntüleme moduna düştüyse yeni ödev eklenemez.
+    if ((await getUserBillingState(studentId)) === 'restricted') {
+      return billingRestrictedResponse()
+    }
+
     const subjectId = payload?.subjectId
     const isSchoolHomework = payload?.homeworkType === 'okul-odevi' || Boolean(payload?.schoolResourceId)
     const resourceBookId = isSchoolHomework ? null : payload?.resourceBookId || null
@@ -561,6 +567,11 @@ async function assignHomeworkTaskHandler(request) {
     const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
     if (error) {
       return error
+    }
+
+    // Ödeme gecikmesi salt-görüntüleme moduna düştüyse ödevden yeni görev planlanamaz.
+    if ((await getUserBillingState(studentId)) === 'restricted') {
+      return billingRestrictedResponse()
     }
 
     const date = payload?.date

@@ -31,6 +31,7 @@ import { isBacklogTask } from '../../../utils/backlogTasks'
 import { isEndedPrivateLessonForToday } from '../../../utils/lessonTasks'
 import Badge from '../../ui/Badge'
 import { isSchoolHoliday } from '../../../services/weeklyPlanService'
+import { useBillingGate } from '../../../context/useBillingGate'
 
 const BREAK_DURATION_OPTIONS = [15, 30, 45, 60]
 
@@ -1008,6 +1009,7 @@ export default function WeeklyPlannerGrid({
   onManageLessonSlot,
   canEditTask,
 }) {
+  const { restricted: billingRestricted, promptPayment } = useBillingGate()
   const currentDate = todayISODate()
   const isCurrentWeekView = weekDates.includes(currentDate)
   const weekKey = weekDates.join('|')
@@ -1029,6 +1031,10 @@ export default function WeeklyPlannerGrid({
 
   const handleAddHomework = (date) => {
     if (date < currentDate || typeof onAddHomework !== 'function') return
+    if (billingRestricted) {
+      promptPayment()
+      return
+    }
     onAddHomework(date)
   }
 

@@ -10,6 +10,30 @@ const GRACE_EVENT_TYPES = new Set(['BILLING_ISSUE'])
 
 const ACTIVE_STATUSES = new Set(['active', 'trial', 'grace_period'])
 
+// Yenileme ödemesi alınamadıktan sonra panelin salt-görüntülemeye düşmesi için tanınan süre.
+const GRACE_DAYS = 3
+
+// Ödeme gecikmesi durumunu hesaplar (panelde uyarı bandı / salt-görüntüleme kararı):
+//   - active / trial            → 'ok'
+//   - grace_period + dönem sonu geçmiş: GRACE_DAYS'e kadar 'grace' (uyarı bandı, tam erişim),
+//                                        sonrasında 'restricted' (yeni görev ekleme kapalı)
+//   - cancelled / expired / none / tarihsiz grace → doğrudan 'restricted'
+function resolveBillingState({ status, currentPeriodEnd }) {
+  if (status === 'active' || status === 'trial') {
+    return { state: 'ok', overdueDays: 0 }
+  }
+  if (status === 'grace_period' && currentPeriodEnd) {
+    const end = new Date(currentPeriodEnd).getTime()
+    if (Number.isFinite(end)) {
+      const overdueDays = Math.max(Math.floor((Date.now() - end) / 86400000), 0)
+      return overdueDays < GRACE_DAYS
+        ? { state: 'grace', overdueDays }
+        : { state: 'restricted', overdueDays }
+    }
+  }
+  return { state: 'restricted', overdueDays: null }
+}
+
 function isAuthorizedWebhook(request) {
   const { revenueCatWebhookAuthHeader } = getBillingConfig()
   const provided = Buffer.from(request.headers.get('authorization') || '')
@@ -207,9 +231,14 @@ async function revenuecatWebhookHandler(request) {
 // gibi ayrı bir "kullanılan koltuk" sayacı tutmuyoruz — funded_by_teacher_id üzerinden canlı sayıyoruz,
 // böylece kota ile gerçek öğrenci sayısı hiçbir zaman birbirinden kopmaz (drift riski yok).
 async function getTeacherQuota(teacherId) {
-  const requestDb = await withRequest({ teacherId: { type: sql.UniqueIdentifier, value: teacherId } })
+  const requestDb = await withRequest({
+    teacherId: { type: sql.UniqueIdentifier, value: teacherId },
+    graceDays: { type: sql.Int, value: GRACE_DAYS },
+  })
   // TeacherEntitlements satırı olmayabilir (öğretmen sadece 499 TL'lik ek öğrenci koltuğu almış
   // olabilir) — bu yüzden skaler alt sorgular kullanıyoruz, satır yoksa NULL döner.
+  // Ek öğrenci koltuğu abonelikleri: 'active' + 'grace_period' (henüz GRACE_DAYS dolmamış "taze"
+  // vs dolmuş "eskimiş" olarak ayrı sayılır — ödeme gecikmesi banner/kısıt kararı için).
   const result = await requestDb.query(`
     SELECT
       (SELECT TOP 1 status FROM dbo.TeacherEntitlements WHERE teacher_id = @teacherId) AS status,
@@ -217,16 +246,38 @@ async function getTeacherQuota(teacherId) {
       (SELECT TOP 1 purchased_seats FROM dbo.TeacherEntitlements WHERE teacher_id = @teacherId) AS purchased_seats,
       (SELECT COUNT(*) FROM dbo.Users u WHERE u.funded_by_teacher_id = @teacherId) AS used_seats,
       (SELECT COUNT(*) FROM dbo.TeacherSeatSubscriptions
-         WHERE teacher_id = @teacherId AND status IN ('active', 'grace_period')) AS seat_subscriptions;
+         WHERE teacher_id = @teacherId AND status = 'active') AS active_seats,
+      (SELECT COUNT(*) FROM dbo.TeacherSeatSubscriptions
+         WHERE teacher_id = @teacherId AND status = 'grace_period'
+           AND (current_period_end IS NULL
+                OR current_period_end > DATEADD(day, -@graceDays, SYSUTCDATETIME()))) AS fresh_grace_seats,
+      (SELECT COUNT(*) FROM dbo.TeacherSeatSubscriptions
+         WHERE teacher_id = @teacherId AND status = 'grace_period'
+           AND current_period_end IS NOT NULL
+           AND current_period_end <= DATEADD(day, -@graceDays, SYSUTCDATETIME())) AS stale_grace_seats;
   `)
   const record = result.recordset[0] || {}
 
   const status = record.status || 'none'
   const baseSeats = Number(record.base_seats) || 0
   const purchasedSeats = Number(record.purchased_seats) || 0
-  const seatSubscriptions = Number(record.seat_subscriptions) || 0
+  const activeSeats = Number(record.active_seats) || 0
+  const freshGraceSeats = Number(record.fresh_grace_seats) || 0
+  const staleGraceSeats = Number(record.stale_grace_seats) || 0
   const usedSeats = Number(record.used_seats) || 0
+
+  const seatSubscriptions = activeSeats + freshGraceSeats + staleGraceSeats
   const totalSeats = baseSeats + purchasedSeats + seatSubscriptions
+  // Ödemesi gecikmemiş (kesin sayılan) koltuklar — bir koltuğun ödemesi GRACE_DAYS'i geçtiyse
+  // artık kapsam dışı sayılır.
+  const paidSeats = baseSeats + purchasedSeats + activeSeats + freshGraceSeats
+
+  let billingState = 'ok'
+  if (usedSeats > paidSeats) {
+    billingState = 'restricted'
+  } else if (freshGraceSeats > 0 || staleGraceSeats > 0 || status === 'grace_period') {
+    billingState = 'grace'
+  }
 
   return {
     status,
@@ -237,6 +288,9 @@ async function getTeacherQuota(teacherId) {
     usedSeats,
     seatSubscriptions,
     remainingSeats: Math.max(totalSeats - usedSeats, 0),
+    billingState,
+    graceSeats: freshGraceSeats + staleGraceSeats,
+    overdueSeats: staleGraceSeats,
   }
 }
 
@@ -299,12 +353,19 @@ async function findParentIdBySubscriptionReferenceCode(subscriptionReferenceCode
 //   3. Hiçbiri yoksa temel durum ('none' vb.) aynen döner.
 async function resolveEffectiveEntitlement({ userId, status, source = null, currentPeriodEnd = null }) {
   if (ACTIVE_STATUSES.has(status)) {
-    return { status, source: source || null, currentPeriodEnd: currentPeriodEnd || null }
+    const bs = resolveBillingState({ status, currentPeriodEnd })
+    return {
+      status,
+      source: source || null,
+      currentPeriodEnd: currentPeriodEnd || null,
+      billingState: bs.state,
+      overdueDays: bs.overdueDays,
+    }
   }
 
   const requestDb = await withRequest({ userId: { type: sql.UniqueIdentifier, value: userId } })
   const result = await requestDb.query(`
-    SELECT TOP 1 te.status
+    SELECT TOP 1 te.teacher_id, te.status
     FROM dbo.TeacherEntitlements te
     WHERE te.teacher_id IN (
       SELECT funded_by_teacher_id
@@ -318,11 +379,30 @@ async function resolveEffectiveEntitlement({ userId, status, source = null, curr
     END;
   `)
 
-  if (ACTIVE_STATUSES.has(result.recordset[0]?.status)) {
-    return { status: 'active', source: 'teacher', currentPeriodEnd: null }
+  const fundingTeacher = result.recordset[0]
+  if (ACTIVE_STATUSES.has(fundingTeacher?.status)) {
+    // Öğretmen finansmanlı: öğretmenin bir koltuğunun ödemesi gecikmişse öğrenci/veliye de
+    // aynı ödeme durumu (uyarı bandı / kısıt) yansıtılır.
+    let billingState = 'ok'
+    if (fundingTeacher.teacher_id) {
+      try {
+        const quota = await getTeacherQuota(fundingTeacher.teacher_id)
+        billingState = quota.billingState || 'ok'
+      } catch {
+        billingState = 'ok'
+      }
+    }
+    return { status: 'active', source: 'teacher', currentPeriodEnd: null, billingState, overdueDays: null }
   }
 
-  return { status: status || 'none', source: source || null, currentPeriodEnd: currentPeriodEnd || null }
+  const bs = resolveBillingState({ status: status || 'none', currentPeriodEnd })
+  return {
+    status: status || 'none',
+    source: source || null,
+    currentPeriodEnd: currentPeriodEnd || null,
+    billingState: bs.state,
+    overdueDays: bs.overdueDays,
+  }
 }
 
 async function hasActiveParentEntitlement(parentId) {
@@ -331,6 +411,51 @@ async function hasActiveParentEntitlement(parentId) {
     SELECT TOP 1 status FROM dbo.Entitlements WHERE parent_id = @parentId;
   `)
   return ACTIVE_STATUSES.has(result.recordset[0]?.status)
+}
+
+// Bir veli veya öğrenci kullanıcısının efektif ödeme durumunu ('ok' | 'grace' | 'restricted')
+// DB'den çözer. Görev oluşturma uçlarında kısıt denetimi için kullanılır.
+async function getUserBillingState(userId) {
+  const requestDb = await withRequest({ userId: { type: sql.UniqueIdentifier, value: userId } })
+  const result = await requestDb.query(`
+    SELECT e.status, e.source, e.current_period_end
+    FROM dbo.Users u
+    LEFT JOIN dbo.Entitlements e ON e.parent_id = COALESCE(u.parent_id, u.id)
+    WHERE u.id = @userId;
+  `)
+  const record = result.recordset[0] || {}
+  const effective = await resolveEffectiveEntitlement({
+    userId,
+    status: record.status,
+    source: record.source,
+    currentPeriodEnd: record.current_period_end,
+  })
+  return effective.billingState || 'ok'
+}
+
+// Oturum yanıtına eklenen `entitlement` nesnesini kullanıcı rolüne göre kurar.
+// Öğretmen `Entitlements` tablosunda olmadığından kota (koltuk) durumundan türetilir;
+// veli/öğrenci için efektif abonelik (kendi + öğretmen finansmanı) kullanılır.
+async function buildSessionEntitlement({ userId, role, status, source, currentPeriodEnd }) {
+  if (role === 'ogretmen') {
+    const quota = await getTeacherQuota(userId)
+    return {
+      status: quota.isActive ? 'active' : 'none',
+      source: 'teacher',
+      currentPeriodEnd: null,
+      billingState: quota.billingState || 'ok',
+      overdueDays: null,
+    }
+  }
+  return resolveEffectiveEntitlement({ userId, status, source, currentPeriodEnd })
+}
+
+// Ödemesi gecikmiş (restricted) aktörün yeni görev oluşturmasını engelleyen ortak yanıt.
+function billingRestrictedResponse() {
+  return json(402, {
+    error: 'Aboneliğiniz askıda. Ödemeyi tamamladığınızda yeni görev ekleyebilirsiniz.',
+    code: 'BILLING_RESTRICTED',
+  })
 }
 
 // Taban veli planının kapsadığı çocuk sayısı (kendi aktif aboneliği olan veliler için).
@@ -480,6 +605,10 @@ module.exports = {
   updateTeacherSeatSubscriptionFromIyzico,
   hasActiveParentEntitlement,
   resolveEffectiveEntitlement,
+  resolveBillingState,
+  buildSessionEntitlement,
+  getUserBillingState,
+  billingRestrictedResponse,
   getParentStudentQuota,
   insertChildSeatSubscription,
   findParentIdByChildSeatSubscriptionReferenceCode,

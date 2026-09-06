@@ -7,6 +7,7 @@ const { recordTaskActivities } = require('./taskActivity')
 const { sanitizeWrongQuestion } = require('./progress')
 const { sanitizeAnswers, gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGrading')
 const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
+const { getUserBillingState, billingRestrictedResponse } = require('./entitlements')
 
 function toISODate(value) {
   if (!value) return null
@@ -650,6 +651,11 @@ async function createTaskHandler(request) {
     })
     if (error) {
       return error
+    }
+
+    // Ödeme gecikmesi salt-görüntüleme moduna düştüyse yeni görev eklenemez.
+    if ((await getUserBillingState(studentId)) === 'restricted') {
+      return billingRestrictedResponse()
     }
 
     // "… ekledi" etiketi + düzenleme yetkisi created_by'ye dayanır. Kopyalama ("geçen haftayı
