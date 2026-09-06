@@ -69,7 +69,8 @@ export default function ClassAnalysisPage() {
         lastActivityAt: entry.lastActivityAt || null,
       })
     })
-    return buildAnalysis(entities, today)
+    // Kaynaklar ısı haritasında SATIR (öğrenciler sütun) — sınıfın tüm kaynakları gösterilir.
+    return buildAnalysis(entities, today, { maxResources: Infinity })
   }, [data, today])
 
   const sortedStudents = useMemo(() => {

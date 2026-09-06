@@ -183,11 +183,11 @@ function HeatCell({ cell, labelA, labelB }) {
   const hasAccuracy = cell && Number.isFinite(cell.accuracy)
   const completion = cell && Number.isFinite(cell.completionRate) ? cell.completionRate : null
   if (!hasAccuracy && completion === null) {
-    return <td className="rounded-md bg-panel-surface-soft/50 py-2 text-[11px] text-panel-text-muted">–</td>
+    return <td className="min-w-[72px] rounded-md bg-panel-surface-soft/50 py-2 text-[11px] text-panel-text-muted">–</td>
   }
   const tone = hasAccuracy ? RATE_TONES[toneFor(cell.accuracy)] : RATE_TONES.neutral
   return (
-    <td className={`rounded-md px-1 py-1 ${tone.chip}`}>
+    <td className={`min-w-[72px] rounded-md px-1 py-1 ${tone.chip}`}>
       <span
         className="block text-[12px] font-bold leading-none"
         title={
@@ -218,71 +218,13 @@ function HeatCell({ cell, labelA, labelB }) {
   )
 }
 
-// entity (satır) × kaynak (sütun) ısı haritası.
-function AccuracyHeatmap({ entities, columns, onSelect }) {
-  const [tip, setTip] = useState(null)
+// kaynak (satır) × entity (sütun) ısı haritası. Hem veli Gelişim Analizi (sütun = ders)
+// hem öğretmen Sınıf Analizi (sütun = öğrenci) bunu kullanır — kaynaklar satır olduğu için
+// çocuğun/sınıfın tüm kaynakları sığar. Kitaplar yayın evine göre gruplu. İlk sütun sabit
+// genişlikte (aksi halde tüm boşluğu yutuyordu); veri sütunları min genişlikle yatay kaydırır.
+const HEAT_FIRST_COL = 'w-[200px] min-w-[200px] max-w-[200px]'
 
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-separate border-spacing-1 text-center">
-        <thead>
-          <tr>
-            <th className="sticky left-0 z-10 bg-panel-surface" />
-            {columns.map((col) => (
-              <th
-                key={col.key}
-                className="w-[104px] min-w-[104px] px-1 pb-1 align-bottom"
-                onMouseEnter={(event) => setTip({ rect: event.currentTarget.getBoundingClientRect(), col })}
-                onMouseLeave={() => setTip((current) => (current?.col === col ? null : current))}
-              >
-                {col.publisher ? (
-                  <span className="mb-0.5 block max-w-full truncate rounded bg-panel-surface-soft px-1 py-0.5 text-[9px] font-semibold text-panel-text-muted">
-                    {col.publisher}
-                  </span>
-                ) : null}
-                <span className="block max-w-full truncate rounded bg-panel-blue-soft px-1 py-0.5 text-[10px] font-semibold text-panel-blue">
-                  {col.label}
-                </span>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {entities.map((entity) => (
-            <tr key={entity.key}>
-              <td
-                className="sticky left-0 z-10 max-w-[6rem] truncate bg-panel-surface pr-2 text-left text-xs font-semibold text-panel-text"
-                title={entity.name}
-              >
-                <button
-                  type="button"
-                  onClick={onSelect ? () => onSelect(entity.key) : undefined}
-                  className={onSelect ? 'hover:underline' : 'cursor-default'}
-                >
-                  {entity.shortLabel}
-                </button>
-              </td>
-              {columns.map((col) => (
-                <HeatCell
-                  key={col.key}
-                  cell={entity.resources.get(col.key)}
-                  labelA={entity.shortLabel}
-                  labelB={col.label}
-                />
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <BookHoverCard tip={tip} />
-    </div>
-  )
-}
-
-// kaynak (satır) × entity (sütun) ısı haritası — veli Gelişim Analizi'nde ders sütunda,
-// kitap satırda; kitaplar yayın evine göre gruplu. table-fixed: ilk sütun sabit genişlik,
-// kalan genişlik ders sütunlarına eşit dağılır (aksi halde ilk sütun tüm boşluğu yutuyordu).
-function ResourceRowHeatmap({ entities, resources }) {
+function ResourceRowHeatmap({ entities, resources, onSelect }) {
   const [tip, setTip] = useState(null)
 
   const groups = useMemo(() => {
@@ -303,21 +245,23 @@ function ResourceRowHeatmap({ entities, resources }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[560px] table-fixed border-separate border-spacing-1 text-center">
-        <colgroup>
-          <col style={{ width: '208px' }} />
-        </colgroup>
+      <table className="w-max min-w-full border-separate border-spacing-1 text-center">
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 bg-panel-surface" />
+            <th className={`sticky left-0 z-10 bg-panel-surface ${HEAT_FIRST_COL}`} />
             {entities.map((entity) => (
-              <th key={entity.key} className="px-1 pb-1 align-bottom">
-                <span
-                  className="block whitespace-normal break-words rounded bg-panel-surface-soft px-1 py-1 text-[10px] font-semibold leading-tight text-panel-text"
+              <th key={entity.key} className="min-w-[78px] px-1 pb-1 align-bottom">
+                <button
+                  type="button"
+                  onClick={onSelect ? () => onSelect(entity.key) : undefined}
                   title={entity.name}
+                  className={cn(
+                    'block w-full whitespace-normal break-words rounded bg-panel-surface-soft px-1 py-1 text-[10px] font-semibold leading-tight text-panel-text',
+                    onSelect ? 'hover:bg-panel-blue-soft hover:text-panel-blue' : 'cursor-default',
+                  )}
                 >
                   {entity.shortLabel}
-                </span>
+                </button>
               </th>
             ))}
           </tr>
@@ -326,7 +270,7 @@ function ResourceRowHeatmap({ entities, resources }) {
           {groups.map((group) => (
             <Fragment key={group.publisher}>
               <tr>
-                <td className="sticky left-0 z-10 bg-panel-surface pb-1 pt-3 text-left">
+                <td className={`sticky left-0 z-10 bg-panel-surface pb-1 pt-3 text-left ${HEAT_FIRST_COL}`}>
                   <span className="block text-[11px] font-bold uppercase tracking-wide text-panel-text-muted">
                     {group.publisher}
                   </span>
@@ -336,7 +280,7 @@ function ResourceRowHeatmap({ entities, resources }) {
               {group.items.map((res) => (
                 <tr key={res.key}>
                   <td
-                    className="sticky left-0 z-10 bg-panel-surface py-0.5 pl-2 pr-2 text-left align-middle"
+                    className={`sticky left-0 z-10 bg-panel-surface py-0.5 pl-2 pr-2 text-left align-middle ${HEAT_FIRST_COL}`}
                     onMouseEnter={(event) => setTip({ rect: event.currentTarget.getBoundingClientRect(), col: res })}
                     onMouseLeave={() => setTip((current) => (current?.col === res ? null : current))}
                   >
@@ -640,7 +584,6 @@ export function AnalysisBody({
   onSelect,
   labels: labelOverrides,
   showLastActivity = true,
-  heatmapLayout = 'entity-rows',
 }) {
   const labels = { ...DEFAULT_LABELS, ...labelOverrides }
   const { entities, resourceColumns, months } = analysis
@@ -699,11 +642,7 @@ export function AnalysisBody({
 
       <Card title={labels.resourceTitle} subtitle={labels.resourceSubtitle} icon={Layers3}>
         {resourceColumns.length ? (
-          heatmapLayout === 'resource-rows' ? (
-            <ResourceRowHeatmap entities={byAccuracy} resources={resourceColumns} />
-          ) : (
-            <AccuracyHeatmap entities={byAccuracy} columns={resourceColumns} onSelect={onSelect} />
-          )
+          <ResourceRowHeatmap entities={byAccuracy} resources={resourceColumns} onSelect={onSelect} />
         ) : (
           <p className="py-4 text-sm text-panel-text-muted">{labels.resourceEmpty}</p>
         )}
