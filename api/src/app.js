@@ -1,5 +1,5 @@
 const { app } = require('@azure/functions')
-const { changePasswordHandler, loginHandler, logoutHandler, meHandler, registerHandler, acceptConsentHandler, validateCouponHandler } = require('./auth')
+const { changePasswordHandler, loginHandler, logoutHandler, meHandler, sessionFromHandoffHandler, registerHandler, acceptConsentHandler, validateCouponHandler } = require('./auth')
 const {
   listUsersHandler,
   updateUserHandler,
@@ -251,6 +251,13 @@ app.http('auth-me', {
   methods: ['GET'],
   route: 'auth/me',
   handler: meHandler,
+})
+
+app.http('auth-session-from-handoff', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'auth/session-from-handoff',
+  handler: sessionFromHandoffHandler,
 })
 
 app.http('auth-logout', {
