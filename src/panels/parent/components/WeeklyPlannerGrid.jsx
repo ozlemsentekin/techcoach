@@ -6,6 +6,7 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronDown,
+  ChevronsRight,
   Clock,
   Coffee,
   Dumbbell,
@@ -20,7 +21,6 @@ import {
   ScanLine,
   School,
   Star,
-  Timer,
   UserRound,
   XCircle,
 } from 'lucide-react'
@@ -155,14 +155,6 @@ function formatTaskTime(task) {
   return task.startTime || task.endTime || 'Saat eklenmedi'
 }
 
-// Ödev kartının en üstünde artık genel "Matematik Ödevi" yerine daha ayırt edici bir
-// etiket gösteriyoruz: ders adı + yayın evi adı bir arada (kart başına farklı olur),
-// ikisinden biri eksikse sadece var olan gösterilir.
-function getTaskTag(task) {
-  if (task.subject && task.publisherName) return `${task.subject} · ${task.publisherName}`
-  return task.publisherName || task.subject || null
-}
-
 // createTaskForHomework/AssignHomeworkModal, ödevin notunu hep "{kaynak adı}\n- {konu}: {test adları}"
 // biçiminde üretir (bkz. teacher/components/AssignHomeworkModal.jsx buildNote). İlk satır zaten
 // resourceBookName ile aynı olduğundan kartta tekrar etmeyip sadece "- " ile başlayan konu/test
@@ -204,6 +196,20 @@ function getFallbackDetail(task) {
 // edilmiyor, sadece kaynağın kendi adı gösterilir.
 function getTaskSource(task) {
   return task.resourceBookName || task.schoolResourceName || null
+}
+
+// Ödev kartında kaynakları "yayınevi → kaynak adı" biçiminde alt alta göstermek için.
+// Bir görev şu an tek kaynak bağlar (resource_book_id ya da school_resource_id) ama yapı
+// ileride çoklu kaynağa uygun: her giriş { publisher, name, imageUrl }.
+function getTaskResourceEntries(task) {
+  const entries = []
+  if (task.resourceBookName) {
+    entries.push({ publisher: task.publisherName || null, name: task.resourceBookName, imageUrl: null })
+  }
+  if (task.schoolResourceName && task.schoolResourceName !== task.resourceBookName) {
+    entries.push({ publisher: null, name: task.schoolResourceName, imageUrl: task.schoolResourceImageUrl || null })
+  }
+  return entries
 }
 
 function getQuestionProgress(task) {
@@ -546,18 +552,15 @@ function CompactMetricChips({
   questionProgress,
   pageProgress,
   graded,
-  completionDurationLabel,
-  isCompleted,
   reviewed = false,
   muted = false,
 }) {
   const grade = graded ? getGradeSummary(task) : null
-  const timerLabel = isCompleted ? `Süre: ${completionDurationLabel || 'yok'}` : null
   const chipBaseClassName = muted
     ? 'border-slate-200 bg-white/70 text-slate-500'
     : 'border-panel-border bg-panel-surface-soft/80 text-panel-text-muted'
 
-  if (!testRowCount && !questionProgress && !pageProgress && !grade && !timerLabel && !reviewed) return null
+  if (!testRowCount && !questionProgress && !pageProgress && !grade && !reviewed) return null
 
   return (
     <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
@@ -592,12 +595,6 @@ function CompactMetricChips({
           <span className="truncate">%{grade.percent} · Net {grade.net}</span>
         </span>
       ) : null}
-      {timerLabel ? (
-        <span className={`inline-flex min-w-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${chipBaseClassName}`}>
-          <Timer size={11} className="shrink-0" aria-hidden="true" />
-          <span className="truncate">{timerLabel}</span>
-        </span>
-      ) : null}
       {reviewed ? (
         <span className="inline-flex min-w-0 items-center gap-1 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-extrabold text-emerald-700">
           <CheckCircle2 size={11} className="shrink-0" aria-hidden="true" />
@@ -622,7 +619,6 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
   const Icon = backlog ? AlertTriangle : homeworkStatus?.Icon || style.icon
   const iconClassName = backlog ? 'bg-panel-red-soft text-panel-red' : homeworkStatus?.iconClassName || style.iconClassName
   const canAddBreak = typeof onQuickAddBreak === 'function' && !['mola', 'dinlenme'].includes(task.taskType) && Boolean(task.endTime)
-  const tag = isHomework ? getTaskTag(task) : null
   const testRows = isHomework ? getTaskTestRows(task) : []
   const fallbackDetail = !isHomework || testRows.length === 0 ? getFallbackDetail(task) : null
   const source = isHomework ? getTaskSource(task) : null
@@ -651,6 +647,19 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
   const hasTypeAccent = Boolean(style.barClassName) && !backlog && !muted
   const typeLabel = hasTypeAccent ? TASK_TYPES[task.taskType]?.label : null
   const compactDetailLabel = getCompactDetailLabel({ source, testRows, fallbackDetail })
+  const resourceEntries = isHomework ? getTaskResourceEntries(task) : []
+  // Ödev kartında baştaki durum ikonu kaldırıldı; tamamlandı/bekliyor ayrımını yer kaplamayan
+  // ince renkli sol çubukla veriyoruz (yeşil = tamamlandı, sarı = bekliyor, kırmızı = biriken).
+  const homeworkBarClass =
+    isHomework && !muted
+      ? backlog
+        ? 'bg-panel-red'
+        : task.status === 'tamamlandi'
+          ? 'bg-emerald-500'
+          : 'bg-amber-400'
+      : null
+  const showAccentBar = hasTypeAccent || Boolean(homeworkBarClass)
+  const accentBarClass = homeworkBarClass || style.barClassName
   const hasDetails =
     Boolean(source) ||
     Boolean(fallbackDetail) ||
@@ -671,50 +680,73 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
     : muted
       ? 'border-slate-200 bg-white/80 text-slate-500'
       : `shadow-[0_1px_4px_rgba(49,42,92,0.06)] hover:-translate-y-0.5 hover:shadow-sm ${style.card}`
-  const summaryContent = (
+  // Ödev kartı: baştaki ikon + "Saat eklenmedi" + süre kaldırıldı. Sıralama:
+  // görev türü → ders adı → (kaynak varsa) yayınevi → kaynak adı (çoklu kaynakta tekrarlanır).
+  const homeworkSummary = (
+    <span className="min-w-0 flex-1 self-center">
+      {task.startTime ? (
+        <span className={`block whitespace-nowrap text-[10px] font-bold leading-tight ${style.timeClassName}`}>
+          {formatTaskTime(task)}
+        </span>
+      ) : null}
+      <span className="block truncate text-xs font-extrabold leading-snug text-panel-text">
+        {TASK_TYPES[task.taskType]?.label || 'Ödev'}
+      </span>
+      {task.subject ? (
+        <span className="mt-0.5 block truncate text-[11px] font-semibold leading-snug text-panel-text-muted">
+          {task.subject}
+        </span>
+      ) : null}
+      {resourceEntries.map((entry, index) => (
+        <span key={index} className="mt-1 block">
+          {entry.publisher ? (
+            <span className="block truncate text-[10px] font-extrabold uppercase tracking-wide leading-snug text-panel-text-muted">
+              {entry.publisher}
+            </span>
+          ) : null}
+          <span className="flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-snug text-panel-text">
+            {entry.imageUrl ? (
+              <img
+                src={entry.imageUrl}
+                alt=""
+                className="h-4 w-4 shrink-0 rounded-full border border-panel-border object-cover"
+              />
+            ) : (
+              <Library size={11} className="shrink-0 text-panel-text-muted" aria-hidden="true" />
+            )}
+            <span className="truncate">{entry.name}</span>
+          </span>
+        </span>
+      ))}
+    </span>
+  )
+
+  const defaultSummary = (
     <>
       <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}>
         <Icon size={21} strokeWidth={2.2} aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1 self-center">
-        <span className="flex flex-nowrap items-center justify-between gap-1">
-          <span className={`block whitespace-nowrap text-[11px] font-bold leading-tight ${style.timeClassName}`}>
+        <span className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+          <span className={`whitespace-nowrap text-[11px] font-bold leading-tight ${style.timeClassName}`}>
             {formatTaskTime(task)}
           </span>
           {task.durationMinutes ? (
-            <span className="shrink-0 whitespace-nowrap text-[10px] font-semibold text-panel-text-muted">
+            <span className="whitespace-nowrap text-[10px] font-semibold text-panel-text-muted">
               {task.durationMinutes} dk
             </span>
           ) : null}
         </span>
         <span className="mt-1 flex min-w-0 items-center gap-1.5">
-          {tag ? (
-            <span
-              title={tag}
-              className={`inline-flex min-w-0 max-w-full items-center truncate rounded-full px-2 py-0.5 text-[10px] font-extrabold ${style.tagClassName}`}
-            >
-              {tag}
-            </span>
-          ) : (
-            <span
-              title={task.title}
-              className={`block min-w-0 truncate text-xs font-bold leading-snug ${style.titleClassName}`}
-            >
-              {task.title}
-            </span>
-          )}
+          <span
+            title={task.title}
+            className={`block min-w-0 truncate text-xs font-bold leading-snug ${style.titleClassName}`}
+          >
+            {task.title}
+          </span>
         </span>
         {compactDetailLabel ? (
           <span className="mt-1 flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-snug text-panel-text-muted">
-            {source && task.schoolResourceImageUrl ? (
-              <img
-                src={task.schoolResourceImageUrl}
-                alt=""
-                className="h-4 w-4 shrink-0 rounded-full border border-panel-border object-cover"
-              />
-            ) : source ? (
-              <Library size={11} className="shrink-0" aria-hidden="true" />
-            ) : null}
             <span className="truncate">{compactDetailLabel}</span>
           </span>
         ) : null}
@@ -726,6 +758,8 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
       </span>
     </>
   )
+
+  const summaryContent = isHomework ? homeworkSummary : defaultSummary
 
   // Kartın herhangi bir boş alanına tıklanınca da detay açılıp kapansın; iç içe buton/link
   // gibi etkileşimli öğelere yapılan tıklamalar kendi işlerini görsün diye hariç tutulur.
@@ -747,33 +781,35 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
       role={hasDetails ? 'button' : undefined}
       tabIndex={hasDetails ? 0 : undefined}
       aria-expanded={hasDetails ? expanded : undefined}
-      className={`group relative flex min-h-[66px] w-full flex-col gap-1.5 rounded-xl border py-2.5 pr-2 transition duration-150 ${hasTypeAccent ? 'pl-4' : 'pl-2.5'} ${cardToneClassName} ${showBreakMenu ? 'z-30' : ''} ${hasDetails ? 'cursor-pointer' : ''}`}
+      className={`group relative flex min-h-[66px] w-full flex-col gap-1.5 rounded-xl border py-2.5 pr-2 transition duration-150 ${showAccentBar ? 'pl-4' : 'pl-2.5'} ${cardToneClassName} ${showBreakMenu ? 'z-30' : ''} ${hasDetails ? 'cursor-pointer' : ''}`}
     >
-      {hasTypeAccent ? (
-        <span className={`absolute inset-y-2 left-1.5 w-1 rounded-full ${style.barClassName}`} aria-hidden="true" />
+      {showAccentBar ? (
+        <span className={`absolute inset-y-2 left-1.5 w-1 rounded-full ${accentBarClass}`} aria-hidden="true" />
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-1.5 pl-0.5">
-        {typeLabel ? (
-          <span
-            className={`inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${style.chipClassName}`}
-          >
-            {typeLabel}
-          </span>
-        ) : null}
-
-        {backlog ? (
-          <>
-            <span className="inline-flex items-center gap-1 rounded-full border border-panel-red/30 bg-panel-red-soft px-2 py-0.5 text-[10px] font-extrabold text-panel-red">
-              <AlertTriangle size={11} aria-hidden="true" />
-              Zamanında yapılmadı
+      {typeLabel || backlog ? (
+        <div className="flex flex-wrap items-center gap-1.5 pl-0.5">
+          {typeLabel ? (
+            <span
+              className={`inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${style.chipClassName}`}
+            >
+              {typeLabel}
             </span>
-            <Badge tone="red" className="px-2 py-0.5 text-[10px] font-extrabold">
-              Biriken Görev
-            </Badge>
-          </>
-        ) : null}
-      </div>
+          ) : null}
+
+          {backlog ? (
+            <>
+              <span className="inline-flex items-center gap-1 rounded-full border border-panel-red/30 bg-panel-red-soft px-2 py-0.5 text-[10px] font-extrabold text-panel-red">
+                <AlertTriangle size={11} aria-hidden="true" />
+                Zamanında yapılmadı
+              </span>
+              <Badge tone="red" className="px-2 py-0.5 text-[10px] font-extrabold">
+                Biriken Görev
+              </Badge>
+            </>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="flex items-start gap-1">
         {hasDetails ? (
@@ -843,22 +879,20 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
         </div>
       </div>
 
-      <div className="pl-10 pr-1">
+      <div className="pl-1 pr-1">
         <CompactMetricChips
           task={task}
           testRowCount={testRows.length}
           questionProgress={questionProgress}
           pageProgress={pageProgress}
           graded={graded}
-          completionDurationLabel={completionDurationLabel}
-          isCompleted={Boolean(completionTimestampLabel)}
           reviewed={canReview && Boolean(task.reviewedAt)}
           muted={muted}
         />
       </div>
 
       {canComplete ? (
-        <div className="mt-1.5 pl-10 pr-1">
+        <div className="mt-1.5 pl-1 pr-1">
           <button
             type="button"
             onClick={(event) => {
@@ -1015,8 +1049,10 @@ export default function WeeklyPlannerGrid({
   const weekKey = weekDates.join('|')
   const [pastDayExpansion, setPastDayExpansion] = useState({ weekKey: '', expandedDates: new Set() })
   const expandedPastDates = pastDayExpansion.weekKey === weekKey ? pastDayExpansion.expandedDates : new Set()
-  const hasCollapsedPastDay =
-    isCurrentWeekView && weekDates.some((date) => date < currentDate && !expandedPastDates.has(date))
+  const collapsedPastDates = isCurrentWeekView
+    ? weekDates.filter((date) => date < currentDate && !expandedPastDates.has(date))
+    : []
+  const hasCollapsedPastDay = collapsedPastDates.length > 0
   const compactPastGridStyle = hasCollapsedPastDay
     ? {
         '--weekly-plan-columns': weekDates
@@ -1036,6 +1072,13 @@ export default function WeeklyPlannerGrid({
       return
     }
     onAddHomework(date)
+  }
+
+  const expandAllPastDays = () => {
+    setPastDayExpansion({
+      weekKey,
+      expandedDates: new Set(weekDates.filter((date) => date < currentDate)),
+    })
   }
 
   const togglePastDay = (date) => {
@@ -1228,15 +1271,31 @@ export default function WeeklyPlannerGrid({
   }
 
   return (
-    <div
-      className={
-        hasCollapsedPastDay
-          ? 'weekly-plan-grid weekly-plan-grid--compact-past min-w-0 items-stretch gap-2'
-          : 'grid min-w-0 grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-7'
-      }
-      style={compactPastGridStyle}
-    >
-      {weekDates.map((date, index) => renderDayColumn(date, index))}
+    <div className="min-w-0">
+      {hasCollapsedPastDay ? (
+        <div className="mb-3 flex justify-end">
+          <button
+            type="button"
+            onClick={expandAllPastDays}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-panel-border bg-panel-surface px-3 py-2 text-xs font-bold text-panel-text-muted shadow-sm transition-colors duration-150 hover:border-panel-blue-soft hover:text-panel-blue"
+          >
+            <ChevronsRight size={15} aria-hidden="true" />
+            Kapalı günleri aç
+            {collapsedPastDates.length > 1 ? ` (${collapsedPastDates.length})` : ''}
+          </button>
+        </div>
+      ) : null}
+
+      <div
+        className={
+          hasCollapsedPastDay
+            ? 'weekly-plan-grid weekly-plan-grid--compact-past min-w-0 items-stretch gap-2'
+            : 'grid min-w-0 grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-7'
+        }
+        style={compactPastGridStyle}
+      >
+        {weekDates.map((date, index) => renderDayColumn(date, index))}
+      </div>
     </div>
   )
 }
