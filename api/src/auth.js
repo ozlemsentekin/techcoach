@@ -451,7 +451,22 @@ async function meHandler(request) {
       currentPeriodEnd: record.entitlement_current_period_end,
     })
 
-    return json(200, { user })
+    // Bu özellikten önce üretilmiş oturum token'ları mustChangePassword claim'i taşımaz; kendi
+    // (delege olmayan) oturumsa çerezi burada tazeleyip passwordGate'in DB fallback'inden çıkarıyoruz.
+    const headers =
+      session.mustChangePassword === undefined && !session.actingParentId && !session.actingAdminId
+        ? createSessionHeaders(
+            createSessionToken({
+              id: record.id,
+              email: record.email,
+              fullName: record.full_name,
+              role: record.role,
+              mustChangePassword: user.mustChangePassword,
+            }),
+          )
+        : undefined
+
+    return json(200, { user }, headers)
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -556,7 +571,7 @@ async function changePasswordHandler(request) {
       id: { type: sql.UniqueIdentifier, value: session.sub },
     })
     const result = await requestDb.query(`
-      SELECT TOP 1 password_hash, phone_number, is_active FROM dbo.Users WHERE id = @id;
+      SELECT TOP 1 id, full_name, email, role, password_hash, phone_number, is_active FROM dbo.Users WHERE id = @id;
     `)
     const record = result.recordset[0]
     if (!record) {
@@ -585,7 +600,17 @@ async function changePasswordHandler(request) {
       WHERE id = @id;
     `)
 
-    return json(200, { ok: true })
+    // Şifre artık başlangıç şifresi değil — oturum çerezini "mustChangePassword: false" claim'iyle
+    // yeniden basıyoruz ki passwordGate kullanıcıyı bir sonraki istekte içeri alsın.
+    const refreshedToken = createSessionToken({
+      id: record.id,
+      email: record.email,
+      fullName: record.full_name,
+      role: record.role,
+      mustChangePassword: false,
+    })
+
+    return json(200, { ok: true }, createSessionHeaders(refreshedToken))
   } catch (error) {
     if (isSessionError(error)) {
       return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())

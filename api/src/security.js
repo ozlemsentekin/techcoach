@@ -86,6 +86,13 @@ function createSessionToken(user, options = {}) {
     role: user.role,
   }
 
+  // Kendi (delege olmayan) oturumlarda başlangıç şifresi durumunu token'a gömüyoruz; böylece
+  // passwordGate her panel isteğinde DB'ye gitmeden karar verebiliyor. Claim'in hiç olmaması
+  // = bu özellikten önce üretilmiş eski token → gate DB fallback'ine düşer.
+  if (!options.actingParentId && !options.actingAdminId) {
+    payload.mustChangePassword = Boolean(user.mustChangePassword)
+  }
+
   if (options.actingParentId) {
     payload.actingParentId = options.actingParentId
     payload.actingParentName = options.actingParentName
