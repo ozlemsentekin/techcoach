@@ -1,24 +1,85 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Award, Users } from 'lucide-react'
+import { BookOpen, Clock, Target, Users } from 'lucide-react'
 import { cachedGet } from '../../../services/authClient'
+import { getProgressOverview } from '../../../services/progressService'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
-import Button from '../../ui/Button'
-import StudentProgressView from '../../shared/StudentProgressView'
-import StudentReportCardModal from '../components/StudentReportCardModal'
+import PageHeader from '../../layout/PageHeader'
+import { RATE_TONES } from '../../shared/rateTones'
+import { cn } from '../../ui/utils'
+import { todayISODate } from '../../../utils/time'
+import {
+  buildActivityRecords,
+  buildSubjectTabs,
+  formatNumber,
+  subjectKey,
+  subjectLabel,
+} from '../../shared/progressAnalytics'
+import { AnalysisBody, SummaryMetric } from '../../shared/analysisView'
+import { SORTS, analyzeEntity, buildAnalysis, pct, toneFor } from '../../shared/analysisData'
+
+const LAST_ACTIVITY_FMT = new Intl.DateTimeFormat('tr-TR', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+// Çocuğun TechCoach'taki son işlemi — overview'daki görev/oturum/manuel test/hata kayıtlarının
+// en yeni zaman damgası (backend'de ayrı bir alan yok, istemcide türetiliyor).
+function deriveLastActivity(overview) {
+  if (!overview) return null
+  let max = null
+  const consider = (value) => {
+    if (!value) return
+    const time = new Date(value).getTime()
+    if (!Number.isNaN(time) && (max === null || time > max)) max = time
+  }
+  for (const task of overview.tasks || []) {
+    consider(task.updatedAt)
+    consider(task.completedAt)
+    consider(task.createdAt)
+  }
+  for (const session of overview.sessions || []) {
+    consider(session.createdAt)
+    consider(session.endedAt)
+    consider(session.startedAt)
+  }
+  for (const completion of overview.manualTestCompletions || []) consider(completion.markedAt)
+  for (const wrong of overview.wrongQuestions || []) consider(wrong.createdAt)
+  return max === null ? null : new Date(max)
+}
+
+// Veli "Gelişim Analizi": öğretmenin Sınıf Analizi'yle aynı grafik seti, ama satırlar
+// öğrenci yerine ders — tek çocuk seçilir, tüm dersleri karşılaştırılır.
+const PARENT_LABELS = {
+  entityHeader: 'Ders',
+  monthlyPerfSubtitle: 'Ders başına aylık çözülen soru ve o ayın başarı yüzdesi (Ağustos–Haziran)',
+  monthlyResultSubtitle: 'Ders başına aylık doğru / yanlış / boş dağılımı ve o ayın başarı yüzdesi',
+  resourceSubtitle: 'Kaynak × ders — her hücrede o kitaptaki doğruluk yüzdesi ve tamamlanma oranı',
+  resourceEmpty: 'Bu çocukta kaynak bazlı çözüm kaydı henüz yok.',
+  taskSubtitle: 'Her dersteki görev tamamlama disiplini',
+  hardestTitle: 'Her derste en zorlanılan konu ve kitap',
+  hardestSubtitle: 'Her ders için doğruluğu en düşük konu/kaynak',
+  comparisonTitle: 'Ders karşılaştırması',
+  comparisonSubtitle: 'Dersleri emek, doğruluk, net ve biriken görev üzerinden karşılaştırın',
+}
 
 export default function ProgressPage() {
   const [searchParams] = useSearchParams()
   const requestedStudentId = searchParams.get('studentId') || ''
   const [students, setStudents] = useState(null)
   const [selectedStudentId, setSelectedStudentId] = useState(requestedStudentId)
-  const [error, setError] = useState('')
-  const [showReportCard, setShowReportCard] = useState(false)
+  const [studentsError, setStudentsError] = useState('')
+  const [loadedOverview, setLoadedOverview] = useState(null)
+  const [failedOverview, setFailedOverview] = useState(null)
+  const [sortKey, setSortKey] = useState('accuracyAsc')
+  const today = useMemo(() => todayISODate(), [])
 
   useEffect(() => {
     let ignore = false
-
     cachedGet('/api/parent/students')
       .then((data) => {
         if (ignore) return
@@ -29,16 +90,64 @@ export default function ProgressPage() {
         })
       })
       .catch((err) => {
-        if (!ignore) setError(err.message)
+        if (!ignore) setStudentsError(err.message)
       })
-
     return () => {
       ignore = true
     }
   }, [])
 
-  if (error) {
-    return <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
+  const selectedStudent = students?.find((student) => student.id === selectedStudentId) || students?.[0] || null
+
+  const activeStudentId = selectedStudent?.id || ''
+
+  useEffect(() => {
+    if (!activeStudentId) return undefined
+    let ignore = false
+    getProgressOverview(activeStudentId)
+      .then((data) => {
+        if (!ignore) setLoadedOverview({ id: activeStudentId, data })
+      })
+      .catch((err) => {
+        if (!ignore) setFailedOverview({ id: activeStudentId, message: err.message })
+      })
+    return () => {
+      ignore = true
+    }
+  }, [activeStudentId])
+
+  // Öğrenci değişince eski çocuğun verisi ekranda kalmasın.
+  const overview = loadedOverview?.id === activeStudentId ? loadedOverview.data : null
+  const overviewError = failedOverview?.id === activeStudentId ? failedOverview.message : ''
+
+  const analysis = useMemo(() => {
+    if (!overview) return null
+    const testsById = new Map((overview.tests || []).map((test) => [test.id, test]))
+    const allRecords = buildActivityRecords(overview, testsById)
+    const subjects = buildSubjectTabs(overview)
+    const entities = subjects.map((subject) =>
+      analyzeEntity({
+        key: subject.key,
+        name: subject.label,
+        shortLabel: subject.label,
+        records: allRecords.filter((record) => subjectKey(record.subject) === subject.key),
+        tasks: (overview.tasks || []).filter((task) => subjectKey(subjectLabel(task)) === subject.key),
+        overview,
+        subjectFilterKey: subject.key,
+      }),
+    )
+    return buildAnalysis(entities, today)
+  }, [overview, today])
+
+  const sortedSubjects = useMemo(() => {
+    if (!analysis) return []
+    return [...analysis.entities].sort(SORTS[sortKey].fn)
+  }, [analysis, sortKey])
+
+  const lastActivity = useMemo(() => deriveLastActivity(overview), [overview])
+
+  if (studentsError) {
+    return <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{studentsError}</div>
   }
 
   if (students === null) {
@@ -55,44 +164,93 @@ export default function ProgressPage() {
     )
   }
 
-  const selectedStudent = students.find((student) => student.id === selectedStudentId) || students[0]
-
-  const headerActions = (
-    <div className="flex items-center gap-2">
-      {students.length > 1 ? (
-        <select
-          value={selectedStudent.id}
-          onChange={(event) => setSelectedStudentId(event.target.value)}
-          className="h-10 rounded-xl border border-panel-border bg-panel-surface px-3 text-sm font-medium text-panel-text"
-          aria-label="Öğrenci seç"
-        >
-          {students.map((student) => (
-            <option key={student.id} value={student.id}>
-              {student.fullName}
-            </option>
-          ))}
-        </select>
-      ) : null}
-      <Button type="button" variant="secondary" size="md" onClick={() => setShowReportCard(true)}>
-        <Award size={16} aria-hidden="true" />
-        LGS Karnesi
-      </Button>
-    </div>
-  )
+  const headerActions =
+    students.length > 1 ? (
+      <select
+        value={selectedStudent?.id || ''}
+        onChange={(event) => setSelectedStudentId(event.target.value)}
+        className="h-10 rounded-xl border border-panel-border bg-panel-surface px-3 text-sm font-medium text-panel-text"
+        aria-label="Öğrenci seç"
+      >
+        {students.map((student) => (
+          <option key={student.id} value={student.id}>
+            {student.fullName}
+          </option>
+        ))}
+      </select>
+    ) : null
 
   return (
-    <>
-      <StudentProgressView
-        key={selectedStudent.id}
-        studentId={selectedStudent.id}
+    <div className="flex flex-col gap-5">
+      <PageHeader
         title="Gelişim Analizi"
-        emptySubtitle={`${selectedStudent.fullName} için gösterilecek ders bulunamadı.`}
-        buildSubtitle={(subjectLabel) => `${selectedStudent.fullName} için ${subjectLabel} bazında emek, doğruluk ve kaynak ilerlemesi.`}
-        headerActions={headerActions}
+        subtitle={
+          selectedStudent
+            ? `${selectedStudent.fullName} için tüm derslerin emek, doğruluk ve kaynak ilerlemesi.`
+            : 'Tüm derslerin emek, doğruluk ve kaynak ilerlemesi.'
+        }
+        actions={headerActions}
       />
-      {showReportCard ? (
-        <StudentReportCardModal student={selectedStudent} onClose={() => setShowReportCard(false)} />
+
+      {lastActivity ? (
+        <p className="-mt-2 flex items-center gap-1.5 text-sm text-panel-text-muted">
+          <Clock size={14} className="shrink-0" aria-hidden="true" />
+          Son işlem zamanı:{' '}
+          <span className="font-semibold text-panel-text">{LAST_ACTIVITY_FMT.format(lastActivity)}</span>
+        </p>
       ) : null}
-    </>
+
+      {analysis ? (
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <SummaryMetric
+            icon={BookOpen}
+            iconClassName="bg-panel-blue-soft text-panel-blue"
+            title="Ders Sayısı"
+            value={formatNumber(analysis.summary.count)}
+            description={`${formatNumber(analysis.summary.activeCount)} derste aktif çözüm var`}
+          />
+          <SummaryMetric
+            icon={Target}
+            iconClassName={cn('bg-panel-blue-soft', RATE_TONES[toneFor(analysis.summary.overallAccuracy)].text)}
+            valueClassName={
+              Number.isFinite(analysis.summary.overallAccuracy)
+                ? RATE_TONES[toneFor(analysis.summary.overallAccuracy)].text
+                : undefined
+            }
+            title="Genel Başarı Ortalaması"
+            value={pct(analysis.summary.overallAccuracy)}
+            description={
+              analysis.summary.activeCount
+                ? `${analysis.summary.activeCount} ders · %${Math.round(analysis.summary.minAccuracy)}–%${Math.round(
+                    analysis.summary.maxAccuracy,
+                  )} arası`
+                : 'Henüz çözüm yok'
+            }
+          />
+        </div>
+      ) : null}
+
+      {overviewError ? (
+        <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{overviewError}</div>
+      ) : !analysis ? (
+        <LoadingState label="Gelişim verileri yükleniyor..." />
+      ) : analysis.entities.length === 0 ? (
+        <EmptyState
+          icon={BookOpen}
+          title="Gösterilecek ders bulunamadı"
+          description={`${selectedStudent?.fullName || 'Bu öğrenci'} için henüz çözüm, görev veya kaynak kaydı yok.`}
+        />
+      ) : (
+        <AnalysisBody
+          analysis={analysis}
+          sortedEntities={sortedSubjects}
+          sortKey={sortKey}
+          onSortChange={setSortKey}
+          labels={PARENT_LABELS}
+          showLastActivity={false}
+          heatmapLayout="resource-rows"
+        />
+      )}
+    </div>
   )
 }

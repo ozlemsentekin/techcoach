@@ -5,12 +5,22 @@ export const GENDER_OPTIONS = [
 
 export const GRADE_OPTIONS = ['1', '2', '3', '4', '5', '6', '7', '8']
 
+// "Detay" profil düzenleme modalının adımları (okul ders saatleri dahil).
 export const WIZARD_STEPS = [
   { key: 1, label: 'Temel Bilgiler' },
   { key: 2, label: 'Okul Bilgileri' },
   { key: 3, label: 'Okul Ders Saatleri' },
   { key: 4, label: 'Dersler' },
   { key: 5, label: 'Panel ve Hobiler' },
+]
+
+// "Çocuk Ekle" sihirbazının adımları. Okul ders saatleri (program okul + sınıf bilgisinden
+// otomatik türetilir), ders seçimi (sınıfa göre otomatik atanır) ve panel/hobi adımları yok;
+// bunlar sonradan "Detay" ekranından düzenlenir. Kaynak seçimi opsiyoneldir.
+export const ADD_STUDENT_WIZARD_STEPS = [
+  { key: 1, label: 'Temel Bilgiler' },
+  { key: 2, label: 'Okul Bilgileri' },
+  { key: 3, label: 'Kaynak Seçimi' },
 ]
 
 // Bir sınıf seviyesindeki öğrencilerin tipik doğum yılı, o sınıfa göre ± 1 yıllık bir

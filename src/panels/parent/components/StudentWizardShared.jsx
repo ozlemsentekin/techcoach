@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Calendar, Check } from 'lucide-react'
 
 export function FieldIcon({ icon }) {
@@ -11,37 +12,47 @@ export function FieldIcon({ icon }) {
   )
 }
 
-// Doğum tarihi alanı: boşken kutunun içinde "Doğum Tarihi" etiketi görünür (native
-// "gg.aa.yyyy" metni şeffaflaştırılır); tıklanınca takvim açılır. min/max/name gibi
-// ek nitelikler `rest` ile geçirilir.
-export function BirthDateField({ value, onChange, disabled = false, className, ...rest }) {
+// Doğum tarihi alanı: boşken normal metin girişi gibi görünür ve "Doğum Tarihi"
+// placeholder'ı gösterir; odaklanınca veya değer varken native tarih girişine
+// (takvim + gg.aa.yyyy) döner. Böylece boş haldeyken tarayıcının "aa/gg/yyyy"
+// segment metni görünmez. min/max/name gibi ek nitelikler `rest` ile geçirilir.
+export function BirthDateField({ value, onChange, disabled = false, required = false, className, ...rest }) {
+  const [focused, setFocused] = useState(false)
   const hasValue = Boolean(value)
+  const asDate = hasValue || focused
+
   return (
     <div className="relative">
       <FieldIcon icon={Calendar} />
       <input
-        type="date"
+        type={asDate ? 'date' : 'text'}
         value={value || ''}
         onChange={onChange}
+        onFocus={(event) => {
+          setFocused(true)
+          if (typeof event.target.showPicker === 'function') {
+            try {
+              event.target.showPicker()
+            } catch {
+              /* showPicker bazı tarayıcılarda kullanıcı hareketi ister; sessiz geç */
+            }
+          }
+        }}
+        onBlur={() => setFocused(false)}
         disabled={disabled}
+        placeholder={required ? 'Doğum Tarihi *' : 'Doğum Tarihi'}
         aria-label="Doğum Tarihi"
         className={[
           'w-full rounded-xl border p-2 pl-9 text-base focus:border-panel-blue focus:outline-none',
           disabled
             ? 'cursor-not-allowed border-panel-border bg-[#f4f5f6] text-panel-text-muted'
             : 'border-panel-border text-panel-text',
-          hasValue ? '' : 'text-transparent',
           className || '',
         ]
           .filter(Boolean)
           .join(' ')}
         {...rest}
       />
-      {hasValue ? null : (
-        <span className="pointer-events-none absolute left-9 top-1/2 -translate-y-1/2 text-base text-panel-text-muted">
-          Doğum Tarihi
-        </span>
-      )}
     </div>
   )
 }

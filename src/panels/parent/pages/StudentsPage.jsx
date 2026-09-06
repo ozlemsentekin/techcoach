@@ -1,14 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
   BookOpen,
   GraduationCap,
-  Palette,
   Phone,
   Plus,
   School,
-  Trophy,
   TrendingUp,
   UserRound,
   Users,
@@ -18,20 +16,17 @@ import { authRequest, cachedGet, invalidateCache } from '../../../services/authC
 import { useAuth } from '../../../context/useAuth'
 import { readJSON, writeJSON } from '../../../services/storage'
 import { useParentStudentsGate } from '../useParentStudentsGate'
-import { THEMES } from '../../../theme/themes'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import Button from '../../ui/Button'
 import StudentTeacherModal from '../components/StudentTeacherModal'
-import StudentProfileModal, { InterestPicker } from '../components/StudentProfileModal'
+import StudentProfileModal from '../components/StudentProfileModal'
 import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
+import StudentResourcePicker from '../components/StudentResourcePicker'
 import SchoolPicker from '../components/SchoolPicker'
-import SchoolScheduleEditor from '../components/SchoolScheduleEditor'
-import SubjectPicker from '../components/SubjectPicker'
 import ResourceImageField from '../components/ResourceImageField'
-import { COMMON_ARTS, COMMON_SPORTS } from '../components/studentInterestCatalog'
 import { BirthDateField, FieldIcon, WizardSteps } from '../components/StudentWizardShared'
-import { GENDER_OPTIONS, GRADE_OPTIONS, WIZARD_STEPS, getGradeBirthYearRange } from '../components/studentWizardConstants'
+import { ADD_STUDENT_WIZARD_STEPS, GENDER_OPTIONS, GRADE_OPTIONS, getGradeBirthYearRange } from '../components/studentWizardConstants'
 import ChildSeatPurchaseModal from '../components/ChildSeatPurchaseModal'
 import ParentWelcome from '../components/ParentWelcome'
 import ParentWelcomeModal from '../components/ParentWelcomeModal'
@@ -88,21 +83,12 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
   const [provinceId, setProvinceId] = useState(null)
   const [districtId, setDistrictId] = useState(null)
   const [school, setSchool] = useState(null)
-  const [themeId, setThemeId] = useState('')
-  const [supportedTeam, setSupportedTeam] = useState('')
-  const [interestedSports, setInterestedSports] = useState([])
-  const [interestedArts, setInterestedArts] = useState([])
-  const [schoolSchedule, setSchoolSchedule] = useState([])
-  const [scheduleLoaded, setScheduleLoaded] = useState(false)
-  const [subjectIds, setSubjectIds] = useState([])
-  const [allSubjects, setAllSubjects] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    authRequest('/api/panel/subjects', { method: 'GET' })
-      .then((data) => setAllSubjects(data.subjects))
-      .catch(() => setAllSubjects([]))
+  // Kaynak Seçimi adımı kaydını StudentResourcePicker üstlenir; buradan çağırırız.
+  const resourcePickerRef = useRef(null)
+  const handleResourcePickerReady = useCallback((api) => {
+    resourcePickerRef.current = api
   }, [])
 
   const handleChange = (event) => {
@@ -179,6 +165,9 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
     }
   }
 
+  // Sihirbaz yalnızca temel + okul bilgisini kaydeder. Dersler (sınıfa göre otomatik), panel
+  // teması (cinsiyete göre otomatik) ve hobiler "Detay" ekranından yönetilir — bu yüzden burada
+  // gönderilmez (backend gönderilmeyen alanları korur).
   const saveProfile = () =>
     authRequest(`/api/parent/students/${studentId}/profile`, {
       method: 'PUT',
@@ -190,12 +179,6 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
         grade: form.grade,
         phone: form.phone.trim(),
         photoUrl: photoUrl || null,
-        supportedTeam: supportedTeam.trim() || null,
-        interestedSports,
-        interestedArts,
-        schoolSchedule,
-        subjectIds,
-        ...(themeId ? { themeId } : {}),
       }),
     }).then((result) => {
       invalidateCache('/api/parent/students')
@@ -224,36 +207,15 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
     setStep(3)
   }
 
-  // 3. adıma (Okul Ders Saatleri) ilk girişte, aynı okul+sınıf için admin tarafında tanımlı
-  // bir ders programı şablonu varsa onu öneri olarak getirip ön dolgu yapar; veli düzenleyip
-  // kaydedebilir veya tamamen atlayabilir.
-  useEffect(() => {
-    if (step !== 3 || scheduleLoaded || !studentId) return
-    let ignore = false
-
-    authRequest(`/api/parent/students/${studentId}/profile`, { method: 'GET' })
-      .then((data) => {
-        if (ignore) return
-        const loaded = data.profile
-        const initial = loaded?.schoolSchedule?.length ? loaded.schoolSchedule : loaded?.suggestedSchoolSchedule || []
-        setSchoolSchedule(initial)
-        setSubjectIds(loaded?.subjectIds || [])
-        setScheduleLoaded(true)
-      })
-      .catch(() => {
-        if (!ignore) setScheduleLoaded(true)
-      })
-
-    return () => {
-      ignore = true
-    }
-  }, [step, scheduleLoaded, studentId])
-
-  const handleSaveSchedule = async () => {
+  // Kaynak Seçimi adımı: seçilen kaynakları StudentResourcePicker kendi PUT'u ile atar.
+  const handleSaveResources = async () => {
     setError('')
     setLoading(true)
     try {
-      await saveProfile()
+      if (resourcePickerRef.current?.save) {
+        await resourcePickerRef.current.save()
+        invalidateCache('/api/parent/students')
+      }
       setStep(4)
     } catch (err) {
       setError(err.message)
@@ -262,40 +224,9 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
     }
   }
 
-  const handleSkipSchedule = () => {
+  const handleSkipResources = () => {
     setError('')
     setStep(4)
-  }
-
-  const handleSaveSubjects = async () => {
-    setError('')
-    setLoading(true)
-    try {
-      await saveProfile()
-      setStep(5)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleSkipSubjects = () => {
-    setError('')
-    setStep(5)
-  }
-
-  const handleFinish = async () => {
-    setError('')
-    setLoading(true)
-    try {
-      await saveProfile()
-      setStep(6)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
   }
 
   const handleAssignResourcesNow = () => {
@@ -303,7 +234,6 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
     if (createdStudent && onAssignResources) onAssignResources(createdStudent)
   }
 
-  const defaultThemeLabel = form.gender === 'kiz' ? 'Mor Tema' : form.gender === 'erkek' ? 'Mavi Tema' : 'cinsiyete göre'
   const gradeBirthYearRange = getGradeBirthYearRange(form.grade)
 
   return (
@@ -311,13 +241,13 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
       <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden bg-white shadow-panel-2 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
         <div className="flex items-center justify-between gap-4 px-4 pb-3 pt-3 sm:px-6 sm:pb-3.5 sm:pt-4">
           <h2 className="text-lg font-semibold text-panel-text">
-            {step === 6 ? 'Profil hazır' : 'Çocuk Ekle'}
+            {step === 4 ? 'Profil hazır' : 'Çocuk Ekle'}
           </h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
             <X size={20} />
           </button>
         </div>
-        {step !== 6 ? <WizardSteps step={step} steps={WIZARD_STEPS} /> : null}
+        {step !== 4 ? <WizardSteps step={step} steps={ADD_STUDENT_WIZARD_STEPS} /> : null}
 
         <div className="min-h-0 flex-1 overflow-y-auto border-t border-[#edf0f1] px-4 py-4 sm:min-h-[460px] sm:px-6 sm:py-5">
           {error ? (
@@ -338,7 +268,7 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
                       name="firstName"
                       value={form.firstName}
                       onChange={handleChange}
-                      placeholder="Ad"
+                      placeholder="Ad *"
                       aria-label="Ad"
                       className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
                     />
@@ -350,7 +280,7 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
                       name="lastName"
                       value={form.lastName}
                       onChange={handleChange}
-                      placeholder="Soyad"
+                      placeholder="Soyad *"
                       aria-label="Soyad"
                       className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
                     />
@@ -365,7 +295,7 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
                       aria-label="Sınıf"
                       className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
                     >
-                      <option value="">Sınıf Seçin</option>
+                      <option value="">Sınıf Seçin *</option>
                       {GRADE_OPTIONS.map((option) => (
                         <option key={option} value={option}>
                           {option}. Sınıf
@@ -377,6 +307,7 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
                   <div className="flex flex-col gap-1">
                     <BirthDateField
                       name="birthDate"
+                      required
                       value={form.birthDate}
                       onChange={handleChange}
                       min={gradeBirthYearRange ? `${gradeBirthYearRange.min}-01-01` : undefined}
@@ -398,7 +329,7 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
                       aria-label="Cinsiyet"
                       className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
                     >
-                      <option value="">Cinsiyet Seçin</option>
+                      <option value="">Cinsiyet Seçin *</option>
                       {GENDER_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
@@ -413,7 +344,7 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
                       name="phone"
                       value={form.phone}
                       onChange={handleChange}
-                      placeholder="Telefon (Örn. 05XX XXX XX XX)"
+                      placeholder="Telefon (Örn. 05XX XXX XX XX) *"
                       aria-label="Telefon"
                       className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
                     />
@@ -456,91 +387,17 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
             </div>
           ) : null}
 
-          {step === 3 ? (
+          {step === 3 && studentId ? (
             <div className="flex flex-col gap-3">
-              {school?.id && form.grade ? (
-                <p className="rounded-xl bg-panel-blue-soft/50 px-3 py-2.5 text-sm text-panel-text">
-                  Okul ders saatleri, seçtiğiniz okul ve sınıf bilgisinden otomatik alınır ve haftalık planda "Okulda"
-                  olarak görünür. Bu adımı geçebilirsiniz.
-                </p>
-              ) : (
-                <>
-                  <p className="text-sm text-panel-text-muted">
-                    Okul sistemde tanımlı değilse çocuğunuzun okul ders saatlerini elle girin (hafta sonu kurs programı
-                    varsa cumartesi/pazar da eklenebilir). Bu saatler haftalık planda "Okulda" olarak görünür ve bu
-                    saatlere ödev eklenemez. Şu an bilmiyorsanız bu adımı atlayabilirsiniz.
-                  </p>
-                  <SchoolScheduleEditor entries={schoolSchedule} onChange={setSchoolSchedule} />
-                </>
-              )}
+              <p className="text-sm text-panel-text-muted">
+                Çocuğunuzun kullandığı kaynak kitapları kütüphaneden seçin. Bu adım zorunlu değildir —
+                daha sonra "Kitaplık" menüsünden de kaynak ekleyebilirsiniz.
+              </p>
+              <StudentResourcePicker studentId={studentId} onReady={handleResourcePickerReady} />
             </div>
           ) : null}
 
           {step === 4 ? (
-            <div className="flex flex-col gap-3">
-              <p className="text-sm text-panel-text-muted">
-                Soldaki listeden çocuğunuzun okulda aldığı dersleri seçin, sağdaki listeye eklensin. Şu an
-                bilmiyorsanız bu adımı atlayıp daha sonra "Detay" ekranından ekleyebilirsiniz.
-              </p>
-              <SubjectPicker allSubjects={allSubjects} selectedIds={subjectIds} onChange={setSubjectIds} />
-            </div>
-          ) : null}
-
-          {step === 5 ? (
-            <div className="flex flex-col gap-4">
-              <p className="text-sm text-panel-text-muted">
-                Bu adımdaki bilgiler zorunlu değildir, istediğiniz zaman "Detay" ekranından güncelleyebilirsiniz.
-              </p>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium text-panel-text-muted">Panel Stili</span>
-                <div className="relative">
-                  <FieldIcon icon={Palette} />
-                  <select
-                    value={themeId}
-                    onChange={(event) => setThemeId(event.target.value)}
-                    className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
-                  >
-                    <option value="">Otomatik ({defaultThemeLabel})</option>
-                    {THEMES.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium text-panel-text-muted">Tuttuğu Takım (opsiyonel)</span>
-                <div className="relative">
-                  <FieldIcon icon={Trophy} />
-                  <input
-                    value={supportedTeam}
-                    onChange={(event) => setSupportedTeam(event.target.value)}
-                    placeholder="Örn. Galatasaray"
-                    className="w-full rounded-xl border border-panel-border p-2 pl-9 text-base text-panel-text"
-                  />
-                </div>
-              </label>
-
-              <InterestPicker
-                label="Spor İlgi Alanları (opsiyonel)"
-                catalog={COMMON_SPORTS}
-                selected={interestedSports}
-                onChange={setInterestedSports}
-              />
-
-              <InterestPicker
-                label="Sanat İlgi Alanları (opsiyonel)"
-                catalog={COMMON_ARTS}
-                selected={interestedArts}
-                onChange={setInterestedArts}
-              />
-            </div>
-          ) : null}
-
-          {step === 6 ? (
             <div className="flex flex-col items-center gap-4 py-6 text-center">
               <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-panel-sage-soft text-panel-sage">
                 <GraduationCap size={30} aria-hidden="true" />
@@ -550,8 +407,8 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
                   {(createdStudent?.fullName || form.firstName || 'Çocuğunuz').trim().split(/\s+/)[0]} için profil hazır
                 </h3>
                 <p className="mx-auto mt-1.5 max-w-sm text-sm leading-6 text-panel-text-muted">
-                  Sırada kaynak atamak ve haftalık planı kurmak var. “Bugün” ekranındaki
-                  başlangıç rehberi kalan adımlarda size yol gösterecek.
+                  Sırada haftalık planı kurmak var. “Bugün” ekranındaki başlangıç rehberi
+                  kalan adımlarda size yol gösterecek.
                 </p>
               </div>
               <div className="mt-1 flex w-full max-w-sm flex-col gap-2">
@@ -604,44 +461,16 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
               <Button type="button" variant="secondary" size="md" onClick={() => setStep(2)} disabled={loading}>
                 Geri
               </Button>
-              <Button type="button" variant="secondary" size="md" onClick={handleSkipSchedule} disabled={loading}>
-                Atla
-              </Button>
-              <Button type="button" size="md" onClick={handleSaveSchedule} disabled={loading}>
-                {loading ? 'Kaydediliyor...' : 'Kaydet ve Devam Et'}
-              </Button>
-            </>
-          ) : null}
-
-          {step === 4 ? (
-            <>
-              <Button type="button" variant="secondary" size="md" onClick={() => setStep(3)} disabled={loading}>
-                Geri
-              </Button>
-              <Button type="button" variant="secondary" size="md" onClick={handleSkipSubjects} disabled={loading}>
-                Atla
-              </Button>
-              <Button type="button" size="md" onClick={handleSaveSubjects} disabled={loading}>
-                {loading ? 'Kaydediliyor...' : 'Kaydet ve Devam Et'}
-              </Button>
-            </>
-          ) : null}
-
-          {step === 5 ? (
-            <>
-              <Button type="button" variant="secondary" size="md" onClick={() => setStep(4)} disabled={loading}>
-                Geri
-              </Button>
-              <Button type="button" variant="secondary" size="md" onClick={() => setStep(6)} disabled={loading}>
+              <Button type="button" variant="secondary" size="md" onClick={handleSkipResources} disabled={loading}>
                 Atla ve Bitir
               </Button>
-              <Button type="button" size="md" onClick={handleFinish} disabled={loading}>
+              <Button type="button" size="md" onClick={handleSaveResources} disabled={loading}>
                 {loading ? 'Kaydediliyor...' : 'Kaydet ve Bitir'}
               </Button>
             </>
           ) : null}
 
-          {step === 6 ? (
+          {step === 4 ? (
             <Button type="button" variant="secondary" size="md" onClick={onClose}>
               Panele git
             </Button>
@@ -709,16 +538,6 @@ function StudentCard({ student, onOpenLibrary, onOpenProfile, onOpenTeachers }) 
         >
           <AlertCircle size={16} className="shrink-0" aria-hidden="true" />
           Hata Defteri
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => navigate(`/parent/progress?studentId=${student.id}`)}
-          className="h-auto w-full justify-start gap-2.5 px-3 py-2"
-        >
-          <TrendingUp size={16} className="shrink-0" aria-hidden="true" />
-          Gelişim Analizi
         </Button>
         <Button
           type="button"

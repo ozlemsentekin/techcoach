@@ -1,5 +1,5 @@
 const { app } = require('@azure/functions')
-const { changePasswordHandler, loginHandler, logoutHandler, meHandler, registerHandler, acceptConsentHandler } = require('./auth')
+const { changePasswordHandler, loginHandler, logoutHandler, meHandler, registerHandler, acceptConsentHandler, validateCouponHandler } = require('./auth')
 const {
   listUsersHandler,
   updateUserHandler,
@@ -230,6 +230,13 @@ app.http('auth-subjects', {
   methods: ['GET'],
   route: 'auth/subjects',
   handler: listSubjectsForRegistrationHandler,
+})
+
+app.http('auth-validate-coupon', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'auth/validate-coupon',
+  handler: validateCouponHandler,
 })
 
 app.http('auth-login', {

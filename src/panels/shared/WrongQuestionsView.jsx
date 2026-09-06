@@ -501,6 +501,7 @@ export default function WrongQuestionsView({
   title = 'Hata Defterim',
   subtitle = 'Fotoğrafını çektiğin yanlış sorular ders ders burada.',
   headerActions,
+  backSlot = null,
   hideHeaderWhenUnselected = false,
 }) {
   const [wrongQuestions, setWrongQuestions] = useState(null)
@@ -672,6 +673,7 @@ export default function WrongQuestionsView({
 
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
+      {backSlot && !activeSource && !effectiveSelectedSubject ? <div>{backSlot}</div> : null}
       {activeSource ? (
         <PageHeader
           title={activeSource.bookName || 'Kaynak belirtilmemiş'}

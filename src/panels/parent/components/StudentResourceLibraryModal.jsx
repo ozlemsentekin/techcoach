@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Plus, Trash2, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, ArrowRight, FilePlus2, Plus, Trash2, X } from 'lucide-react'
 import Badge from '../../ui/Badge'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
@@ -7,6 +8,7 @@ import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import { ImagePreviewLightbox, ResourceBookAvatar, ResourceBookRates } from '../../shared/ResourceBookCard'
 import { authRequest } from '../../../services/authClient'
 import StudentResourceAssignModal from './StudentResourceAssignModal'
+import BookAdditionRequestModal from '../../shared/requests/BookAdditionRequestModal'
 import ResourceSolveList from '../../shared/bookshelf/ResourceSolveList'
 
 function groupResourceBooksBySubject(resourceBooks) {
@@ -28,6 +30,7 @@ function groupResourceBooksBySubject(resourceBooks) {
 }
 
 export default function StudentResourceLibraryModal({ student, onClose }) {
+  const navigate = useNavigate()
   const [resourceBooks, setResourceBooks] = useState(null)
   const [error, setError] = useState('')
   const [activeSubjectId, setActiveSubjectId] = useState(null)
@@ -36,7 +39,13 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
   const [removeError, setRemoveError] = useState('')
   const [removing, setRemoving] = useState(false)
   const [showAssignModal, setShowAssignModal] = useState(false)
+  const [showRequestModal, setShowRequestModal] = useState(false)
   const [previewImage, setPreviewImage] = useState(null)
+
+  const goToBookshelf = () => {
+    onClose()
+    navigate('/parent/bookshelf')
+  }
 
   useEffect(() => {
     let ignore = false
@@ -214,6 +223,34 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
             </div>
           )}
         </div>
+
+        {!selectedBook ? (
+          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-dashed border-panel-border bg-panel-surface-soft p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
+                <FilePlus2 size={18} aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-panel-text">Aradığınız kitap listede yok mu?</p>
+                <p className="text-xs leading-5 text-panel-text-muted">
+                  Elinizdeki kitabın kapak, içindekiler ve cevap anahtarı fotoğraflarını yükleyin;
+                  ekibimiz kütüphaneye eklesin. Dilerseniz Kitaplık'tan kendi özel kaynağınızı da
+                  oluşturabilirsiniz.
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+              <Button type="button" size="sm" variant="secondary" className="gap-1.5" onClick={goToBookshelf}>
+                Kitaplığa Git
+                <ArrowRight size={15} aria-hidden="true" />
+              </Button>
+              <Button type="button" size="sm" className="gap-1.5" onClick={() => setShowRequestModal(true)}>
+                <FilePlus2 size={15} aria-hidden="true" />
+                Kitap Ekleme Talebi
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {removingBook ? (
@@ -242,6 +279,17 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
             setShowAssignModal(false)
           }}
           onClose={() => setShowAssignModal(false)}
+        />
+      ) : null}
+
+      {showRequestModal ? (
+        <BookAdditionRequestModal
+          onClose={() => setShowRequestModal(false)}
+          onGoToRequests={() => {
+            setShowRequestModal(false)
+            onClose()
+            navigate('/parent/requests')
+          }}
         />
       ) : null}
 

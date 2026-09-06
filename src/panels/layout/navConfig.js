@@ -35,6 +35,7 @@ export function getParentPrimaryNav(hasStudents, canManageLibrary = false) {
   return [
     { to: '/parent/dashboard', label: 'Bugün', icon: 'Home' },
     { to: '/parent/weekly-plan', label: 'Haftalık Plan', icon: 'CalendarRange' },
+    { to: '/parent/progress', label: 'Gelişim Analizi', icon: 'BarChart3' },
     canManageLibrary ? KUTUPHANE_PARENT_ITEM : KITAPLIK_PARENT_ITEM,
   ]
 }

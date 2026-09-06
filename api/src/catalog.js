@@ -8,11 +8,45 @@ const { gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGradin
 const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
 const { sanitizeWrongQuestion } = require('./progress')
 
+const SUBJECT_GRADES = new Set(['1', '2', '3', '4', '5', '6', '7', '8'])
+
+function parseSubjectGradesJson(value) {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value)
+    if (!Array.isArray(parsed)) return null
+    const grades = parsed.map(String).filter((grade) => SUBJECT_GRADES.has(grade))
+    return grades.length ? Array.from(new Set(grades)) : null
+  } catch {
+    return null
+  }
+}
+
+// Payload'dan gelen `grades` dizisini doğrular. undefined/null → { value: undefined } (koru),
+// [] → { value: null } (tüm sınıflar), geçerli liste → { value: sıralı benzersiz liste }.
+function normalizeSubjectGrades(value) {
+  if (value === undefined || value === null) return { value: undefined }
+  if (!Array.isArray(value)) return { error: 'Sınıf listesi geçersiz.' }
+  const grades = []
+  const seen = new Set()
+  for (const raw of value) {
+    const grade = String(raw)
+    if (!SUBJECT_GRADES.has(grade)) return { error: 'Sınıf listesi geçersiz.' }
+    if (!seen.has(grade)) {
+      seen.add(grade)
+      grades.push(grade)
+    }
+  }
+  grades.sort((a, b) => Number(a) - Number(b))
+  return { value: grades.length ? grades : null }
+}
+
 function sanitizeSubject(record) {
   return {
     id: record.id,
     name: record.name,
     isActive: record.is_active === undefined || record.is_active === null ? true : Boolean(record.is_active),
+    grades: record.grades_json === undefined ? undefined : parseSubjectGradesJson(record.grades_json),
     createdAt: record.created_at,
   }
 }
@@ -171,7 +205,7 @@ async function listSubjectsHandler(request) {
     const requestDb = await withRequest({})
     // Admin ekranı pasif dersleri de görür (tekrar aktife alabilmek için).
     const result = await requestDb.query(`
-      SELECT id, name, is_active, created_at FROM dbo.Subjects ORDER BY name ASC;
+      SELECT id, name, is_active, grades_json, created_at FROM dbo.Subjects ORDER BY name ASC;
     `)
 
     return json(200, { subjects: result.recordset.map(sanitizeSubject) })
@@ -200,17 +234,34 @@ async function updateSubjectHandler(request) {
 
     const subjectId = request.params.subjectId
     const payload = await request.json().catch(() => null)
-    if (typeof payload?.isActive !== 'boolean') {
-      return json(400, { error: 'isActive alanı zorunlu.' })
+    const hasIsActive = typeof payload?.isActive === 'boolean'
+    const gradesResult = normalizeSubjectGrades(payload?.grades)
+    if (gradesResult.error) {
+      return json(400, { error: gradesResult.error })
+    }
+    const hasGrades = gradesResult.value !== undefined
+    if (!hasIsActive && !hasGrades) {
+      return json(400, { error: 'isActive veya grades alanı zorunlu.' })
     }
 
-    const requestDb = await withRequest({
-      id: { type: sql.UniqueIdentifier, value: subjectId },
-      isActive: { type: sql.Bit, value: payload.isActive },
-    })
+    const setClauses = []
+    const inputs = { id: { type: sql.UniqueIdentifier, value: subjectId } }
+    if (hasIsActive) {
+      setClauses.push('is_active = @isActive')
+      inputs.isActive = { type: sql.Bit, value: payload.isActive }
+    }
+    if (hasGrades) {
+      setClauses.push('grades_json = @gradesJson')
+      inputs.gradesJson = {
+        type: sql.NVarChar(200),
+        value: gradesResult.value ? JSON.stringify(gradesResult.value) : null,
+      }
+    }
+
+    const requestDb = await withRequest(inputs)
     const result = await requestDb.query(`
-      UPDATE dbo.Subjects SET is_active = @isActive
-      OUTPUT inserted.id, inserted.name, inserted.is_active, inserted.created_at
+      UPDATE dbo.Subjects SET ${setClauses.join(', ')}
+      OUTPUT inserted.id, inserted.name, inserted.is_active, inserted.grades_json, inserted.created_at
       WHERE id = @id;
     `)
 
@@ -281,7 +332,7 @@ async function listSubjectsForPanelHandler(request) {
 
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
-      SELECT id, name, is_active, created_at FROM dbo.Subjects WHERE is_active = 1 ORDER BY name ASC;
+      SELECT id, name, is_active, grades_json, created_at FROM dbo.Subjects WHERE is_active = 1 ORDER BY name ASC;
     `)
 
     return json(200, { subjects: result.recordset.map(sanitizeSubject) })

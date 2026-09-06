@@ -29,14 +29,51 @@ function groupResourceBooksBySubject(resourceBooks) {
   return Array.from(groups.values())
 }
 
-function ResourceAvatar({ book }) {
+function groupResourceBooksByPublisher(resourceBooks) {
+  const groups = new Map()
+
+  resourceBooks.forEach((book) => {
+    const name = book.publisherName || 'Yayın evi belirtilmemiş'
+    const key = book.publisherName || 'no-publisher'
+    if (!groups.has(key)) {
+      groups.set(key, { id: key, name, books: [] })
+    }
+    groups.get(key).books.push(book)
+  })
+
+  return Array.from(groups.values()).sort((a, b) => {
+    if (a.id === 'no-publisher') return 1
+    if (b.id === 'no-publisher') return -1
+    return a.name.localeCompare(b.name, 'tr-TR')
+  })
+}
+
+function ResourceAvatar({ book, onPreview }) {
   if (book.imageUrl) {
     return (
-      <img loading="lazy" decoding="async"
-        src={book.imageUrl}
-        alt={`${book.name} görseli`}
-        className="h-14 w-14 shrink-0 rounded-xl border border-panel-border object-cover"
-      />
+      <span
+        role="button"
+        tabIndex={0}
+        aria-label={`${book.name} kapağını büyüt`}
+        onClick={(event) => {
+          event.stopPropagation()
+          onPreview(book)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            event.stopPropagation()
+            onPreview(book)
+          }
+        }}
+        className="shrink-0"
+      >
+        <img loading="lazy" decoding="async"
+          src={book.imageUrl}
+          alt={`${book.name} görseli`}
+          className="h-14 w-14 rounded-xl border border-panel-border object-cover transition-transform hover:scale-105"
+        />
+      </span>
     )
   }
 
@@ -47,6 +84,35 @@ function ResourceAvatar({ book }) {
   )
 }
 
+function ResourceCoverPreview({ book, onClose }) {
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${book.name} kapağı`}
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        aria-label="Kapat"
+        onClick={onClose}
+        className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+      >
+        <X size={22} />
+      </button>
+      <div className="flex max-h-full flex-col items-center gap-3" onClick={(event) => event.stopPropagation()}>
+        <img
+          src={book.imageUrl}
+          alt={`${book.name} görseli`}
+          className="max-h-[80vh] w-auto max-w-full rounded-2xl border border-white/20 object-contain shadow-2xl"
+        />
+        <p className="text-center text-sm font-semibold text-white">{book.name}</p>
+      </div>
+    </div>
+  )
+}
+
 export default function StudentResourceAssignModal({ student, onSaved, onClose }) {
   const [resourceBooks, setResourceBooks] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
@@ -54,6 +120,7 @@ export default function StudentResourceAssignModal({ student, onSaved, onClose }
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [previewBook, setPreviewBook] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -123,6 +190,7 @@ export default function StudentResourceAssignModal({ student, onSaved, onClose }
   }
 
   return (
+    <>
     <div className="fixed inset-0 z-[60] flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
       <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-[88vh] sm:max-h-[92vh] sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-start justify-between gap-3">
@@ -190,43 +258,54 @@ export default function StudentResourceAssignModal({ student, onSaved, onClose }
           ) : subjectGroups.length === 0 ? (
             <p className="p-2 text-sm text-panel-text-muted">Aramayla eşleşen kaynak yok.</p>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {(activeSubject?.books || []).map((book) => {
-                const selected = selectedIds.has(book.id)
-                return (
-                  <button
-                    key={book.id}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => toggleResource(book.id)}
-                    className={`flex min-h-[118px] items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
-                      selected
-                        ? 'border-[#1c2b5e] bg-[#f8f7fb] shadow-[0_2px_10px_rgba(101,94,148,0.12)]'
-                        : 'border-panel-border bg-white hover:border-[#c1c8e0] hover:bg-[#f7f8fc]'
-                    }`}
-                  >
-                    <ResourceAvatar book={book} />
-                    <span className="flex min-w-0 flex-1 flex-col gap-1">
-                      <span className="flex items-start justify-between gap-2">
-                        <span className="line-clamp-2 text-sm font-bold leading-snug text-panel-text">{book.name}</span>
-                        <span
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
-                            selected ? 'border-[#1c2b5e] bg-[#1c2b5e] text-white' : 'border-panel-border bg-white'
+            <div className="flex flex-col gap-6">
+              {groupResourceBooksByPublisher(activeSubject?.books || []).map((publisher) => (
+                <section key={publisher.id} className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3 border-b border-panel-border pb-2">
+                    <h3 className="text-sm font-bold text-panel-text">{publisher.name}</h3>
+                    <span className="text-xs font-medium text-panel-text-muted">{publisher.books.length} kaynak</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {publisher.books.map((book) => {
+                      const selected = selectedIds.has(book.id)
+                      return (
+                        <button
+                          key={book.id}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => toggleResource(book.id)}
+                          className={`flex min-h-[118px] items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
+                            selected
+                              ? 'border-[#1c2b5e] bg-[#f8f7fb] shadow-[0_2px_10px_rgba(101,94,148,0.12)]'
+                              : 'border-panel-border bg-white hover:border-[#c1c8e0] hover:bg-[#f7f8fc]'
                           }`}
                         >
-                          {selected ? <Check size={13} aria-hidden="true" /> : null}
-                        </span>
-                      </span>
-                      <span className="truncate text-xs text-panel-text-muted">{book.publisherName || 'Yayın evi yok'}</span>
-                      <span className="flex flex-wrap items-center gap-1.5 pt-1">
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#1c2b5e]">
-                          {RESOURCE_BOOK_TYPE_LABELS[book.type] || book.type}
-                        </span>
-                      </span>
-                    </span>
-                  </button>
-                )
-              })}
+                          <ResourceAvatar book={book} onPreview={setPreviewBook} />
+                          <span className="flex min-w-0 flex-1 flex-col gap-1">
+                            <span className="flex items-start justify-between gap-2">
+                              <span className="line-clamp-2 text-sm font-bold leading-snug text-panel-text">{book.name}</span>
+                              <span
+                                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+                                  selected ? 'border-[#1c2b5e] bg-[#1c2b5e] text-white' : 'border-panel-border bg-white'
+                                }`}
+                              >
+                                {selected ? <Check size={13} aria-hidden="true" /> : null}
+                              </span>
+                            </span>
+                            <span className="truncate text-xs text-panel-text-muted">{book.publisherName || 'Yayın evi yok'}</span>
+                            <span className="flex flex-wrap items-center gap-1.5 pt-1">
+                              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#1c2b5e]">
+                                {RESOURCE_BOOK_TYPE_LABELS[book.type] || book.type}
+                              </span>
+                            </span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </section>
+              ))}
             </div>
           )}
         </div>
@@ -241,5 +320,9 @@ export default function StudentResourceAssignModal({ student, onSaved, onClose }
         </div>
       </div>
     </div>
+    {previewBook ? (
+      <ResourceCoverPreview book={previewBook} onClose={() => setPreviewBook(null)} />
+    ) : null}
+    </>
   )
 }

@@ -29,14 +29,32 @@ function groupResourceBooksBySubject(resourceBooks) {
   return Array.from(groups.values())
 }
 
-function ResourceAvatar({ book }) {
+function ResourceAvatar({ book, onPreview }) {
   if (book.imageUrl) {
     return (
-      <img loading="lazy" decoding="async"
-        src={book.imageUrl}
-        alt={`${book.name} görseli`}
-        className="h-14 w-14 shrink-0 rounded-xl border border-[#e5e8e9] object-cover"
-      />
+      <span
+        role="button"
+        tabIndex={0}
+        aria-label={`${book.name} kapağını büyüt`}
+        onClick={(event) => {
+          event.stopPropagation()
+          onPreview(book)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            event.stopPropagation()
+            onPreview(book)
+          }
+        }}
+        className="shrink-0"
+      >
+        <img loading="lazy" decoding="async"
+          src={book.imageUrl}
+          alt={`${book.name} görseli`}
+          className="h-14 w-14 rounded-xl border border-[#e5e8e9] object-cover transition-transform hover:scale-105"
+        />
+      </span>
     )
   }
 
@@ -47,12 +65,42 @@ function ResourceAvatar({ book }) {
   )
 }
 
+function ResourceCoverPreview({ book, onClose }) {
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${book.name} kapağı`}
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        aria-label="Kapat"
+        onClick={onClose}
+        className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+      >
+        <X size={22} />
+      </button>
+      <div className="flex max-h-full flex-col items-center gap-3" onClick={(event) => event.stopPropagation()}>
+        <img
+          src={book.imageUrl}
+          alt={`${book.name} görseli`}
+          className="max-h-[80vh] w-auto max-w-full rounded-2xl border border-white/20 object-contain shadow-2xl"
+        />
+        <p className="text-center text-sm font-semibold text-white">{book.name}</p>
+      </div>
+    </div>
+  )
+}
+
 export default function TeacherResourceBooksModal({ student, teacher, onSaved, onClose }) {
   const [resourceBooks, setResourceBooks] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [previewBook, setPreviewBook] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -109,6 +157,7 @@ export default function TeacherResourceBooksModal({ student, teacher, onSaved, o
   }
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
       <div className="flex h-full w-full max-w-5xl flex-col bg-white shadow-panel-2 sm:h-[88vh] sm:max-h-[92vh] sm:rounded-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-[#edf0f1] px-4 py-3 sm:px-5 sm:py-4">
@@ -181,7 +230,7 @@ export default function TeacherResourceBooksModal({ student, teacher, onSaved, o
                               : 'border-[#e5e8e9] bg-white hover:border-[#c1c8e0] hover:bg-[#f7f8fc]'
                           }`}
                         >
-                          <ResourceAvatar book={book} />
+                          <ResourceAvatar book={book} onPreview={setPreviewBook} />
                           <span className="flex min-w-0 flex-1 flex-col gap-1">
                             <span className="flex items-start justify-between gap-2">
                               <span className="line-clamp-2 text-sm font-bold leading-snug text-[#253d3e]">{book.name}</span>
@@ -220,5 +269,9 @@ export default function TeacherResourceBooksModal({ student, teacher, onSaved, o
         </div>
       </div>
     </div>
+    {previewBook ? (
+      <ResourceCoverPreview book={previewBook} onClose={() => setPreviewBook(null)} />
+    ) : null}
+    </>
   )
 }
