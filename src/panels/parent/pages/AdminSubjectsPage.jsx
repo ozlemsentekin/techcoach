@@ -232,7 +232,51 @@ function BookRow({ book, publishersById, onEditBook, onToggleActive, onPreviewIm
   )
 }
 
-function SubjectRow({ subject, books, publishersById, onToggleActive, onToggleSubjectActive, onEditBook, onAddBook, onPreviewImage }) {
+// grades: string[] | null | undefined  (null/undefined = tüm sınıflar).
+function SubjectGradesEditor({ grades, onChange }) {
+  const selected = grades && grades.length ? new Set(grades.map(String)) : new Set(GRADE_OPTIONS)
+  const allSelected = selected.size >= GRADE_OPTIONS.length
+
+  const toggle = (grade) => {
+    const next = new Set(selected)
+    if (next.has(grade)) next.delete(grade)
+    else next.add(grade)
+    // Hepsi seçili (veya hiçbiri) = "tüm sınıflar" → backend'e [] gönderilir.
+    onChange(next.size === 0 || next.size >= GRADE_OPTIONS.length ? [] : Array.from(next))
+  }
+
+  return (
+    <div className="border-t border-[#edf0f1] bg-[#fbfbfd] px-4 py-3">
+      <p className="mb-2 text-xs font-semibold text-[#1c2b5e]">
+        Hangi sınıflarda okutulur?{' '}
+        <span className="font-normal text-[#667475]">
+          {allSelected ? 'Tüm sınıflar (yeni çocuğa sınıfına göre otomatik atanır)' : 'Seçili sınıflara otomatik atanır'}
+        </span>
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {GRADE_OPTIONS.map((grade) => {
+          const on = selected.has(grade)
+          return (
+            <button
+              key={grade}
+              type="button"
+              onClick={() => toggle(grade)}
+              className={`h-8 min-w-[2.25rem] rounded-lg border px-2 text-sm font-semibold transition-colors ${
+                on
+                  ? 'border-[#1c2b5e] bg-[#1c2b5e] text-white'
+                  : 'border-[#dfe4e5] bg-white text-[#667475] hover:bg-[#f8f7fb]'
+              }`}
+            >
+              {grade}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function SubjectRow({ subject, books, publishersById, onToggleActive, onToggleSubjectActive, onSetGrades, onEditBook, onAddBook, onPreviewImage }) {
   const [expanded, setExpanded] = useState(false)
   const isActive = subject.isActive !== false
 
@@ -281,7 +325,9 @@ function SubjectRow({ subject, books, publishersById, onToggleActive, onToggleSu
         </div>
       </div>
       {expanded ? (
-        <div className="border-t border-[#edf0f1] bg-white">
+        <>
+          <SubjectGradesEditor grades={subject.grades} onChange={(grades) => onSetGrades(subject, grades)} />
+          <div className="border-t border-[#edf0f1] bg-white">
           {books.length === 0 ? (
             <p className="px-4 py-3 text-xs text-[#667475]">Bu derse ait kaynak yok.</p>
           ) : (
@@ -296,7 +342,8 @@ function SubjectRow({ subject, books, publishersById, onToggleActive, onToggleSu
               />
             ))
           )}
-        </div>
+          </div>
+        </>
       ) : null}
     </div>
   )
@@ -343,6 +390,20 @@ export default function AdminSubjectsPage() {
       const data = await authRequest(`/api/panel-admin/subjects/${subject.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ isActive: subject.isActive === false }),
+      })
+      setSubjects((current) =>
+        (current || []).map((item) => (item.id === data.subject.id ? data.subject : item)),
+      )
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleSetSubjectGrades = async (subject, grades) => {
+    try {
+      const data = await authRequest(`/api/panel-admin/subjects/${subject.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ grades }),
       })
       setSubjects((current) =>
         (current || []).map((item) => (item.id === data.subject.id ? data.subject : item)),
@@ -405,6 +466,7 @@ export default function AdminSubjectsPage() {
                   publishersById={publishersById}
                   onToggleActive={handleToggleActive}
                   onToggleSubjectActive={handleToggleSubjectActive}
+                  onSetGrades={handleSetSubjectGrades}
                   onEditBook={setEditingBook}
                   onAddBook={setAddBookSubject}
                   onPreviewImage={setPreviewImage}

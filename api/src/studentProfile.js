@@ -276,6 +276,9 @@ function validateProfilePayload(payload) {
     return { error: scheduleResult.error }
   }
 
+  // subjectIds gönderilmezse mevcut değer korunur (ör. çocuk oluşturulurken sınıfa göre
+  // atanan varsayılan dersler, sihirbazın sonraki adımlarında sessizce silinmemeli).
+  const subjectIdsProvided = Array.isArray(payload.subjectIds)
   const subjectIdsResult = normalizeSubjectIds(payload.subjectIds)
   if (subjectIdsResult.error) {
     return { error: subjectIdsResult.error }
@@ -295,6 +298,7 @@ function validateProfilePayload(payload) {
       interestedArts: artsResult.value,
       schoolSchedule: scheduleResult.value,
       subjectIds: subjectIdsResult.value,
+      subjectIdsProvided,
       themeId,
       themeIdProvided,
     },
@@ -382,6 +386,7 @@ async function updateStudentProfileHandler(request) {
       photoUrl: { type: sql.NVarChar(sql.MAX), value: profile.photoUrl },
       themeId: { type: sql.NVarChar(20), value: profile.themeId },
       themeIdProvided: { type: sql.Bit, value: profile.themeIdProvided },
+      subjectIdsProvided: { type: sql.Bit, value: profile.subjectIdsProvided },
       interestedSportsJson: {
         type: sql.NVarChar(sql.MAX),
         value: profile.interestedSports.length ? JSON.stringify(profile.interestedSports) : null,
@@ -425,7 +430,7 @@ async function updateStudentProfileHandler(request) {
         interested_sports_json = @interestedSportsJson,
         interested_arts_json = @interestedArtsJson,
         school_schedule_json = @schoolScheduleJson,
-        subject_ids_json = @subjectIdsJson
+        subject_ids_json = CASE WHEN @subjectIdsProvided = 1 THEN @subjectIdsJson ELSE target.subject_ids_json END
       WHEN NOT MATCHED THEN INSERT
         (student_id, province_id, district_id, school_id, birth_date, supported_team, grade, phone, photo_url, theme_id, interested_sports_json, interested_arts_json, school_schedule_json, subject_ids_json)
         VALUES (@studentId, @provinceId, @districtId, @schoolId, @birthDate, @supportedTeam, @grade, @phone, @photoUrl, @themeId, @interestedSportsJson, @interestedArtsJson, @schoolScheduleJson, @subjectIdsJson);

@@ -554,9 +554,36 @@ async function acceptConsentHandler(request) {
   }
 }
 
+// Kayıt formundaki kupon kodu alanı için canlı doğrulama. Şu an tek geçerli kod "DENEME";
+// büyük/küçük harf ve boşluk toleranslı eşleşir. Geçerliyse frontend "Uygulandı" gösterir ve
+// kanonik kodu (`code`) kayıt isteğinde kullanır.
+async function validateCouponHandler(request) {
+  try {
+    const payload = await request.json().catch(() => null)
+    const rawCode = String(payload?.code || '').trim()
+
+    if (!rawCode) {
+      return json(400, { valid: false, error: 'Kupon kodu girin.' })
+    }
+
+    if (rawCode.toUpperCase() === TRIAL_COUPON_CODE) {
+      return json(200, {
+        valid: true,
+        code: TRIAL_COUPON_CODE,
+        description: 'Ücretsiz deneme — ödeme adımı atlanır.',
+      })
+    }
+
+    return json(200, { valid: false, error: 'Kupon kodu geçersiz.' })
+  } catch (error) {
+    return createAuthServiceErrorResponse(error, 'validateCouponHandler failed')
+  }
+}
+
 module.exports = {
   changePasswordHandler,
   loginHandler,
+  validateCouponHandler,
   logoutHandler,
   meHandler,
   registerHandler,

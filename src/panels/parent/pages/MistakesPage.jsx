@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Users } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, Users } from 'lucide-react'
 import { cachedGet } from '../../../services/authClient'
+import Button from '../../ui/Button'
 import {
   getWrongQuestions,
   getWrongQuestionTopicStats,
@@ -14,6 +15,7 @@ import WrongQuestionsView from '../../shared/WrongQuestionsView'
 
 export default function MistakesPage() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const requestedStudentId = searchParams.get('studentId') || ''
   const [students, setStudents] = useState(null)
   const [selectedStudentId, setSelectedStudentId] = useState(requestedStudentId)
@@ -87,6 +89,20 @@ export default function MistakesPage() {
       title="Hata Defteri"
       subtitle={`${selectedStudent.fullName} için fotoğraflanan yanlış sorular ders ders burada.`}
       headerActions={headerActions}
+      backSlot={
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="gap-1.5"
+          onClick={() =>
+            navigate(`/parent/students?action=profile&studentId=${selectedStudent.id}`)
+          }
+        >
+          <ArrowLeft size={16} aria-hidden="true" />
+          Öğrenci Profili
+        </Button>
+      }
     />
   )
 }

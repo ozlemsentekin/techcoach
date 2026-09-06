@@ -105,7 +105,10 @@ export default function ParentApp() {
               path="weekly-plan"
               element={<RequireStudents>{pageElement(WeeklyPlanPage)}</RequireStudents>}
             />
-            <Route path="progress" element={pageElement(ProgressPage)} />
+            <Route
+              path="progress"
+              element={<RequireStudents>{pageElement(ProgressPage)}</RequireStudents>}
+            />
             {/* Ödev/görev tekilleştirme (Faz 2): ayrı "Ödevler" sayfası kaldırıldı; ders-tipi
                 görevler artık Haftalık Plan üzerinden yönetiliyor. Eski yer imleri yönlendirilir. */}
             <Route path="homework" element={<Navigate to="/parent/weekly-plan" replace />} />

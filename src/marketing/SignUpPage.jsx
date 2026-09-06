@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CheckCircle2, GraduationCap, UserPlus, Users } from 'lucide-react'
+import { CheckCircle2, GraduationCap, Loader2, UserPlus, Users, XCircle } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { panelPathForRole } from '../utils/panelPath'
 import { authRequest } from '../services/authClient'
@@ -141,6 +141,8 @@ export default function SignUpPage() {
   const [turnstileToken, setTurnstileToken] = useState('')
   const [subjects, setSubjects] = useState(null)
   const [subjectIds, setSubjectIds] = useState([])
+  // Kupon kodu canlı doğrulama: 'idle' | 'checking' | 'valid' | 'invalid'
+  const [couponCheck, setCouponCheck] = useState({ status: 'idle', code: '', message: '' })
   const turnstileRef = useRef(null)
 
   const plan = PLANS[role]
@@ -159,6 +161,48 @@ export default function SignUpPage() {
       ignore = true
     }
   }, [role, subjects])
+
+  useEffect(() => {
+    const code = form.couponCode.trim()
+    if (!code) {
+      setCouponCheck({ status: 'idle', code: '', message: '' })
+      return
+    }
+
+    let ignore = false
+    setCouponCheck({ status: 'checking', code: '', message: '' })
+    const timer = setTimeout(() => {
+      authRequest('/api/auth/validate-coupon', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      })
+        .then((data) => {
+          if (ignore) return
+          if (data?.valid) {
+            setCouponCheck({
+              status: 'valid',
+              code: data.code || code,
+              message: data.description || 'Kupon kodu uygulandı.',
+            })
+          } else {
+            setCouponCheck({ status: 'invalid', code: '', message: data?.error || 'Kupon kodu geçersiz.' })
+          }
+        })
+        .catch((error) => {
+          if (ignore) return
+          setCouponCheck({
+            status: 'invalid',
+            code: '',
+            message: error?.message || 'Kupon kodu doğrulanamadı. Lütfen tekrar deneyin.',
+          })
+        })
+    }, 500)
+
+    return () => {
+      ignore = true
+      clearTimeout(timer)
+    }
+  }, [form.couponCode])
 
   const toggleSubject = (subjectId) => {
     setSubjectIds((current) =>
@@ -203,10 +247,17 @@ export default function SignUpPage() {
     if (role === 'ogretmen' && subjectIds.length === 0) {
       return 'Branşınızı seçmelisiniz.'
     }
+    if (form.couponCode.trim() && couponCheck.status === 'checking') {
+      return 'Kupon kodu kontrol ediliyor, lütfen bekleyin.'
+    }
+    if (form.couponCode.trim() && couponCheck.status === 'invalid') {
+      return 'Kupon kodu geçersiz. Kodu düzeltin veya alanı boş bırakın.'
+    }
     return null
   }
 
-  const hasTrialCoupon = form.couponCode.trim().toUpperCase() === 'DENEME'
+  const hasTrialCoupon = couponCheck.status === 'valid' && Boolean(couponCheck.code)
+  const appliedCouponCode = hasTrialCoupon ? couponCheck.code : form.couponCode.trim()
   // Veli, kupon kodu yoksa hesabı hemen açmıyoruz — ödeme adımına geçiyoruz, gerçek hesap
   // yalnızca ödeme başarılı olunca backend'de oluşturuluyor (bkz. PaymentPage.jsx).
   const isPaymentBound = role === 'ebeveyn' && !hasTrialCoupon
@@ -226,7 +277,7 @@ export default function SignUpPage() {
           pendingRegistration: {
             fullName: combinedFullName(),
             phone: form.phone,
-            couponCode: form.couponCode.trim(),
+            couponCode: appliedCouponCode,
             acceptAydinlatma: form.acceptAydinlatma,
             acceptKvkk: form.acceptKvkk,
             turnstileToken: turnstileToken || undefined,
@@ -352,15 +403,35 @@ export default function SignUpPage() {
                 onChange={handleInputChange}
               />
 
-              <input
-                name="couponCode"
-                type="text"
-                placeholder="Kupon kodu (varsa)"
-                aria-label="Kupon Kodu"
-                autoComplete="off"
-                value={form.couponCode}
-                onChange={handleInputChange}
-              />
+              <div className="signup-coupon-field">
+                <input
+                  name="couponCode"
+                  type="text"
+                  placeholder="Kupon kodu (varsa)"
+                  aria-label="Kupon Kodu"
+                  autoComplete="off"
+                  value={form.couponCode}
+                  onChange={handleInputChange}
+                />
+                {couponCheck.status === 'checking' ? (
+                  <p className="signup-coupon-status is-checking" role="status">
+                    <Loader2 size={15} className="spin" aria-hidden="true" />
+                    Kupon kodu kontrol ediliyor...
+                  </p>
+                ) : null}
+                {couponCheck.status === 'valid' ? (
+                  <p className="signup-coupon-status is-valid" role="status">
+                    <CheckCircle2 size={15} aria-hidden="true" />
+                    Uygulandı{couponCheck.message ? ` — ${couponCheck.message}` : ''}
+                  </p>
+                ) : null}
+                {couponCheck.status === 'invalid' ? (
+                  <p className="signup-coupon-status is-invalid" role="alert">
+                    <XCircle size={15} aria-hidden="true" />
+                    {couponCheck.message}
+                  </p>
+                ) : null}
+              </div>
 
               {role === 'ogretmen' ? (
                 <div className="signup-subjects">
@@ -425,7 +496,11 @@ export default function SignUpPage() {
               <button
                 type="submit"
                 className="btn btn-primary login-submit"
-                disabled={authLoading || (Boolean(TURNSTILE_SITE_KEY) && !turnstileToken)}
+                disabled={
+                  authLoading ||
+                  (Boolean(TURNSTILE_SITE_KEY) && !turnstileToken) ||
+                  (form.couponCode.trim() !== '' && couponCheck.status === 'checking')
+                }
               >
                 <UserPlus size={18} aria-hidden="true" />
                 {authLoading ? 'Üye olunuyor...' : isPaymentBound ? 'Ödemeye Geç' : 'Üye Ol'}

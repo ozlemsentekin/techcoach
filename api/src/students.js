@@ -616,7 +616,7 @@ async function createStudentHandler(request) {
     }
     if (!themeId) {
       // Panel stili seçilmezse cinsiyete göre varsayılan tema atanır.
-      themeId = gender === 'kiz' ? 'purple' : 'blue'
+      themeId = gender === 'kiz' ? 'pink' : 'blue'
     }
 
     let provinceId = null
@@ -710,6 +710,28 @@ async function createStudentHandler(request) {
       INSERT INTO dbo.StudentProfiles (student_id, province_id, district_id, school_id, birth_date, grade, phone, gender, theme_id, photo_url)
       VALUES (@studentId, @provinceId, @districtId, @schoolId, @birthDate, @grade, @phone, @gender, @themeId, @photoUrl);
     `)
+
+    // Ortaokul dersleri sınıfa göre sabit — sihirbazda ayrı bir "Dersler" adımı yok. Öğrencinin
+    // sınıfına uyan aktif dersleri (dbo.Subjects.grades_json) otomatik atarız; veli daha sonra
+    // "Detay" ekranından değiştirebilir.
+    try {
+      const subjectsDb = await withRequest({
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        gradeLike: { type: sql.NVarChar(10), value: `%"${grade}"%` },
+      })
+      await subjectsDb.query(`
+        UPDATE dbo.StudentProfiles
+        SET subject_ids_json = (
+          SELECT '[' + STRING_AGG('"' + LOWER(CONVERT(NVARCHAR(36), id)) + '"', ',') + ']'
+          FROM dbo.Subjects
+          WHERE is_active = 1 AND (grades_json IS NULL OR grades_json LIKE @gradeLike)
+        )
+        WHERE student_id = @studentId;
+      `)
+    } catch (seedError) {
+      // Ders atama başarısız olsa da öğrenci kaydı geçerli — veli Detay'dan ekler.
+      console.error('createStudentHandler: subject seed failed', seedError)
+    }
 
     const record = { ...insertResult.recordset[0], theme_id: themeId, photo_url: photoUrl }
     return json(201, { student: sanitizeStudent(record) })

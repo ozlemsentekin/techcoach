@@ -247,9 +247,11 @@ async function listAssignableStudentsHandler(request) {
 async function actorCanSeeBook(book, ctx) {
   if (actorOwnsBook(book, ctx)) return true
   if ((book.scope || 'private') !== 'private') {
-    // Katalog kaynağı: yalnızca takip eden öğretmen görebilir.
-    if (ctx.role !== 'ogretmen' || ctx.isActingAsStudent) return false
-    return teacherTracksBook(ctx.actorId, book.id)
+    // Katalog kaynağı: takip eden öğretmen her zaman görebilir; veli/öğrenci ise yalnızca
+    // kaynak yönettiği çocuğa/öğrenciye atanmışsa (salt görüntüleme) — aşağıdaki atama denetimi.
+    if (ctx.role === 'ogretmen' && !ctx.isActingAsStudent) {
+      return teacherTracksBook(ctx.actorId, book.id)
+    }
   }
   const ids = [...ctx.manageableStudentIds]
   if (!ids.length) return false

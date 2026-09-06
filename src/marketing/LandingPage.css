@@ -5050,6 +5050,48 @@ footer {
   gap: 10px;
 }
 
+.signup-coupon-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.signup-coupon-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+
+.signup-coupon-status.is-checking {
+  color: #64748b;
+}
+
+.signup-coupon-status.is-valid {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.signup-coupon-status.is-invalid {
+  color: #b91c1c;
+}
+
+.signup-coupon-status svg {
+  flex-shrink: 0;
+}
+
+.signup-coupon-status .spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .legal-page-card {
   position: static;
   max-width: min(720px, calc(100vw - 32px));

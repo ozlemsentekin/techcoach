@@ -192,7 +192,7 @@ export default function StudentProfileModal({ student, onClose }) {
   const firstName = nameParts[0] || ''
   const lastName = nameParts.slice(1).join(' ') || ''
   const genderLabel = GENDER_OPTIONS.find((option) => option.value === gender)?.label || ''
-  const defaultThemeLabel = gender === 'kiz' ? 'Mor Tema' : gender === 'erkek' ? 'Mavi Tema' : 'cinsiyete göre'
+  const defaultThemeLabel = gender === 'kiz' ? 'Pembe Tema' : gender === 'erkek' ? 'Mavi Tema' : 'cinsiyete göre'
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
