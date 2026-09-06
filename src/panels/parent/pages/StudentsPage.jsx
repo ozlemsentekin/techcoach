@@ -565,6 +565,7 @@ export default function StudentsPage() {
   const [showModal, setShowModal] = useState(false)
   const [showSeatPurchase, setShowSeatPurchase] = useState(false)
   const [seatPurchaseBanner] = useState(() => searchParams.get('cocuk_koltugu') === 'eklendi')
+  const [seatPaymentFailed, setSeatPaymentFailed] = useState(() => searchParams.get('odeme') === 'hata')
   const [libraryModalStudent, setLibraryModalStudent] = useState(null)
   const [teacherModalStudent, setTeacherModalStudent] = useState(null)
   const [profileModalStudent, setProfileModalStudent] = useState(null)
@@ -585,9 +586,14 @@ export default function StudentsPage() {
   // kotayı tazele (force), URL'i temizle ve hak açıldıysa profil sihirbazını aç.
   useEffect(() => {
     const justPurchased = searchParams.get('cocuk_koltugu') === 'eklendi'
-    if (justPurchased) {
+    const paymentFailed = searchParams.get('odeme') === 'hata'
+    if (justPurchased || paymentFailed) {
       searchParams.delete('cocuk_koltugu')
+      searchParams.delete('odeme')
       setSearchParams(searchParams, { replace: true })
+    }
+    if (paymentFailed) {
+      setShowSeatPurchase(true)
     }
     loadStudents({ force: justPurchased }).then((data) => {
       if (justPurchased && data?.quota?.hasRemaining) setShowModal(true)
@@ -642,6 +648,7 @@ export default function StudentsPage() {
 
   const handleSeatPurchaseClose = () => {
     setShowSeatPurchase(false)
+    setSeatPaymentFailed(false)
     loadStudents({ force: true })
   }
 
@@ -669,6 +676,13 @@ export default function StudentsPage() {
       {seatPurchaseBanner ? (
         <div className="rounded-xl bg-panel-sage-soft px-4 py-3 text-sm text-panel-text" role="status">
           Ödemeniz alındı. Yeni çocuk profilinizi şimdi oluşturabilirsiniz.
+        </div>
+      ) : null}
+
+      {seatPaymentFailed ? (
+        <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm" role="alert">
+          Ödeme tamamlanamadı ya da onaylanamadı. Tekrar deneyebilirsiniz. Sorun sürerse veya
+          kartınızdan ücret alındığını görürseniz bizimle iletişime geçin.
         </div>
       ) : null}
 
