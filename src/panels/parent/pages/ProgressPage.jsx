@@ -136,7 +136,9 @@ export default function ProgressPage() {
         subjectFilterKey: subject.key,
       }),
     )
-    return buildAnalysis(entities, today)
+    // Kaynaklar ısı haritasında SATIR olduğu için üst sınır yok — çocuğun test çözdüğü
+    // tüm kaynaklar gösterilir.
+    return buildAnalysis(entities, today, { maxResources: Infinity })
   }, [overview, today])
 
   const sortedSubjects = useMemo(() => {
