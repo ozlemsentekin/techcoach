@@ -7,6 +7,7 @@ const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./su
 const { buildSessionEntitlement } = require('./entitlements')
 const {
   createSessionToken,
+  verifyHandoffToken,
   defaultPasswordForPhone,
   hashPassword,
   isSessionError,
@@ -459,6 +460,64 @@ async function meHandler(request) {
   }
 }
 
+// iyzico ödeme callback'i yeni açtığı veli hesabı için URL'de kısa ömürlü bir handoff token'ı
+// bırakır (SameSite=Strict çerezi çapraz-site yönlendirmede saklanmıyor). Frontend bu aynı-origin
+// POST ile token'ı gerçek oturum çerezine çevirir.
+async function sessionFromHandoffHandler(request) {
+  try {
+    const payload = await request.json().catch(() => null)
+    const handoffToken = String(payload?.token || '')
+    if (!handoffToken) {
+      return json(400, { error: 'Geçersiz istek.' })
+    }
+
+    const claims = verifyHandoffToken(handoffToken)
+
+    const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: claims.sub } })
+    const result = await requestDb.query(`
+      SELECT TOP 1
+        u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active,
+        u.last_login_at, u.created_at, u.aydinlatma_accepted_at, u.kvkk_accepted_at, u.funded_by_teacher_id,
+        u.teacher_subject_ids_json,
+        sp.theme_id, sp.grade,
+        e.status AS entitlement_status, e.source AS entitlement_source,
+        e.current_period_end AS entitlement_current_period_end
+      FROM dbo.Users u
+      LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
+      LEFT JOIN dbo.Entitlements e ON e.parent_id = COALESCE(u.parent_id, u.id)
+      WHERE u.id = @id;
+    `)
+    const record = result.recordset[0]
+    if (!record) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+    if (record.is_active === false) {
+      return accountDisabledResponse()
+    }
+
+    const user = sanitizeUser(record)
+    user.entitlement = await buildSessionEntitlement({
+      userId: record.id,
+      role: record.role,
+      status: record.entitlement_status,
+      source: record.entitlement_source,
+      currentPeriodEnd: record.entitlement_current_period_end,
+    })
+
+    const sessionToken = createSessionToken(user)
+    return json(200, { user }, createSessionHeaders(sessionToken))
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+    if (isSessionError(error)) {
+      return json(401, { error: 'Bağlantının süresi doldu. Lütfen giriş yapın.' })
+    }
+    console.error('sessionFromHandoffHandler failed', error)
+    return json(500, { error: 'Oturum oluşturulamadı.' })
+  }
+}
+
 async function changePasswordHandler(request) {
   try {
     const token = readSessionToken(request)
@@ -595,6 +654,7 @@ module.exports = {
   validateCouponHandler,
   logoutHandler,
   meHandler,
+  sessionFromHandoffHandler,
   registerHandler,
   sanitizeUser,
   acceptConsentHandler,

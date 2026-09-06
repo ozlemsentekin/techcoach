@@ -2,7 +2,7 @@ const crypto = require('crypto')
 const { sql, withRequest, withTransaction } = require('./db')
 const { isConfigError, getIyzicoConfig } = require('./config')
 const { createSessionHeaders, json } = require('./http')
-const { createSessionToken, defaultPasswordForPhone, hashPassword, isSessionError } = require('./security')
+const { createSessionToken, createHandoffToken, defaultPasswordForPhone, hashPassword, isSessionError } = require('./security')
 const { requireParentSession } = require('./students')
 const { requireTeacherSession } = require('./teacherScope')
 const {
@@ -648,6 +648,11 @@ async function iyzicoCheckoutCallbackHandler(request) {
     const existingParent = await findExistingParent(conversationId)
     let parentId = existingParent?.id
     let sessionHeaders = {}
+    // Yeni açılan veli hesabı için: tarayıcı çapraz-site yönlendirme zincirinde SameSite=Strict
+    // oturum çerezini saklamadığından, giriş bilgisini URL'de kısa ömürlü bir handoff token'ıyla
+    // taşıyıp frontend'de aynı-origin bir istekle gerçek çereze çeviriyoruz (bkz.
+    // sessionFromHandoffHandler + PaymentResultPage).
+    let handoffToken = null
 
     if (!existingParent) {
       const pending = await consumePendingParentRegistration(conversationId)
@@ -658,6 +663,7 @@ async function iyzicoCheckoutCallbackHandler(request) {
       parentId = newUser.id
       const sessionToken = createSessionToken(newUser)
       sessionHeaders = createSessionHeaders(sessionToken)
+      handoffToken = createHandoffToken(newUser.id)
     }
 
     const isNew = await recordEntitlementEvent({
@@ -678,7 +684,10 @@ async function iyzicoCheckoutCallbackHandler(request) {
       })
     }
 
-    return redirectTo(`${config.webRedirectBaseUrl}/odeme/sonuc?durum=basarili`, sessionHeaders)
+    const successUrl = handoffToken
+      ? `${config.webRedirectBaseUrl}/odeme/sonuc?durum=basarili&ott=${encodeURIComponent(handoffToken)}`
+      : `${config.webRedirectBaseUrl}/odeme/sonuc?durum=basarili`
+    return redirectTo(successUrl, sessionHeaders)
   } catch (error) {
     console.error('iyzicoCheckoutCallbackHandler failed', error)
     return redirectTo(failureUrl)

@@ -118,10 +118,41 @@ function readSessionToken(request) {
 function verifySessionToken(token) {
   const { jwtSecret } = getAuthConfig()
 
-  return jwt.verify(token, jwtSecret, {
+  const payload = jwt.verify(token, jwtSecret, {
     issuer: 'techcoach-api',
     audience: 'techcoach-web',
   })
+  // Oturum token'larında `purpose` claim'i bulunmaz — kısa ömürlü handoff token'ı (bkz.
+  // createHandoffToken) doğrudan oturum çerezi olarak kullanılamasın.
+  if (payload.purpose) {
+    throw new jwt.JsonWebTokenError('not a session token')
+  }
+  return payload
+}
+
+// iyzico ödeme callback'i, tarayıcının çapraz-site (iyzico → callback) yönlendirme zincirinde
+// SameSite=Strict oturum çerezini SAKLAMAMASI nedeniyle, yeni açılan veli hesabını doğrudan
+// giriş yaptıramıyor. Bunun yerine kısa ömürlü (2 dk) tek kullanımlık bir "handoff" token'ı
+// URL'de taşınır; frontend bunu aynı-origin bir istekle gerçek oturum çerezine çevirir.
+function createHandoffToken(userId) {
+  const { jwtSecret } = getAuthConfig()
+  return jwt.sign({ sub: userId, purpose: 'payment-handoff' }, jwtSecret, {
+    expiresIn: 120,
+    issuer: 'techcoach-api',
+    audience: 'techcoach-web',
+  })
+}
+
+function verifyHandoffToken(token) {
+  const { jwtSecret } = getAuthConfig()
+  const payload = jwt.verify(token, jwtSecret, {
+    issuer: 'techcoach-api',
+    audience: 'techcoach-web',
+  })
+  if (payload.purpose !== 'payment-handoff' || !payload.sub) {
+    throw new jwt.JsonWebTokenError('invalid handoff token')
+  }
+  return payload
 }
 
 // True for a rejected/expired/malformed JWT (jsonwebtoken's own error types) — i.e. an
@@ -133,6 +164,8 @@ function isSessionError(error) {
 
 module.exports = {
   createSessionToken,
+  createHandoffToken,
+  verifyHandoffToken,
   defaultPasswordForPhone,
   generateOtpCode,
   hashOtpCode,
