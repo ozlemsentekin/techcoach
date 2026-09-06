@@ -356,6 +356,8 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
     const hasTrialCoupon = String(payload.couponCode || '').trim().toUpperCase() === TRIAL_COUPON_CODE
     if (hasTrialCoupon) {
       const user = await createCompParentAccount({ fullName, phone, email: fields.email })
+      // Hesap başlangıç şifresiyle (telefonun son 6 hanesi) açılır — ilk panel girişinde değişmeli.
+      user.mustChangePassword = true
       const token = createSessionToken(user)
       return json(201, { user }, createSessionHeaders(token))
     }
@@ -661,6 +663,8 @@ async function iyzicoCheckoutCallbackHandler(request) {
       }
       const newUser = await createParentFromPendingRegistration(pending)
       parentId = newUser.id
+      // Hesap başlangıç şifresiyle (telefonun son 6 hanesi) açılır — ilk panel girişinde değişmeli.
+      newUser.mustChangePassword = true
       const sessionToken = createSessionToken(newUser)
       sessionHeaders = createSessionHeaders(sessionToken)
       handoffToken = createHandoffToken(newUser.id)
