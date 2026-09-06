@@ -15,6 +15,11 @@ export default function PaymentResultPage() {
   const durum = searchParams.get('durum')
   const [status, setStatus] = useState(durum === 'basarili' ? 'checking' : 'hata')
 
+  // Öğretmen ek öğrenci koltuğu / veli çocuk koltuğu ödemeleri başarısızlıkta doğrudan ilgili
+  // panele döner; buraya düşen öğretmen olursa "Tekrar Dene" onu veli ödeme sayfasına değil
+  // öğrenci ekranına götürsün.
+  const retryPath = authUser?.role === 'ogretmen' ? '/teacher/students' : '/odeme'
+
   useEffect(() => {
     if (durum !== 'basarili') {
       return
@@ -63,7 +68,7 @@ export default function PaymentResultPage() {
               <>
                 <h3>Ödeme tamamlanamadı</h3>
                 <p>Ödeme işlemi başarısız oldu ya da onaylanamadı. Tekrar deneyebilirsiniz.</p>
-                <Link to="/odeme" className="btn btn-primary">
+                <Link to={retryPath} className="btn btn-primary">
                   Tekrar Dene
                 </Link>
               </>

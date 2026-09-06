@@ -198,6 +198,7 @@ async function initiateIyzicoCheckoutHandler(request) {
       fullName: parent.full_name,
       phone: parent.phone_number,
     })
+    await recordCheckoutSession({ token: result.token, planKind: 'parent', conversationId: parentId })
 
     return json(200, { checkoutFormContent: result.checkoutFormContent, token: result.token })
   } catch (error) {
@@ -252,6 +253,7 @@ async function initiateChildSeatCheckoutHandler(request) {
       fullName: parent.full_name,
       phone: parent.phone_number,
     })
+    await recordCheckoutSession({ token: result.token, planKind: 'childSeat', conversationId: parentId })
 
     return json(200, { checkoutFormContent: result.checkoutFormContent, token: result.token })
   } catch (error) {
@@ -301,6 +303,7 @@ async function initiateTeacherSeatCheckoutHandler(request) {
       fullName: teacherFullName,
       phone: teacherPhone,
     })
+    await recordCheckoutSession({ token: result.token, planKind: 'teacherSeat', conversationId: teacherUserId })
 
     return json(200, { checkoutFormContent: result.checkoutFormContent, token: result.token })
   } catch (error) {
@@ -384,6 +387,7 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
       fullName,
       phone,
     })
+    await recordCheckoutSession({ token: result.token, planKind: 'parentNew', conversationId: pendingId })
 
     return json(200, { checkoutFormContent: result.checkoutFormContent, token: result.token })
   } catch (error) {
@@ -458,6 +462,35 @@ async function findExistingTeacher(id) {
   return result.recordset[0] || null
 }
 
+// iyzico'nun abonelik checkout formu "retrieve" yanıtı conversationId dönmediği için
+// (iyzico hatası, iyzipay-php#194), initiate anında token → {planKind, conversationId}
+// eşlemesini saklıyoruz ve callback'te token üzerinden çözüyoruz.
+async function recordCheckoutSession({ token, planKind, conversationId }) {
+  const db = await withRequest({
+    token: { type: sql.NVarChar(100), value: token },
+    planKind: { type: sql.NVarChar(20), value: planKind },
+    conversationId: { type: sql.NVarChar(120), value: String(conversationId) },
+  })
+  await db.query(`
+    INSERT INTO dbo.IyzicoCheckoutSessions (token, plan_kind, conversation_id)
+    VALUES (@token, @planKind, @conversationId);
+  `)
+}
+
+// Token'ı çözer ve (varsa) tüketilmiş olarak işaretler. Callback iyzico tarafından birden fazla
+// kez tetiklenebildiği için, zaten tüketilmiş bir oturumu da döndürürüz — asıl yazma işlemleri
+// recordEntitlementEvent tekilleştirmesiyle korunuyor.
+async function resolveCheckoutSession(token) {
+  const db = await withRequest({ token: { type: sql.NVarChar(100), value: token } })
+  const result = await db.query(`
+    UPDATE dbo.IyzicoCheckoutSessions
+    SET consumed_at = COALESCE(consumed_at, SYSUTCDATETIME())
+    OUTPUT inserted.plan_kind, inserted.conversation_id
+    WHERE token = @token;
+  `)
+  return result.recordset[0] || null
+}
+
 async function consumePendingParentRegistration(id) {
   const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: id } })
   const result = await requestDb.query(`
@@ -498,9 +531,35 @@ async function createParentFromPendingRegistration(pending) {
   })
 }
 
+// iyzico abonelik detayı endDate alanı döndürmüyor; mevcut dönemin bitişini ödemesi başarılı
+// (veya devam eden) siparişlerin en ileri endPeriod'undan çıkarıyoruz.
+function currentPeriodEndFromSubscription(subscriptionData) {
+  const orders = Array.isArray(subscriptionData?.orders) ? subscriptionData.orders : []
+  const ends = orders
+    .filter((order) => order.orderStatus === 'SUCCESS' || order.orderStatus === 'PAID')
+    .map((order) => Number(order.endPeriod))
+    .filter((value) => Number.isFinite(value))
+  if (!ends.length) {
+    return null
+  }
+  return new Date(Math.max(...ends))
+}
+
+// Ödeme başarısız/onaylanamadıysa kullanıcıyı geldiği akışa uygun sayfaya geri göndeririz;
+// koltuk akışlarında panelde kalıp modalın yeniden açılabilmesi için ilgili panel sayfasına.
+function checkoutFailureUrl(config, planKind) {
+  if (planKind === 'teacherSeat') {
+    return `${config.webRedirectBaseUrl}/teacher/students?odeme=hata`
+  }
+  if (planKind === 'childSeat') {
+    return `${config.webRedirectBaseUrl}/parent/students?odeme=hata`
+  }
+  return `${config.webRedirectBaseUrl}/odeme/sonuc?durum=hata`
+}
+
 async function iyzicoCheckoutCallbackHandler(request) {
   const config = getIyzicoConfig()
-  const failureUrl = `${config.webRedirectBaseUrl}/odeme/sonuc?durum=hata`
+  let failureUrl = checkoutFailureUrl(config, null)
 
   try {
     const token = await readCallbackToken(request)
@@ -508,16 +567,33 @@ async function iyzicoCheckoutCallbackHandler(request) {
       return redirectTo(failureUrl)
     }
 
+    // iyzico'nun abonelik checkout "retrieve" yanıtı conversationId dönmediği için (iyzico
+    // hatası, iyzipay-php#194) hangi kullanıcı/akış olduğunu initiate anında sakladığımız
+    // token → oturum eşlemesinden çözüyoruz.
+    const session = await resolveCheckoutSession(token)
+    failureUrl = checkoutFailureUrl(config, session?.plan_kind)
+
     const result = await retrieveSubscriptionCheckoutForm({ checkoutFormToken: token })
     const data = result.data
-    const conversationId = result.conversationId
+    const conversationId = result.conversationId || session?.conversation_id
 
-    if (!conversationId || data.subscriptionStatus !== 'ACTIVE') {
+    // Abonelik detayını çekip durum + dönem sonunu güvenilir şekilde alıyoruz (checkout form
+    // yanıtı bunları eksik/güncel olmayan verebiliyor).
+    const subscription = data?.referenceCode
+      ? await retrieveSubscription({ subscriptionReferenceCode: data.referenceCode }).catch(() => null)
+      : null
+    const subscriptionStatus = subscription?.data?.subscriptionStatus || data?.subscriptionStatus
+    if (data) {
+      const periodEnd = currentPeriodEndFromSubscription(subscription?.data)
+      data.endDate = periodEnd ? periodEnd.toISOString() : (subscription?.data?.endDate || data.endDate)
+    }
+
+    if (!conversationId || subscriptionStatus !== 'ACTIVE') {
       return redirectTo(failureUrl)
     }
 
     // Ek çocuk (çocuk-koltuğu) paketi — conversationId her zaman mevcut bir velinin Users.id'sidir.
-    if (isChildSeatPlanRef(config, data.pricingPlanReferenceCode)) {
+    if (session?.plan_kind === 'childSeat' || isChildSeatPlanRef(config, data.pricingPlanReferenceCode)) {
       const childSeatParent = await findExistingParent(conversationId)
       if (!childSeatParent) {
         return redirectTo(failureUrl)
@@ -542,7 +618,7 @@ async function iyzicoCheckoutCallbackHandler(request) {
     }
 
     // Öğretmen ek öğrenci koltuğu — conversationId her zaman mevcut bir öğretmenin Users.id'sidir.
-    if (isTeacherSeatPlanRef(config, data.pricingPlanReferenceCode)) {
+    if (session?.plan_kind === 'teacherSeat' || isTeacherSeatPlanRef(config, data.pricingPlanReferenceCode)) {
       const seatTeacher = await findExistingTeacher(conversationId)
       if (!seatTeacher) {
         return redirectTo(failureUrl)
@@ -686,7 +762,7 @@ async function iyzicoWebhookHandler(request) {
         await updateTeacherSeatSubscriptionFromIyzico({
           subscriptionReferenceCode,
           status: 'active',
-          currentPeriodEnd: subscription.data.endDate ? new Date(subscription.data.endDate) : null,
+          currentPeriodEnd: currentPeriodEndFromSubscription(subscription.data),
         })
       } else if (iyziEventType === 'subscription.order.failure') {
         await updateTeacherSeatSubscriptionFromIyzico({ subscriptionReferenceCode, status: 'grace_period' })
@@ -702,7 +778,7 @@ async function iyzicoWebhookHandler(request) {
         await updateChildSeatSubscriptionFromIyzico({
           subscriptionReferenceCode,
           status: 'active',
-          currentPeriodEnd: subscription.data.endDate ? new Date(subscription.data.endDate) : null,
+          currentPeriodEnd: currentPeriodEndFromSubscription(subscription.data),
         })
       } else if (iyziEventType === 'subscription.order.failure') {
         await updateChildSeatSubscriptionFromIyzico({ subscriptionReferenceCode, status: 'grace_period' })
@@ -720,7 +796,7 @@ async function iyzicoWebhookHandler(request) {
         pricingPlanReferenceCode: subscription.data.pricingPlanReferenceCode,
         billingCycle: subscription.data.pricingPlanReferenceCode === getIyzicoConfig().parentYearlyPlanRef ? 'yearly' : 'monthly',
         subscriptionReferenceCode,
-        currentPeriodEnd: subscription.data.endDate ? new Date(subscription.data.endDate) : null,
+        currentPeriodEnd: currentPeriodEndFromSubscription(subscription.data),
       })
     } else if (iyziEventType === 'subscription.order.failure') {
       await updateParentEntitlementStatus(parentId, 'grace_period')

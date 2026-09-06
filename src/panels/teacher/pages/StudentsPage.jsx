@@ -349,6 +349,7 @@ export default function StudentsPage() {
   const [showSeatPurchase, setShowSeatPurchase] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const [seatPurchaseBanner] = useState(() => searchParams.get('koltuk') === 'eklendi')
+  const [seatPaymentFailed, setSeatPaymentFailed] = useState(() => searchParams.get('odeme') === 'hata')
   const navigate = useNavigate()
 
   const loadEntitlement = () => getTeacherEntitlement().then((data) => {
@@ -376,9 +377,14 @@ export default function StudentsPage() {
   // kotayı tazele, URL'i temizle, banner göster ve hak açıldıysa öğrenci ekleme modalını aç.
   useEffect(() => {
     const justPurchased = searchParams.get('koltuk') === 'eklendi'
-    if (justPurchased) {
+    const paymentFailed = searchParams.get('odeme') === 'hata'
+    if (justPurchased || paymentFailed) {
       searchParams.delete('koltuk')
+      searchParams.delete('odeme')
       setSearchParams(searchParams, { replace: true })
+    }
+    if (paymentFailed) {
+      setShowSeatPurchase(true)
     }
     loadEntitlement()
       .then((data) => {
@@ -449,6 +455,7 @@ export default function StudentsPage() {
 
   const handleSeatPurchaseClose = () => {
     setShowSeatPurchase(false)
+    setSeatPaymentFailed(false)
     loadEntitlement().catch(() => {})
   }
 
@@ -468,6 +475,13 @@ export default function StudentsPage() {
       {seatPurchaseBanner ? (
         <div className="rounded-xl bg-panel-sage-soft px-4 py-3 text-sm text-panel-text" role="status">
           Ödemeniz alındı. Yeni öğrencinizi şimdi ekleyebilirsiniz.
+        </div>
+      ) : null}
+
+      {seatPaymentFailed ? (
+        <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm" role="alert">
+          Ödeme tamamlanamadı ya da onaylanamadı. Tekrar deneyebilirsiniz. Sorun sürerse veya
+          kartınızdan ücret alındığını görürseniz bizimle iletişime geçin.
         </div>
       ) : null}
 
