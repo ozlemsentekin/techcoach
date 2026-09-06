@@ -19,6 +19,7 @@ import AddTaskDrawer from '../components/AddTaskDrawer'
 import TaskAnswerSheetModal from '../../student/components/TaskAnswerSheetModal'
 import TaskCompletionFlow from '../components/TaskCompletionFlow'
 import { completeTaskDirect, resolveCompletionFlow } from '../../shared/taskCompletion'
+import { useBillingGate } from '../../../context/useBillingGate'
 
 const date = todayISODate()
 const LOW_PRIORITY_BALANCE_WARNINGS = new Set(['Mola eklenmemiş', 'Serbest zaman yok'])
@@ -180,6 +181,7 @@ function TodaySidePanel({ requests, warnings, onApprove, onSuggestOther, onPostp
 
 export default function DashboardPage() {
   const { authUser } = useAuth()
+  const { restricted: billingRestricted, promptPayment } = useBillingGate()
   const [students, setStudents] = useState(null)
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [tasks, setTasks] = useState([])
@@ -349,6 +351,14 @@ export default function DashboardPage() {
     showBanner('Görev kaydedildi.')
   }
 
+  const handleAddTask = () => {
+    if (billingRestricted) {
+      promptPayment()
+      return
+    }
+    setDrawerState({ defaultDate: date })
+  }
+
   const handleDeleteConfirmed = async () => {
     try {
       await removeTask(deletingTask.id, selectedStudentId)
@@ -431,7 +441,7 @@ export default function DashboardPage() {
       ) : null}
 
       <ParentHomeHeader
-        onAddTask={() => setDrawerState({ defaultDate: date })}
+        onAddTask={handleAddTask}
         students={students}
         selectedStudentId={selectedStudentId}
         onSelectStudent={(studentId) => {
@@ -450,7 +460,7 @@ export default function DashboardPage() {
         <DailyPlanTable
           tasks={dailyFlowTasks}
           backlogTasks={backlogFlowTasks}
-          onAddTask={() => setDrawerState({ defaultDate: date })}
+          onAddTask={handleAddTask}
           onEdit={(task) => setDrawerState({ initialTask: task })}
           onDelete={(task) => setDeletingTask(task)}
           onOpenAnswerSheet={setAnswerSheetTask}

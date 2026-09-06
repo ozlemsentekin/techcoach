@@ -4,7 +4,7 @@ const { accountDisabledResponse, clearSessionHeaders, createSessionHeaders, getC
 const { consumeRateLimit } = require('./rate-limit')
 const { verifyTurnstileToken } = require('./turnstile')
 const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
-const { resolveEffectiveEntitlement } = require('./entitlements')
+const { buildSessionEntitlement } = require('./entitlements')
 const {
   createSessionToken,
   defaultPasswordForPhone,
@@ -141,7 +141,7 @@ async function createCompParentAccount({ fullName, phone, email }) {
       VALUES (@parentId, 'active', 'comp', @maxStudents, 'coupon:DENEME');
     `)
 
-    return { user: insertedUser, entitlement: { status: 'active', source: 'comp', currentPeriodEnd: null } }
+    return { user: insertedUser, entitlement: { status: 'active', source: 'comp', currentPeriodEnd: null, billingState: 'ok', overdueDays: 0 } }
   })
 
   user.entitlement = entitlement
@@ -208,7 +208,7 @@ async function registerHandler(request) {
       `)
 
       const insertedUser = sanitizeUser(result.recordset[0])
-      let insertedEntitlement = { status: 'none', source: null, currentPeriodEnd: null }
+      let insertedEntitlement = { status: 'none', source: null, currentPeriodEnd: null, billingState: 'restricted', overdueDays: null }
 
       if (role === 'ogretmen') {
         // Web üzerinden kart tahsilatı henüz entegre değil; öğretmen deneme durumuyla
@@ -227,6 +227,13 @@ async function registerHandler(request) {
           INSERT INTO dbo.TeacherEntitlements (teacher_id, status, source, base_seats, purchased_seats, granted_reason)
           VALUES (@teacherId, @status, 'comp', @baseSeats, 0, @grantedReason);
         `)
+        insertedEntitlement = {
+          status: teacherStatus,
+          source: 'teacher',
+          currentPeriodEnd: null,
+          billingState: 'ok',
+          overdueDays: 0,
+        }
       } else if (hasTrialCoupon) {
         // "DENEME" kupon kodu girildiyse veli hesabı ücretsiz aktif olur ve 2 öğrenci ekleme
         // hakkı tanınır (kota kontrolü createStudentHandler içinde uygulanır).
@@ -238,7 +245,7 @@ async function registerHandler(request) {
           INSERT INTO dbo.Entitlements (parent_id, status, source, max_students, granted_reason)
           VALUES (@parentId, 'active', 'comp', @maxStudents, 'coupon:DENEME');
         `)
-        insertedEntitlement = { status: 'active', source: 'comp', currentPeriodEnd: null }
+        insertedEntitlement = { status: 'active', source: 'comp', currentPeriodEnd: null, billingState: 'ok', overdueDays: 0 }
       }
 
       return { user: insertedUser, entitlement: insertedEntitlement }
@@ -374,8 +381,9 @@ async function loginHandler(request) {
     // registerHandler'daki aynı nedenden: route guard'ın (App.jsx) girişten hemen sonra
     // paywall'a yanlış yönlendirmemesi için entitlement bilgisi yanıta ekleniyor.
     // Öğretmen tarafından eklenen öğrenci/veli için öğretmenin aboneliği devreye girer.
-    user.entitlement = await resolveEffectiveEntitlement({
+    user.entitlement = await buildSessionEntitlement({
       userId: record.id,
+      role: record.role,
       status: record.entitlement_status,
       source: record.entitlement_source,
       currentPeriodEnd: record.entitlement_current_period_end,
@@ -429,8 +437,9 @@ async function meHandler(request) {
     if (session.actingAdminId) {
       user.actingAdmin = { id: session.actingAdminId, fullName: session.actingAdminName }
     }
-    user.entitlement = await resolveEffectiveEntitlement({
+    user.entitlement = await buildSessionEntitlement({
       userId: record.id,
+      role: record.role,
       status: record.entitlement_status,
       source: record.entitlement_source,
       currentPeriodEnd: record.entitlement_current_period_end,

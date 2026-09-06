@@ -1,4 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom'
+import { BillingGateProvider } from '../../context/BillingGateContext'
+import BillingBanner from './BillingBanner'
 import StudentSidebar from './StudentSidebar'
 import ParentSidebar from './ParentSidebar'
 import TeacherSidebar from './TeacherSidebar'
@@ -42,19 +44,22 @@ export default function PanelLayout({ role }) {
         : STUDENT_MORE_NAV
 
   return (
-    <div className="min-h-screen bg-panel-bg" data-panel-role={role}>
-      <div className="flex min-w-0">
-        <Sidebar />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <PanelHeader />
-          <main className="min-w-0 flex-1 px-4 pb-24 pt-5 md:px-6 md:pb-6 xl:px-8">
-            <div className="mx-auto flex w-full max-w-[1480px] min-w-0 flex-col">
-              <Outlet />
-            </div>
-          </main>
+    <BillingGateProvider>
+      <div className="min-h-screen bg-panel-bg" data-panel-role={role}>
+        <div className="flex min-w-0">
+          <Sidebar />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <PanelHeader />
+            <main className="min-w-0 flex-1 px-4 pb-24 pt-5 md:px-6 md:pb-6 xl:px-8">
+              <div className="mx-auto flex w-full max-w-[1480px] min-w-0 flex-col">
+                <BillingBanner />
+                <Outlet />
+              </div>
+            </main>
+          </div>
         </div>
+        <MobileBottomNavigation primaryItems={primaryItems} moreItems={moreItems} />
       </div>
-      <MobileBottomNavigation primaryItems={primaryItems} moreItems={moreItems} />
-    </div>
+    </BillingGateProvider>
   )
 }
