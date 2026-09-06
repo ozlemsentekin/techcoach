@@ -3,7 +3,7 @@ import { useAuth } from '../../../context/useAuth'
 import { AlertTriangle, CalendarDays, Plus, Sparkles, Users } from 'lucide-react'
 import { cachedGet } from '../../../services/authClient'
 import { getTasksForDate, patchTask, createTask, removeTask } from '../../../services/taskService'
-import { getSchoolSchedule, getBacklogTasks, getTasksCompletedOn, getTeacherLessonSchedule, buildTeacherLessonTasksForDate } from '../../../services/weeklyPlanService'
+import { getSchoolSchedule, getBacklogAndCompletedTasks, getTeacherLessonSchedule, buildTeacherLessonTasksForDate } from '../../../services/weeklyPlanService'
 import { getRequests, updateRequestStatus } from '../../../services/studentRequestService'
 import { evaluateDayBalance } from '../../../utils/planInsights'
 import { getSortedTasks } from '../../../utils/taskSelectors'
@@ -231,16 +231,15 @@ export default function DashboardPage() {
 
     Promise.all([
       getTasksForDate(date, { studentId: selectedStudentId }),
-      getBacklogTasks(date, 30, { studentId: selectedStudentId }),
-      getTasksCompletedOn(date, 30, { studentId: selectedStudentId }),
+      getBacklogAndCompletedTasks(date, 30, { studentId: selectedStudentId }),
       getRequests({ studentId: selectedStudentId }),
       getTeacherLessonSchedule({ studentId: selectedStudentId }).catch(() => []),
     ])
-      .then(([tasksData, backlogTasksData, completedBacklogData, requestsData, teacherLessonScheduleData]) => {
+      .then(([tasksData, backlogAndCompleted, requestsData, teacherLessonScheduleData]) => {
         if (ignore) return
         setTasks(tasksData)
-        setBacklogTasks(backlogTasksData)
-        setCompletedBacklogTasks(completedBacklogData)
+        setBacklogTasks(backlogAndCompleted.backlog)
+        setCompletedBacklogTasks(backlogAndCompleted.completedOn)
         setRequests(requestsData)
         setTeacherLessonSchedule(teacherLessonScheduleData)
       })
@@ -264,11 +263,11 @@ export default function DashboardPage() {
     getTasksForDate(date, { studentId: selectedStudentId })
       .then((tasksData) => setTasks(tasksData))
       .catch(() => {})
-    getBacklogTasks(date, 30, { studentId: selectedStudentId })
-      .then((backlogTasksData) => setBacklogTasks(backlogTasksData))
-      .catch(() => {})
-    getTasksCompletedOn(date, 30, { studentId: selectedStudentId })
-      .then((completedBacklogData) => setCompletedBacklogTasks(completedBacklogData))
+    getBacklogAndCompletedTasks(date, 30, { studentId: selectedStudentId })
+      .then((backlogAndCompleted) => {
+        setBacklogTasks(backlogAndCompleted.backlog)
+        setCompletedBacklogTasks(backlogAndCompleted.completedOn)
+      })
       .catch(() => {})
   }, 30000)
 
@@ -375,11 +374,11 @@ export default function DashboardPage() {
     getTasksForDate(date, { studentId: selectedStudentId })
       .then((tasksData) => setTasks(tasksData))
       .catch(() => {})
-    getBacklogTasks(date, 30, { studentId: selectedStudentId })
-      .then((backlogTasksData) => setBacklogTasks(backlogTasksData))
-      .catch(() => {})
-    getTasksCompletedOn(date, 30, { studentId: selectedStudentId })
-      .then((completedBacklogData) => setCompletedBacklogTasks(completedBacklogData))
+    getBacklogAndCompletedTasks(date, 30, { studentId: selectedStudentId })
+      .then((backlogAndCompleted) => {
+        setBacklogTasks(backlogAndCompleted.backlog)
+        setCompletedBacklogTasks(backlogAndCompleted.completedOn)
+      })
       .catch(() => {})
   }, [selectedStudentId])
 
@@ -422,7 +421,7 @@ export default function DashboardPage() {
   }
 
   if (loading) {
-    return <LoadingState label="Panel yükleniyor..." />
+    return <LoadingState label="Bugünün planı yükleniyor..." />
   }
 
   const hasSidePanelContent =

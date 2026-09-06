@@ -82,6 +82,21 @@ export async function getTasksCompletedOn(onDateISO, lookbackDays = 30, { studen
   return tasks.filter((task) => isCompletedOnDate(task, onDateISO))
 }
 
+/**
+ * `getBacklogTasks` + `getTasksCompletedOn` aynı geriye dönük aralığı çekiyor — veli "Bugün"
+ * ekranında ikisini ayrı ayrı çağırmak birebir aynı (ağır) isteği iki kez atıyordu. Bu yardımcı
+ * aralığı tek istekte çekip her iki listeyi de client tarafında ayırır.
+ */
+export async function getBacklogAndCompletedTasks(dateISO, lookbackDays = 30, { studentId } = {}) {
+  const fromDate = addDaysISO(dateISO, -lookbackDays)
+  const toDate = addDaysISO(dateISO, -1)
+  const tasks = await getTasksForDateRange(fromDate, toDate, { studentId })
+  return {
+    backlog: tasks.filter(isBacklogTask),
+    completedOn: tasks.filter((task) => isCompletedOnDate(task, dateISO)),
+  }
+}
+
 /** Bir gün için yeni görev kaydeder — görev doğrudan canlı plana yazılır. */
 export async function saveTaskForDay(date, taskData, { studentId } = {}) {
   return postTask(
