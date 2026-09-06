@@ -250,7 +250,6 @@ export default function ProgressPage() {
           onSortChange={setSortKey}
           labels={PARENT_LABELS}
           showLastActivity={false}
-          heatmapLayout="resource-rows"
         />
       )}
     </div>

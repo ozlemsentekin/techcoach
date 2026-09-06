@@ -188,10 +188,10 @@ export function analyzeEntity({
   }
 }
 
-// entities listesini ısı haritası sütunları + eğitim yılı ayları + özet metrikleriyle
-// birlikte hazırlar. maxResources: ısı haritasındaki kaynak sayısı üst sınırı — öğretmen
-// Sınıf Analizi'nde kaynaklar SÜTUN olduğu için 8'de kesilir; veli Gelişim Analizi'nde
-// kaynaklar SATIR olduğundan çocuğun tüm kaynakları gösterilir (Infinity).
+// entities listesini ısı haritası kaynakları + eğitim yılı ayları + özet metrikleriyle
+// birlikte hazırlar. maxResources: ısı haritasındaki kaynak (satır) sayısı üst sınırı;
+// hem Sınıf hem Gelişim Analizi Infinity geçiyor (kaynaklar satır olduğu için hepsi sığar),
+// varsayılan MAX_RESOURCE_COLUMNS geriye dönük uyumluluk içindir.
 export function buildAnalysis(entities, today, { maxResources = MAX_RESOURCE_COLUMNS } = {}) {
   const resourceMeta = new Map()
   for (const entity of entities) {
@@ -260,7 +260,7 @@ export const DEFAULT_LABELS = {
   monthlyResultTitle: 'Aylık Sonuç Analizi',
   monthlyResultSubtitle: 'Öğrenci başına aylık doğru / yanlış / boş dağılımı ve o ayın başarı yüzdesi',
   resourceTitle: 'Kaynaklara göre başarı',
-  resourceSubtitle: 'Öğrenci × kaynak — her hücrede o kitaptaki doğruluk yüzdesi ve tamamlanma oranı',
+  resourceSubtitle: 'Kaynak × öğrenci — her hücrede o kitaptaki doğruluk yüzdesi ve tamamlanma oranı',
   resourceEmpty: 'Bu aralıkta kaynak bazlı çözüm kaydı yok.',
   taskTitle: 'Görevleri zamanında çözme',
   taskSubtitle: 'Her öğrencinin görev tamamlama disiplini',
