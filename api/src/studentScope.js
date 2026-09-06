@@ -20,13 +20,34 @@ async function requireStudentContext(request, { studentId: bodyStudentId } = {})
   }
 
   const session = verifySessionToken(token)
+  const requestedStudentId = bodyStudentId || request.query.get('studentId')
 
+  // Tek round-trip: kullanıcı kaydı + (veli & studentId verilmişse) sahiplik denetimi +
+  // (veli & studentId yoksa) ilk çocuk — hepsi tek sorguda. Eskiden veli yolu 2 ayrı
+  // sorgu atıyordu; her panel isteği auth için o kadar Azure SQL gidiş-dönüşü yapıyordu
+  // ve "Bugün"/"Haftalık Plan" gibi paralel çok istekli ekranlarda bu gecikme birikiyordu.
   const requestDb = await withRequest({
     id: { type: sql.UniqueIdentifier, value: session.sub },
+    requestedStudentId: { type: sql.UniqueIdentifier, value: requestedStudentId || null },
   })
   const result = await requestDb.query(`
-    SELECT TOP 1 id, role, parent_id, funded_by_teacher_id, is_active, aydinlatma_accepted_at, kvkk_accepted_at
-    FROM dbo.Users WHERE id = @id;
+    SELECT TOP 1
+      u.id, u.role, u.parent_id, u.is_active, u.aydinlatma_accepted_at, u.kvkk_accepted_at,
+      owned.id AS owned_student_id,
+      first_child.id AS first_child_id
+    FROM dbo.Users u
+    OUTER APPLY (
+      SELECT TOP 1 s.id
+      FROM dbo.Users s
+      WHERE @requestedStudentId IS NOT NULL AND s.id = @requestedStudentId AND s.parent_id = u.id
+    ) owned
+    OUTER APPLY (
+      SELECT TOP 1 s.id
+      FROM dbo.Users s
+      WHERE @requestedStudentId IS NULL AND s.parent_id = u.id
+      ORDER BY s.created_at ASC
+    ) first_child
+    WHERE u.id = @id;
   `)
   const record = result.recordset[0]
   if (!record) {
@@ -56,35 +77,18 @@ async function requireStudentContext(request, { studentId: bodyStudentId } = {})
     return { error: json(403, CONSENT_REQUIRED_ERROR) }
   }
 
-  const requestedStudentId = bodyStudentId || request.query.get('studentId')
-
   if (requestedStudentId) {
-    const ownershipDb = await withRequest({
-      studentId: { type: sql.UniqueIdentifier, value: requestedStudentId },
-      parentId: { type: sql.UniqueIdentifier, value: session.sub },
-    })
-    const ownershipResult = await ownershipDb.query(`
-      SELECT TOP 1 id, funded_by_teacher_id FROM dbo.Users WHERE id = @studentId AND parent_id = @parentId;
-    `)
-    const ownedStudent = ownershipResult.recordset[0]
-    if (!ownedStudent) {
+    if (!record.owned_student_id) {
       return { error: json(404, { error: 'Öğrenci bulunamadı.' }) }
     }
     return { studentId: requestedStudentId, ...actor }
   }
 
-  const firstStudentDb = await withRequest({
-    parentId: { type: sql.UniqueIdentifier, value: session.sub },
-  })
-  const firstStudentResult = await firstStudentDb.query(`
-    SELECT TOP 1 id, funded_by_teacher_id FROM dbo.Users WHERE parent_id = @parentId ORDER BY created_at ASC;
-  `)
-  const firstStudent = firstStudentResult.recordset[0]
-  if (!firstStudent) {
+  if (!record.first_child_id) {
     return { error: json(404, { error: 'Bağlı öğrenci bulunamadı.' }) }
   }
 
-  return { studentId: firstStudent.id, ...actor }
+  return { studentId: record.first_child_id, ...actor }
 }
 
 /**

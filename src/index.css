@@ -671,6 +671,53 @@ button {
   outline-offset: 2px;
 }
 
+/* Yükleniyor durumu: TechCoach logosundaki iki çapraz "T" birbirine yaklaşıp uzaklaşır
+   + altında parlayan iskelet satırları. */
+/* Dış <g> döndürme/aynalamayı SVG transform attribute'u ile yapar (pivot = viewBox merkezi).
+   İç <g> yalnızca kendi sırt ekseni boyunca kayar (saf translate, transform-origin bağımsız).
+   İki T sırt sırta yaklaşır ama y=0'ı geçmez, iç içe girmez. */
+@keyframes tt-shoulder {
+  0%,
+  100% {
+    transform: translateY(34px);
+  }
+  50% {
+    transform: translateY(3px);
+  }
+}
+
+.tt-shoulder {
+  animation: tt-shoulder 1500ms ease-in-out infinite;
+}
+
+@keyframes loading-shimmer {
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.loading-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-panel-surface-soft) 0%,
+    color-mix(in srgb, var(--color-panel-surface-soft) 55%, var(--color-panel-bg)) 50%,
+    var(--color-panel-surface-soft) 100%
+  );
+  background-size: 200% 100%;
+  animation: loading-shimmer 1600ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tt-shoulder {
+    animation: none;
+    transform: translateY(12px);
+  }
+  .loading-skeleton {
+    animation-duration: 0.001ms;
+    animation-iteration-count: 1;
+  }
+}
+
 /* %100 başarı kutlaması: ekranın ortasından yukarı fırlayıp savrulan emoji parçacıkları. */
 @keyframes confetti-pop {
   0% {

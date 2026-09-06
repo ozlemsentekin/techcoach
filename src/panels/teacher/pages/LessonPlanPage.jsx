@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
-import { CalendarPlus, CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react'
+import { CalendarPlus, ChevronLeft, ChevronRight } from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
-import EmptyState from '../../shared/EmptyState'
 import LoadingState from '../../shared/LoadingState'
 import { addDaysISO, getMondayOfWeek, todayISODate } from '../../../utils/time'
 import { getTeacherLessonPlan, getTeacherStudents } from '../../../services/teacherService'
@@ -27,6 +26,7 @@ export default function LessonPlanPage() {
   const [students, setStudents] = useState(null)
   const [error, setError] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
+  const [addContext, setAddContext] = useState(null)
   const [editingEntry, setEditingEntry] = useState(null)
 
   const loadLessonPlan = () => {
@@ -73,7 +73,18 @@ export default function LessonPlanPage() {
 
   const handleLessonAdded = async () => {
     setShowAddModal(false)
+    setAddContext(null)
     await loadLessonPlan()
+  }
+
+  const openAddModal = (context = null) => {
+    setAddContext(context)
+    setShowAddModal(true)
+  }
+
+  const closeAddModal = () => {
+    setShowAddModal(false)
+    setAddContext(null)
   }
 
   const handleLessonEdited = async () => {
@@ -81,7 +92,7 @@ export default function LessonPlanPage() {
     await loadLessonPlan()
   }
 
-  const isEmpty = recurringEntries?.length === 0 && oneTimeEntries.length === 0
+  const hasStudents = Boolean(students?.length)
 
   return (
     <div className="flex flex-col gap-5">
@@ -89,10 +100,10 @@ export default function LessonPlanPage() {
         title="Ders Planım"
         subtitle="Özel ders verdiğiniz öğrencilerin haftalık programı."
         actions={
-          students?.length ? (
+          hasStudents ? (
             <button
               type="button"
-              onClick={() => setShowAddModal(true)}
+              onClick={() => openAddModal()}
               className="flex h-11 items-center gap-2 rounded-xl bg-panel-blue px-4 text-sm font-semibold text-white hover:opacity-90"
             >
               <CalendarPlus size={18} aria-hidden="true" />
@@ -126,23 +137,31 @@ export default function LessonPlanPage() {
         <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
       ) : recurringEntries === null ? (
         <LoadingState label="Ders planı yükleniyor..." />
-      ) : isEmpty ? (
-        <EmptyState
-          icon={CalendarRange}
-          title="Ders programı yok"
-          description="Özel ders programı tanımlanmış bir öğrenciniz olduğunda haftalık planınız burada görünür."
-        />
       ) : (
-        <LessonScheduleGrid
-          recurringEntries={recurringEntries}
-          oneTimeEntries={oneTimeEntries}
-          weekDates={weekDates}
-          onEntryClick={setEditingEntry}
-        />
+        <>
+          {!hasStudents && students !== null ? (
+            <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-text-muted">
+              Özel ders verdiğiniz bir öğrenciniz olduğunda gün hücrelerinden ders ekleyebilirsiniz.
+            </div>
+          ) : null}
+          <LessonScheduleGrid
+            recurringEntries={recurringEntries}
+            oneTimeEntries={oneTimeEntries}
+            weekDates={weekDates}
+            onEntryClick={setEditingEntry}
+            onAddClick={hasStudents ? openAddModal : undefined}
+          />
+        </>
       )}
 
       {showAddModal ? (
-        <AddLessonModal students={students || []} onSave={handleLessonAdded} onClose={() => setShowAddModal(false)} />
+        <AddLessonModal
+          students={students || []}
+          onSave={handleLessonAdded}
+          onClose={closeAddModal}
+          initialDayOfWeek={addContext?.dayOfWeek}
+          initialDate={addContext?.date || undefined}
+        />
       ) : null}
 
       {editingEntry ? (

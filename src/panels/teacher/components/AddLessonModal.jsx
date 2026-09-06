@@ -60,11 +60,18 @@ function DurationPicker({ value, onChange }) {
   )
 }
 
-export default function AddLessonModal({ students, onSave, onClose }) {
+export default function AddLessonModal({
+  students,
+  onSave,
+  onClose,
+  initialMode = 'recurring',
+  initialDayOfWeek,
+  initialDate,
+}) {
   const [studentTeacherId, setStudentTeacherId] = useState(students[0]?.studentTeacherId || '')
-  const [mode, setMode] = useState('recurring')
-  const [dayOfWeek, setDayOfWeek] = useState(WEEKDAYS[0].id)
-  const [date, setDate] = useState(todayISODate())
+  const [mode, setMode] = useState(initialMode)
+  const [dayOfWeek, setDayOfWeek] = useState(initialDayOfWeek || WEEKDAYS[0].id)
+  const [date, setDate] = useState(initialDate || todayISODate())
   const [startTime, setStartTime] = useState('15:00')
   const [durationMinutes, setDurationMinutes] = useState(60)
   const [saving, setSaving] = useState(false)

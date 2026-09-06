@@ -1,4 +1,4 @@
-import { CalendarDays } from 'lucide-react'
+import { CalendarDays, Plus } from 'lucide-react'
 import Badge from '../../ui/Badge'
 
 const WEEKDAYS = [
@@ -15,7 +15,13 @@ function formatDayDate(dateISO) {
   return new Date(dateISO).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })
 }
 
-export default function LessonScheduleGrid({ recurringEntries, oneTimeEntries, weekDates, onEntryClick }) {
+export default function LessonScheduleGrid({
+  recurringEntries,
+  oneTimeEntries,
+  weekDates,
+  onEntryClick,
+  onAddClick,
+}) {
   const entriesByDay = new Map(WEEKDAYS.map((day) => [day.id, []]))
 
   recurringEntries.forEach((entry) => {
@@ -75,6 +81,16 @@ export default function LessonScheduleGrid({ recurringEntries, oneTimeEntries, w
                 ))}
               </div>
             )}
+            {onAddClick ? (
+              <button
+                type="button"
+                onClick={() => onAddClick({ dayOfWeek: day.id, date: weekDates?.[index] || null })}
+                className="mt-auto flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-panel-border py-2 text-xs font-semibold text-panel-text-muted hover:border-panel-blue hover:text-panel-blue"
+              >
+                <Plus size={14} aria-hidden="true" />
+                Ders ekle
+              </button>
+            ) : null}
           </div>
         )
       })}
