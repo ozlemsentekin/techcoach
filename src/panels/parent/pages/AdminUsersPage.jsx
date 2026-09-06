@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Ban, ChevronDown, ChevronRight, Library, LogIn, Pencil, RotateCcw, Search, ShieldCheck, Trash2, X } from 'lucide-react'
+import { Ban, ChevronDown, ChevronRight, Library, Lock, LockOpen, LogIn, Pencil, RotateCcw, Search, ShieldCheck, Trash2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { useAuth } from '../../../context/useAuth'
 import PageHeader from '../../layout/PageHeader'
@@ -76,6 +76,21 @@ function LibraryBadge({ user }) {
 function PassiveBadge({ user }) {
   if (user.isActive !== false) return null
   return <Badge tone="neutral">Pasif</Badge>
+}
+
+// Şifreyi arka arkaya yanlış girip geçici kilitlenen hesap.
+function isAccountLocked(user) {
+  return Boolean(user.lockoutUntil) && new Date(user.lockoutUntil).getTime() > Date.now()
+}
+
+function LockBadge({ user }) {
+  if (!isAccountLocked(user)) return null
+  return (
+    <Badge tone="red">
+      <Lock size={12} aria-hidden="true" />
+      Kilitli
+    </Badge>
+  )
 }
 
 function ContactCell({ user }) {
@@ -259,10 +274,22 @@ function EditUserModal({ user, isSelf, onSaved, onClose }) {
   )
 }
 
-function RowActions({ user, isSelf, impersonating, onEdit, onImpersonate, onToggleActive, onDelete }) {
+function RowActions({ user, isSelf, impersonating, unlocking, onEdit, onImpersonate, onUnlock, onToggleActive, onDelete }) {
   const passive = user.isActive === false
   return (
     <div className="flex items-center justify-end gap-3">
+      {isAccountLocked(user) ? (
+        <button
+          type="button"
+          aria-label="Hesap kilidini kaldır"
+          title="Hesap kilidini kaldır"
+          disabled={unlocking}
+          className="text-panel-warm hover:text-panel-red disabled:opacity-50"
+          onClick={() => onUnlock(user)}
+        >
+          <LockOpen size={14} aria-hidden="true" />
+        </button>
+      ) : null}
       {!isSelf ? (
         <button
           type="button"
@@ -309,7 +336,7 @@ function RowActions({ user, isSelf, impersonating, onEdit, onImpersonate, onTogg
   )
 }
 
-function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpersonate, onToggleActive, onDelete }) {
+function UserRow({ user, indent = false, isSelf, impersonating, unlocking, onEdit, onImpersonate, onUnlock, onToggleActive, onDelete }) {
   return (
     <tr className="hover:bg-[#f8f7fb]">
       <td className="px-4 py-3 text-[#253d3e]">
@@ -323,6 +350,7 @@ function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpers
           ) : null}
           <LibraryBadge user={user} />
           <PassiveBadge user={user} />
+          <LockBadge user={user} />
         </div>
       </td>
       <td className="px-4 py-3">
@@ -338,8 +366,10 @@ function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpers
           user={user}
           isSelf={isSelf}
           impersonating={impersonating}
+          unlocking={unlocking}
           onEdit={onEdit}
           onImpersonate={onImpersonate}
+          onUnlock={onUnlock}
           onToggleActive={onToggleActive}
           onDelete={onDelete}
         />
@@ -348,7 +378,7 @@ function UserRow({ user, indent = false, isSelf, impersonating, onEdit, onImpers
   )
 }
 
-function UserMobileCard({ user, indent = false, isSelf, impersonating, onEdit, onImpersonate, onToggleActive, onDelete }) {
+function UserMobileCard({ user, indent = false, isSelf, impersonating, unlocking, onEdit, onImpersonate, onUnlock, onToggleActive, onDelete }) {
   return (
     <article className={`rounded-xl border border-panel-border bg-white p-4 shadow-sm ${indent ? 'ml-4 border-dashed' : ''}`}>
       <div className="flex items-start justify-between gap-3">
@@ -363,6 +393,7 @@ function UserMobileCard({ user, indent = false, isSelf, impersonating, onEdit, o
             ) : null}
             <LibraryBadge user={user} />
             <PassiveBadge user={user} />
+            <LockBadge user={user} />
           </div>
           <div className="mt-1">
             <ContactCell user={user} />
@@ -372,8 +403,10 @@ function UserMobileCard({ user, indent = false, isSelf, impersonating, onEdit, o
           user={user}
           isSelf={isSelf}
           impersonating={impersonating}
+          unlocking={unlocking}
           onEdit={onEdit}
           onImpersonate={onImpersonate}
+          onUnlock={onUnlock}
           onToggleActive={onToggleActive}
           onDelete={onDelete}
         />
@@ -392,7 +425,7 @@ function UserMobileCard({ user, indent = false, isSelf, impersonating, onEdit, o
   )
 }
 
-function GroupRow({ user, students, isSelf, impersonating, onEdit, onImpersonate, onToggleActive, onDelete }) {
+function GroupRow({ user, students, isSelf, impersonating, unlocking, onEdit, onImpersonate, onUnlock, onToggleActive, onDelete }) {
   const [expanded, setExpanded] = useState(false)
   const hasStudents = students.length > 0
 
@@ -422,6 +455,7 @@ function GroupRow({ user, students, isSelf, impersonating, onEdit, onImpersonate
             ) : null}
             <LibraryBadge user={user} />
             <PassiveBadge user={user} />
+            <LockBadge user={user} />
             {hasStudents ? (
               <span className="inline-flex items-center rounded-full bg-[#f8f7fb] px-2.5 py-1 text-xs font-medium text-[#1c2b5e]">
                 {students.length} öğrenci
@@ -442,8 +476,10 @@ function GroupRow({ user, students, isSelf, impersonating, onEdit, onImpersonate
             user={user}
             isSelf={isSelf}
             impersonating={impersonating}
+            unlocking={unlocking}
             onEdit={onEdit}
             onImpersonate={onImpersonate}
+            onUnlock={onUnlock}
             onToggleActive={onToggleActive}
             onDelete={onDelete}
           />
@@ -457,8 +493,10 @@ function GroupRow({ user, students, isSelf, impersonating, onEdit, onImpersonate
               indent
               isSelf={false}
               impersonating={impersonating}
+              unlocking={unlocking}
               onEdit={onEdit}
               onImpersonate={onImpersonate}
+              onUnlock={onUnlock}
               onToggleActive={onToggleActive}
               onDelete={onDelete}
             />
@@ -468,7 +506,7 @@ function GroupRow({ user, students, isSelf, impersonating, onEdit, onImpersonate
   )
 }
 
-function GroupMobileCard({ user, students, isSelf, impersonating, onEdit, onImpersonate, onToggleActive, onDelete }) {
+function GroupMobileCard({ user, students, isSelf, impersonating, unlocking, onEdit, onImpersonate, onUnlock, onToggleActive, onDelete }) {
   const [expanded, setExpanded] = useState(false)
   const hasStudents = students.length > 0
 
@@ -502,6 +540,7 @@ function GroupMobileCard({ user, students, isSelf, impersonating, onEdit, onImpe
                 ) : null}
                 <LibraryBadge user={user} />
                 <PassiveBadge user={user} />
+                <LockBadge user={user} />
                 {hasStudents ? (
                   <span className="inline-flex items-center rounded-full bg-[#f8f7fb] px-2.5 py-1 text-xs font-medium text-[#1c2b5e]">
                     {students.length} öğrenci
@@ -518,8 +557,10 @@ function GroupMobileCard({ user, students, isSelf, impersonating, onEdit, onImpe
             user={user}
             isSelf={isSelf}
             impersonating={impersonating}
+            unlocking={unlocking}
             onEdit={onEdit}
             onImpersonate={onImpersonate}
+            onUnlock={onUnlock}
             onToggleActive={onToggleActive}
             onDelete={onDelete}
           />
@@ -544,8 +585,10 @@ function GroupMobileCard({ user, students, isSelf, impersonating, onEdit, onImpe
               indent
               isSelf={false}
               impersonating={impersonating}
+              unlocking={unlocking}
               onEdit={onEdit}
               onImpersonate={onImpersonate}
+              onUnlock={onUnlock}
               onToggleActive={onToggleActive}
               onDelete={onDelete}
             />
@@ -563,6 +606,7 @@ export default function AdminUsersPage() {
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
   const [impersonatingId, setImpersonatingId] = useState('')
+  const [unlockingId, setUnlockingId] = useState('')
   const [query, setQuery] = useState('')
   const [tab, setTab] = useState('veliler')
   const [editingUser, setEditingUser] = useState(null)
@@ -602,6 +646,21 @@ export default function AdminUsersPage() {
       setActionError(err.message)
     } finally {
       setImpersonatingId('')
+    }
+  }
+
+  const handleUnlock = async (user) => {
+    setActionError('')
+    setUnlockingId(user.id)
+    try {
+      const data = await authRequest(`/api/panel-admin/users/${user.id}/unlock`, { method: 'POST' })
+      setUsers((current) =>
+        (current || []).map((item) => (item.id === data.user.id ? { ...item, ...data.user } : item)),
+      )
+    } catch (err) {
+      setActionError(err.message)
+    } finally {
+      setUnlockingId('')
     }
   }
 
@@ -777,8 +836,10 @@ export default function AdminUsersPage() {
                     students={students}
                     isSelf={user.id === authUser?.id}
                     impersonating={Boolean(impersonatingId)}
+                    unlocking={Boolean(unlockingId)}
                     onEdit={setEditingUser}
                     onImpersonate={handleImpersonate}
+                    onUnlock={handleUnlock}
                     onToggleActive={setTogglingUser}
                     onDelete={setDeletingUser}
                   />
@@ -789,8 +850,10 @@ export default function AdminUsersPage() {
                     user={student}
                     isSelf={student.id === authUser?.id}
                     impersonating={Boolean(impersonatingId)}
+                    unlocking={Boolean(unlockingId)}
                     onEdit={setEditingUser}
                     onImpersonate={handleImpersonate}
+                    onUnlock={handleUnlock}
                     onToggleActive={setTogglingUser}
                     onDelete={setDeletingUser}
                   />
@@ -817,8 +880,10 @@ export default function AdminUsersPage() {
                       students={students}
                       isSelf={user.id === authUser?.id}
                       impersonating={Boolean(impersonatingId)}
+                      unlocking={Boolean(unlockingId)}
                       onEdit={setEditingUser}
                       onImpersonate={handleImpersonate}
+                      onUnlock={handleUnlock}
                       onToggleActive={setTogglingUser}
                       onDelete={setDeletingUser}
                     />
@@ -829,8 +894,10 @@ export default function AdminUsersPage() {
                       user={student}
                       isSelf={student.id === authUser?.id}
                       impersonating={Boolean(impersonatingId)}
+                      unlocking={Boolean(unlockingId)}
                       onEdit={setEditingUser}
                       onImpersonate={handleImpersonate}
+                      onUnlock={handleUnlock}
                       onToggleActive={setTogglingUser}
                       onDelete={setDeletingUser}
                     />
