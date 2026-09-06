@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
@@ -14,9 +14,11 @@ import {
 } from 'lucide-react'
 import { authRequest, cachedGet, invalidateCache } from '../../../services/authClient'
 import { useAuth } from '../../../context/useAuth'
-import { readJSON, writeJSON } from '../../../services/storage'
+import { hasSeenWelcome, saveOnboardingState } from '../onboarding/onboardingStorage'
+import ParentTourContext from '../onboarding/parentTourContext'
 import { useParentStudentsGate } from '../useParentStudentsGate'
 import PageHeader from '../../layout/PageHeader'
+import { parentStudentsNavLabel } from '../../layout/navConfig'
 import LoadingState from '../../shared/LoadingState'
 import Button from '../../ui/Button'
 import StudentTeacherModal from '../components/StudentTeacherModal'
@@ -30,20 +32,6 @@ import { ADD_STUDENT_WIZARD_STEPS, GENDER_OPTIONS, GRADE_OPTIONS, getGradeBirthY
 import ChildSeatPurchaseModal from '../components/ChildSeatPurchaseModal'
 import ParentWelcome from '../components/ParentWelcome'
 import ParentWelcomeModal from '../components/ParentWelcomeModal'
-
-const WELCOME_SEEN_KEY = 'parentWelcomeSeen'
-
-function hasSeenWelcome(parentId) {
-  if (!parentId) return true
-  const map = readJSON(WELCOME_SEEN_KEY, {})
-  return Boolean(map && map[parentId])
-}
-
-function markWelcomeSeen(parentId) {
-  if (!parentId) return
-  const map = readJSON(WELCOME_SEEN_KEY, {}) || {}
-  writeJSON(WELCOME_SEEN_KEY, { ...map, [parentId]: true })
-}
 
 const INITIAL_FORM = {
   firstName: '',
@@ -224,9 +212,20 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
     }
   }
 
-  const handleSkipResources = () => {
+  const handleGoToBookshelf = async () => {
+    if (loading) return
     setError('')
-    setStep(4)
+    setLoading(true)
+    try {
+      await resourcePickerRef.current?.save?.()
+      invalidateCache('/api/parent/students')
+      onClose()
+      navigate('/parent/bookshelf')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleAssignResourcesNow = () => {
@@ -241,7 +240,7 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
       <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden bg-white shadow-panel-2 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
         <div className="flex items-center justify-between gap-4 px-4 pb-3 pt-3 sm:px-6 sm:pb-3.5 sm:pt-4">
           <h2 className="text-lg font-semibold text-panel-text">
-            {step === 4 ? 'Profil hazır' : 'Çocuk Ekle'}
+            {step === 4 ? 'İlk adım tamamlandı' : 'Çocuğunuzun profilini oluşturalım'}
           </h2>
           <button type="button" aria-label="Kapat" onClick={onClose}>
             <X size={20} />
@@ -256,6 +255,7 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
 
           {step === 1 ? (
             <form id="add-student-step1" onSubmit={handleCreate} className="flex flex-col gap-3">
+              <p className="rounded-xl bg-panel-blue-soft p-3 text-sm leading-6 text-panel-text">Çocuğunuzun bilgileriyle başlayın. Sınıf bilgisi uygun kaynakları seçmenize yardımcı olur. Fotoğraf eklemek isteğe bağlıdır; sonraki okul ve kaynak adımlarını atlayabilirsiniz.</p>
               <div className="flex flex-col gap-3 sm:flex-row sm:gap-5">
                 <div className="flex justify-center sm:w-2/5 sm:items-start">
                   <ResourceImageField value={photoUrl} onChange={setPhotoUrl} shape="circle" compact size={160} />
@@ -353,8 +353,9 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
               </div>
 
               <p className="-mt-1.5 text-xs text-panel-text-muted">
-                Öğrenci, telefon numarası ve varsayılan olarak telefonun son 6 hanesinden oluşan şifreyle, sizin
-                hesabınızdan bağımsız olarak doğrudan giriş yapabilir.
+                Çocuğunuz, buraya girdiğiniz kendi telefon numarasıyla ayrı öğrenci hesabına giriş yapar.
+                İlk giriş şifresi bu numaranın son 6 hanesidir; ilk girişte yeni şifre belirlemesi istenir.
+                Siz veli hesabınıza kendi telefon numaranız ve şifrenizle girersiniz.
               </p>
 
               <label className="flex items-start gap-2 text-sm text-panel-text">
@@ -407,23 +408,23 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
                   {(createdStudent?.fullName || form.firstName || 'Çocuğunuz').trim().split(/\s+/)[0]} için profil hazır
                 </h3>
                 <p className="mx-auto mt-1.5 max-w-sm text-sm leading-6 text-panel-text-muted">
-                  Sırada haftalık planı kurmak var. “Bugün” ekranındaki başlangıç rehberi
-                  kalan adımlarda size yol gösterecek.
+                  Şimdi Haftalık Plan’da bir gün seçip ilk çalışma görevini ekleyin.
+                  Ardından “Bugün” ekranından günlük görevleri ve tamamlanma durumunu takip edin.
                 </p>
               </div>
               <div className="mt-1 flex w-full max-w-sm flex-col gap-2">
-                <Button type="button" size="md" onClick={handleAssignResourcesNow}>
+                <Button type="button" variant="secondary" size="md" onClick={handleAssignResourcesNow}>
                   <BookOpen size={16} aria-hidden="true" />
-                  Kaynak / Kitap Ata
+                  Kaynakları düzenle (isteğe bağlı)
                 </Button>
                 <Button
                   type="button"
-                  variant="secondary"
                   size="md"
-                  onClick={() => navigate('/parent/weekly-plan')}
+                  className="order-first min-h-11"
+                  onClick={() => { onClose(); navigate(`/parent/weekly-plan?studentId=${studentId}`) }}
                 >
                   <TrendingUp size={16} aria-hidden="true" />
-                  Haftalık Planı Kur
+                  İlk çalışmayı planla
                 </Button>
               </div>
             </div>
@@ -448,7 +449,7 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
                 Geri
               </Button>
               <Button type="button" variant="secondary" size="md" onClick={handleSkipSchool} disabled={loading}>
-                Atla
+                Daha sonra ekle
               </Button>
               <Button type="button" size="md" onClick={handleSaveSchool} disabled={loading}>
                 {loading ? 'Kaydediliyor...' : 'Kaydet ve Devam Et'}
@@ -461,8 +462,8 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
               <Button type="button" variant="secondary" size="md" onClick={() => setStep(2)} disabled={loading}>
                 Geri
               </Button>
-              <Button type="button" variant="secondary" size="md" onClick={handleSkipResources} disabled={loading}>
-                Atla ve Bitir
+              <Button type="button" variant="secondary" size="md" onClick={handleGoToBookshelf} disabled={loading}>
+                Kitaplığınızı yeniden oluşturun
               </Button>
               <Button type="button" size="md" onClick={handleSaveResources} disabled={loading}>
                 {loading ? 'Kaydediliyor...' : 'Kaydet ve Bitir'}
@@ -471,8 +472,8 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
           ) : null}
 
           {step === 4 ? (
-            <Button type="button" variant="secondary" size="md" onClick={onClose}>
-              Panele git
+            <Button type="button" variant="secondary" size="md" onClick={() => { onClose(); navigate('/parent/dashboard') }}>
+              Bugün ekranına git
             </Button>
           ) : null}
         </div>
@@ -558,6 +559,7 @@ export default function StudentsPage() {
   const { markHasStudents } = useParentStudentsGate()
   const { authUser } = useAuth()
   const parentId = authUser?.id
+  const tour = useContext(ParentTourContext)
   const [searchParams, setSearchParams] = useSearchParams()
   const [students, setStudents] = useState(null)
   const [quota, setQuota] = useState(null)
@@ -598,7 +600,7 @@ export default function StudentsPage() {
     loadStudents({ force: justPurchased }).then((data) => {
       if (justPurchased && data?.quota?.hasRemaining) setShowModal(true)
       const list = data?.students || []
-      if (!justPurchased && list.length === 0 && !authUser?.isAdmin && !hasSeenWelcome(parentId)) {
+      if (data && !justPurchased && !paymentFailed && list.length === 0 && !authUser?.isAdmin && !authUser?.actingAdmin && !hasSeenWelcome(parentId)) {
         setShowWelcome(true)
       }
     })
@@ -624,7 +626,7 @@ export default function StudentsPage() {
   }, [students])
 
   const handleCloseWelcome = () => {
-    markWelcomeSeen(parentId)
+    saveOnboardingState(parentId, 'deferred')
     setShowWelcome(false)
   }
 
@@ -661,11 +663,11 @@ export default function StudentsPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Çocuklarım"
+        title={parentStudentsNavLabel(students?.length ?? null)}
         subtitle="Çocuklarınızın profillerini yönetin, gelişimlerini takip edin ve onlara özel kaynaklara ulaşın."
         actions={
           students && students.length > 0 ? (
-            <Button onClick={handleAddChild}>
+            <Button data-tour="create-child" className="min-h-11" onClick={handleAddChild}>
               <Plus size={16} aria-hidden="true" />
               Çocuk Profili Ekle
             </Button>
@@ -691,7 +693,7 @@ export default function StudentsPage() {
       ) : students === null ? (
         <LoadingState label="Çocuklar yükleniyor..." />
       ) : students.length === 0 ? (
-        <ParentWelcome parentName={authUser?.fullName} onAddChild={handleAddChild} />
+        <ParentWelcome parentName={authUser?.fullName} onAddChild={handleAddChild} onStartTour={tour?.enabled ? tour.startTour : undefined} />
       ) : (
         <div className="fade-slide-in">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -709,7 +711,7 @@ export default function StudentsPage() {
       )}
 
       {showWelcome ? (
-        <ParentWelcomeModal parentName={authUser?.fullName} onClose={handleCloseWelcome} />
+        <ParentWelcomeModal parentName={authUser?.fullName} onClose={handleCloseWelcome} onStart={() => { setShowWelcome(false); tour?.startTour() }} />
       ) : null}
       {showModal ? (
         <AddStudentModal

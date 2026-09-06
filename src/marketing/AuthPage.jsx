@@ -122,7 +122,7 @@ export default function AuthPage() {
                 value={form.password}
                 onChange={handleInputChange}
               />
-              <div className="auth-hint">Şifreniz, telefon numaranızın son 6 hanesidir.</div>
+              <div className="auth-hint">İlk girişte başlangıç şifreniz telefon numaranızın son 6 hanesidir. Ardından yeni şifre belirlemeniz istenir. Sonraki girişlerde belirlediğiniz şifreyi kullanın.</div>
 
               <button type="submit" className="btn btn-primary login-submit" disabled={authLoading}>
                 <LogIn size={18} aria-hidden="true" />

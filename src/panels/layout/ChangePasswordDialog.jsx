@@ -12,6 +12,8 @@ function PasswordField({ label, value, onChange, autoComplete, visible, onToggle
           value={value}
           onChange={(event) => onChange(event.target.value)}
           autoComplete={autoComplete}
+          autoFocus={autoComplete === 'current-password'}
+          required
           className="min-w-0 w-full rounded-xl border border-panel-border px-3 py-2.5 pr-10 text-base text-panel-text"
         />
         <button
@@ -27,7 +29,7 @@ function PasswordField({ label, value, onChange, autoComplete, visible, onToggle
   )
 }
 
-export default function ChangePasswordDialog({ onClose }) {
+export default function ChangePasswordDialog({ onClose, required = false, onSaved, onLogout }) {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -56,6 +58,7 @@ export default function ChangePasswordDialog({ onClose }) {
         body: JSON.stringify({ currentPassword, newPassword }),
       })
       setSuccess(true)
+      await onSaved?.()
     } catch (err) {
       setError(err.message || 'Şifre değiştirilemedi, tekrar deneyin.')
     } finally {
@@ -66,17 +69,18 @@ export default function ChangePasswordDialog({ onClose }) {
   if (success) {
     return (
       <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-black/30 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">
-        <div className="w-full min-w-0 max-w-full overflow-x-hidden rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-lg sm:max-w-sm sm:rounded-2xl sm:p-6">
+        <div className="w-full min-w-0 max-w-full max-h-[92dvh] overflow-y-auto overflow-x-hidden rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-lg sm:max-w-sm sm:rounded-2xl sm:p-6">
           <div className="flex items-center gap-2 text-emerald-600">
             <Check size={20} aria-hidden="true" />
             <h2 className="text-lg font-semibold text-panel-text">Şifre değiştirildi</h2>
           </div>
           <p className="mt-3 break-words text-base text-panel-text-muted">
-            Yeni şifren kaydedildi, bir sonraki girişte bu şifreyi kullanabilirsin.
+            Yeni şifreniz kaydedildi. Bundan sonraki girişlerde telefon numaranızla birlikte bu şifreyi kullanın.
           </p>
+          {error ? <p role="alert" className="mt-3 text-sm text-panel-warm">{error}</p> : null}
           <button
             type="button"
-            onClick={onClose}
+            onClick={async () => { try { await onClose() } catch (err) { setError(err.message || 'Oturum yenilenemedi. Tekrar deneyin.') } }}
             className="mt-6 w-full rounded-xl bg-panel-blue px-4 py-3 text-base font-medium text-white"
           >
             Tamam
@@ -90,23 +94,24 @@ export default function ChangePasswordDialog({ onClose }) {
     <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-black/30 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">
       <form
         onSubmit={handleSubmit}
-        className="w-full min-w-0 max-w-full overflow-x-hidden rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-lg sm:max-w-sm sm:rounded-2xl sm:p-6"
+        className="w-full min-w-0 max-w-full max-h-[92dvh] overflow-y-auto overflow-x-hidden rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-lg sm:max-w-sm sm:rounded-2xl sm:p-6"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
               <KeyRound size={18} aria-hidden="true" />
             </span>
-            <h2 className="text-lg font-semibold text-panel-text">Şifremi Değiştir</h2>
+            <h2 className="text-lg font-semibold text-panel-text">{required ? 'İlk giriş: şifrenizi belirleyin' : 'Şifremi Değiştir'}</h2>
           </div>
-          <button type="button" aria-label="Kapat" onClick={onClose}>
+          {!required ? <button type="button" aria-label="Kapat" onClick={onClose}>
             <X size={18} />
-          </button>
+          </button> : null}
         </div>
 
+        {required ? <p className="mt-4 text-sm leading-6 text-panel-text-muted">Başlangıç şifreniz, bu hesaba kayıtlı telefon numarasının son 6 hanesidir. Panele devam etmek için yalnızca sizin bildiğiniz yeni bir şifre belirleyin. Yeni şifre en az 6 karakter olmalı ve başlangıç şifresinden farklı olmalıdır.</p> : null}
         <div className="mt-4 flex flex-col gap-3">
           <PasswordField
-            label="Mevcut şifre"
+            label={required ? 'Başlangıç şifresi (telefonun son 6 hanesi)' : 'Mevcut şifre'}
             value={currentPassword}
             onChange={setCurrentPassword}
             autoComplete="current-password"
@@ -131,16 +136,16 @@ export default function ChangePasswordDialog({ onClose }) {
           />
         </div>
 
-        {error ? <p className="mt-3 text-sm text-panel-warm">{error}</p> : null}
+        {error ? <p role="alert" className="mt-3 text-sm text-panel-warm">{error}</p> : null}
 
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:gap-3">
           <button
             type="button"
-            onClick={onClose}
+            onClick={required ? onLogout : onClose}
             disabled={saving}
             className="flex-1 rounded-xl border border-panel-border px-4 py-3 text-base font-medium text-panel-text disabled:opacity-60"
           >
-            Vazgeç
+            {required ? 'Çıkış yap' : 'Vazgeç'}
           </button>
           <button
             type="submit"

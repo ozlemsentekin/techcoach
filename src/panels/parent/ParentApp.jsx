@@ -5,9 +5,11 @@ import { cachedGet } from '../../services/authClient'
 import ThemeProvider from '../../theme/ThemeProvider'
 import PanelLayout from '../layout/PanelLayout'
 import LoadingState from '../shared/LoadingState'
+import ParentTourProvider from './onboarding/ParentTourProvider'
 import ParentStudentsGateContext from './parentStudentsGateContextObject'
 import { useParentStudentsGate } from './useParentStudentsGate'
 
+const GettingStartedPage = lazy(() => import('./pages/GettingStartedPage'))
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const WeeklyPlanPage = lazy(() => import('./pages/WeeklyPlanPage'))
 const ProgressPage = lazy(() => import('./pages/ProgressPage'))
@@ -51,6 +53,8 @@ function ParentStudentsGateProvider({ children }) {
   // Fetch tamamlanana kadar mevcut çoğunluk (zaten çocuğu olan) veliler için menüde
   // gereksiz bir yanıp sönme olmasın diye iyimser varsayılan true.
   const [hasStudents, setHasStudents] = useState(true)
+  // Menü adının "Çocuğum" / "Çocuklarım" arasında seçilmesi için (null = henüz bilinmiyor).
+  const [studentCount, setStudentCount] = useState(null)
 
   // authUser.id'ye bağlı: admin bir veliyi impersonate edip /parent/dashboard'a geçtiğinde
   // ParentApp yeniden mount olmuyor, bu yüzden kimlik değiştiğinde yeniden fetch etmezsek
@@ -59,7 +63,11 @@ function ParentStudentsGateProvider({ children }) {
     let ignore = false
     cachedGet('/api/parent/students')
       .then((data) => {
-        if (!ignore) setHasStudents((data.students || []).length > 0)
+        if (!ignore) {
+          const count = (data.students || []).length
+          setHasStudents(count > 0)
+          setStudentCount(count)
+        }
       })
       .catch(() => {})
       .finally(() => {
@@ -74,9 +82,10 @@ function ParentStudentsGateProvider({ children }) {
     () => ({
       studentsLoading,
       hasStudents,
+      studentCount,
       markHasStudents: () => setHasStudents(true),
     }),
-    [studentsLoading, hasStudents],
+    [studentsLoading, hasStudents, studentCount],
   )
 
   return <ParentStudentsGateContext.Provider value={value}>{children}</ParentStudentsGateContext.Provider>
@@ -94,6 +103,7 @@ export default function ParentApp() {
   return (
     <ThemeProvider fixedTheme="techcoach">
       <ParentStudentsGateProvider>
+        <ParentTourProvider>
         <Routes>
           <Route element={<PanelLayout role="parent" />}>
             <Route index element={<Navigate to="dashboard" replace />} />
@@ -115,6 +125,7 @@ export default function ParentApp() {
             <Route path="tests" element={pageElement(TestsPage)} />
             <Route path="mistakes" element={pageElement(MistakesPage)} />
             <Route path="students" element={pageElement(StudentsPage)} />
+            <Route path="guide" element={pageElement(GettingStartedPage)} />
             <Route path="teachers" element={pageElement(TeachersPage)} />
             <Route
               path="library"
@@ -185,6 +196,7 @@ export default function ParentApp() {
             <Route path="*" element={<Navigate to="dashboard" replace />} />
           </Route>
         </Routes>
+        </ParentTourProvider>
       </ParentStudentsGateProvider>
     </ThemeProvider>
   )

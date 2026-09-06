@@ -17,12 +17,13 @@ const LABEL_CLASS =
 export default function ParentSidebar() {
   const location = useLocation()
   const { authUser } = useAuth()
-  const { hasStudents } = useParentStudentsGate()
+  const { hasStudents, studentCount } = useParentStudentsGate()
   const isAdminSection = location.pathname.startsWith('/parent/admin')
   const sidebarNav = getParentSidebarNav(
     authUser?.isAdmin,
     hasStudents,
     Boolean(authUser?.isAdmin || authUser?.canManageLibrary),
+    studentCount,
   )
 
   return (

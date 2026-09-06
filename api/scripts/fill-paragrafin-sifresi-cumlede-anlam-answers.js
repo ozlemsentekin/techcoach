@@ -13,7 +13,6 @@ function loadLocalSettings() {
 
 // "Paragrafın Şifresi" (7. Sınıf) — "2. Cümlede Anlam Özelliği Metodu" İçeriğindeki
 // iki testin cevap anahtarları. Kaynağın kendi cevap anahtarı sayfasından birebir alındı.
-const RESOURCE_BOOK_ID = 'F9639A95-BC60-4DF9-96F5-D80FC1161799'
 const TOPIC_ID = 'CFC5EE02-3E9F-4450-8027-D3F4E319D03D'
 
 // [test adı, soru sayısı, cevaplar]

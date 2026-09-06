@@ -734,12 +734,8 @@ function TaskAgendaItem({
 
 export default function DailyPlanTable({ tasks, backlogTasks = [], onEdit, onDelete, onAddTask, onOpenAnswerSheet, onCompleteTask }) {
   const [openMenuId, setOpenMenuId] = useState(null)
-  const [agendaFilter, setAgendaFilter] = useState(() => {
-    const initial = [...backlogTasks, ...tasks]
-    const hasPending = initial.some((task) => getDailyFlowFilterKey(task) === 'pending')
-    // Varsayılan olarak bekleyen görevleri göster; hepsi tamamlandıysa tüm akışa düş
-    return hasPending || initial.length === 0 ? 'pending' : 'all'
-  })
+  // Varsayılan olarak her zaman bekleyen görevleri göster
+  const [agendaFilter, setAgendaFilter] = useState('pending')
 
   const combinedTasks = useMemo(
     () => [...backlogTasks.map((task) => ({ ...task, isBacklog: true })), ...tasks],

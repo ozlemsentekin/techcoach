@@ -10,6 +10,7 @@ import { cachedGet, authRequest } from '../../../services/authClient'
 import { RATE_TONES, completionRateTone, successRateTone } from '../../shared/rateTones'
 import { ImagePreviewLightbox } from '../../shared/ResourceBookCard'
 import { BOOKSHELF_RESOURCE_TYPE_LABELS } from '../../shared/bookshelf/bookshelfConstants'
+import StudentResourceAssignModal from '../components/StudentResourceAssignModal'
 import BookFormModal from '../../shared/bookshelf/BookFormModal'
 import BookshelfDetailModal from '../../shared/bookshelf/BookshelfDetailModal'
 import BookAdditionRequestModal from '../../shared/requests/BookAdditionRequestModal'
@@ -256,6 +257,7 @@ export default function ParentBookshelfPage() {
   const [selectedSubjectId, setSelectedSubjectId] = useState(null)
   const [previewImage, setPreviewImage] = useState(null)
   const [creating, setCreating] = useState(false)
+  const [assigningStudent, setAssigningStudent] = useState(null)
   const [requesting, setRequesting] = useState(false)
   const [editingBook, setEditingBook] = useState(null)
   const [detailBookId, setDetailBookId] = useState(null)
@@ -336,7 +338,7 @@ export default function ParentBookshelfPage() {
         subtitle={
           selectedGroup
             ? null
-            : `${childName} adına atanmış tüm kitaplar. Buradan yeni özel kaynak da ekleyebilirsiniz.`
+            : `${childName} adına atanmış tüm kitaplar. Kütüphaneden kitap seçebilir veya kendi özel kaynağınızı ekleyebilirsiniz.`
         }
         actions={
           selectedGroup ? (
@@ -352,6 +354,10 @@ export default function ParentBookshelfPage() {
             </Button>
           ) : (
             <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" className="min-h-11 gap-1.5" disabled={!selectedStudent} onClick={() => setAssigningStudent(selectedStudent)}>
+                <BookOpen size={16} aria-hidden="true" />
+                Kütüphaneden kitap seç
+              </Button>
               <Button
                 type="button"
                 size="md"
@@ -397,7 +403,13 @@ export default function ParentBookshelfPage() {
         <EmptyState
           icon={BookMarked}
           title="Henüz kitap atanmadı"
-          description={`${childName} için kaynak atandığında burada listelenir. "Yeni Kitap Ekle" ile kendi özel kaynağınızı da ekleyebilirsiniz.`}
+          description={`${childName} için kütüphaneden kitap seçerek başlayın. “Yeni Kitap Ekle” ile kendi özel kaynağınızı da oluşturabilirsiniz.`}
+          action={
+            <Button className="min-h-11" disabled={!selectedStudent} onClick={() => setAssigningStudent(selectedStudent)}>
+              <BookOpen size={16} aria-hidden="true" />
+              Kütüphaneden kitap seç
+            </Button>
+          }
         />
       ) : selectedGroup ? (
         <div className="fade-slide-in grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -417,6 +429,22 @@ export default function ParentBookshelfPage() {
           ))}
         </div>
       )}
+
+      {assigningStudent ? (
+        <StudentResourceAssignModal
+          student={assigningStudent}
+          onSaved={(studentId, _resourceCount, updatedBooks) => {
+            setAssigningStudent(null)
+            if (studentId === selectedStudentId) {
+              setBooks(updatedBooks.filter((book) => book.assigned))
+              setBooksStudentId(studentId)
+              setSelectedSubjectId(null)
+              setError('')
+            }
+          }}
+          onClose={() => setAssigningStudent(null)}
+        />
+      ) : null}
 
       {creating ? (
         <BookFormModal onSaved={handleCreated} onClose={() => setCreating(false)} />

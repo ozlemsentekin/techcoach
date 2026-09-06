@@ -63,8 +63,6 @@ const RESOURCE_BOOK_TYPES = ['konu_anlatimi', 'soru_bankasi', 'okuma_kitabi', 'e
 const RESOURCE_BOOK_GRADES = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'])
 // Kütüphane özelliği (veli/öğretmen kaynak gezinme + ekleme) ortaokul (5-8) ve lise (9-12) kademelerini kapsıyor.
 const LIBRARY_GRADES = new Set(['5', '6', '7', '8', '9', '10', '11', '12'])
-const LIBRARY_CREATOR_ROLES = new Set(['ogretmen', 'ebeveyn'])
-const MAX_ANSWER_KEY_PHOTOS = 8
 // Bir kaynak onaylıysa herkese, onay bekliyor/reddedildiyse sadece onu ekleyen kişiye görünür.
 const LIBRARY_VISIBILITY_SQL = "(rb.status = 'approved' OR rb.created_by_user_id = @actorUserId)"
 const MAX_RESOURCE_IMAGE_LENGTH = 350000
@@ -128,16 +126,6 @@ function sanitizeResourceBookPublishMonthYear(value) {
   }
 
   return { value: publishMonthYear }
-}
-
-function sanitizeResourceBookPublishYear(value) {
-  const publishYear = Number(value)
-  const currentYear = new Date().getFullYear()
-  if (!Number.isInteger(publishYear) || publishYear < 1900 || publishYear > currentYear + 1) {
-    return { error: 'Basım yılı geçerli bir yıl olmalı.' }
-  }
-
-  return { value: publishYear }
 }
 
 function sanitizeTestAnswerKeyEntry(record) {
