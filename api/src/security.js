@@ -30,7 +30,7 @@ function normalizePhone(value) {
 // Netgsm hesabı kurulana kadar geçici olarak: her kullanıcının şifresi telefon
 // numarasının son 6 hanesidir (kayıt anında otomatik atanır). Netgsm bağlandığında
 // gerçek SMS/OTP akışına dönülebilir; bu yardımcı yalnızca varsayılan şifreyi türetir,
-// kullanıcı isterse şifresini daha sonra değiştirebilir.
+// ilk doğrudan panel girişinde bu şifrenin değiştirilmesi zorunludur.
 function defaultPasswordForPhone(phone) {
   return String(phone || '').replace(/\D/g, '').slice(-6)
 }

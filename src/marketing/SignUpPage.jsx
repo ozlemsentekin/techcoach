@@ -164,13 +164,9 @@ export default function SignUpPage() {
 
   useEffect(() => {
     const code = form.couponCode.trim()
-    if (!code) {
-      setCouponCheck({ status: 'idle', code: '', message: '' })
-      return
-    }
+    if (!code) return
 
     let ignore = false
-    setCouponCheck({ status: 'checking', code: '', message: '' })
     const timer = setTimeout(() => {
       authRequest('/api/auth/validate-coupon', {
         method: 'POST',
@@ -223,6 +219,9 @@ export default function SignUpPage() {
 
   const handleInputChange = (event) => {
     const { name, type, value, checked } = event.target
+    if (name === 'couponCode') {
+      setCouponCheck({ status: value.trim() ? 'checking' : 'idle', code: '', message: '' })
+    }
     setForm((current) => ({
       ...current,
       [name]: type === 'checkbox' ? checked : name === 'phone' ? normalizePhoneInput(value) : value,
@@ -456,7 +455,7 @@ export default function SignUpPage() {
               ) : null}
 
               <div className="auth-hint">
-                Şifreniz otomatik olarak telefon numaranızın son 6 hanesi olacaktır
+                İlk giriş şifreniz telefon numaranızın son 6 hanesi olacaktır. Panele ilk girişte bu şifreyi değiştirmeniz istenir
                 {defaultPasswordHint ? ` (${defaultPasswordHint})` : ''}.
               </div>
 

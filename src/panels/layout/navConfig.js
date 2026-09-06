@@ -25,13 +25,20 @@ export const STUDENT_SIDEBAR_NAV = [...STUDENT_PRIMARY_NAV, ...STUDENT_MORE_NAV]
 export const PARENT_STUDENTS_NAV_ITEM = { to: '/parent/students', label: 'Çocuklarım', icon: 'Users' }
 export const PARENT_REQUESTS_NAV_ITEM = { to: '/parent/requests', label: 'Taleplerim', icon: 'ClipboardList' }
 
-export const PARENT_MORE_NAV = [PARENT_STUDENTS_NAV_ITEM, PARENT_REQUESTS_NAV_ITEM]
+// Tek çocuğu olan veli için menü adı "Çocuğum", birden fazlası (veya bilinmiyor) için "Çocuklarım".
+export function parentStudentsNavLabel(studentCount) {
+  return studentCount === 1 ? 'Çocuğum' : 'Çocuklarım'
+}
+
+export function getParentStudentsNavItem(studentCount) {
+  return { ...PARENT_STUDENTS_NAV_ITEM, label: parentStudentsNavLabel(studentCount) }
+}
 
 // Henüz hiç çocuk profili eklenmemiş bir veli için Bugün/Haftalık Plan sayfalarının
 // hepsi boş/hatalı görünür (bunlar bir öğrenci bağlamı gerektirir); o yüzden ilk kayıtta tek
 // birincil menü öğesi olarak yalnızca Çocuklarım gösterilir.
-export function getParentPrimaryNav(hasStudents, canManageLibrary = false) {
-  if (!hasStudents) return [PARENT_STUDENTS_NAV_ITEM]
+export function getParentPrimaryNav(hasStudents, canManageLibrary = false, studentCount = null) {
+  if (!hasStudents) return [getParentStudentsNavItem(studentCount)]
   return [
     { to: '/parent/dashboard', label: 'Bugün', icon: 'Home' },
     { to: '/parent/weekly-plan', label: 'Haftalık Plan', icon: 'CalendarRange' },
@@ -40,18 +47,19 @@ export function getParentPrimaryNav(hasStudents, canManageLibrary = false) {
   ]
 }
 
-export function getParentMoreNav(isAdmin, hasStudents = true) {
+export function getParentMoreNav(isAdmin, hasStudents = true, studentCount = null) {
+  const parentMore = [getParentStudentsNavItem(studentCount), PARENT_REQUESTS_NAV_ITEM]
   const base = isAdmin
-    ? [KITAPLIK_PARENT_ITEM, ...PARENT_MORE_NAV]
-    : [...PARENT_MORE_NAV]
+    ? [KITAPLIK_PARENT_ITEM, ...parentMore]
+    : [...parentMore]
   // Çocuklarım hiç öğrenci yokken zaten birincil menüde gösteriliyor, burada tekrar etmesin.
   return hasStudents ? base : base.filter((item) => item.to !== PARENT_STUDENTS_NAV_ITEM.to)
 }
 
-export function getParentSidebarNav(isAdmin, hasStudents = true, canManageLibrary = false) {
+export function getParentSidebarNav(isAdmin, hasStudents = true, canManageLibrary = false, studentCount = null) {
   return [
-    ...getParentPrimaryNav(hasStudents, canManageLibrary || isAdmin),
-    ...getParentMoreNav(isAdmin, hasStudents),
+    ...getParentPrimaryNav(hasStudents, canManageLibrary || isAdmin, studentCount),
+    ...getParentMoreNav(isAdmin, hasStudents, studentCount),
   ]
 }
 

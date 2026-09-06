@@ -1,0 +1,25 @@
+const { defaultPasswordForPhone, verifyPassword } = require('./security')
+
+// The hash itself is the source of truth. Covers existing/default/reset accounts
+// without a schema migration; changing the hash immediately invalidates the cache key.
+const checks = new Map()
+async function requiresPasswordChange(record) {
+  if (!record?.password_hash || !record.phone_number) return false
+  const initial = defaultPasswordForPhone(record.phone_number)
+  if (initial.length !== 6) return false
+  const key = `${record.phone_number}:${record.password_hash}`
+  if (!checks.has(key)) {
+    if (checks.size >= 500) checks.delete(checks.keys().next().value)
+    checks.set(key, verifyPassword(initial, record.password_hash).catch((error) => { checks.delete(key); throw error }))
+  }
+  return checks.get(key)
+}
+
+function passwordChangeError(currentPassword, newPassword, phone) {
+  if (newPassword.length < 6 || newPassword.length > 72 || Buffer.byteLength(newPassword, 'utf8') > 72) return 'Yeni şifre 6 ile 72 karakter arasında ve en fazla 72 bayt olmalı.'
+  if (newPassword === currentPassword) return 'Yeni şifreniz mevcut şifrenizden farklı olmalı.'
+  if (newPassword === defaultPasswordForPhone(phone)) return 'Telefon numaranızın son 6 hanesini yeni şifre olarak kullanamazsınız.'
+  return null
+}
+
+module.exports = { requiresPasswordChange, passwordChangeError }

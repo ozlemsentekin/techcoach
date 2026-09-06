@@ -1,92 +1,60 @@
-import { useState } from 'react'
-import { BookMarked, CalendarRange, LineChart, Sparkles, X } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { ArrowRight, BookOpen, GraduationCap, LineChart, Repeat2, Sparkles, UserRound, X } from 'lucide-react'
 import Button from '../../ui/Button'
 
-// Sıfırdan üye olan bir velinin ilk girişinde bir kez gösterilen tanıtım modalı.
-// "Görüldü" bilgisi StudentsPage/ParentApp tarafında localStorage'da tutulur; bu
-// bileşen yalnızca sunumdan sorumludur.
-const SLIDES = [
-  {
-    icon: Sparkles,
-    title: 'TechCoach’a hoş geldiniz',
-    body: 'TechCoach, çocuğunuzun çalışma düzenini birlikte kurup takip etmeniz için bir koçluk paneli. Kurulum yalnızca birkaç dakika sürer.',
-  },
-  {
-    icon: BookMarked,
-    title: '1. Çocuğunuzun profilini oluşturun',
-    body: 'Ad, sınıf ve okul bilgisini girin. Ardından çocuğunuza kitap ve kaynak atayın; hangi konularda çalışacağını siz belirleyin.',
-  },
-  {
-    icon: CalendarRange,
-    title: '2. Haftalık planı kurun',
-    body: 'Gün gün ödev, test ve mola ekleyin. Özel ders alıyorsa öğretmenini tanımlayın; ders saatleri plana otomatik yansır.',
-  },
-  {
-    icon: LineChart,
-    title: '3. Gelişimi takip edin',
-    body: '“Bugün” akışında günlük görevleri, hata defterinde yanlışları, gelişim analizinde ilerlemeyi görürsünüz. Hazırsanız başlayalım.',
-  },
+const STAGES = [
+  { icon: UserRound, title: 'Çocuğunuzu tanımlayın', description: 'Profilini oluşturun, ardından okul ve sınıf bilgilerini ekleyin.' },
+  { icon: BookOpen, title: 'Kitaplığını hazırlayın', description: 'Kullandığı kaynakları kütüphaneden seçin. Kaynak kütüphanede yoksa kendiniz oluşturun veya sisteme eklenmesi için kaynak talebi gönderin.', options: ['Kütüphaneden seç', 'Kendin oluştur', 'Kaynak talebi aç'] },
+  { icon: GraduationCap, title: 'Öğretmenlerini ekleyin', optional: true, description: 'Özel ders öğretmenlerini çocuğunuz ve takip ettikleri kaynaklarla eşleştirerek öğretmenlere panel erişimi verebilirsiniz.' },
+  { icon: LineChart, title: 'Çalışmayı başlatın ve ölçün', description: 'Geçmiş test sonuçlarını girin veya çocuğunuza yeni görev verin. Başarı oranını, kitap tamamlama oranını ve yanlış soruları birlikte takip edin.' },
 ]
 
-export default function ParentWelcomeModal({ parentName, onClose }) {
-  const [index, setIndex] = useState(0)
-  const slide = SLIDES[index]
-  const Icon = slide.icon
-  const isLast = index === SLIDES.length - 1
-  const firstName = parentName?.trim().split(/\s+/)[0] || ''
+export default function ParentWelcomeModal({ parentName, onClose, onStart }) {
+  const dialogRef = useRef(null)
+  const firstName = parentName?.trim().split(/\s+/)[0]
+  useEffect(() => {
+    const previousFocus = document.activeElement
+    const dialog = dialogRef.current
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    dialog.showModal()
+    return () => {
+      dialog.close()
+      document.body.style.overflow = previousOverflow
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true })
+    }
+  }, [])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 p-0 sm:items-center sm:p-4">
-      <div className="flex h-full w-full max-w-md flex-col overflow-hidden bg-white shadow-panel-2 sm:h-auto sm:rounded-2xl">
-        <div className="flex items-center justify-end px-4 pt-3">
-          <button type="button" aria-label="Kapat" onClick={onClose} className="text-panel-text-muted hover:text-panel-text">
-            <X size={20} />
-          </button>
+    <dialog ref={dialogRef} aria-labelledby="parent-welcome-title" aria-describedby="parent-welcome-description" onCancel={(event) => { event.preventDefault(); onClose() }} className="fixed inset-0 m-auto max-h-[calc(100dvh-24px)] w-[calc(100%-24px)] max-w-4xl overflow-y-auto rounded-3xl border border-panel-border bg-panel-surface p-0 text-panel-text shadow-panel-2 backdrop:bg-black/50">
+      <div className="px-5 pb-5 pt-3 sm:px-7 sm:pb-6">
+        <div className="flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-2 text-xs font-bold text-panel-warm"><Sparkles size={15} aria-hidden="true" />TechCoach ile ilk adım</span>
+          <Button autoFocus variant="ghost" onClick={onClose} className="min-h-11 px-2">Daha sonra <X size={18} aria-hidden="true" /></Button>
         </div>
-
-        <div className="flex flex-1 flex-col items-center gap-4 px-6 pb-2 pt-2 text-center sm:pt-4">
-          <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-panel-accent-soft text-panel-warm">
-            <Icon size={30} aria-hidden="true" />
-          </span>
-          <h2 className="text-xl font-bold text-panel-text">
-            {index === 0 && firstName ? `${slide.title}, ${firstName}` : slide.title}
-          </h2>
-          <p className="max-w-sm text-base leading-7 text-panel-text-muted">{slide.body}</p>
-        </div>
-
-        <div className="flex items-center justify-center gap-1.5 py-4">
-          {SLIDES.map((item, dotIndex) => (
-            <span
-              key={item.title}
-              className={`h-1.5 rounded-full transition-all ${
-                dotIndex === index ? 'w-5 bg-panel-warm' : 'w-1.5 bg-panel-border-strong'
-              }`}
-            />
+        <h2 id="parent-welcome-title" className="mt-2 text-2xl font-bold sm:text-3xl">{firstName ? `Hoş geldiniz, ${firstName}` : 'Hoş geldiniz'}</h2>
+        <p id="parent-welcome-description" className="mt-2 max-w-2xl text-sm leading-6 text-panel-text-muted">Önce çocuğunuzun çalışma alanını birlikte hazırlayalım. Ardından sonuçlar ve yanlışlar, gelişimi görünür bir döngüye dönüştürsün.</p>
+        <ol className="mt-5 grid gap-3 sm:grid-cols-2">
+          {STAGES.map((stage, index) => (
+            <li key={stage.title} className="rounded-2xl border border-panel-border bg-panel-surface p-4">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue"><stage.icon size={17} aria-hidden="true" /></span>
+                <h3 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-bold"><span><span className="text-panel-text-muted">{index + 1}. </span>{stage.title}</span>{stage.optional ? <span className="inline-flex rounded-full bg-panel-sage-soft px-2 py-0.5 text-xs font-medium text-panel-text">İsteğe bağlı</span> : null}</h3>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-panel-text-muted">{stage.description}</p>
+              {stage.options ? <ul aria-label="Kaynak ekleme seçenekleri" className="mt-2 flex flex-wrap gap-1.5">{stage.options.map((option) => <li key={option} className="rounded-md bg-panel-surface-soft px-2 py-1 text-[11px] font-medium text-panel-text">{option}</li>)}</ul> : null}
+            </li>
           ))}
+        </ol>
+        <div className="mt-4 rounded-2xl bg-panel-blue-soft/60 px-4 py-3">
+          <p className="flex items-center gap-2 text-xs font-bold text-panel-blue"><Repeat2 size={16} aria-hidden="true" />Her çalışmada devam eden döngü</p>
+          <p className="mt-1.5 text-sm leading-6 text-panel-text">Görev verilir → test çözülür → sonuç girilir → yanlış soru fotoğraflanır → dijital hata defteri ve gelişim analizi oluşur.</p>
         </div>
-
-        <div className="flex items-center justify-between gap-2 border-t border-[#edf0f1] px-4 py-3 sm:px-6 sm:py-4">
-          {index > 0 ? (
-            <Button type="button" variant="secondary" size="md" onClick={() => setIndex((current) => current - 1)}>
-              Geri
-            </Button>
-          ) : (
-            <Button type="button" variant="ghost" size="md" onClick={onClose}>
-              Geç
-            </Button>
-          )}
-
-          {isLast ? (
-            <Button type="button" size="md" onClick={onClose}>
-              Kuruluma başla
-            </Button>
-          ) : (
-            <Button type="button" size="md" onClick={() => setIndex((current) => current + 1)}>
-              Devam
-            </Button>
-          )}
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs leading-5 text-panel-text-muted">Rehber, sizi ilgili ekranlara adım adım götürecek.</p>
+          <Button className="min-h-11 w-full sm:w-auto" onClick={onStart}>Başlangıç rehberini aç <ArrowRight size={16} aria-hidden="true" /></Button>
         </div>
       </div>
-    </div>
+    </dialog>
   )
 }

@@ -35,7 +35,7 @@ export default function WeeklyPlanPage() {
   const weekDates = useMemo(() => getWeekDates(weekStart), [weekStart])
 
   const [students, setStudents] = useState(null)
-  const [selectedStudentId, setSelectedStudentId] = useState('')
+  const [selectedStudentId, setSelectedStudentId] = useState(() => searchParams.get('studentId') || '')
   const selectedStudent = students?.find((student) => student.id === selectedStudentId)
   const studentName = selectedStudent?.fullName?.trim().split(/\s+/)[0] || ''
   const hasMultipleStudents = (students?.length || 0) > 1

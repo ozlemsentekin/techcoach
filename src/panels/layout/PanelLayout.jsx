@@ -24,21 +24,21 @@ const RETURN_TO_PANEL_ITEM = { to: '/parent/dashboard', label: 'Panele Dön', ic
 export default function PanelLayout({ role }) {
   const location = useLocation()
   const { authUser } = useAuth()
-  const { hasStudents } = useParentStudentsGate()
+  const { hasStudents, studentCount } = useParentStudentsGate()
   const Sidebar = SIDEBAR_BY_ROLE[role] || StudentSidebar
   const isAdminSection = role === 'parent' && location.pathname.startsWith('/parent/admin')
   const canManageLibrary = Boolean(authUser?.isAdmin || authUser?.canManageLibrary)
   const primaryItems = isAdminSection
     ? [RETURN_TO_PANEL_ITEM]
     : role === 'parent'
-      ? getParentPrimaryNav(hasStudents, canManageLibrary)
+      ? getParentPrimaryNav(hasStudents, canManageLibrary, studentCount)
       : role === 'teacher'
         ? getTeacherPrimaryNav(canManageLibrary)
         : STUDENT_PRIMARY_NAV
   const moreItems = isAdminSection
     ? PARENT_ADMIN_NAV.children
     : role === 'parent'
-      ? getParentMoreNav(authUser?.isAdmin, hasStudents)
+      ? getParentMoreNav(authUser?.isAdmin, hasStudents, studentCount)
       : role === 'teacher'
         ? TEACHER_MORE_NAV
         : STUDENT_MORE_NAV

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from './context/useAuth'
 import LoadingState from './panels/shared/LoadingState'
+import FirstLoginPasswordGate from './panels/shared/FirstLoginPasswordGate'
 import ConsentGate from './panels/shared/ConsentGate'
 import { panelPathForRole } from './utils/panelPath'
 
@@ -46,6 +47,10 @@ function RequireRole({ role, children }) {
 
   if (!authUser) {
     return <Navigate to="/" replace />
+  }
+
+  if (authUser.mustChangePassword && !authUser.actingParent && !authUser.actingAdmin) {
+    return <FirstLoginPasswordGate />
   }
 
   // Öğretmen tarafından oluşturulan veli/öğrenci hesapları "onay bekliyor" durumunda açılır;

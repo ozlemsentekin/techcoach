@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Check, FilePlus2, Plus, Search } from 'lucide-react'
+import { BookOpen, Check, FilePlus2, Search } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import LoadingState from '../../shared/LoadingState'
 import Button from '../../ui/Button'
-import BookFormModal from '../../shared/bookshelf/BookFormModal'
 import BookAdditionRequestModal from '../../shared/requests/BookAdditionRequestModal'
 
 const RESOURCE_BOOK_TYPE_LABELS = {
@@ -23,6 +22,17 @@ function groupBySubject(resourceBooks) {
     groups.get(key).books.push(book)
   })
   return Array.from(groups.values())
+}
+
+function groupByPublisher(resourceBooks) {
+  const groups = new Map()
+  resourceBooks.forEach((book) => {
+    const name = book.publisherName?.trim() || 'Yayınevi belirtilmemiş'
+    const key = book.publisherId || name.toLocaleLowerCase('tr-TR')
+    if (!groups.has(key)) groups.set(key, { id: key, name, books: [] })
+    groups.get(key).books.push(book)
+  })
+  return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name, 'tr'))
 }
 
 function ResourceAvatar({ book }) {
@@ -46,7 +56,7 @@ function ResourceAvatar({ book }) {
 
 /**
  * "Çocuk Ekle" sihirbazının Kaynak Seçimi adımı. Kütüphane kataloğundaki (öğrencinin sınıfına
- * uygun) atanmamış kaynakları derse göre gruplayıp çoklu seçtirir. Katalogda hiç kaynak yoksa
+ * uygun) atanmamış kaynakları ders ve yayınevine göre gruplayıp çoklu seçtirir. Katalogda hiç kaynak yoksa
  * velinin Kitaplık'tan kendi kitabını eklemesi / kitap talebi oluşturması için rehber gösterir.
  *
  * Kaydetme sorumluluğu üst bileşende: `onReady` ile verilen `save` fonksiyonu çağrılınca seçili
@@ -58,20 +68,12 @@ export default function StudentResourcePicker({ studentId, onReady }) {
   const [query, setQuery] = useState('')
   const [activeSubjectId, setActiveSubjectId] = useState(null)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
-  const [showAddBook, setShowAddBook] = useState(false)
   const [showRequest, setShowRequest] = useState(false)
 
   const selectedIdsRef = useRef(selectedIds)
   selectedIdsRef.current = selectedIds
   const resourceBooksRef = useRef(resourceBooks)
   resourceBooksRef.current = resourceBooks
-
-  const loadResourceBooks = () => {
-    setResourceBooks(null)
-    return authRequest(`/api/parent/students/${studentId}/resource-books`, { method: 'GET' })
-      .then((data) => setResourceBooks(data.resourceBooks || []))
-      .catch((err) => setError(err.message))
-  }
 
   useEffect(() => {
     let ignore = false
@@ -130,6 +132,11 @@ export default function StudentResourcePicker({ studentId, onReady }) {
 
   const activeSubject = subjectGroups.find((group) => group.id === activeSubjectId) || null
 
+  const publisherGroups = useMemo(
+    () => groupByPublisher(activeSubject?.books || []),
+    [activeSubject],
+  )
+
   const toggleResource = (bookId) => {
     setSelectedIds((current) => {
       const next = new Set(current)
@@ -160,10 +167,6 @@ export default function StudentResourcePicker({ studentId, onReady }) {
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Button type="button" size="md" className="gap-1.5" onClick={() => setShowAddBook(true)}>
-            <Plus size={16} aria-hidden="true" />
-            Yeni Kitap Ekle
-          </Button>
           <Button
             type="button"
             variant="secondary"
@@ -175,16 +178,6 @@ export default function StudentResourcePicker({ studentId, onReady }) {
             Kitap Ekleme Talebi Oluştur
           </Button>
         </div>
-
-        {showAddBook ? (
-          <BookFormModal
-            onSaved={() => {
-              setShowAddBook(false)
-              loadResourceBooks()
-            }}
-            onClose={() => setShowAddBook(false)}
-          />
-        ) : null}
         {showRequest ? (
           <BookAdditionRequestModal
             onClose={() => setShowRequest(false)}
@@ -208,7 +201,8 @@ export default function StudentResourcePicker({ studentId, onReady }) {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Kaynak, yayın evi veya ders ara..."
+            placeholder="Kaynak, yayınevi veya ders ara..."
+            aria-label="Kaynak, yayınevi veya ders ara"
             className="w-full rounded-xl border border-panel-border bg-white py-2 pl-9 pr-3 text-sm text-panel-text focus:outline-none focus:ring-2 focus:ring-[#1c2b5e]/20"
           />
         </div>
@@ -240,63 +234,57 @@ export default function StudentResourcePicker({ studentId, onReady }) {
       {subjectGroups.length === 0 ? (
         <p className="p-2 text-sm text-panel-text-muted">Aramayla eşleşen kaynak yok.</p>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {(activeSubject?.books || []).map((book) => {
-            const selected = selectedIds.has(book.id)
-            return (
-              <button
-                key={book.id}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => toggleResource(book.id)}
-                className={`flex min-h-[118px] items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
-                  selected
-                    ? 'border-[#1c2b5e] bg-[#f8f7fb] shadow-[0_2px_10px_rgba(101,94,148,0.12)]'
-                    : 'border-panel-border bg-white hover:border-[#c1c8e0] hover:bg-[#f7f8fc]'
-                }`}
-              >
-                <ResourceAvatar book={book} />
-                <span className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="flex items-start justify-between gap-2">
-                    <span className="line-clamp-2 text-sm font-bold leading-snug text-panel-text">{book.name}</span>
-                    <span
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
-                        selected ? 'border-[#1c2b5e] bg-[#1c2b5e] text-white' : 'border-panel-border bg-white'
+        <div className="flex flex-col gap-6">
+          {publisherGroups.map((publisher) => (
+            <section key={publisher.id} aria-label={publisher.name} className="min-w-0">
+              <div className="mb-3 flex items-center gap-2 border-b border-panel-border pb-2">
+                <BookOpen size={17} className="shrink-0 text-panel-blue" aria-hidden="true" />
+                <h3 className="min-w-0 break-words text-sm font-bold text-panel-text">{publisher.name}</h3>
+                <span className="shrink-0 rounded-full bg-panel-surface-soft px-2 py-1 text-xs font-medium text-panel-text-muted">{publisher.books.length} kaynak</span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {publisher.books.map((book) => {
+                  const selected = selectedIds.has(book.id)
+                  return (
+                    <button
+                      key={book.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => toggleResource(book.id)}
+                      className={`flex min-h-[118px] items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
+                        selected
+                          ? 'border-[#1c2b5e] bg-[#f8f7fb] shadow-[0_2px_10px_rgba(101,94,148,0.12)]'
+                          : 'border-panel-border bg-white hover:border-[#c1c8e0] hover:bg-[#f7f8fc]'
                       }`}
                     >
-                      {selected ? <Check size={13} aria-hidden="true" /> : null}
-                    </span>
-                  </span>
-                  <span className="truncate text-xs text-panel-text-muted">{book.publisherName || 'Yayın evi yok'}</span>
-                  <span className="flex flex-wrap items-center gap-1.5 pt-1">
-                    <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#1c2b5e]">
-                      {RESOURCE_BOOK_TYPE_LABELS[book.type] || book.type}
-                    </span>
-                  </span>
-                </span>
-              </button>
-            )
-          })}
+                      <ResourceAvatar book={book} />
+                      <span className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="flex items-start justify-between gap-2">
+                          <span className="line-clamp-2 text-sm font-bold leading-snug text-panel-text">{book.name}</span>
+                          <span
+                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+                              selected ? 'border-[#1c2b5e] bg-[#1c2b5e] text-white' : 'border-panel-border bg-white'
+                            }`}
+                          >
+                            {selected ? <Check size={13} aria-hidden="true" /> : null}
+                          </span>
+                        </span>
+                        <span className="truncate text-xs text-panel-text-muted">{book.publisherName || 'Yayınevi belirtilmemiş'}</span>
+                        <span className="flex flex-wrap items-center gap-1.5 pt-1">
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#1c2b5e]">
+                            {RESOURCE_BOOK_TYPE_LABELS[book.type] || book.type}
+                          </span>
+                        </span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          ))}
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => setShowAddBook(true)}
-        className="self-start text-sm font-semibold text-panel-blue hover:underline"
-      >
-        Aradığın kaynak yok mu? Yeni kitap ekle
-      </button>
-
-      {showAddBook ? (
-        <BookFormModal
-          onSaved={() => {
-            setShowAddBook(false)
-            loadResourceBooks()
-          }}
-          onClose={() => setShowAddBook(false)}
-        />
-      ) : null}
       {showRequest ? (
         <BookAdditionRequestModal
           onClose={() => setShowRequest(false)}

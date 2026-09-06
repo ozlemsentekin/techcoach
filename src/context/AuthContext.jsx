@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { authRequest, invalidateCache, setAccountDisabledHandler, setConsentRequiredHandler } from '../services/authClient'
+import { authRequest, invalidateCache, setAccountDisabledHandler, setConsentRequiredHandler, setPasswordChangeRequiredHandler } from '../services/authClient'
 import AuthContext from './authContextObject'
 
 export function AuthProvider({ children }) {
@@ -13,6 +13,9 @@ export function AuthProvider({ children }) {
     // Herhangi bir API çağrısı backend'den CONSENT_REQUIRED dönerse (ör. onay durumu
     // sunucu tarafında güncel değil), authUser.needsConsent'i işaretleyip RequireRole'ün
     // ConsentGate'i göstermesini sağlar — düz bir hata banner'ı yerine gerçek onay ekranı açılır.
+    setPasswordChangeRequiredHandler(() => {
+      setAuthUser((current) => current ? { ...current, mustChangePassword: true } : current)
+    })
     setConsentRequiredHandler(() => {
       setAuthUser((current) => (current && !current.needsConsent ? { ...current, needsConsent: true } : current))
     })
@@ -23,6 +26,7 @@ export function AuthProvider({ children }) {
       setAuthError('Hesabınız pasife alınmış. Erişim için site yöneticisiyle iletişime geçin.')
     })
     return () => {
+      setPasswordChangeRequiredHandler(null)
       setConsentRequiredHandler(null)
       setAccountDisabledHandler(null)
     }

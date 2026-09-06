@@ -95,12 +95,10 @@ export default function MistakesPage() {
           variant="secondary"
           size="sm"
           className="gap-1.5"
-          onClick={() =>
-            navigate(`/parent/students?action=profile&studentId=${selectedStudent.id}`)
-          }
+          onClick={() => navigate('/parent/students')}
         >
           <ArrowLeft size={16} aria-hidden="true" />
-          Öğrenci Profili
+          Geri
         </Button>
       }
     />

@@ -1,3 +1,4 @@
+const { requiresPasswordChange, passwordChangeError } = require('./passwordPolicy')
 const { sql, withRequest, withTransaction } = require('./db')
 const { isCaptchaConfigured, isConfigError } = require('./config')
 const { accountDisabledResponse, clearSessionHeaders, createSessionHeaders, getClientIp, json } = require('./http')
@@ -255,6 +256,7 @@ async function registerHandler(request) {
     // Kayıt anında verilen aboneliği (kupon vb.) yanıta ekliyoruz; aksi halde frontend'deki
     // route guard (App.jsx) taze kaydolan kullanıcıyı bir sonraki /me çağrısına kadar
     // entitlement bilgisi eksik zannedip paywall'a yönlendirebilir.
+    user.mustChangePassword = true
     user.entitlement = entitlement
     const token = createSessionToken(user)
 
@@ -379,6 +381,7 @@ async function loginHandler(request) {
       ...record,
       last_login_at: new Date().toISOString(),
     })
+    user.mustChangePassword = await requiresPasswordChange(record)
     // registerHandler'daki aynı nedenden: route guard'ın (App.jsx) girişten hemen sonra
     // paywall'a yanlış yönlendirmemesi için entitlement bilgisi yanıta ekleniyor.
     // Öğretmen tarafından eklenen öğrenci/veli için öğretmenin aboneliği devreye girer.
@@ -410,7 +413,7 @@ async function meHandler(request) {
     })
     const result = await requestDb.query(`
       SELECT TOP 1
-        u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active, u.last_login_at, u.created_at,
+        u.id, u.full_name, u.email, u.phone_number, u.password_hash, u.role, u.is_admin, u.can_manage_library, u.is_active, u.last_login_at, u.created_at,
         u.aydinlatma_accepted_at, u.kvkk_accepted_at, u.funded_by_teacher_id, u.teacher_subject_ids_json,
         sp.theme_id,
         sp.grade,
@@ -432,6 +435,8 @@ async function meHandler(request) {
     }
 
     const user = sanitizeUser(record)
+    user.mustChangePassword = await requiresPasswordChange(record)
+    if (session.actingParentId || session.actingAdminId) user.mustChangePassword = false
     if (session.actingParentId) {
       user.actingParent = { id: session.actingParentId, fullName: session.actingParentName }
     }
@@ -476,7 +481,7 @@ async function sessionFromHandoffHandler(request) {
     const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: claims.sub } })
     const result = await requestDb.query(`
       SELECT TOP 1
-        u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active,
+        u.id, u.full_name, u.email, u.phone_number, u.password_hash, u.role, u.is_admin, u.can_manage_library, u.is_active,
         u.last_login_at, u.created_at, u.aydinlatma_accepted_at, u.kvkk_accepted_at, u.funded_by_teacher_id,
         u.teacher_subject_ids_json,
         sp.theme_id, sp.grade,
@@ -496,6 +501,7 @@ async function sessionFromHandoffHandler(request) {
     }
 
     const user = sanitizeUser(record)
+    user.mustChangePassword = await requiresPasswordChange(record)
     user.entitlement = await buildSessionEntitlement({
       userId: record.id,
       role: record.role,
@@ -526,6 +532,7 @@ async function changePasswordHandler(request) {
     }
 
     const session = verifySessionToken(token)
+    if (session.actingParentId || session.actingAdminId) return json(403, { error: 'Şifre değiştirmek için kendi hesabınızla giriş yapın.' })
     const payload = await request.json().catch(() => null)
     if (!payload) {
       return json(400, { error: 'Geçersiz istek gövdesi.' })
@@ -549,12 +556,16 @@ async function changePasswordHandler(request) {
       id: { type: sql.UniqueIdentifier, value: session.sub },
     })
     const result = await requestDb.query(`
-      SELECT TOP 1 password_hash FROM dbo.Users WHERE id = @id;
+      SELECT TOP 1 password_hash, phone_number, is_active FROM dbo.Users WHERE id = @id;
     `)
     const record = result.recordset[0]
     if (!record) {
       return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
     }
+
+    if (record.is_active === false) return accountDisabledResponse()
+    const validationError = passwordChangeError(currentPassword, newPassword, record.phone_number)
+    if (validationError) return json(400, { error: validationError })
 
     const isPasswordValid = await verifyPassword(currentPassword, record.password_hash)
     if (!isPasswordValid) {

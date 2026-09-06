@@ -3,6 +3,9 @@ const DEFAULT_CACHE_TTL_MS = 30000
 
 const getCache = new Map() // path -> { expiresAt, promise }
 
+let passwordChangeRequiredHandler = null
+export function setPasswordChangeRequiredHandler(handler) { passwordChangeRequiredHandler = handler }
+
 let consentRequiredHandler = null
 let accountDisabledHandler = null
 
@@ -76,6 +79,10 @@ export async function authRequest(path, options = {}) {
           ? 'Kimlik doğrulama servisine ulaşılamadı. API sunucusunun çalıştığını kontrol edin.'
           : 'İşlem tamamlanamadı.'
 
+      if (data.code === 'PASSWORD_CHANGE_REQUIRED') {
+        invalidateCache()
+        passwordChangeRequiredHandler?.()
+      }
       if (data.code === 'CONSENT_REQUIRED') {
         consentRequiredHandler?.()
       }

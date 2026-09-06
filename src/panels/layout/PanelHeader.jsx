@@ -16,6 +16,7 @@ import { useAuth } from '../../context/useAuth'
 import { cachedGet } from '../../services/authClient'
 import ThemeContext from '../../theme/themeContextObject'
 import { THEMES } from '../../theme/themes'
+import ParentTourContext from '../parent/onboarding/parentTourContext'
 import ChangePasswordDialog from './ChangePasswordDialog'
 import TeacherSubjectsDialog from '../teacher/components/TeacherSubjectsDialog'
 
@@ -48,6 +49,7 @@ export default function PanelHeader() {
   const actingParent = authUser?.actingParent
   const actingAdmin = authUser?.actingAdmin
   const themeCtx = useContext(ThemeContext)
+  const parentTour = useContext(ParentTourContext)
   const activeTheme = themeCtx ? THEMES.find((theme) => theme.id === themeCtx.theme) || THEMES[0] : null
 
   useEffect(() => {
@@ -258,7 +260,7 @@ export default function PanelHeader() {
           aria-haspopup="true"
           aria-expanded={open}
           aria-label="Hesap menüsü"
-          className={`flex h-10 min-w-0 items-center gap-2 rounded-full border px-2 py-1 transition-colors ${
+          className={`flex min-h-11 min-w-11 items-center gap-2 rounded-full border px-2 py-1 transition-colors ${
             open
               ? 'border-panel-blue-soft bg-panel-blue-soft/50 text-panel-text'
               : 'border-transparent text-panel-text hover:border-panel-border hover:bg-panel-surface-soft'
@@ -337,6 +339,12 @@ export default function PanelHeader() {
             ) : null}
 
             <div className="grid gap-1 p-2">
+              {isParent && parentTour?.enabled ? (
+                <button type="button" onClick={() => { setOpen(false); parentTour.startTour() }} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-bold text-panel-text hover:bg-panel-surface-soft">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue"><RefreshCw size={16} aria-hidden="true" /></span>
+                  Başlangıç rehberini aç
+                </button>
+              ) : null}
               {isParent && authUser?.isAdmin ? (
                 <button
                   type="button"
