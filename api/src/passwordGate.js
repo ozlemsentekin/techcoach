@@ -49,7 +49,10 @@ function withPasswordGate(route, handler) {
           }
         }
         if (session && MUTATING_METHODS.has((request.method || '').toUpperCase())) {
-          await touchLastSeen(session)
+          // Bloklamadan başlat: last_seen_at güncellemesi asıl isteği geciktirmesin.
+          // touchLastSeen kendi içinde tüm hataları yutar; handler zaten birkaç DB
+          // round-trip sürdüğü için bu yazma o sırada tamamlanır.
+          touchLastSeen(session)
         }
       }
     } catch (error) {
