@@ -29,15 +29,6 @@ const PANEL_PATH_BY_ROLE = {
   ogrenci: '/student/today',
 }
 
-function formatDate(value) {
-  if (!value) return '—'
-  return new Date(value).toLocaleDateString('tr-TR', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
-}
-
 function formatDateTime(value) {
   if (!value) return '—'
   return new Date(value).toLocaleString('tr-TR', {
@@ -359,7 +350,7 @@ function UserRow({ user, indent = false, isSelf, impersonating, unlocking, onEdi
       <td className="px-4 py-3">
         <RoleBadge user={user} />
       </td>
-      <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.createdAt)}</td>
+      <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDateTime(user.createdAt)}</td>
       <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDateTime(user.lastSeenAt || user.lastLoginAt)}</td>
       <td className="px-4 py-3 text-right">
         <RowActions
@@ -415,7 +406,7 @@ function UserMobileCard({ user, indent = false, isSelf, impersonating, unlocking
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <RoleBadge user={user} />
         <span className="rounded-full bg-[#f8f7fb] px-2.5 py-1 text-[11px] font-semibold text-[#667475]">
-          Kayıt: {formatDate(user.createdAt)}
+          Kayıt: {formatDateTime(user.createdAt)}
         </span>
         <span className="rounded-full bg-[#f8f7fb] px-2.5 py-1 text-[11px] font-semibold text-[#667475]">
           Son işlem: {formatDateTime(user.lastSeenAt || user.lastLoginAt)}
@@ -469,7 +460,7 @@ function GroupRow({ user, students, isSelf, impersonating, unlocking, onEdit, on
         <td className="px-4 py-3">
           <RoleBadge user={user} />
         </td>
-        <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDate(user.createdAt)}</td>
+        <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDateTime(user.createdAt)}</td>
         <td className="whitespace-nowrap px-4 py-3 text-sm text-[#667475]">{formatDateTime(user.lastSeenAt || user.lastLoginAt)}</td>
         <td className="px-4 py-3 text-right" onClick={(event) => event.stopPropagation()}>
           <RowActions
@@ -569,7 +560,7 @@ function GroupMobileCard({ user, students, isSelf, impersonating, unlocking, onE
         <div className="mt-3 flex flex-wrap items-center gap-2 pl-6">
           <RoleBadge user={user} />
           <span className="rounded-full bg-[#f8f7fb] px-2.5 py-1 text-[11px] font-semibold text-[#667475]">
-            Kayıt: {formatDate(user.createdAt)}
+            Kayıt: {formatDateTime(user.createdAt)}
           </span>
           <span className="rounded-full bg-[#f8f7fb] px-2.5 py-1 text-[11px] font-semibold text-[#667475]">
             Son işlem: {formatDateTime(user.lastSeenAt || user.lastLoginAt)}
