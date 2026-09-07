@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Archive, BookMarked, FilePlus2, Plus, Search, Users } from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
@@ -10,9 +10,9 @@ import { ResourceBookAvatar } from '../ResourceBookCard'
 import { useAuth } from '../../../context/useAuth'
 import { getBookshelfBooks } from '../../../services/bookshelfService'
 import { BOOKSHELF_RESOURCE_TYPE_LABELS } from './bookshelfConstants'
-import BookFormModal from './BookFormModal'
-import BookshelfDetailModal from './BookshelfDetailModal'
-import BookAdditionRequestModal from '../requests/BookAdditionRequestModal'
+const BookFormModal = lazy(() => import('./BookFormModal'))
+const BookshelfDetailModal = lazy(() => import('./BookshelfDetailModal'))
+const BookAdditionRequestModal = lazy(() => import('../requests/BookAdditionRequestModal'))
 
 function groupBySubject(books) {
   const groups = new Map()
@@ -250,43 +250,45 @@ export default function BookshelfPage({ showAssignees = true }) {
         </>
       )}
 
-      {creating ? (
-        <BookFormModal onSaved={handleCreated} onClose={() => setCreating(false)} />
-      ) : null}
+      <Suspense fallback={<LoadingState label="Pencere yükleniyor..." />}>
+        {creating ? (
+          <BookFormModal onSaved={handleCreated} onClose={() => setCreating(false)} />
+        ) : null}
 
-      {requesting ? (
-        <BookAdditionRequestModal
-          onClose={() => setRequesting(false)}
-          onGoToRequests={() => {
-            setRequesting(false)
-            navigate(requestsPath)
-          }}
-        />
-      ) : null}
+        {requesting ? (
+          <BookAdditionRequestModal
+            onClose={() => setRequesting(false)}
+            onGoToRequests={() => {
+              setRequesting(false)
+              navigate(requestsPath)
+            }}
+          />
+        ) : null}
 
-      {editingBook ? (
-        <BookFormModal
-          book={editingBook}
-          onSaved={() => {
-            setEditingBook(null)
-            load()
-          }}
-          onClose={() => setEditingBook(null)}
-        />
-      ) : null}
+        {editingBook ? (
+          <BookFormModal
+            book={editingBook}
+            onSaved={() => {
+              setEditingBook(null)
+              load()
+            }}
+            onClose={() => setEditingBook(null)}
+          />
+        ) : null}
 
-      {detailBookId ? (
-        <BookshelfDetailModal
-          resourceBookId={detailBookId}
-          showAssignees={showAssignees}
-          onChanged={load}
-          onEdit={(book) => {
-            setDetailBookId(null)
-            setEditingBook(book)
-          }}
-          onClose={() => setDetailBookId(null)}
-        />
-      ) : null}
+        {detailBookId ? (
+          <BookshelfDetailModal
+            resourceBookId={detailBookId}
+            showAssignees={showAssignees}
+            onChanged={load}
+            onEdit={(book) => {
+              setDetailBookId(null)
+              setEditingBook(book)
+            }}
+            onClose={() => setDetailBookId(null)}
+          />
+        ) : null}
+      </Suspense>
     </div>
   )
 }

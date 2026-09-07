@@ -233,16 +233,12 @@ export default function DashboardPage() {
     Promise.all([
       getTasksForDate(date, { studentId: selectedStudentId }),
       getBacklogAndCompletedTasks(date, 30, { studentId: selectedStudentId }),
-      getRequests({ studentId: selectedStudentId }),
-      getTeacherLessonSchedule({ studentId: selectedStudentId }).catch(() => []),
     ])
-      .then(([tasksData, backlogAndCompleted, requestsData, teacherLessonScheduleData]) => {
+      .then(([tasksData, backlogAndCompleted]) => {
         if (ignore) return
         setTasks(tasksData)
         setBacklogTasks(backlogAndCompleted.backlog)
         setCompletedBacklogTasks(backlogAndCompleted.completedOn)
-        setRequests(requestsData)
-        setTeacherLessonSchedule(teacherLessonScheduleData)
       })
       .catch((err) => {
         if (!ignore) setLoadError(err.message)
@@ -250,6 +246,14 @@ export default function DashboardPage() {
       .finally(() => {
         if (!ignore) setLoading(false)
       })
+
+    // Ek bilgiler görev akışının görünmesini bekletmesin.
+    getRequests({ studentId: selectedStudentId })
+      .then((data) => { if (!ignore) setRequests(data) })
+      .catch((err) => { if (!ignore) setLoadError(err.message) })
+    getTeacherLessonSchedule({ studentId: selectedStudentId })
+      .then((data) => { if (!ignore) setTeacherLessonSchedule(data) })
+      .catch(() => { if (!ignore) setTeacherLessonSchedule([]) })
 
     return () => {
       ignore = true

@@ -1,11 +1,11 @@
-import { authRequest } from './authClient'
+import { authRequest, cachedGet } from './authClient'
 
 // Kitaplık (özel kaynak rafı). Veli / öğretmen / öğrenci ortak kullanır; sunucu aktörün
 // rolüne ve yönettiği öğrencilere göre görünürlüğü ve atama yetkisini belirler.
 
 export async function getBookshelfBooks({ studentId } = {}) {
   const query = studentId ? `?studentId=${encodeURIComponent(studentId)}` : ''
-  const data = await authRequest(`/api/panel/bookshelf/resource-books${query}`, { method: 'GET' })
+  const data = await cachedGet(`/api/panel/bookshelf/resource-books${query}`)
   return data.resourceBooks
 }
 
