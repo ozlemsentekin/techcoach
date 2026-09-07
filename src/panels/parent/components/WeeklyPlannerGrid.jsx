@@ -265,9 +265,9 @@ function CreatorNote({ task }) {
   const who = task.createdByName ? `${task.createdByName} (${roleLabel})` : roleLabel
 
   return (
-    <span className="mt-1 flex items-center gap-1 px-1 text-[10px] font-semibold leading-snug text-panel-text-muted">
+    <span className="mt-1 flex min-w-0 items-center gap-1 px-1 text-[10px] font-semibold leading-snug text-panel-text-muted">
       <UserRound size={11} className="shrink-0" aria-hidden="true" />
-      <span className="truncate">
+      <span className="min-w-0 truncate" title={`${who}${stamp ? ` · ${stamp}` : ''}`}>
         {who}
         {stamp ? ` · ${stamp}` : ''}
       </span>
@@ -693,31 +693,15 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
         {TASK_TYPES[task.taskType]?.label || 'Ödev'}
       </span>
       {task.subject ? (
-        <span className="mt-0.5 block truncate text-[11px] font-semibold leading-snug text-panel-text-muted">
+        <span
+          title={task.subject}
+          className="mt-0.5 block truncate text-[11px] font-semibold leading-snug text-panel-text-muted"
+        >
           {task.subject}
         </span>
       ) : null}
-      {resourceEntries.map((entry, index) => (
-        <span key={index} className="mt-1 block">
-          {entry.publisher ? (
-            <span className="block truncate text-[10px] font-extrabold uppercase tracking-wide leading-snug text-panel-text-muted">
-              {entry.publisher}
-            </span>
-          ) : null}
-          <span className="flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-snug text-panel-text">
-            {entry.imageUrl ? (
-              <img
-                src={entry.imageUrl}
-                alt=""
-                className="h-4 w-4 shrink-0 rounded-full border border-panel-border object-cover"
-              />
-            ) : (
-              <Library size={11} className="shrink-0 text-panel-text-muted" aria-hidden="true" />
-            )}
-            <span className="truncate">{entry.name}</span>
-          </span>
-        </span>
-      ))}
+      {/* Yayınevi + kitap adı ilk (kapalı) görünümde gizli; detay okuna basınca aşağıdaki
+          genişletilmiş kutuda gösterilir. Kapalı kartta ders adı + konu/soru sayısı yeterli. */}
     </span>
   )
 
@@ -747,11 +731,16 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
         </span>
         {compactDetailLabel ? (
           <span className="mt-1 flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-snug text-panel-text-muted">
-            <span className="truncate">{compactDetailLabel}</span>
+            <span className="min-w-0 truncate" title={compactDetailLabel}>
+              {compactDetailLabel}
+            </span>
           </span>
         ) : null}
         {task.taskType === 'ozel-ders' && task.teacherFullName ? (
-          <span className="mt-0.5 block truncate text-[11px] font-semibold text-panel-text-muted">
+          <span
+            title={task.teacherFullName}
+            className="mt-0.5 block truncate text-[11px] font-semibold text-panel-text-muted"
+          >
             {task.teacherFullName}
           </span>
         ) : null}
@@ -891,6 +880,10 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
         />
       </div>
 
+      {/* Ödevi kimin eklediği kapalı kartta da görünsün; diğer görev tiplerinde
+          bu bilgi yalnızca detay kutusunda kalır. */}
+      {isHomework ? <CreatorNote task={task} /> : null}
+
       {canComplete ? (
         <div className="mt-1.5 pl-1 pr-1">
           <button
@@ -909,42 +902,61 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
 
       {expanded && hasDetails ? (
         <div className="mt-2 grid gap-2 rounded-xl border border-panel-border/70 bg-panel-surface-soft/70 p-2.5">
-          {source || testRows.length ? (
+          {resourceEntries.length || testRows.length ? (
             <div>
-              {source ? (
-                <span
-                  title={source}
-                  className="flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-snug text-panel-text-muted"
-                >
-                  {task.schoolResourceImageUrl ? (
-                    <img
-                      src={task.schoolResourceImageUrl}
-                      alt=""
-                      className="h-4 w-4 shrink-0 rounded-full border border-panel-border object-cover"
-                    />
-                  ) : (
-                    <Library size={11} className="shrink-0" aria-hidden="true" />
-                  )}
-                  <span className="truncate">{source}</span>
+              {resourceEntries.map((entry, index) => (
+                <span key={index} className="mb-1 block min-w-0 last:mb-0">
+                  {entry.publisher ? (
+                    <span
+                      title={entry.publisher}
+                      className="block truncate text-[10px] font-extrabold uppercase tracking-wide leading-snug text-panel-text-muted"
+                    >
+                      {entry.publisher}
+                    </span>
+                  ) : null}
+                  <span className="flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-snug text-panel-text">
+                    {entry.imageUrl ? (
+                      <img
+                        src={entry.imageUrl}
+                        alt=""
+                        className="h-4 w-4 shrink-0 rounded-full border border-panel-border object-cover"
+                      />
+                    ) : (
+                      <Library size={11} className="shrink-0 text-panel-text-muted" aria-hidden="true" />
+                    )}
+                    <span className="min-w-0 truncate" title={entry.name}>
+                      {entry.name}
+                    </span>
+                  </span>
                 </span>
-              ) : null}
+              ))}
 
               {testRows.length ? (
-                <div className="mt-1 grid gap-0.5 border-l border-panel-blue-soft/80 pl-2">
+                <div className="mt-1 grid min-w-0 gap-0.5 border-l border-panel-blue-soft/80 pl-2">
                   {testRows.map((line, index) => (
-                    <p key={index} className="break-words text-[11px] font-medium leading-snug text-panel-text-muted">
+                    <p
+                      key={index}
+                      title={line}
+                      className="min-w-0 truncate text-[11px] font-medium leading-snug text-panel-text-muted"
+                    >
                       {line}
                     </p>
                   ))}
                 </div>
               ) : fallbackDetail ? (
-                <p className="mt-1 whitespace-pre-line break-words border-l border-panel-blue-soft/80 pl-2 text-[11px] font-medium leading-snug text-panel-text-muted">
+                <p
+                  title={fallbackDetail}
+                  className="mt-1 line-clamp-3 min-w-0 whitespace-pre-line break-words border-l border-panel-blue-soft/80 pl-2 text-[11px] font-medium leading-snug text-panel-text-muted"
+                >
                   {fallbackDetail}
                 </p>
               ) : null}
             </div>
           ) : fallbackDetail ? (
-            <p className="whitespace-pre-line break-words text-[11px] font-medium leading-snug text-panel-text-muted">
+            <p
+              title={fallbackDetail}
+              className="line-clamp-3 min-w-0 whitespace-pre-line break-words text-[11px] font-medium leading-snug text-panel-text-muted"
+            >
               {fallbackDetail}
             </p>
           ) : null}
@@ -972,7 +984,7 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
               onToggle={(next) => onToggleReview(task, next)}
             />
           ) : null}
-          <CreatorNote task={task} />
+          {!isHomework ? <CreatorNote task={task} /> : null}
           <CompletionTimerNote
             durationLabel={completionDurationLabel}
             completedAtLabel={completionTimestampLabel}
