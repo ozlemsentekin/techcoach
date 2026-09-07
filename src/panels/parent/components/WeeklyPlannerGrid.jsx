@@ -1139,7 +1139,17 @@ export default function WeeklyPlannerGrid({
     const tasks = [...(tasksByDate?.[date] || []), ...scheduleSlots, ...schoolSlots, ...holidaySlots]
       // Bugün planlanmış bir özel ders bitiş saatini geçtiyse akıştan otomatik düşer.
       .filter((task) => date !== currentDate || !isEndedPrivateLessonForToday(task, date))
-      .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+      // Önce saati olanlar (saate göre), sonra saatsiz görevler eklenme tarihine göre.
+      .sort((a, b) => {
+        const aTime = a.startTime || ''
+        const bTime = b.startTime || ''
+        if (aTime && bTime) return aTime.localeCompare(bTime)
+        if (aTime) return -1
+        if (bTime) return 1
+        const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        return aCreated - bCreated
+      })
     const isPastDay = date < currentDate
     const isToday = date === currentDate
     const isPastDayExpanded = expandedPastDates.has(date)
