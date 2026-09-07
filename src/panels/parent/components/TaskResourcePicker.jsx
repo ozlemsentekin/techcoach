@@ -38,17 +38,17 @@ export default function TaskResourcePicker({ title, summary, canConfirm, onCance
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel() }}>
-      <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="task-resource-picker-title" className="flex max-h-[95dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl bg-panel-surface shadow-2xl sm:max-h-[90dvh] sm:rounded-2xl">
-        <header className="flex items-center gap-3 border-b border-panel-border p-4 sm:px-6">
+      <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="task-resource-picker-title" className="flex h-[100dvh] w-full max-w-5xl flex-col overflow-hidden bg-panel-surface shadow-2xl sm:h-[min(90dvh,850px)] sm:rounded-2xl">
+        <header className="flex shrink-0 items-center gap-3 border-b border-panel-border p-4 sm:px-6">
           <button type="button" onClick={onCancel} aria-label="Görev formuna dön" className="rounded-lg p-2 text-panel-text hover:bg-panel-blue-soft"><ArrowLeft size={20} /></button>
           <div className="flex-1">
             <h2 id="task-resource-picker-title" className="text-lg font-semibold text-panel-text">{title}</h2>
-            <p className="mt-1 text-sm text-panel-text-muted">Seçiminizi tamamlayıp görev formuna dönün.</p>
+            <p className="mt-1 text-sm text-panel-text-muted">Dersi ve kaynağı seçin, ardından görev içeriğini belirleyin.</p>
           </div>
           <button type="button" onClick={onCancel} aria-label="Seçimden vazgeç" className="rounded-lg p-2 text-panel-text-muted hover:bg-panel-blue-soft"><X size={20} /></button>
         </header>
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">{children}</div>
-        <footer className="flex flex-wrap items-center gap-3 border-t border-panel-border p-4 sm:px-6">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 sm:p-6 [&>*]:shrink-0">{children}</div>
+        <footer className="flex shrink-0 flex-wrap items-center gap-3 border-t border-panel-border bg-panel-surface p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
           <p aria-live="polite" className="w-full text-sm font-semibold text-panel-text sm:w-auto sm:flex-1">{summary}</p>
           <button type="button" onClick={onCancel} className="rounded-xl border border-panel-border px-4 py-3 text-sm font-semibold text-panel-text">Vazgeç</button>
           <button type="button" onClick={onConfirm} disabled={!canConfirm} className="flex-1 rounded-xl bg-panel-blue px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none">Seçimi tamamla</button>

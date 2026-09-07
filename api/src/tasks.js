@@ -675,15 +675,17 @@ async function createTaskHandler(request) {
       return json(400, { error: 'Başlangıç ve bitiş saati birlikte girilmeli.' })
     }
 
-    if (payload.taskType === PRIVATE_LESSON_TASK_TYPE || payload.studentTeacherId) {
-      if (!payload.studentTeacherId) {
-        return json(400, { error: 'Özel ders için öğretmen seçmelisiniz.' })
-      }
+    // Özel ders görevinde öğretmen isteğe bağlıdır: seçili öğretmen varsa öğrenciye ait
+    // ve aktif olduğu doğrulanır, ders adı öğretmen kaydından türetilir; öğretmen yoksa
+    // görev yalnızca `subject` (ders adı) bilgisiyle kaydedilir.
+    if (payload.studentTeacherId) {
       const teacherRecord = await resolveActiveParentPrivateTeacher(studentId, payload.studentTeacherId)
       if (!teacherRecord) {
         return json(400, { error: 'Geçersiz öğretmen seçimi.' })
       }
       payload.subject = teacherRecord.subject_name || null
+    } else if (payload.taskType === PRIVATE_LESSON_TASK_TYPE && !payload.subject) {
+      return json(400, { error: 'Özel ders için ders seçmelisiniz.' })
     }
 
     // Ödev-tipi görevde subject_id yoksa ders adından çöz (AddTaskDrawer subjectId göndermeyebilir):
