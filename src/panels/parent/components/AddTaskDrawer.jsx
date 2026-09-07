@@ -8,6 +8,7 @@ import Badge from '../../ui/Badge'
 import { cn } from '../../ui/utils'
 import { ResourceBookRates } from '../../shared/ResourceBookCard'
 import { filterTopicsBySearch } from '../../shared/homework/topicSearch'
+import TaskResourcePicker from './TaskResourcePicker'
 import SchoolResourceDropdown from '../../shared/homework/SchoolResourceDropdown'
 
 const QUESTION_BANK_HOMEWORK_TASK_TYPE = 'soru-bankasi-odevi'
@@ -289,6 +290,7 @@ export default function AddTaskDrawer({
   const [error, setError] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [pickerSnapshot, setPickerSnapshot] = useState(null)
 
   const durationMinutes = Number(form.durationMinutes) || 0
   const endTime = durationMinutes > 0 ? addMinutesToTime(form.startTime, durationMinutes) : ''
@@ -334,11 +336,11 @@ export default function AddTaskDrawer({
 
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && !saving && !deleting) onClose()
+      if (event.key === 'Escape' && !pickerSnapshot && !saving && !deleting) onClose()
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [deleting, onClose, saving])
+  }, [deleting, onClose, saving, pickerSnapshot])
 
   useEffect(() => {
     if (!needsResource || resourceBooks !== null || resourceBooksError) return undefined
@@ -509,6 +511,27 @@ export default function AddTaskDrawer({
     () => sumSelectedQuestions(topics, selectedTestIds),
     [topics, selectedTestIds],
   )
+
+  const openResourcePicker = () => {
+    setPickerSnapshot({ resourceBookId, schoolResourceId, schoolSubjectId, subjectId,
+      selectedTestIds: new Set(selectedTestIds), topics, topicsError, collapsedTopicIds,
+      searchQuery, form: { ...form }, autoTitle: autoTitleRef.current })
+  }
+
+  const cancelResourcePicker = () => {
+    setResourceBookId(pickerSnapshot.resourceBookId)
+    setSchoolResourceId(pickerSnapshot.schoolResourceId)
+    setSchoolSubjectId(pickerSnapshot.schoolSubjectId)
+    setSubjectId(pickerSnapshot.subjectId)
+    setSelectedTestIds(pickerSnapshot.selectedTestIds)
+    setTopics(pickerSnapshot.topics)
+    setTopicsError(pickerSnapshot.topicsError)
+    setCollapsedTopicIds(pickerSnapshot.collapsedTopicIds)
+    setSearchQuery(pickerSnapshot.searchQuery)
+    setForm(pickerSnapshot.form)
+    autoTitleRef.current = pickerSnapshot.autoTitle
+    setPickerSnapshot(null)
+  }
 
   const handleChange = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }))
@@ -819,7 +842,10 @@ export default function AddTaskDrawer({
   }
 
   return (
+    <>
     <div
+      hidden={Boolean(pickerSnapshot)}
+      style={pickerSnapshot ? { display: 'none' } : undefined}
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
@@ -956,6 +982,136 @@ export default function AddTaskDrawer({
               </select>
             </label>
 
+            {needsResource || isSchoolHomework ? (
+              <div className="flex flex-col gap-3 rounded-2xl border border-panel-border bg-panel-surface-soft/60 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-panel-text">
+                    {needsResource ? 'Kaynak ve içerik' : 'Okul kaynağı (isteğe bağlı)'}
+                  </span>
+                  <button type="button" onClick={openResourcePicker} className="shrink-0 rounded-xl border border-panel-blue px-3 py-2 text-sm font-semibold text-panel-blue hover:bg-panel-blue-soft">
+                    {selectedBook || selectedSchoolResource ? 'Değiştir' : needsResource ? 'Kaynak ve içerik seç' : 'Kaynak seç'}
+                  </button>
+                </div>
+                {selectedBook || selectedSchoolResource ? (
+                  <div className="flex items-start gap-3">
+                    {selectedBook ? <ResourceBookCover book={selectedBook} /> : <BookOpen size={22} className="shrink-0 text-panel-blue" />}
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-panel-text">{selectedBook?.name || selectedSchoolResource?.name}</p>
+                      <p className="mt-1 text-xs text-panel-text-muted">{selectedSubjectName || selectedSchoolSubjectName}</p>
+                      {needsResource ? (
+                        <>
+                          <p className="mt-2 text-sm font-semibold text-panel-blue">{selectedTestIds.size} test · {totalQuestionCount} soru</p>
+                          <p className="mt-1 line-clamp-3 text-xs text-panel-text-muted">
+                            {topics?.flatMap((topic) => topic.tests.filter((test) => selectedTestIds.has(test.id)).map((test) => `${topic.name}: ${test.name}`)).join(' · ')}
+                          </p>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : <p className="text-sm text-panel-text-muted">{needsResource ? 'Ders, kaynak ve testleri ayrı pencerede kolayca seçin.' : 'Göreve eklemek istediğiniz okul kaynağını seçebilirsiniz.'}</p>}
+              </div>
+            ) : null}
+
+            {isPrivateLesson ? (
+              <div className="flex flex-col gap-2 rounded-2xl border border-panel-border bg-panel-surface-soft/60 p-3">
+                {privateTeachersError ? (
+                  <p className="rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{privateTeachersError}</p>
+                ) : privateTeachers === null ? (
+                  <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">Öğretmenler yükleniyor...</p>
+                ) : lessonSubjectGroups.length === 0 ? (
+                  <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">
+                    Öğrenciye tanımlı aktif özel öğretmen yok.
+                  </p>
+                ) : (
+                  <>
+                    <select
+                      aria-label="Ders"
+                      value={effectiveLessonSubjectId}
+                      onChange={handleLessonSubjectChange}
+                      className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                    >
+                      <option value="">Ders seçin</option>
+                      {lessonSubjectGroups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    {effectiveLessonSubjectId ? (
+                      <select
+                        aria-label="Öğretmen"
+                        value={studentTeacherId}
+                        onChange={handleTeacherChange}
+                        className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                      >
+                        <option value="">Öğretmen seçin</option>
+                        {lessonTeachersForSubject.map((teacher) => (
+                          <option key={teacher.id} value={teacher.id}>
+                            {teacher.fullName}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            ) : null}
+
+            {showTitleInput ? (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Görev konusu</span>
+                <input
+                  value={form.title}
+                  onChange={handleChange('title')}
+                  className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                />
+              </label>
+            ) : null}
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-panel-text-muted">Görev açıklaması</span>
+              <textarea
+                rows={3}
+                value={form.description}
+                onChange={handleChange('description')}
+                className="resize-none rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 border-t border-panel-border px-4 py-3 sm:flex-row sm:gap-3 sm:px-6 sm:py-4">
+          {initialTask && onDelete ? (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting || saving}
+              className="flex h-12 items-center justify-center gap-2 rounded-xl border border-panel-warm/40 px-4 text-sm font-semibold text-panel-warm hover:bg-panel-warm/10 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} aria-hidden="true" />}
+              Görevi Sil
+            </button>
+          ) : null}
+          <button
+            type="submit"
+            disabled={deleting || saving || Boolean(schoolConflict)}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {saving ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : null}
+            {initialTask ? 'Değişiklikleri Kaydet' : 'Görevi Ekle'}
+          </button>
+        </div>
+      </form>
+    </div>
+    {pickerSnapshot ? (
+      <TaskResourcePicker
+        title={needsResource ? 'Kaynak ve içerik seç' : 'Okul kaynağı seç'}
+        summary={needsResource ? `${selectedTestIds.size} test · ${totalQuestionCount} soru seçildi` : selectedSchoolResource?.name || 'Kaynak seçimi isteğe bağlıdır'}
+        canConfirm={!needsResource || (hasValidResourceSelection && selectedTestIds.size > 0 && topics !== null && !topicsError)}
+        onCancel={cancelResourcePicker}
+        onConfirm={() => { setPickerSnapshot(null); setError('') }}
+      >
             {needsResource ? (
               <div className="flex flex-col gap-2 rounded-2xl border border-panel-border bg-panel-surface-soft/60 p-3">
                 <span className="text-sm font-semibold text-panel-text">Soru bankası kaynağı</span>
@@ -1059,63 +1215,6 @@ export default function AddTaskDrawer({
               </div>
             ) : null}
 
-            {isPrivateLesson ? (
-              <div className="flex flex-col gap-2 rounded-2xl border border-panel-border bg-panel-surface-soft/60 p-3">
-                {privateTeachersError ? (
-                  <p className="rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{privateTeachersError}</p>
-                ) : privateTeachers === null ? (
-                  <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">Öğretmenler yükleniyor...</p>
-                ) : lessonSubjectGroups.length === 0 ? (
-                  <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">
-                    Öğrenciye tanımlı aktif özel öğretmen yok.
-                  </p>
-                ) : (
-                  <>
-                    <select
-                      aria-label="Ders"
-                      value={effectiveLessonSubjectId}
-                      onChange={handleLessonSubjectChange}
-                      className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-                    >
-                      <option value="">Ders seçin</option>
-                      {lessonSubjectGroups.map((group) => (
-                        <option key={group.id} value={group.id}>
-                          {group.name}
-                        </option>
-                      ))}
-                    </select>
-
-                    {effectiveLessonSubjectId ? (
-                      <select
-                        aria-label="Öğretmen"
-                        value={studentTeacherId}
-                        onChange={handleTeacherChange}
-                        className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-                      >
-                        <option value="">Öğretmen seçin</option>
-                        {lessonTeachersForSubject.map((teacher) => (
-                          <option key={teacher.id} value={teacher.id}>
-                            {teacher.fullName}
-                          </option>
-                        ))}
-                      </select>
-                    ) : null}
-                  </>
-                )}
-              </div>
-            ) : null}
-
-            {showTitleInput ? (
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Görev konusu</span>
-                <input
-                  value={form.title}
-                  onChange={handleChange('title')}
-                  className="rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-                />
-              </label>
-            ) : null}
-
             {isQuestionBankHomework && resourceBookId ? (
               <div className="flex flex-col gap-2 rounded-2xl border border-panel-border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1202,40 +1301,8 @@ export default function AddTaskDrawer({
               </div>
             ) : null}
 
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-panel-text-muted">Görev açıklaması</span>
-              <textarea
-                rows={3}
-                value={form.description}
-                onChange={handleChange('description')}
-                className="resize-none rounded-xl border border-panel-border bg-white p-3 text-base text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-              />
-            </label>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-2 border-t border-panel-border px-4 py-3 sm:flex-row sm:gap-3 sm:px-6 sm:py-4">
-          {initialTask && onDelete ? (
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={deleting || saving}
-              className="flex h-12 items-center justify-center gap-2 rounded-xl border border-panel-warm/40 px-4 text-sm font-semibold text-panel-warm hover:bg-panel-warm/10 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} aria-hidden="true" />}
-              Görevi Sil
-            </button>
-          ) : null}
-          <button
-            type="submit"
-            disabled={deleting || saving || Boolean(schoolConflict)}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-panel-blue px-4 py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {saving ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : null}
-            {initialTask ? 'Değişiklikleri Kaydet' : 'Görevi Ekle'}
-          </button>
-        </div>
-      </form>
-    </div>
+      </TaskResourcePicker>
+    ) : null}
+    </>
   )
 }
