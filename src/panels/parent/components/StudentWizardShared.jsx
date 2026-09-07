@@ -12,20 +12,21 @@ export function FieldIcon({ icon }) {
   )
 }
 
-// Doğum tarihi alanı: boşken normal metin girişi gibi görünür ve "Doğum Tarihi"
-// placeholder'ı gösterir; odaklanınca veya değer varken native tarih girişine
-// (takvim + gg.aa.yyyy) döner. Böylece boş haldeyken tarayıcının "aa/gg/yyyy"
-// segment metni görünmez. min/max/name gibi ek nitelikler `rest` ile geçirilir.
+// Doğum tarihi alanı: her zaman native tarih girişidir (type="date"), böylece
+// tek dokunuşla takvim açılır. Boşken tarayıcının "gg.aa.yyyy" segment metnini
+// gizlemek için üstüne opak bir "Doğum Tarihi" placeholder katmanı bindirilir;
+// değer varken veya odaklanınca bu katman kalkar. min/max/name gibi ek
+// nitelikler `rest` ile geçirilir.
 export function BirthDateField({ value, onChange, disabled = false, required = false, className, ...rest }) {
   const [focused, setFocused] = useState(false)
   const hasValue = Boolean(value)
-  const asDate = hasValue || focused
+  const showPlaceholder = !hasValue && !focused
 
   return (
     <div className="relative">
       <FieldIcon icon={Calendar} />
       <input
-        type={asDate ? 'date' : 'text'}
+        type="date"
         value={value || ''}
         onChange={onChange}
         onFocus={(event) => {
@@ -40,7 +41,7 @@ export function BirthDateField({ value, onChange, disabled = false, required = f
         }}
         onBlur={() => setFocused(false)}
         disabled={disabled}
-        placeholder={required ? 'Doğum Tarihi *' : 'Doğum Tarihi'}
+        required={required}
         aria-label="Doğum Tarihi"
         className={[
           'w-full rounded-xl border p-2 pl-9 text-base focus:border-panel-blue focus:outline-none',
@@ -53,6 +54,19 @@ export function BirthDateField({ value, onChange, disabled = false, required = f
           .join(' ')}
         {...rest}
       />
+      {showPlaceholder ? (
+        <span
+          aria-hidden="true"
+          className={[
+            // pointer-events-none: dokunuş doğrudan alttaki date input'a geçsin,
+            // takvim tek dokunuşta açılsın
+            'pointer-events-none absolute inset-y-px left-px right-px flex items-center rounded-xl pl-9 pr-3 text-base',
+            disabled ? 'bg-[#f4f5f6] text-panel-text-muted' : 'bg-white text-panel-text-muted',
+          ].join(' ')}
+        >
+          {required ? 'Doğum Tarihi *' : 'Doğum Tarihi'}
+        </span>
+      ) : null}
     </div>
   )
 }
