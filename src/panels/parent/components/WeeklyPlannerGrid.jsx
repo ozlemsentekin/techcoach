@@ -750,6 +750,22 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
 
   const summaryContent = isHomework ? homeworkSummary : defaultSummary
 
+  // "Tamamla" butonu: kapalı kartta chip'lerin altında, açık kartta detay kutusunun
+  // en sonunda görünür; her iki durumda da kartın içinde kalır.
+  const completeButton = canComplete ? (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        onCompleteTask(task)
+      }}
+      className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-panel-sage bg-panel-sage/10 px-3 text-xs font-bold text-panel-sage transition-colors duration-150 hover:bg-panel-sage hover:text-white"
+    >
+      <CheckCircle2 size={15} aria-hidden="true" />
+      Tamamla
+    </button>
+  ) : null
+
   // Kartın herhangi bir boş alanına tıklanınca da detay açılıp kapansın; iç içe buton/link
   // gibi etkileşimli öğelere yapılan tıklamalar kendi işlerini görsün diye hariç tutulur.
   const handleCardActivate = (event) => {
@@ -884,20 +900,8 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
           bu bilgi yalnızca detay kutusunda kalır. */}
       {isHomework ? <CreatorNote task={task} /> : null}
 
-      {canComplete ? (
-        <div className="mt-1.5 pl-1 pr-1">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation()
-              onCompleteTask(task)
-            }}
-            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-panel-sage bg-panel-sage/10 px-3 text-xs font-bold text-panel-sage transition-colors duration-150 hover:bg-panel-sage hover:text-white"
-          >
-            <CheckCircle2 size={15} aria-hidden="true" />
-            Tamamla
-          </button>
-        </div>
+      {completeButton && !(expanded && hasDetails) ? (
+        <div className="mt-1.5 pl-1 pr-1">{completeButton}</div>
       ) : null}
 
       {expanded && hasDetails ? (
@@ -989,6 +993,7 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
             durationLabel={completionDurationLabel}
             completedAtLabel={completionTimestampLabel}
           />
+          {completeButton ? <div className="mt-0.5">{completeButton}</div> : null}
         </div>
       ) : null}
     </div>
