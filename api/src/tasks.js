@@ -1410,6 +1410,149 @@ async function removeTaskTestHandler(request) {
   }
 }
 
+// Kitaplık / "Çocuklarım → Kaynaklar" ekranından bir testin sonucu girildiğinde ya da geri
+// alındığında (dbo.StudentManualTestCompletions), o testi içeren "soru bankası ödevi"
+// görevlerinin durumunu yeniden hesaplar. Bir görevin seçili testlerinin tümü — görevin kendi
+// test_results_json'ı VEYA öğrencinin manuel tamamlamalarıyla — bittiyse görev otomatik
+// 'tamamlandi' olur. Bir test geri alınıp görev artık eksik kalıyorsa ve görev yalnızca manuel
+// tamamlamalarla bitmişse görev tekrar açılır. Görevin kendi optik akışıyla tamamlanmış
+// (tüm testleri test_results_json'da grade edilmiş) görevlere dokunulmaz.
+async function syncTasksForManualTestCompletion({ studentId, testId, actorRole, actorId }) {
+  const norm = (value) => String(value || '').toLowerCase()
+  const targetTestId = norm(testId)
+
+  const listDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    needle: { type: sql.NVarChar(80), value: `%${testId}%` },
+  })
+  const tasksResult = await listDb.query(`
+    SELECT id, title, subject, task_type, date, start_time, status, completed_at,
+           selected_test_ids_json, test_results_json
+    FROM dbo.Tasks
+    WHERE student_id = @studentId AND is_draft = 0
+      AND selected_test_ids_json IS NOT NULL
+      AND selected_test_ids_json LIKE @needle;
+  `)
+
+  const affected = tasksResult.recordset
+    .map((row) => {
+      let selectedTestIds = []
+      try {
+        selectedTestIds = (JSON.parse(row.selected_test_ids_json) || []).map(norm)
+      } catch {
+        selectedTestIds = []
+      }
+      let results = {}
+      try {
+        const parsed = row.test_results_json ? JSON.parse(row.test_results_json) : {}
+        results = Object.fromEntries(Object.entries(parsed || {}).map(([key, value]) => [norm(key), value]))
+      } catch {
+        results = {}
+      }
+      return { row, selectedTestIds, results }
+    })
+    .filter(({ selectedTestIds }) => selectedTestIds.includes(targetTestId))
+
+  if (!affected.length) return
+
+  const allTestIds = [...new Set(affected.flatMap(({ selectedTestIds }) => selectedTestIds))]
+  const lookupBindings = { studentId: { type: sql.UniqueIdentifier, value: studentId } }
+  const placeholders = allTestIds.map((id, index) => {
+    lookupBindings[`t${index}`] = { type: sql.UniqueIdentifier, value: id }
+    return `@t${index}`
+  })
+
+  const manualDb = await withRequest(lookupBindings)
+  const manualResult = await manualDb.query(`
+    SELECT test_id, correct_count, wrong_count, blank_count
+    FROM dbo.StudentManualTestCompletions
+    WHERE student_id = @studentId AND test_id IN (${placeholders.join(', ')});
+  `)
+  const manualByTestId = new Map(manualResult.recordset.map((row) => [norm(row.test_id), row]))
+
+  const countsDb = await withRequest(lookupBindings)
+  const countsResult = await countsDb.query(`
+    SELECT id, question_count FROM dbo.ResourceBookTopicTests WHERE id IN (${placeholders.join(', ')});
+  `)
+  const questionCountByTestId = new Map(countsResult.recordset.map((row) => [norm(row.id), row.question_count || 0]))
+
+  for (const { row, selectedTestIds, results } of affected) {
+    const testDone = (tid) => Boolean(results[tid]) || manualByTestId.has(tid)
+    const anyDone = selectedTestIds.some(testDone)
+    const allDone = selectedTestIds.length > 0 && selectedTestIds.every(testDone)
+    const gradedByTaskAlone = selectedTestIds.length > 0 && selectedTestIds.every((tid) => Boolean(results[tid]))
+
+    let nextStatus = null
+    if (allDone && row.status !== 'tamamlandi') {
+      nextStatus = 'tamamlandi'
+    } else if (!allDone && row.status === 'tamamlandi' && !gradedByTaskAlone) {
+      nextStatus = anyDone ? 'devam-ediyor' : 'bekliyor'
+    }
+    if (!nextStatus) continue
+
+    let totalCorrect = 0
+    let totalWrong = 0
+    let totalBlank = 0
+    let totalCompleted = 0
+    selectedTestIds.forEach((tid) => {
+      const graded = results[tid]
+      const manual = manualByTestId.get(tid)
+      const source = graded || manual
+      if (!source) return
+      totalCompleted += questionCountByTestId.get(tid) || 0
+      totalCorrect += Number(graded ? graded.correct : manual.correct_count) || 0
+      totalWrong += Number(graded ? graded.wrong : manual.wrong_count) || 0
+      totalBlank += Number(graded ? graded.blank : manual.blank_count) || 0
+    })
+
+    const completedAt = nextStatus === 'tamamlandi' ? row.completed_at || new Date() : null
+    const updateDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: row.id },
+      status: { type: sql.NVarChar(30), value: nextStatus },
+      completedAt: { type: sql.DateTime2, value: completedAt },
+      completedQuestionCount: { type: sql.Int, value: totalCompleted },
+      correctCount: { type: sql.Int, value: totalCorrect },
+      wrongCount: { type: sql.Int, value: totalWrong },
+      blankCount: { type: sql.Int, value: totalBlank },
+    })
+    await updateDb.query(`
+      UPDATE dbo.Tasks
+      SET status = @status,
+          completed_at = @completedAt,
+          completed_question_count = @completedQuestionCount,
+          correct_count = @correctCount,
+          wrong_count = @wrongCount,
+          blank_count = @blankCount
+      WHERE id = @id;
+    `)
+
+    await recordTaskActivities({
+      studentId,
+      taskId: row.id,
+      actorRole: actorRole || 'ebeveyn',
+      actorUserId: actorId,
+      entries: [
+        {
+          action: nextStatus === 'tamamlandi' ? 'task_completed' : 'task_reopened',
+          metadata: {
+            taskTitle: row.title || 'Görev',
+            taskSummary: row.title || 'Görev',
+            taskType: row.task_type,
+            subject: row.subject || undefined,
+            taskDate: toISODate(row.date),
+            startTime: row.start_time || undefined,
+            previousStatus: row.status,
+            nextStatus,
+            detail: `${totalCompleted} soru`,
+            source: 'kitaplik',
+            auto: true,
+          },
+        },
+      ],
+    })
+  }
+}
+
 module.exports = {
   listTasksHandler,
   getTaskHandler,
@@ -1421,6 +1564,7 @@ module.exports = {
   saveWrongQuestionPhotoHandler,
   removeTaskTestHandler,
   fetchTaskAnswerSheetData,
+  syncTasksForManualTestCompletion,
   SELECT_TASK,
   sanitizeTask,
 }

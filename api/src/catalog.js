@@ -7,6 +7,7 @@ const { requireStudentContext, requireStudentWriteContext } = require('./student
 const { gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGrading')
 const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
 const { sanitizeWrongQuestion } = require('./progress')
+const { syncTasksForManualTestCompletion } = require('./tasks')
 
 const SUBJECT_GRADES = new Set(['1', '2', '3', '4', '5', '6', '7', '8'])
 
@@ -1435,7 +1436,7 @@ function parseNullableCount(value) {
 
 async function markResourceBookTopicTestCompletionHandler(request) {
   try {
-    const { error, studentId, actorId } = await requireStudentWriteContext(request)
+    const { error, studentId, actorId, actorRole } = await requireStudentWriteContext(request)
     if (error) {
       return error
     }
@@ -1472,6 +1473,14 @@ async function markResourceBookTopicTestCompletionHandler(request) {
         VALUES (@studentId, @testId, @markedByUserId, @correctCount, @wrongCount, @blankCount);
     `)
 
+    // Test bir "soru bankası ödevi" görevine bağlıysa ve görevin tüm testleri bittiyse görevi
+    // otomatik tamamlandı yap. Görev akışını bozmamak için en iyi çaba: hata olsa bile sonucu döndür.
+    try {
+      await syncTasksForManualTestCompletion({ studentId, testId, actorRole, actorId })
+    } catch (syncError) {
+      console.error('syncTasksForManualTestCompletion failed (mark)', syncError)
+    }
+
     return json(200, { success: true, completionSource: 'manual', correctCount, wrongCount, blankCount })
   } catch (error) {
     if (isConfigError(error)) {
@@ -1489,7 +1498,7 @@ async function markResourceBookTopicTestCompletionHandler(request) {
 
 async function unmarkResourceBookTopicTestCompletionHandler(request) {
   try {
-    const { error, studentId } = await requireStudentWriteContext(request)
+    const { error, studentId, actorId, actorRole } = await requireStudentWriteContext(request)
     if (error) {
       return error
     }
@@ -1502,6 +1511,13 @@ async function unmarkResourceBookTopicTestCompletionHandler(request) {
     await requestDb.query(`
       DELETE FROM dbo.StudentManualTestCompletions WHERE student_id = @studentId AND test_id = @testId;
     `)
+
+    // Görev yalnızca Kitaplık'tan girilen sonuçlarla tamamlanmışsa ve bu test geri alındıysa görevi tekrar aç.
+    try {
+      await syncTasksForManualTestCompletion({ studentId, testId, actorRole, actorId })
+    } catch (syncError) {
+      console.error('syncTasksForManualTestCompletion failed (unmark)', syncError)
+    }
 
     return json(200, { success: true, completionSource: null })
   } catch (error) {
@@ -1520,7 +1536,7 @@ async function unmarkResourceBookTopicTestCompletionHandler(request) {
 
 async function submitManualOpticalAnswersHandler(request) {
   try {
-    const { error, studentId, actorId } = await requireStudentWriteContext(request)
+    const { error, studentId, actorId, actorRole } = await requireStudentWriteContext(request)
     if (error) {
       return error
     }
@@ -1570,6 +1586,13 @@ async function submitManualOpticalAnswersHandler(request) {
     // Yanlış işaretlenip fotoğrafı çekilen bir soru bu düzeltmede doğru cevaplandıysa,
     // ilgili kayıt (ve fotoğrafı) hata defterinden düşsün.
     await pruneCorrectedWrongQuestions(studentId, testId, answers, result.correctLabels)
+
+    // Test bir "soru bankası ödevi" görevine bağlıysa ve görevin tüm testleri bittiyse görevi otomatik tamamla.
+    try {
+      await syncTasksForManualTestCompletion({ studentId, testId, actorRole, actorId })
+    } catch (syncError) {
+      console.error('syncTasksForManualTestCompletion failed (optical)', syncError)
+    }
 
     return json(200, {
       success: true,
