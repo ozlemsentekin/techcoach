@@ -8,6 +8,7 @@ import {
   saveTaskForDay,
 } from '../../../services/weeklyPlanService'
 import { addDaysISO, addMinutesToTime, getMondayOfWeek, todayISODate } from '../../../utils/time'
+import { useAuth } from '../../../context/useAuth'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import Button from '../../ui/Button'
@@ -27,6 +28,7 @@ function groupTasksByDate(tasks, dates) {
 }
 
 export default function WeeklyPlanPage() {
+  const { authUser } = useAuth()
   const [weekOffset, setWeekOffset] = useState(0)
   const weekStart = useMemo(() => addDaysISO(currentWeekStart, weekOffset * 7), [weekOffset])
   const weekDates = useMemo(() => getWeekDates(weekStart), [weekStart])
@@ -218,6 +220,7 @@ export default function WeeklyPlanPage() {
                 getExistingTasksForDate={getExistingTasksForDrawer}
                 schoolSchedule={schoolSchedule}
                 schoolHolidays={schoolHolidays}
+                studentGrade={authUser?.grade}
                 onSave={handleSaveDrawerTask}
                 onDelete={handleDeleteTask}
                 onClose={() => setDrawerState(null)}

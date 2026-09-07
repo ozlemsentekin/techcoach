@@ -359,6 +359,7 @@ export default function WeeklyPlanPage() {
                 getExistingTasksForDate={getExistingTasksForDrawer}
                 schoolSchedule={schoolSchedule}
                 schoolHolidays={schoolHolidays}
+                studentGrade={selectedStudent?.grade}
                 onSave={handleSaveDrawerTask}
                 onDelete={handleDeleteTask}
                 onClose={() => setDrawerState(null)}

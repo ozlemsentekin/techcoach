@@ -248,6 +248,7 @@ export default function AddTaskDrawer({
   getExistingTasksForDate,
   schoolSchedule,
   schoolHolidays,
+  studentGrade,
 }) {
   const seed = { ...initialTemplate?.task, ...initialTask }
   const seedTaskType = normalizeTaskType(seed, Boolean(initialTask || initialTemplate))
@@ -277,6 +278,8 @@ export default function AddTaskDrawer({
   const [studentTeacherId, setStudentTeacherId] = useState(seed.studentTeacherId || '')
   const [privateTeachers, setPrivateTeachers] = useState(null)
   const [privateTeachersError, setPrivateTeachersError] = useState('')
+  const [lessonSubjects, setLessonSubjects] = useState(null)
+  const [lessonSubjectsError, setLessonSubjectsError] = useState('')
   const [resourceBooks, setResourceBooks] = useState(null)
   const [resourceBooksError, setResourceBooksError] = useState('')
   const [topics, setTopics] = useState(null)
@@ -393,6 +396,25 @@ export default function AddTaskDrawer({
     }
   }, [isPrivateLesson, privateTeachers, privateTeachersError])
 
+  // Özel ders "Ders" seçimi: öğretmeni olan derslerle sınırlı kalmasın — öğrencinin
+  // sınıfına ait tüm aktif dersler listelensin (öğretmen isteğe bağlı).
+  useEffect(() => {
+    if (!isPrivateLesson || lessonSubjects !== null || lessonSubjectsError) return undefined
+
+    let ignore = false
+    authRequest('/api/panel/subjects', { method: 'GET' })
+      .then((data) => {
+        if (!ignore) setLessonSubjects(data.subjects || [])
+      })
+      .catch((err) => {
+        if (!ignore) setLessonSubjectsError(err.message || 'Dersler yüklenemedi.')
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [isPrivateLesson, lessonSubjects, lessonSubjectsError])
+
   useEffect(() => {
     if (!isQuestionBankHomework || !resourceBookId) return undefined
 
@@ -458,25 +480,39 @@ export default function AddTaskDrawer({
 
   const lessonSubjectGroups = useMemo(() => {
     const groups = new Map()
+    const gradeStr = studentGrade == null ? null : String(studentGrade).trim()
+    ;(lessonSubjects || []).forEach((subject) => {
+      if (subject.isActive === false) return
+      if (gradeStr && Array.isArray(subject.grades) && !subject.grades.includes(gradeStr)) return
+      groups.set(subject.id, { id: subject.id, name: subject.name, teachers: [] })
+    })
     ;(privateTeachers || []).forEach((teacher) => {
       const key = teacher.subjectId || 'no-subject'
       if (!groups.has(key)) groups.set(key, { id: key, name: teacher.subjectName || 'Derssiz', teachers: [] })
       groups.get(key).teachers.push(teacher)
     })
-    return Array.from(groups.values())
-  }, [privateTeachers])
+    return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+  }, [lessonSubjects, privateTeachers, studentGrade])
 
-  // Özel ders görevi düzenlenirken kaydedilmiş öğretmenden dersi geri türet (ayrıca saklanmıyor).
+  // Özel ders görevi düzenlenirken kaydedilmiş öğretmenden ya da (öğretmensiz görevde)
+  // kaydedilmiş ders adından dersi geri türet (subjectId ayrıca saklanmıyor).
   const effectiveLessonSubjectId = useMemo(() => {
-    if (lessonSubjectId || !isPrivateLesson || !studentTeacherId || !privateTeachers) return lessonSubjectId
-    const teacher = privateTeachers.find((candidate) => candidate.id === studentTeacherId)
-    return teacher ? teacher.subjectId || 'no-subject' : lessonSubjectId
-  }, [lessonSubjectId, isPrivateLesson, studentTeacherId, privateTeachers])
+    if (lessonSubjectId || !isPrivateLesson) return lessonSubjectId
+    if (studentTeacherId && privateTeachers) {
+      const teacher = privateTeachers.find((candidate) => candidate.id === studentTeacherId)
+      if (teacher) return teacher.subjectId || 'no-subject'
+    }
+    if (seed.subject) {
+      const match = lessonSubjectGroups.find((group) => group.name === seed.subject)
+      if (match) return match.id
+    }
+    return lessonSubjectId
+  }, [lessonSubjectId, isPrivateLesson, studentTeacherId, privateTeachers, seed.subject, lessonSubjectGroups])
 
   const lessonTeachersForSubject = useMemo(() => {
-    if (!privateTeachers || !effectiveLessonSubjectId) return []
-    return privateTeachers.filter((teacher) => (teacher.subjectId || 'no-subject') === effectiveLessonSubjectId)
-  }, [privateTeachers, effectiveLessonSubjectId])
+    if (!effectiveLessonSubjectId) return []
+    return lessonSubjectGroups.find((group) => group.id === effectiveLessonSubjectId)?.teachers || []
+  }, [lessonSubjectGroups, effectiveLessonSubjectId])
 
   const selectedPrivateTeacher = privateTeachers?.find((teacher) => teacher.id === studentTeacherId) || null
 
@@ -812,10 +848,6 @@ export default function AddTaskDrawer({
       setError('Özel ders için ders seçin.')
       return
     }
-    if (isPrivateLesson && !studentTeacherId) {
-      setError('Özel ders için öğretmen seçin.')
-      return
-    }
     if (resourceRequired && (!selectedBook || !hasValidResourceSelection)) {
       setError('Soru bankası ödevi için kaynak seçin.')
       return
@@ -1014,13 +1046,15 @@ export default function AddTaskDrawer({
 
             {isPrivateLesson ? (
               <div className="flex flex-col gap-2 rounded-2xl border border-panel-border bg-panel-surface-soft/60 p-3">
-                {privateTeachersError ? (
-                  <p className="rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{privateTeachersError}</p>
-                ) : privateTeachers === null ? (
-                  <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">Öğretmenler yükleniyor...</p>
+                {privateTeachersError || lessonSubjectsError ? (
+                  <p className="rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">
+                    {privateTeachersError || lessonSubjectsError}
+                  </p>
+                ) : privateTeachers === null || lessonSubjects === null ? (
+                  <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">Dersler yükleniyor...</p>
                 ) : lessonSubjectGroups.length === 0 ? (
                   <p className="rounded-xl bg-white px-3 py-3 text-sm text-panel-text-muted">
-                    Öğrenciye tanımlı aktif özel öğretmen yok.
+                    Seçilebilecek ders bulunamadı.
                   </p>
                 ) : (
                   <>
@@ -1039,19 +1073,25 @@ export default function AddTaskDrawer({
                     </select>
 
                     {effectiveLessonSubjectId ? (
-                      <select
-                        aria-label="Öğretmen"
-                        value={studentTeacherId}
-                        onChange={handleTeacherChange}
-                        className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
-                      >
-                        <option value="">Öğretmen seçin</option>
-                        {lessonTeachersForSubject.map((teacher) => (
-                          <option key={teacher.id} value={teacher.id}>
-                            {teacher.fullName}
-                          </option>
-                        ))}
-                      </select>
+                      lessonTeachersForSubject.length > 0 ? (
+                        <select
+                          aria-label="Öğretmen"
+                          value={studentTeacherId}
+                          onChange={handleTeacherChange}
+                          className="rounded-xl border border-panel-border bg-white p-2.5 text-sm text-panel-text shadow-sm outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                        >
+                          <option value="">Öğretmen seçin (isteğe bağlı)</option>
+                          {lessonTeachersForSubject.map((teacher) => (
+                            <option key={teacher.id} value={teacher.id}>
+                              {teacher.fullName}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="rounded-xl bg-white px-3 py-2 text-xs text-panel-text-muted">
+                          Bu derse tanımlı özel öğretmen yok. Görevi ders bilgisiyle ekleyebilirsiniz.
+                        </p>
+                      )
                     ) : null}
                   </>
                 )}

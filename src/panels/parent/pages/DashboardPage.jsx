@@ -485,6 +485,7 @@ export default function DashboardPage() {
             getExistingTasksForDate={getExistingTasksForDrawer}
             schoolSchedule={schoolSchedule}
             schoolHolidays={schoolHolidays}
+            studentGrade={students?.find((student) => student.id === selectedStudentId)?.grade}
             onSave={handleSaveDrawerTask}
             onClose={() => setDrawerState(null)}
           />
