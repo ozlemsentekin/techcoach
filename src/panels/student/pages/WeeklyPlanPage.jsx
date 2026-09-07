@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { getTasksForDateRange, getUnscheduledTasks, patchTask, removeTask } from '../../../services/taskService'
 import {
@@ -12,8 +12,9 @@ import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import Button from '../../ui/Button'
 import WeeklyPlannerGrid from '../../parent/components/WeeklyPlannerGrid'
-import AddTaskDrawer from '../../parent/components/AddTaskDrawer'
 import UnscheduledTasksPanel from '../../shared/UnscheduledTasksPanel'
+
+const AddTaskDrawer = lazy(() => import('../../parent/components/AddTaskDrawer'))
 
 const currentWeekStart = getMondayOfWeek(todayISODate())
 
@@ -210,16 +211,18 @@ export default function WeeklyPlanPage() {
           <UnscheduledTasksPanel tasks={unscheduledTasks} onChanged={() => reload()} />
 
           {drawerState ? (
-            <AddTaskDrawer
-              initialTask={drawerState.initialTask}
-              defaultDate={drawerState.defaultDate}
-              getExistingTasksForDate={getExistingTasksForDrawer}
-              schoolSchedule={schoolSchedule}
-              schoolHolidays={schoolHolidays}
-              onSave={handleSaveDrawerTask}
-              onDelete={handleDeleteTask}
-              onClose={() => setDrawerState(null)}
-            />
+            <Suspense fallback={<LoadingState label="Yükleniyor..." />}>
+              <AddTaskDrawer
+                initialTask={drawerState.initialTask}
+                defaultDate={drawerState.defaultDate}
+                getExistingTasksForDate={getExistingTasksForDrawer}
+                schoolSchedule={schoolSchedule}
+                schoolHolidays={schoolHolidays}
+                onSave={handleSaveDrawerTask}
+                onDelete={handleDeleteTask}
+                onClose={() => setDrawerState(null)}
+              />
+            </Suspense>
           ) : null}
         </>
       )}

@@ -1,4 +1,4 @@
-import { authRequest } from './authClient'
+import { authRequest, cachedGet } from './authClient'
 
 /**
  * @typedef {Object} StudentRequest
@@ -14,7 +14,7 @@ import { authRequest } from './authClient'
 /** @returns {Promise<StudentRequest[]>} */
 export async function getRequests({ studentId } = {}) {
   const path = studentId ? `/api/panel/student-requests?studentId=${studentId}` : '/api/panel/student-requests'
-  const data = await authRequest(path, { method: 'GET' })
+  const data = await cachedGet(path, { ttlMs: 15000 })
   return data.requests
 }
 

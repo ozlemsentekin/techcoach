@@ -1,4 +1,4 @@
-import { authRequest } from './authClient'
+import { authRequest, cachedGet } from './authClient'
 
 /**
  * @typedef {Object} WrongQuestion
@@ -65,14 +65,14 @@ import { authRequest } from './authClient'
  */
 export async function getWrongQuestions(studentId) {
   const query = studentId ? `?studentId=${studentId}` : ''
-  const data = await authRequest(`/api/panel/wrong-questions${query}`, { method: 'GET' })
+  const data = await cachedGet(`/api/panel/wrong-questions${query}`)
   return { wrongQuestions: data.wrongQuestions || [], bookImages: data.bookImages || {} }
 }
 
 /** @param {string} [studentId] @returns {Promise<WrongQuestionTopicStatsResponse>} */
 export async function getWrongQuestionTopicStats(studentId) {
   const query = studentId ? `?studentId=${studentId}` : ''
-  const data = await authRequest(`/api/panel/wrong-question-topic-stats${query}`, { method: 'GET' })
+  const data = await cachedGet(`/api/panel/wrong-question-topic-stats${query}`)
   return { topicStats: data.topicStats || [], sourceTopicStats: data.sourceTopicStats || [] }
 }
 

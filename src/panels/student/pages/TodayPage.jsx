@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../../context/useAuth'
 import { getTasksForDate, getTasksForDateRange, updateTask, patchTask, toggleSubGoal, rescheduleTask } from '../../../services/taskService'
 import { getCheckIn } from '../../../services/checkInService'
@@ -15,15 +15,16 @@ import useVisiblePolling from '../../../hooks/useVisiblePolling'
 import StudentWelcomeBanner from '../components/StudentWelcomeBanner'
 import StudentStatsCards from '../components/StudentStatsCards'
 import TaskListSection from '../components/TaskListSection'
-import TaskFocusScreen from '../components/TaskFocusScreen'
-import SessionCompletionModal from '../components/SessionCompletionModal'
-import RescheduleTaskModal from '../components/RescheduleTaskModal'
-import AddHomeworkModal from '../components/AddHomeworkModal'
-import StressSupportModal from '../components/StressSupportModal'
-import BreathingExercise from '../components/BreathingExercise'
 import LoadingState from '../../shared/LoadingState'
 import { TIMER_STOP_STATUSES, buildTimerStopUpdates, buildCompletionUpdates } from '../../shared/taskCompletion'
 import { useBillingGate } from '../../../context/useBillingGate'
+
+const SessionCompletionModal = lazy(() => import('../components/SessionCompletionModal'))
+const RescheduleTaskModal = lazy(() => import('../components/RescheduleTaskModal'))
+const AddHomeworkModal = lazy(() => import('../components/AddHomeworkModal'))
+const StressSupportModal = lazy(() => import('../components/StressSupportModal'))
+const BreathingExercise = lazy(() => import('../components/BreathingExercise'))
+const TaskFocusScreen = lazy(() => import('../components/TaskFocusScreen'))
 
 const date = todayISODate()
 const STUDENT_SUPPORT_EVENT = 'student-support-requested'
@@ -57,16 +58,16 @@ export default function TodayPage() {
 
   useEffect(() => {
     let ignore = false
-    Promise.all([
-      getTasksForDate(date),
-      getCheckIn(date),
-      getTeacherLessonSchedule().catch(() => []),
-    ])
-      .then(([tasksData, checkInData, teacherLessons]) => {
+    getCheckIn(date)
+      .then((data) => { if (!ignore) setCheckIn(data) })
+      .catch((err) => { if (!ignore) setLoadError(err.message) })
+    getTeacherLessonSchedule()
+      .then((data) => { if (!ignore) setTeacherLessonSchedule(data) })
+      .catch(() => {})
+    getTasksForDate(date)
+      .then((tasksData) => {
         if (ignore) return
         setTasks(tasksData)
-        setCheckIn(checkInData)
-        setTeacherLessonSchedule(teacherLessons)
       })
       .catch((err) => {
         if (!ignore) setLoadError(err.message)
@@ -469,43 +470,53 @@ export default function TodayPage() {
       </div>
 
       {focusTask ? (
-        <TaskFocusScreen
-          task={focusTask}
-          onClose={() => setFocusTaskId(null)}
-          onFinishSession={handleFinishSession}
-          onStartTimer={handleFocusTimerStart}
-          onToggleSubGoal={handleToggleSubGoal}
-          onSubmitReflection={handleSubmitReflection}
-          onOpenHomeworkModal={() => (billingRestricted ? promptPayment() : setShowHomeworkModal(true))}
-        />
+        <Suspense fallback={<LoadingState label="Yükleniyor..." />}>
+          <TaskFocusScreen
+            task={focusTask}
+            onClose={() => setFocusTaskId(null)}
+            onFinishSession={handleFinishSession}
+            onStartTimer={handleFocusTimerStart}
+            onToggleSubGoal={handleToggleSubGoal}
+            onSubmitReflection={handleSubmitReflection}
+            onOpenHomeworkModal={() => (billingRestricted ? promptPayment() : setShowHomeworkModal(true))}
+          />
+        </Suspense>
       ) : null}
 
       {pendingSession ? (
-        <SessionCompletionModal
-          task={pendingSession.task}
-          initialCompletedQuestionCount={pendingSession.completedQuestionCount}
-          onSave={handleSaveSession}
-          onClose={() => setPendingSession(null)}
-        />
+        <Suspense fallback={<LoadingState label="Yükleniyor..." />}>
+          <SessionCompletionModal
+            task={pendingSession.task}
+            initialCompletedQuestionCount={pendingSession.completedQuestionCount}
+            onSave={handleSaveSession}
+            onClose={() => setPendingSession(null)}
+          />
+        </Suspense>
       ) : null}
 
       {reschedulingTask ? (
-        <RescheduleTaskModal
-          task={reschedulingTask}
-          onConfirm={handleConfirmReschedule}
-          onClose={() => setReschedulingTask(null)}
-        />
+        <Suspense fallback={<LoadingState label="Yükleniyor..." />}>
+          <RescheduleTaskModal
+            task={reschedulingTask}
+            onConfirm={handleConfirmReschedule}
+            onClose={() => setReschedulingTask(null)}
+          />
+        </Suspense>
       ) : null}
 
       {showHomeworkModal ? (
-        <AddHomeworkModal onSave={handleSaveHomework} onClose={() => setShowHomeworkModal(false)} />
+        <Suspense fallback={<LoadingState label="Yükleniyor..." />}>
+          <AddHomeworkModal onSave={handleSaveHomework} onClose={() => setShowHomeworkModal(false)} />
+        </Suspense>
       ) : null}
 
       {showStressModal ? (
-        <StressSupportModal onSelectOption={handleStressOption} onClose={() => setShowStressModal(false)} />
+        <Suspense fallback={<LoadingState label="Yükleniyor..." />}>
+          <StressSupportModal onSelectOption={handleStressOption} onClose={() => setShowStressModal(false)} />
+        </Suspense>
       ) : null}
 
-      {showBreathing ? <BreathingExercise onClose={() => setShowBreathing(false)} /> : null}
+      {showBreathing ? <Suspense fallback={<LoadingState label="Yükleniyor..." />}><BreathingExercise onClose={() => setShowBreathing(false)} /></Suspense> : null}
     </div>
   )
 }

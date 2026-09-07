@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../../context/useAuth'
 import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Info, Users } from 'lucide-react'
@@ -18,12 +18,13 @@ import { withGenitive } from '../../../utils/turkishSuffix'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
 import WeeklyPlannerGrid from '../components/WeeklyPlannerGrid'
-import TaskAnswerSheetModal from '../../student/components/TaskAnswerSheetModal'
-import TaskCompletionFlow from '../components/TaskCompletionFlow'
 import { completeTaskDirect, resolveCompletionFlow } from '../../shared/taskCompletion'
-import AddTaskDrawer from '../components/AddTaskDrawer'
-import ParentLessonSlotModal from '../components/ParentLessonSlotModal'
 import UnscheduledTasksPanel from '../../shared/UnscheduledTasksPanel'
+
+const AddTaskDrawer = lazy(() => import('../components/AddTaskDrawer'))
+const TaskAnswerSheetModal = lazy(() => import('../../student/components/TaskAnswerSheetModal'))
+const TaskCompletionFlow = lazy(() => import('../components/TaskCompletionFlow'))
+const ParentLessonSlotModal = lazy(() => import('../components/ParentLessonSlotModal'))
 
 const currentWeekStart = getMondayOfWeek(todayISODate())
 
@@ -351,53 +352,61 @@ export default function WeeklyPlanPage() {
           </div>
 
           {drawerState ? (
-            <AddTaskDrawer
-              initialTask={drawerState.initialTask}
-              defaultDate={drawerState.defaultDate}
-              getExistingTasksForDate={getExistingTasksForDrawer}
-              schoolSchedule={schoolSchedule}
-              schoolHolidays={schoolHolidays}
-              onSave={handleSaveDrawerTask}
-              onDelete={handleDeleteTask}
-              onClose={() => setDrawerState(null)}
-            />
+            <Suspense fallback={<LoadingState label="Yükleniyor..." />}>
+              <AddTaskDrawer
+                initialTask={drawerState.initialTask}
+                defaultDate={drawerState.defaultDate}
+                getExistingTasksForDate={getExistingTasksForDrawer}
+                schoolSchedule={schoolSchedule}
+                schoolHolidays={schoolHolidays}
+                onSave={handleSaveDrawerTask}
+                onDelete={handleDeleteTask}
+                onClose={() => setDrawerState(null)}
+              />
+            </Suspense>
           ) : null}
 
           {managingSlot ? (
-            <ParentLessonSlotModal
-              slot={managingSlot}
-              teacher={managingTeacher}
-              studentId={selectedStudentId}
-              onSaved={handleLessonSlotSaved}
-              onClose={() => setManagingSlot(null)}
-            />
+            <Suspense fallback={<LoadingState label="Yükleniyor..." />}>
+              <ParentLessonSlotModal
+                slot={managingSlot}
+                teacher={managingTeacher}
+                studentId={selectedStudentId}
+                onSaved={handleLessonSlotSaved}
+                onClose={() => setManagingSlot(null)}
+              />
+            </Suspense>
           ) : null}
 
           {completingTask ? (
-            <TaskCompletionFlow
-              task={completingTask}
-              studentId={selectedStudentId}
-              onCompleted={() => refresh()}
-              onClose={() => {
-                setCompletingTask(null)
-                refresh()
-              }}
-            />
+            <Suspense fallback={<LoadingState label="Yükleniyor..." />}>
+              <TaskCompletionFlow
+                task={completingTask}
+                studentId={selectedStudentId}
+                onCompleted={() => refresh()}
+                onClose={() => {
+                  setCompletingTask(null)
+                  refresh()
+                }}
+              />
+            </Suspense>
           ) : null}
 
           {answerSheetTask ? (
-            <TaskAnswerSheetModal
-              task={answerSheetTask}
-              lessonLabel={answerSheetTask.subject || 'Görev'}
-              photoMode="view"
-              studentId={selectedStudentId}
-              canRegrade
-              onClose={() => setAnswerSheetTask(null)}
-              onSaved={(updatedTask) => {
-                setAnswerSheetTask(updatedTask)
-                refresh()
-              }}
-            />
+            <Suspense fallback={<LoadingState label="Yükleniyor..." />}>
+              <TaskAnswerSheetModal
+                task={answerSheetTask}
+                lessonLabel={answerSheetTask.subject || 'Görev'}
+                photoMode="view"
+                studentId={selectedStudentId}
+                canRegrade
+                onClose={() => setAnswerSheetTask(null)}
+                onSaved={(updatedTask) => {
+                  setAnswerSheetTask(updatedTask)
+                  refresh()
+                }}
+              />
+            </Suspense>
           ) : null}
 
         </>

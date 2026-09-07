@@ -1,4 +1,4 @@
-import { authRequest } from './authClient'
+import { authRequest, cachedGet } from './authClient'
 
 /** Birden çocuğu olan bir veli hangi çocuğu görüntülüyorsa `studentId` ile ilgili endpoint'e iletilir. */
 function withStudentId(path, studentId) {
@@ -12,15 +12,15 @@ function taskQuery(date, isDraft, studentId) {
 
 /** @returns {Promise<object[]>} */
 export async function getTasksForDate(date, { isDraft = false, studentId } = {}) {
-  const data = await authRequest(taskQuery(date, isDraft, studentId), { method: 'GET' })
+  const data = await cachedGet(taskQuery(date, isDraft, studentId), { ttlMs: 15000 })
   return data.tasks
 }
 
 /** Aralıktaki (dahil) tüm günlerin görevlerini tek istekte döner. @returns {Promise<object[]>} */
 export async function getTasksForDateRange(fromDate, toDate, { isDraft = false, studentId } = {}) {
-  const data = await authRequest(
+  const data = await cachedGet(
     withStudentId(`/api/panel/tasks?from=${fromDate}&to=${toDate}&isDraft=${isDraft}`, studentId),
-    { method: 'GET' },
+    { ttlMs: 15000 },
   )
   return data.tasks
 }
@@ -31,7 +31,7 @@ export async function getTasksForDateRange(fromDate, toDate, { isDraft = false, 
  * @returns {Promise<object[]>}
  */
 export async function getUnscheduledTasks({ studentId } = {}) {
-  const data = await authRequest(withStudentId('/api/panel/tasks?unscheduled=true', studentId), { method: 'GET' })
+  const data = await cachedGet(withStudentId('/api/panel/tasks?unscheduled=true', studentId), { ttlMs: 15000 })
   return data.tasks
 }
 
@@ -168,7 +168,10 @@ export async function rescheduleTask(date, taskId, { newDate, newTime, reason })
     completedPageCount: original.targetPageCount ? 0 : undefined,
   })
 
-  const sourceTasks = await getTasksForDate(date, { isDraft: original.isDraft })
-  const targetTasks = newDate === date ? sourceTasks : await getTasksForDate(newDate, { isDraft: original.isDraft })
+  const sourceRequest = getTasksForDate(date, { isDraft: original.isDraft })
+  const [sourceTasks, targetTasks] = await Promise.all([
+    sourceRequest,
+    newDate === date ? sourceRequest : getTasksForDate(newDate, { isDraft: original.isDraft }),
+  ])
   return { sourceTasks, targetTasks }
 }

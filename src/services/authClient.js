@@ -1,7 +1,8 @@
 const DEFAULT_AUTH_TIMEOUT_MS = 25000
 const DEFAULT_CACHE_TTL_MS = 30000
+const MAX_CACHE_ENTRIES = 100
 
-const getCache = new Map() // path -> { expiresAt, promise }
+const getCache = new Map() // path -> { pending, expiresAt, promise }
 
 let passwordChangeRequiredHandler = null
 export function setPasswordChangeRequiredHandler(handler) { passwordChangeRequiredHandler = handler }
@@ -29,16 +30,31 @@ export function setAccountDisabledHandler(handler) {
  */
 export function cachedGet(path, { ttlMs = DEFAULT_CACHE_TTL_MS } = {}) {
   const cached = getCache.get(path)
-  if (cached && cached.expiresAt > Date.now()) {
+  if (cached && (cached.pending || cached.expiresAt > Date.now())) {
     return cached.promise
   }
 
-  const promise = authRequest(path, { method: 'GET' }).catch((error) => {
-    getCache.delete(path)
+  // Tarih/öğrenci değiştirerek gezinirken eski yanıtlar bellekte birikmesin.
+  for (const [key, entry] of getCache) {
+    if (!entry.pending && entry.expiresAt <= Date.now()) getCache.delete(key)
+  }
+  if (getCache.size >= MAX_CACHE_ENTRIES) {
+    const oldestSettled = [...getCache].find(([, entry]) => !entry.pending)
+    if (oldestSettled) getCache.delete(oldestSettled[0])
+  }
+
+  const entry = { pending: true, expiresAt: 0, promise: null }
+  entry.promise = authRequest(path, { method: 'GET' }).then((data) => {
+    entry.pending = false
+    entry.expiresAt = Date.now() + ttlMs
+    return data
+  }).catch((error) => {
+    // Eski bir istek, mutasyon sonrası oluşturulan yeni önbelleği silmemeli.
+    if (getCache.get(path) === entry) getCache.delete(path)
     throw error
   })
-  getCache.set(path, { expiresAt: Date.now() + ttlMs, promise })
-  return promise
+  getCache.set(path, entry)
+  return entry.promise
 }
 
 /** Bir path'in (veya path'le başlayan tüm girişlerin) önbelleğini temizler. */
@@ -96,6 +112,10 @@ export async function authRequest(path, options = {}) {
       throw requestError
     }
 
+    // Yazma işlemleri görevleri, ilerlemeyi ve hata defterini birlikte etkileyebilir.
+    if (!['GET', 'HEAD'].includes((fetchOptions.method || 'GET').toUpperCase())) {
+      invalidateCache()
+    }
     return data
   } catch (error) {
     if (error.name === 'AbortError') {

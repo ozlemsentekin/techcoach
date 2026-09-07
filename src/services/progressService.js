@@ -1,6 +1,6 @@
-import { authRequest } from './authClient'
+import { cachedGet } from './authClient'
 
 export async function getProgressOverview(studentId) {
   const query = studentId ? `?studentId=${encodeURIComponent(studentId)}` : ''
-  return authRequest(`/api/panel/progress-overview${query}`, { method: 'GET' })
+  return cachedGet(`/api/panel/progress-overview${query}`)
 }

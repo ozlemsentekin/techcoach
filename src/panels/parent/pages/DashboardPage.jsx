@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../../context/useAuth'
 import { AlertTriangle, CalendarDays, Plus, Sparkles, Users } from 'lucide-react'
 import { cachedGet } from '../../../services/authClient'
@@ -15,11 +15,12 @@ import EmptyState from '../../shared/EmptyState'
 import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import DailyPlanTable from '../components/DailyPlanTable'
 import OnboardingChecklist from '../components/OnboardingChecklist'
-import AddTaskDrawer from '../components/AddTaskDrawer'
-import TaskAnswerSheetModal from '../../student/components/TaskAnswerSheetModal'
-import TaskCompletionFlow from '../components/TaskCompletionFlow'
 import { completeTaskDirect, resolveCompletionFlow } from '../../shared/taskCompletion'
 import { useBillingGate } from '../../../context/useBillingGate'
+
+const AddTaskDrawer = lazy(() => import('../components/AddTaskDrawer'))
+const TaskAnswerSheetModal = lazy(() => import('../../student/components/TaskAnswerSheetModal'))
+const TaskCompletionFlow = lazy(() => import('../components/TaskCompletionFlow'))
 
 const date = todayISODate()
 const LOW_PRIORITY_BALANCE_WARNINGS = new Set(['Mola eklenmemiş', 'Serbest zaman yok'])
@@ -476,16 +477,18 @@ export default function DashboardPage() {
       </div>
 
       {drawerState ? (
-        <AddTaskDrawer
-          initialTask={drawerState.initialTask}
-          initialTemplate={drawerState.initialTemplate}
-          defaultDate={drawerState.defaultDate}
-          getExistingTasksForDate={getExistingTasksForDrawer}
-          schoolSchedule={schoolSchedule}
-          schoolHolidays={schoolHolidays}
-          onSave={handleSaveDrawerTask}
-          onClose={() => setDrawerState(null)}
-        />
+        <Suspense fallback={<LoadingState label="Yükleniyor..." />}>
+          <AddTaskDrawer
+            initialTask={drawerState.initialTask}
+            initialTemplate={drawerState.initialTemplate}
+            defaultDate={drawerState.defaultDate}
+            getExistingTasksForDate={getExistingTasksForDrawer}
+            schoolSchedule={schoolSchedule}
+            schoolHolidays={schoolHolidays}
+            onSave={handleSaveDrawerTask}
+            onClose={() => setDrawerState(null)}
+          />
+        </Suspense>
       ) : null}
 
       {deletingTask ? (
@@ -499,30 +502,34 @@ export default function DashboardPage() {
       ) : null}
 
       {completingTask ? (
-        <TaskCompletionFlow
-          task={completingTask}
-          studentId={selectedStudentId}
-          onCompleted={() => refreshTasks()}
-          onClose={() => {
-            setCompletingTask(null)
-            refreshTasks()
-          }}
-        />
+        <Suspense fallback={<LoadingState label="Yükleniyor..." />}>
+          <TaskCompletionFlow
+            task={completingTask}
+            studentId={selectedStudentId}
+            onCompleted={() => refreshTasks()}
+            onClose={() => {
+              setCompletingTask(null)
+              refreshTasks()
+            }}
+          />
+        </Suspense>
       ) : null}
 
       {answerSheetTask ? (
-        <TaskAnswerSheetModal
-          task={answerSheetTask}
-          lessonLabel={answerSheetTask.subject || 'Görev'}
-          photoMode="view"
-          studentId={selectedStudentId}
-          canRegrade
-          onClose={() => setAnswerSheetTask(null)}
-          onSaved={(updatedTask) => {
-            setTasks((prev) => prev.map((item) => (item.id === updatedTask.id ? updatedTask : item)))
-            setAnswerSheetTask(updatedTask)
-          }}
-        />
+        <Suspense fallback={<LoadingState label="Yükleniyor..." />}>
+          <TaskAnswerSheetModal
+            task={answerSheetTask}
+            lessonLabel={answerSheetTask.subject || 'Görev'}
+            photoMode="view"
+            studentId={selectedStudentId}
+            canRegrade
+            onClose={() => setAnswerSheetTask(null)}
+            onSaved={(updatedTask) => {
+              setTasks((prev) => prev.map((item) => (item.id === updatedTask.id ? updatedTask : item)))
+              setAnswerSheetTask(updatedTask)
+            }}
+          />
+        </Suspense>
       ) : null}
     </div>
   )
