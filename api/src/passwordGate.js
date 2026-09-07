@@ -3,6 +3,28 @@ const { readSessionToken, verifySessionToken, isSessionError } = require('./secu
 const { requiresPasswordChange } = require('./passwordPolicy')
 const { json } = require('./http')
 
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+// Kullanıcının "son işlem" (last_seen_at) zamanını günceller. Her yazma isteğinde
+// çağrılır ama DB'yi (Basic tier) yormamak için kullanıcı başına 10 dakikada bir
+// yazar (WHERE koşulu). Impersonate durumunda gerçek kişiye (veli/admin) yazılır.
+// Hata bastırılır — asıl isteğin akışını hiçbir şekilde etkilemez.
+async function touchLastSeen(session) {
+  try {
+    const userId = session.actingAdminId || session.actingParentId || session.sub
+    if (!userId) return
+    const db = await withRequest({ id: { type: sql.UniqueIdentifier, value: userId } })
+    await db.query(`
+      UPDATE dbo.Users
+      SET last_seen_at = SYSUTCDATETIME()
+      WHERE id = @id
+        AND (last_seen_at IS NULL OR last_seen_at < DATEADD(MINUTE, -10, SYSUTCDATETIME()));
+    `)
+  } catch {
+    // yut
+  }
+}
+
 function withPasswordGate(route, handler) {
   // Login/session recovery, consent, sign-out and payment callbacks stay available.
   if (/^(auth\/|payments\/|billing\/|health(?:\/|$))/.test(route)) return handler
@@ -25,6 +47,9 @@ function withPasswordGate(route, handler) {
           if (mustChange) {
             return json(403, { code: 'PASSWORD_CHANGE_REQUIRED', error: 'Devam etmek için başlangıç şifrenizi değiştirin.' })
           }
+        }
+        if (session && MUTATING_METHODS.has((request.method || '').toUpperCase())) {
+          await touchLastSeen(session)
         }
       }
     } catch (error) {

@@ -121,6 +121,7 @@ function sanitizeUser(record) {
     parentId: record.parent_id,
     parentName: record.parent_full_name,
     lastLoginAt: record.last_login_at,
+    lastSeenAt: record.last_seen_at || record.last_login_at || null,
     createdAt: record.created_at,
     lockoutUntil: record.lockout_until || null,
     failedLoginCount: record.failed_login_count ?? 0,
@@ -138,7 +139,7 @@ async function listUsersHandler(request) {
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
       SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active, u.parent_id,
-             p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json,
+             p.full_name AS parent_full_name, u.last_login_at, u.last_seen_at, u.created_at, u.teacher_subject_ids_json,
              u.failed_login_count, u.lockout_until
       FROM dbo.Users u
       LEFT JOIN dbo.Users p ON p.id = u.parent_id
@@ -251,7 +252,7 @@ async function updateUserHandler(request) {
       WHERE id = @id;
 
       SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active, u.parent_id,
-             p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json,
+             p.full_name AS parent_full_name, u.last_login_at, u.last_seen_at, u.created_at, u.teacher_subject_ids_json,
              u.failed_login_count, u.lockout_until
       FROM dbo.Users u
       LEFT JOIN dbo.Users p ON p.id = u.parent_id
@@ -329,7 +330,7 @@ async function setUserActiveHandler(request) {
       WHERE id = @id;
 
       SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active, u.parent_id,
-             p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json,
+             p.full_name AS parent_full_name, u.last_login_at, u.last_seen_at, u.created_at, u.teacher_subject_ids_json,
              u.failed_login_count, u.lockout_until
       FROM dbo.Users u
       LEFT JOIN dbo.Users p ON p.id = u.parent_id
@@ -428,7 +429,7 @@ async function impersonateUserHandler(request) {
     const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: targetId } })
     const result = await requestDb.query(`
       SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active, u.parent_id,
-             p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json,
+             p.full_name AS parent_full_name, u.last_login_at, u.last_seen_at, u.created_at, u.teacher_subject_ids_json,
              sp.theme_id,
              e.status AS entitlement_status, e.source AS entitlement_source,
              e.current_period_end AS entitlement_current_period_end
@@ -558,7 +559,7 @@ async function returnToAdminHandler(request) {
     const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: session.actingAdminId } })
     const result = await requestDb.query(`
       SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.parent_id,
-             p.full_name AS parent_full_name, u.last_login_at, u.created_at,
+             p.full_name AS parent_full_name, u.last_login_at, u.last_seen_at, u.created_at,
              e.status AS entitlement_status, e.source AS entitlement_source,
              e.current_period_end AS entitlement_current_period_end
       FROM dbo.Users u
@@ -611,7 +612,7 @@ async function unlockUserHandler(request) {
       WHERE id = @id;
 
       SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active, u.parent_id,
-             p.full_name AS parent_full_name, u.last_login_at, u.created_at, u.teacher_subject_ids_json,
+             p.full_name AS parent_full_name, u.last_login_at, u.last_seen_at, u.created_at, u.teacher_subject_ids_json,
              u.failed_login_count, u.lockout_until
       FROM dbo.Users u
       LEFT JOIN dbo.Users p ON p.id = u.parent_id

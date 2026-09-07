@@ -372,7 +372,8 @@ async function loginHandler(request) {
       UPDATE dbo.Users
       SET failed_login_count = 0,
           lockout_until = NULL,
-          last_login_at = SYSUTCDATETIME()
+          last_login_at = SYSUTCDATETIME(),
+          last_seen_at = SYSUTCDATETIME()
           ${rehashedPassword ? ', password_hash = @passwordHash' : ''}
       WHERE id = @id;
     `)
