@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CheckCircle2, GraduationCap, Loader2, UserPlus, Users, XCircle } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { panelPathForRole } from '../utils/panelPath'
 import { authRequest } from '../services/authClient'
+import { formatTRY, usePublicPricing } from '../utils/pricing'
 import { LEGAL_CONTENT } from './legalContent'
 import TurnstileWidget from './TurnstileWidget'
 import './LandingPage.css'
@@ -19,43 +20,43 @@ const INITIAL_FORM = {
   acceptKvkk: false,
 }
 
-const PLANS = {
-  ebeveyn: {
-    badgeLabel: 'Veliyim',
-    badgeIcon: Users,
-    title: 'Veli Takip Paketi',
-    features: [
-      '2 öğrenciye kadar tam erişim',
-      'Günlük çalışma planı ve ders ajandası görünürlüğü',
-      'Hata defteri ile konu bazlı tekrar takibi',
-      'Haftalık ilerleme raporu ve risk uyarıları',
-      'Sınav takvimini fotoğrafla saniyeler içinde içe aktarma',
-      'Öğretmenle paylaşımlı görünüm ve bildirimler',
-    ],
-    billing: {
-      monthly: { price: '3000', period: 'TL / ay' },
-      yearly: { price: '24000', period: 'TL / yıl', badge: '%20 indirim' },
-    },
-    cta: 'Veli Planını Seç',
-  },
-  ogretmen: {
-    badgeLabel: 'Öğretmenim',
-    badgeIcon: GraduationCap,
-    title: 'Öğretmen İş Paketi',
-    features: [
-      '4 öğrenciye kadar dahil, ek öğrenci 200 TL / ay',
-      'Sınıf geneli hata yoğunluğu ve öncelik alanları analizi',
-      'Öğrenci bazlı haftalık performans raporları',
-      'Ödev ve sınav atama, teslim takibi',
-      'Velilerle otomatik paylaşım ve bildirim akışı',
-      'Öncelikli destek hattı',
-    ],
-    billing: {
-      monthly: { price: '3000', period: 'TL / ay' },
-    },
-    note: 'Kart tahsilatı yakında aktif olacak; üye olduğunuzda hesabınız deneme durumunda hemen açılır.',
-    cta: 'Öğretmen Planını Seç',
-  },
+// Fiyat / özellik / metin bilgisi admin "Üyelik Paketleri" ekranından yönetilir
+// (usePublicPricing). Burada yalnızca role'e özel sabit görsel meta tutulur.
+const PLAN_META = {
+  ebeveyn: { badgeLabel: 'Veliyim', badgeIcon: Users, cta: 'Veli Planını Seç', pricingKey: 'parent' },
+  ogretmen: { badgeLabel: 'Öğretmenim', badgeIcon: GraduationCap, cta: 'Öğretmen Planını Seç', pricingKey: 'teacher' },
+}
+
+function buildBilling(source) {
+  const billing = { monthly: { price: formatTRY(source.monthlyPrice), period: 'TL / ay' } }
+  if (source.yearlyPrice != null) {
+    billing.yearly = {
+      price: formatTRY(source.yearlyPrice),
+      period: 'TL / yıl',
+      ...(source.yearlyBadge ? { badge: source.yearlyBadge } : {}),
+    }
+  }
+  return billing
+}
+
+function buildPlans(pricing) {
+  return Object.fromEntries(
+    Object.entries(PLAN_META).map(([role, meta]) => {
+      const source = pricing[meta.pricingKey]
+      return [
+        role,
+        {
+          badgeLabel: meta.badgeLabel,
+          badgeIcon: meta.badgeIcon,
+          cta: meta.cta,
+          title: source.title,
+          features: source.features,
+          note: source.note,
+          billing: buildBilling(source),
+        },
+      ]
+    }),
+  )
 }
 
 function BrandIcon() {
@@ -145,7 +146,9 @@ export default function SignUpPage() {
   const [couponCheck, setCouponCheck] = useState({ status: 'idle', code: '', message: '' })
   const turnstileRef = useRef(null)
 
-  const plan = PLANS[role]
+  const pricing = usePublicPricing()
+  const plans = useMemo(() => buildPlans(pricing), [pricing])
+  const plan = plans[role]
 
   useEffect(() => {
     if (role !== 'ogretmen' || subjects !== null) return
@@ -330,7 +333,7 @@ export default function SignUpPage() {
           <h1 className="section-title signup-pricing-title">Üyelik Paketleri</h1>
 
           <div className="pricing-cards-grid">
-            {Object.entries(PLANS).map(([key, value]) => (
+            {Object.entries(plans).map(([key, value]) => (
               <PricingCard
                 key={key}
                 planKey={key}

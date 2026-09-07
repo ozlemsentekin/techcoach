@@ -237,6 +237,10 @@ export default function WeeklyPlanPage() {
     [tasksByDate],
   )
 
+  const weekNavBase = 'h-11 w-full px-3 text-sm font-semibold shadow-sm sm:w-auto sm:px-4'
+  const weekNavActive = `${weekNavBase} border-transparent bg-panel-blue text-white hover:bg-panel-blue`
+  const weekNavIdle = `${weekNavBase} border-panel-blue-soft text-panel-text hover:bg-panel-blue-soft/50`
+
   return (
     <div className="flex w-full flex-col gap-5">
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
@@ -283,7 +287,8 @@ export default function WeeklyPlanPage() {
           type="button"
           variant="secondary"
           onClick={() => setWeekOffset((current) => current - 1)}
-          className="h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4"
+          className={weekOffset < 0 ? weekNavActive : weekNavIdle}
+          aria-pressed={weekOffset < 0}
         >
           <ChevronLeft size={18} aria-hidden="true" />
           Önceki Hafta
@@ -292,7 +297,8 @@ export default function WeeklyPlanPage() {
           type="button"
           variant="secondary"
           onClick={() => setWeekOffset(0)}
-          className="h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4"
+          className={weekOffset === 0 ? weekNavActive : weekNavIdle}
+          aria-pressed={weekOffset === 0}
         >
           <CalendarDays size={18} aria-hidden="true" />
           Bu Hafta
@@ -301,7 +307,8 @@ export default function WeeklyPlanPage() {
           type="button"
           variant="secondary"
           onClick={() => setWeekOffset((current) => current + 1)}
-          className="h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4"
+          className={weekOffset > 0 ? weekNavActive : weekNavIdle}
+          aria-pressed={weekOffset > 0}
         >
           Sonraki Hafta
           <ChevronRight size={18} aria-hidden="true" />

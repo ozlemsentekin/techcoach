@@ -5,20 +5,8 @@ import { useAuth } from '../context/useAuth'
 import { panelPathForRole } from '../utils/panelPath'
 import { initiateIyzicoCheckout, initiateIyzicoCheckoutForNewParent } from '../services/paymentService'
 import { injectCheckoutFormContent } from './iyzicoCheckoutForm'
+import { formatTRY, usePublicPricing } from '../utils/pricing'
 import './LandingPage.css'
-
-const BILLING_OPTIONS = {
-  monthly: { price: '1', period: 'TL / ay' },
-  yearly: { price: '24000', period: 'TL / yıl', badge: '%20 indirim' },
-}
-
-const INCLUDED_FEATURES = [
-  '2 öğrenciye kadar tam erişim',
-  'Günlük çalışma planı ve ders ajandası',
-  'Hata defteri ile konu bazlı tekrar takibi',
-  'Haftalık ilerleme raporu ve risk uyarıları',
-  'Sınav takvimini fotoğrafla içe aktarma',
-]
 
 function BrandIcon() {
   return <img src="/logo-mark.png" alt="" className="logo-mark-img" />
@@ -40,6 +28,8 @@ export default function PaymentPage() {
   const [loading, setLoading] = useState(false)
   const [checkoutFormContent, setCheckoutFormContent] = useState(null)
   const formContainerRef = useRef(null)
+
+  const parentPlan = usePublicPricing().parent
 
   useEffect(() => {
     if (checkoutFormContent && formContainerRef.current) {
@@ -105,7 +95,19 @@ export default function PaymentPage() {
     }
   }
 
-  const activeBilling = BILLING_OPTIONS[billingCycle]
+  const billingOptions = {
+    monthly: { price: formatTRY(parentPlan.monthlyPrice), period: 'TL / ay' },
+    ...(parentPlan.yearlyPrice != null
+      ? {
+          yearly: {
+            price: formatTRY(parentPlan.yearlyPrice),
+            period: 'TL / yıl',
+            ...(parentPlan.yearlyBadge ? { badge: parentPlan.yearlyBadge } : {}),
+          },
+        }
+      : {}),
+  }
+  const activeBilling = billingOptions[billingCycle] || billingOptions.monthly
 
   return (
     <div className="landing-page">
@@ -199,7 +201,7 @@ export default function PaymentPage() {
                 <h4>Sepetiniz</h4>
 
                 <div className="checkout-summary-plan-row">
-                  <span className="checkout-summary-plan-name">Veli Takip Paketi</span>
+                  <span className="checkout-summary-plan-name">{parentPlan.title}</span>
                   <div className="billing-toggle" role="tablist" aria-label="Fatura periyodu">
                     <button
                       type="button"
@@ -219,7 +221,7 @@ export default function PaymentPage() {
                 </div>
 
                 <ul className="checkout-summary-features">
-                  {INCLUDED_FEATURES.map((feature) => (
+                  {parentPlan.features.map((feature) => (
                     <li key={feature}>
                       <CheckCircle2 size={15} aria-hidden="true" />
                       <span>{feature}</span>

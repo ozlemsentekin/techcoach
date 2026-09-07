@@ -15,6 +15,35 @@ import { GENDER_OPTIONS, WIZARD_STEPS } from './studentWizardConstants'
 const LOCKED_FIELD_CLASS =
   'w-full cursor-not-allowed rounded-xl border border-panel-border bg-[#f4f5f6] p-2 pl-9 text-base text-panel-text-muted'
 
+const SCHEDULE_DAY_ORDER = ['pazartesi', 'sali', 'carsamba', 'persembe', 'cuma', 'cumartesi', 'pazar']
+const SCHEDULE_DAY_LABELS = {
+  pazartesi: 'Pazartesi',
+  sali: 'Salı',
+  carsamba: 'Çarşamba',
+  persembe: 'Perşembe',
+  cuma: 'Cuma',
+  cumartesi: 'Cumartesi',
+  pazar: 'Pazar',
+}
+
+function ScheduleSummary({ entries }) {
+  return (
+    <ul className="mt-1.5 flex flex-col gap-0.5 text-xs text-panel-text-muted">
+      {SCHEDULE_DAY_ORDER.filter((day) => entries.some((entry) => entry.dayOfWeek === day)).map((day) => {
+        const ranges = entries
+          .filter((entry) => entry.dayOfWeek === day)
+          .map((entry) => `${entry.startTime}–${entry.endTime}`)
+          .join(', ')
+        return (
+          <li key={day}>
+            <span className="font-medium text-panel-text">{SCHEDULE_DAY_LABELS[day]}:</span> {ranges}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
 export function InterestPicker({ label, catalog, selected, onChange }) {
   const [customInput, setCustomInput] = useState('')
 
@@ -112,6 +141,7 @@ export default function StudentProfileModal({ student, onClose }) {
   const [interestedSports, setInterestedSports] = useState([])
   const [interestedArts, setInterestedArts] = useState([])
   const [schoolSchedule, setSchoolSchedule] = useState([])
+  const [suggestedSchoolSchedule, setSuggestedSchoolSchedule] = useState([])
   const [subjectIds, setSubjectIds] = useState([])
   const [allSubjects, setAllSubjects] = useState([])
   const [error, setError] = useState('')
@@ -144,7 +174,8 @@ export default function StudentProfileModal({ student, onClose }) {
           setThemeId(loaded.themeId || '')
           setInterestedSports(loaded.interestedSports || [])
           setInterestedArts(loaded.interestedArts || [])
-          setSchoolSchedule(loaded.schoolSchedule?.length ? loaded.schoolSchedule : loaded.suggestedSchoolSchedule || [])
+          setSchoolSchedule(loaded.schoolSchedule || [])
+          setSuggestedSchoolSchedule(loaded.suggestedSchoolSchedule || [])
           setSubjectIds(loaded.subjectIds || [])
         }
       })
@@ -273,21 +304,32 @@ export default function StudentProfileModal({ student, onClose }) {
 
           {profile !== null && step === 3 ? (
             <div className="flex flex-col gap-3">
-              {school?.id && grade ? (
-                <p className="rounded-xl bg-panel-blue-soft/50 px-3 py-2.5 text-sm text-panel-text">
-                  Okul ders saatleri, seçilen okul ve sınıf bilgisinden otomatik alınır ve haftalık planda "Okulda"
-                  olarak görünür. Değişiklik için okul yönetimindeki ders programını güncelleyin.
-                </p>
-              ) : (
-                <>
-                  <p className="text-sm text-panel-text-muted">
-                    Okul sistemde tanımlı değil. Okul ders saatlerini elle girin (hafta sonu kurs programı varsa
-                    cumartesi/pazar da eklenebilir). Bu saatler haftalık planda "Okulda" olarak görünür ve bu saatlere
-                    ödev eklenemez.
+              <p className="text-sm text-panel-text-muted">
+                Çocuğunuzun okulda olduğu saatleri Pazartesi–Pazar için girin (hafta sonu kurs programı varsa
+                cumartesi/pazar da eklenebilir). Bu saatler haftalık planda "Okulda" olarak görünür ve bu
+                saatlere ödev eklenemez.
+              </p>
+              {schoolSchedule.length === 0 && suggestedSchoolSchedule.length > 0 ? (
+                <div className="rounded-xl bg-panel-blue-soft/50 px-3 py-2.5 text-sm text-panel-text">
+                  <p>
+                    Bu çocuk için özel ders saati girmediniz. Plan şu an okul yönetiminin bu okul ve sınıf için
+                    tanımladığı ders programını kullanıyor:
                   </p>
-                  <SchoolScheduleEditor entries={schoolSchedule} onChange={setSchoolSchedule} />
-                </>
+                  <ScheduleSummary entries={suggestedSchoolSchedule} />
+                  <button
+                    type="button"
+                    onClick={() => setSchoolSchedule(suggestedSchoolSchedule)}
+                    className="mt-2 inline-flex items-center gap-1 rounded-lg border border-panel-border bg-white px-2.5 py-1.5 text-xs font-medium text-panel-text hover:bg-[#f8f7fb]"
+                  >
+                    Bu programı kopyala ve düzenle
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-panel-text-muted">
+                  Bu listeyi boşaltıp kaydederseniz plan yeniden okul yönetiminin tanımladığı ders programına döner.
+                </p>
               )}
+              <SchoolScheduleEditor entries={schoolSchedule} onChange={setSchoolSchedule} />
             </div>
           ) : null}
 

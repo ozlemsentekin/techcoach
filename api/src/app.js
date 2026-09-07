@@ -222,6 +222,12 @@ const {
   deleteGreetingRuleHandler,
   listGreetingRulesForPanelHandler,
 } = require('./content')
+const {
+  getPublicPricingHandler,
+  listPricingPlansHandler,
+  updatePricingPlanHandler,
+  refreshIyzicoPlanHandler,
+} = require('./pricing')
 
 registerHttp('auth-register', {
   authLevel: 'anonymous',
@@ -1054,6 +1060,34 @@ registerHttp('panel-greeting-rules', {
   methods: ['GET'],
   route: 'panel/greeting-rules',
   handler: listGreetingRulesForPanelHandler,
+})
+
+registerHttp('public-pricing', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'pricing',
+  handler: getPublicPricingHandler,
+})
+
+registerHttp('panel-admin-pricing-plans-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-admin/pricing-plans',
+  handler: listPricingPlansHandler,
+})
+
+registerHttp('panel-admin-pricing-plans-update', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel-admin/pricing-plans/{planKey}',
+  handler: updatePricingPlanHandler,
+})
+
+registerHttp('panel-admin-pricing-plans-iyzico-refresh', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-admin/pricing-plans/{planKey}/iyzico-refresh',
+  handler: refreshIyzicoPlanHandler,
 })
 
 registerHttp('panel-admin-resource-books-list', {

@@ -123,7 +123,7 @@ function getBillingConfig() {
     revenueCatWebhookAuthHeader: getRequiredEnv('REVENUECAT_WEBHOOK_AUTH_HEADER', {
       placeholders: ['replace-with-the-revenuecat-webhook-auth-header'],
     }),
-    // Öğretmenin sabit panel ücretine (3000 TL/ay, 4 öğrenci dahil) ek olarak satın aldığı
+    // Öğretmenin sabit panel ücretine (2999 TL/ay, 4 öğrenci dahil) ek olarak satın aldığı
     // öğrenci başı (200 TL/ay) koltuk ürünlerinin RevenueCat product_id listesi.
     teacherSeatProductIds: (process.env.REVENUECAT_TEACHER_SEAT_PRODUCT_IDS || '')
       .split(',')
@@ -171,7 +171,7 @@ function getIyzicoConfig() {
     childYearlyPlanRef: getOptionalEnv('IYZICO_CHILD_YEARLY_PLAN_REF', {
       placeholders: ['replace-with-iyzico-child-yearly-plan-ref'],
     }),
-    // Öğretmenin ek öğrenci koltuğu (öğrenci başı aylık 499 TL / yıllık 4.990 TL) paketi.
+    // Öğretmenin ek öğrenci koltuğu (öğrenci başı aylık 299 TL / yıllık 4.990 TL) paketi.
     // Planlar iyzico panelinde oluşturulunca gerçek reference code'lar app settings'e girilir.
     // Opsiyonel: set edilmediyse null döner (öğretmen-koltuğu satın alma handler'ı 503 verir),
     // diğer iyzico akışları etkilenmez.

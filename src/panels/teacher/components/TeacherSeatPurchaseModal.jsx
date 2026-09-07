@@ -4,11 +4,7 @@ import { CheckCircle2, Lock, Smartphone, X } from 'lucide-react'
 import Button from '../../ui/Button'
 import { initiateTeacherSeatCheckout } from '../../../services/paymentService'
 import { injectCheckoutFormContent } from '../../../marketing/iyzicoCheckoutForm'
-
-const BILLING_OPTIONS = {
-  monthly: { price: '499', period: 'TL / öğrenci / ay' },
-  yearly: { price: '4.990', period: 'TL / öğrenci / yıl', badge: '2 ay bedava' },
-}
+import { formatTRY, usePublicPricing } from '../../../utils/pricing'
 
 const INCLUDED_FEATURES = [
   'Bir öğrenci için tam panel erişimi',
@@ -70,7 +66,20 @@ export default function TeacherSeatPurchaseModal({ onClose }) {
     }
   }
 
-  const activeBilling = BILLING_OPTIONS[billingCycle]
+  const seatPlan = usePublicPricing().teacher_seat
+  const billingOptions = {
+    monthly: { price: formatTRY(seatPlan.monthlyPrice), period: 'TL / öğrenci / ay' },
+    ...(seatPlan.yearlyPrice != null
+      ? {
+          yearly: {
+            price: formatTRY(seatPlan.yearlyPrice),
+            period: 'TL / öğrenci / yıl',
+            ...(seatPlan.yearlyBadge ? { badge: seatPlan.yearlyBadge } : {}),
+          },
+        }
+      : {}),
+  }
+  const activeBilling = billingOptions[billingCycle] || billingOptions.monthly
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
