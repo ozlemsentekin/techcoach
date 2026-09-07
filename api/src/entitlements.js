@@ -118,7 +118,7 @@ async function upsertTeacherBaseEntitlement(event, status) {
   `)
 }
 
-// Öğretmenin sabit plana (3000 TL/ay, 4 öğrenci dahil) ek olarak satın aldığı öğrenci başı
+// Öğretmenin sabit plana (2999 TL/ay, 4 öğrenci dahil) ek olarak satın aldığı öğrenci başı
 // (200 TL/ay) koltuk ürünleri için sadece purchased_seats sayacını günceller; genel abonelik
 // durumunu (status/product_id) etkilemez — o alanlar yalnızca temel ürün event'lerinden gelir.
 async function adjustTeacherSeatCount(event) {
@@ -235,7 +235,7 @@ async function getTeacherQuota(teacherId) {
     teacherId: { type: sql.UniqueIdentifier, value: teacherId },
     graceDays: { type: sql.Int, value: GRACE_DAYS },
   })
-  // TeacherEntitlements satırı olmayabilir (öğretmen sadece 499 TL'lik ek öğrenci koltuğu almış
+  // TeacherEntitlements satırı olmayabilir (öğretmen sadece 299 TL'lik ek öğrenci koltuğu almış
   // olabilir) — bu yüzden skaler alt sorgular kullanıyoruz, satır yoksa NULL döner.
   // Ek öğrenci koltuğu abonelikleri: 'active' + 'grace_period' (henüz GRACE_DAYS dolmamış "taze"
   // vs dolmuş "eskimiş" olarak ayrı sayılır — ödeme gecikmesi banner/kısıt kararı için).
@@ -547,7 +547,7 @@ async function updateChildSeatSubscriptionFromIyzico({ subscriptionReferenceCode
   `)
 }
 
-// Öğretmen ek öğrenci koltuğu (499 TL/ay) abonelikleri — ChildSeatSubscriptions helper'larının
+// Öğretmen ek öğrenci koltuğu (299 TL/ay) abonelikleri — ChildSeatSubscriptions helper'larının
 // öğretmen karşılığı.
 async function insertTeacherSeatSubscription({
   teacherId,

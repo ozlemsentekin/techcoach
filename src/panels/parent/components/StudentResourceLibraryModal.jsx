@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, FilePlus2, Plus, Trash2, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ClipboardList, FilePlus2, Plus, Trash2, X } from 'lucide-react'
 import Badge from '../../ui/Badge'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
@@ -217,6 +217,17 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
                       successRate={book.successRate}
                       className="grid-cols-2"
                     />
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setSelectedBook(book)
+                      }}
+                      className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-lg bg-panel-blue px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-panel-blue/90"
+                    >
+                      <ClipboardList size={14} aria-hidden="true" />
+                      Test sonuçlarını gir
+                    </button>
                   </div>
                 </div>
               ))}

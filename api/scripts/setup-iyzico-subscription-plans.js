@@ -51,7 +51,7 @@ async function main() {
     conversationId: 'techcoach-setup-plan-monthly',
     productReferenceCode: product.data.referenceCode,
     name: 'Veli Aylık',
-    price: '3000',
+    price: '2999',
     currencyCode: Iyzipay.CURRENCY.TRY,
     paymentInterval: 'MONTHLY',
     paymentIntervalCount: 1,

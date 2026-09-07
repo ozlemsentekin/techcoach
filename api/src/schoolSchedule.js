@@ -351,9 +351,10 @@ async function getStudentSchoolScheduleTemplate(schoolId, grade) {
 
 /**
  * Bir öğrencinin haftalık plan için okul ders saatlerini ve tatil takvimini döner.
- * Okul + sınıf biliniyorsa saatler canlı olarak admin şablonundan (SchoolClassSchedules)
- * türetilir; aksi halde öğrenciye kaydedilmiş manuel programa düşülür. Hem veli hem
- * öğretmen panelleri bu ortak çözümleyiciyi kullanır.
+ * Öğrenciye özel kaydedilmiş bir program varsa her zaman o kullanılır (velinin "Detay"
+ * ekranından girdiği açık tanım); yoksa okul + sınıf için admin tarafından tanımlanmış
+ * şablona (SchoolClassSchedules) düşülür. Hem veli hem öğretmen panelleri bu ortak
+ * çözümleyiciyi kullanır.
  */
 async function resolveStudentSchoolSchedule(studentId) {
   const requestDb = await withRequest({
@@ -364,12 +365,9 @@ async function resolveStudentSchoolSchedule(studentId) {
   `)
   const profile = result.recordset[0]
 
-  let entries = []
-  if (profile?.school_id && profile?.grade) {
+  let entries = parseJsonEntries(profile?.school_schedule_json)
+  if (entries.length === 0 && profile?.school_id && profile?.grade) {
     entries = await getStudentSchoolScheduleTemplate(profile.school_id, profile.grade)
-  }
-  if (entries.length === 0) {
-    entries = parseJsonEntries(profile?.school_schedule_json)
   }
 
   const holidays = profile?.school_id ? await getSchoolCalendarEntries(profile.school_id) : []
