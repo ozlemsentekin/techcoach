@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { AlertCircle, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, GraduationCap, Phone, TrendingUp } from 'lucide-react'
 import LoadingState from '../../shared/LoadingState'
 import Button from '../../ui/Button'
 import WeeklyPlannerGrid from '../../parent/components/WeeklyPlannerGrid'
 import AssignTaskModal from '../../shared/homework/AssignTaskModal'
-import StudentProgressView from '../../shared/StudentProgressView'
-import WrongQuestionsView from '../../shared/WrongQuestionsView'
 import AssignHomeworkModal from '../components/AssignHomeworkModal'
 import EditHomeworkModal from '../components/EditHomeworkModal'
 import TaskDetailModal from '../components/TaskDetailModal'
@@ -34,6 +32,9 @@ import {
 import { addDaysISO, getMondayOfWeek, todayISODate } from '../../../utils/time'
 import { getWeekDates } from '../../../services/weeklyPlanService'
 import { HOMEWORK_TASK_TYPES } from '../../../data/taskTypes'
+
+const StudentProgressView = lazy(() => import('../../shared/StudentProgressView'))
+const WrongQuestionsView = lazy(() => import('../../shared/WrongQuestionsView'))
 
 const currentWeekStart = getMondayOfWeek(todayISODate())
 
@@ -340,83 +341,86 @@ export default function StudentDetailPage() {
         </div>
       ) : null}
 
-      {activeTab === 'calendar' ? (
-        <div className="flex flex-col gap-5">
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setWeekOffset((current) => current - 1)}
-              className="h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4"
-            >
-              <ChevronLeft size={18} aria-hidden="true" />
-              Önceki Hafta
-            </Button>
-            <Button
-              type="button"
-              variant={weekOffset === 0 ? 'primary' : 'secondary'}
-              onClick={() => setWeekOffset(0)}
-              className={
-                weekOffset === 0
-                  ? 'h-11 w-full px-3 text-sm font-semibold sm:w-auto sm:px-4'
-                  : 'h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4'
-              }
-            >
-              <CalendarDays size={18} aria-hidden="true" />
-              Bu Hafta
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setWeekOffset((current) => current + 1)}
-              className="h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4"
-            >
-              Sonraki Hafta
-              <ChevronRight size={18} aria-hidden="true" />
-            </Button>
+      <Suspense fallback={<LoadingState label="Sekme yükleniyor..." />}>
+        {activeTab === 'calendar' ? (
+          <div className="flex flex-col gap-5">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setWeekOffset((current) => current - 1)}
+                className="h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4"
+              >
+                <ChevronLeft size={18} aria-hidden="true" />
+                Önceki Hafta
+              </Button>
+              <Button
+                type="button"
+                variant={weekOffset === 0 ? 'primary' : 'secondary'}
+                onClick={() => setWeekOffset(0)}
+                className={
+                  weekOffset === 0
+                    ? 'h-11 w-full px-3 text-sm font-semibold sm:w-auto sm:px-4'
+                    : 'h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4'
+                }
+              >
+                <CalendarDays size={18} aria-hidden="true" />
+                Bu Hafta
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setWeekOffset((current) => current + 1)}
+                className="h-11 w-full border-panel-blue-soft px-3 text-sm font-semibold text-panel-text shadow-sm hover:bg-panel-blue-soft/50 sm:w-auto sm:px-4"
+              >
+                Sonraki Hafta
+                <ChevronRight size={18} aria-hidden="true" />
+              </Button>
+            </div>
+
+            {weekError ? (
+              <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{weekError}</div>
+            ) : null}
+
+            {loadingWeek ? (
+              <LoadingState label="Takvim yükleniyor..." />
+            ) : (
+              <WeeklyPlannerGrid
+                weekDates={weekDates}
+                tasksByDate={tasksByDate}
+                lessonSchedule={student.schedule}
+                lessonScheduleExceptions={student.scheduleExceptions}
+                schoolSchedule={schoolSchedule}
+                schoolHolidays={schoolHolidays}
+                onAddHomework={(date) => setHomeworkModalDate(date)}
+                onEditTask={handleEditTask}
+                onViewAnswerSheet={setAnswerSheetTask}
+                onToggleReview={handleToggleTaskReview}
+                onManageLessonSlot={(slot) => setManagingSlot(slot)}
+                canEditTask={(task) => task.createdBy === 'ogretmen' || isManageableStandaloneTask(task)}
+              />
+            )}
           </div>
+        ) : activeTab === 'analysis' ? (
+          <StudentProgressView
+            studentId={studentTeacherId}
+            title="Gelişim Analizi"
+            emptySubtitle={`${student.subjectName || 'Bu ders'} için ilerleme burada görünecek.`}
+            buildSubtitle={(subjectLabel) => `${subjectLabel} için emek, doğruluk ve kaynak ilerlemesi.`}
+            fetchOverview={getTeacherStudentProgressOverview}
+          />
+        ) : (
+          <WrongQuestionsView
+            fetchWrongQuestions={fetchWrongQuestions}
+            fetchTopicStats={fetchTopicStats}
+            fetchPhoto={fetchPhoto}
+            updateMistakeReason={updateMistakeReason}
+            updateMistakeMeta={updateMistakeMeta}
+            hideHeaderWhenUnselected
+          />
+        )}
 
-          {weekError ? (
-            <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{weekError}</div>
-          ) : null}
-
-          {loadingWeek ? (
-            <LoadingState label="Takvim yükleniyor..." />
-          ) : (
-            <WeeklyPlannerGrid
-              weekDates={weekDates}
-              tasksByDate={tasksByDate}
-              lessonSchedule={student.schedule}
-              lessonScheduleExceptions={student.scheduleExceptions}
-              schoolSchedule={schoolSchedule}
-              schoolHolidays={schoolHolidays}
-              onAddHomework={(date) => setHomeworkModalDate(date)}
-              onEditTask={handleEditTask}
-              onViewAnswerSheet={setAnswerSheetTask}
-              onToggleReview={handleToggleTaskReview}
-              onManageLessonSlot={(slot) => setManagingSlot(slot)}
-              canEditTask={(task) => task.createdBy === 'ogretmen' || isManageableStandaloneTask(task)}
-            />
-          )}
-        </div>
-      ) : activeTab === 'analysis' ? (
-        <StudentProgressView
-          studentId={studentTeacherId}
-          title="Gelişim Analizi"
-          emptySubtitle={`${student.subjectName || 'Bu ders'} için ilerleme burada görünecek.`}
-          buildSubtitle={(subjectLabel) => `${subjectLabel} için emek, doğruluk ve kaynak ilerlemesi.`}
-          fetchOverview={getTeacherStudentProgressOverview}
-        />
-      ) : (
-        <WrongQuestionsView
-          fetchWrongQuestions={fetchWrongQuestions}
-          fetchTopicStats={fetchTopicStats}
-          fetchPhoto={fetchPhoto}
-          updateMistakeReason={updateMistakeReason}
-          updateMistakeMeta={updateMistakeMeta}
-          hideHeaderWhenUnselected
-        />
-      )}
+      </Suspense>
 
       {homeworkModalDate ? (
         <AssignHomeworkModal

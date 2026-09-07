@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, BookMarked, BookOpen, ClipboardList, FilePlus2, Plus, Users } from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
@@ -6,14 +6,14 @@ import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import Button from '../../ui/Button'
 import { cn } from '../../ui/utils'
-import { cachedGet, authRequest } from '../../../services/authClient'
+import { cachedGet } from '../../../services/authClient'
 import { RATE_TONES, completionRateTone, successRateTone } from '../../shared/rateTones'
 import { ImagePreviewLightbox } from '../../shared/ResourceBookCard'
 import { BOOKSHELF_RESOURCE_TYPE_LABELS } from '../../shared/bookshelf/bookshelfConstants'
-import StudentResourceAssignModal from '../components/StudentResourceAssignModal'
-import BookFormModal from '../../shared/bookshelf/BookFormModal'
-import BookshelfDetailModal from '../../shared/bookshelf/BookshelfDetailModal'
-import BookAdditionRequestModal from '../../shared/requests/BookAdditionRequestModal'
+const StudentResourceAssignModal = lazy(() => import('../components/StudentResourceAssignModal'))
+const BookFormModal = lazy(() => import('../../shared/bookshelf/BookFormModal'))
+const BookshelfDetailModal = lazy(() => import('../../shared/bookshelf/BookshelfDetailModal'))
+const BookAdditionRequestModal = lazy(() => import('../../shared/requests/BookAdditionRequestModal'))
 
 function groupBySubject(books) {
   const groups = new Map()
@@ -288,7 +288,7 @@ export default function ParentBookshelfPage() {
 
   const loadBooks = (studentId = selectedStudentId, { resetSubject = false } = {}) => {
     if (!studentId) return Promise.resolve()
-    return authRequest(`/api/parent/students/${studentId}/resource-books`, { method: 'GET' })
+    return cachedGet(`/api/parent/students/${studentId}/resource-books`)
       .then((data) => {
         setBooks((data.resourceBooks || []).filter((book) => book.assigned))
         setBooksStudentId(studentId)
@@ -300,7 +300,7 @@ export default function ParentBookshelfPage() {
   useEffect(() => {
     if (!selectedStudentId) return undefined
     let ignore = false
-    authRequest(`/api/parent/students/${selectedStudentId}/resource-books`, { method: 'GET' })
+    cachedGet(`/api/parent/students/${selectedStudentId}/resource-books`)
       .then((data) => {
         if (ignore) return
         setBooks((data.resourceBooks || []).filter((book) => book.assigned))
@@ -430,60 +430,62 @@ export default function ParentBookshelfPage() {
         </div>
       )}
 
-      {assigningStudent ? (
-        <StudentResourceAssignModal
-          student={assigningStudent}
-          onSaved={(studentId, _resourceCount, updatedBooks) => {
-            setAssigningStudent(null)
-            if (studentId === selectedStudentId) {
-              setBooks(updatedBooks.filter((book) => book.assigned))
-              setBooksStudentId(studentId)
-              setSelectedSubjectId(null)
-              setError('')
-            }
-          }}
-          onClose={() => setAssigningStudent(null)}
-        />
-      ) : null}
+      <Suspense fallback={<LoadingState label="Pencere yükleniyor..." />}>
+        {assigningStudent ? (
+          <StudentResourceAssignModal
+            student={assigningStudent}
+            onSaved={(studentId, _resourceCount, updatedBooks) => {
+              setAssigningStudent(null)
+              if (studentId === selectedStudentId) {
+                setBooks(updatedBooks.filter((book) => book.assigned))
+                setBooksStudentId(studentId)
+                setSelectedSubjectId(null)
+                setError('')
+              }
+            }}
+            onClose={() => setAssigningStudent(null)}
+          />
+        ) : null}
 
-      {creating ? (
-        <BookFormModal onSaved={handleCreated} onClose={() => setCreating(false)} />
-      ) : null}
+        {creating ? (
+          <BookFormModal onSaved={handleCreated} onClose={() => setCreating(false)} />
+        ) : null}
 
-      {requesting ? (
-        <BookAdditionRequestModal
-          onClose={() => setRequesting(false)}
-          onGoToRequests={() => {
-            setRequesting(false)
-            navigate('/parent/requests')
-          }}
-        />
-      ) : null}
+        {requesting ? (
+          <BookAdditionRequestModal
+            onClose={() => setRequesting(false)}
+            onGoToRequests={() => {
+              setRequesting(false)
+              navigate('/parent/requests')
+            }}
+          />
+        ) : null}
 
-      {editingBook ? (
-        <BookFormModal
-          book={editingBook}
-          onSaved={() => {
-            setEditingBook(null)
-            loadBooks()
-          }}
-          onClose={() => setEditingBook(null)}
-        />
-      ) : null}
+        {editingBook ? (
+          <BookFormModal
+            book={editingBook}
+            onSaved={() => {
+              setEditingBook(null)
+              loadBooks()
+            }}
+            onClose={() => setEditingBook(null)}
+          />
+        ) : null}
 
-      {detailBookId ? (
-        <BookshelfDetailModal
-          resourceBookId={detailBookId}
-          showAssignees
-          solveStudentId={selectedStudentId}
-          onChanged={loadBooks}
-          onEdit={(book) => {
-            setDetailBookId(null)
-            setEditingBook(book)
-          }}
-          onClose={() => setDetailBookId(null)}
-        />
-      ) : null}
+        {detailBookId ? (
+          <BookshelfDetailModal
+            resourceBookId={detailBookId}
+            showAssignees
+            solveStudentId={selectedStudentId}
+            onChanged={loadBooks}
+            onEdit={(book) => {
+              setDetailBookId(null)
+              setEditingBook(book)
+            }}
+            onClose={() => setDetailBookId(null)}
+          />
+        ) : null}
+      </Suspense>
 
       <ImagePreviewLightbox preview={previewImage} onClose={() => setPreviewImage(null)} />
     </div>
