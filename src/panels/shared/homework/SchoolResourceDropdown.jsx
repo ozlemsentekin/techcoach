@@ -24,8 +24,9 @@ export function SchoolResourceAvatar({ resource, size = 'md' }) {
 
 // Okul Ödevi için okul+sınıf+ders bazlı okul kaynağı seçimi (bkz. api/src/schoolResources.js).
 // Yuvarlak profil resmi + kaynak adı.
-export default function SchoolResourceDropdown({ resources, selectedResource, onSelect, placeholder }) {
+export default function SchoolResourceDropdown({ resources, selectedResource, onSelect, placeholder, inline = false }) {
   const [open, setOpen] = useState(false)
+  const showResources = open || (inline && !selectedResource)
   const [query, setQuery] = useState('')
   const containerRef = useRef(null)
   const searchInputRef = useRef(null)
@@ -57,7 +58,7 @@ export default function SchoolResourceDropdown({ resources, selectedResource, on
           setOpen((prev) => !prev)
           setQuery('')
         }}
-        aria-expanded={open}
+        aria-expanded={showResources}
         className="flex w-full items-center gap-3 rounded-xl border border-panel-border bg-white p-2.5 text-left shadow-sm outline-none transition-colors hover:border-panel-warm focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
       >
         {selectedResource ? (
@@ -75,8 +76,8 @@ export default function SchoolResourceDropdown({ resources, selectedResource, on
         />
       </button>
 
-      {open ? (
-        <div className="absolute z-10 mt-2 flex max-h-72 w-full flex-col rounded-xl border border-panel-border bg-white p-2 shadow-lg">
+      {showResources ? (
+        <div className={cn('mt-2 flex w-full flex-col rounded-xl border border-panel-border bg-white p-2', !inline && 'absolute z-10 max-h-72 shadow-lg')}>
           {resources.length === 0 ? (
             <p className="p-3 text-sm text-panel-text-muted">Bu derse tanımlı okul kaynağı yok.</p>
           ) : (
@@ -92,8 +93,9 @@ export default function SchoolResourceDropdown({ resources, selectedResource, on
                   type="text"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
+                  aria-label="Okul kaynağı ara"
                   placeholder="Kaynak ara"
-                  className="w-full rounded-lg border border-panel-border bg-white py-2 pl-8 pr-2.5 text-sm text-panel-text outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
+                  className="w-full rounded-lg border border-panel-border bg-white min-h-11 py-2 pl-8 pr-2.5 text-base text-panel-text outline-none transition-colors focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
                 />
               </div>
               {filteredResources.length === 0 ? (
@@ -118,7 +120,7 @@ export default function SchoolResourceDropdown({ resources, selectedResource, on
                   )}
                 >
                   <SchoolResourceAvatar resource={resource} size="sm" />
-                  <span className="line-clamp-1 flex-1 text-sm font-medium text-panel-text">{resource.name}</span>
+                  <span className="min-w-0 flex-1 text-sm font-medium text-panel-text">{resource.name}</span>
                   {selectedResource?.id === resource.id ? (
                     <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-panel-blue text-white">
                       <Check size={12} strokeWidth={3} aria-hidden="true" />

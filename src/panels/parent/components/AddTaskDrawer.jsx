@@ -169,23 +169,19 @@ function ResourceBookButton({ book, selected, onSelect }) {
 
 function ResourceBookDropdown({ books, selectedBook, onSelect, placeholder }) {
   const [open, setOpen] = useState(false)
-  const containerRef = useRef(null)
-
-  useEffect(() => {
-    if (!open) return undefined
-    const handlePointerDown = (event) => {
-      if (containerRef.current && !containerRef.current.contains(event.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handlePointerDown)
-    return () => document.removeEventListener('mousedown', handlePointerDown)
-  }, [open])
+  const [query, setQuery] = useState('')
+  const showBooks = !selectedBook || open
+  const normalizedQuery = query.trim().toLocaleLowerCase('tr')
+  const filteredBooks = books.filter((book) =>
+    `${book.name} ${book.publisherName || ''}`.toLocaleLowerCase('tr').includes(normalizedQuery),
+  )
 
   return (
-    <div ref={containerRef} className="relative">
-      <button
+    <div className="min-w-0">
+      {selectedBook ? <button
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        aria-expanded={open}
+        onClick={() => { setOpen((prev) => !prev); setQuery('') }}
+        aria-expanded={showBooks}
         className="flex w-full items-center gap-3 rounded-xl border border-panel-border bg-white p-2.5 text-left shadow-sm outline-none transition-colors hover:border-panel-warm focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft"
       >
         {selectedBook ? (
@@ -208,18 +204,23 @@ function ResourceBookDropdown({ books, selectedBook, onSelect, placeholder }) {
         )}
         <ChevronDown
           size={16}
-          className={cn('shrink-0 self-start text-panel-text-muted transition-transform', open && 'rotate-180')}
+          className={cn('shrink-0 self-start text-panel-text-muted transition-transform', showBooks && 'rotate-180')}
           aria-hidden="true"
         />
-      </button>
+      </button> : null}
 
-      {open ? (
-        <div className="absolute z-10 mt-2 max-h-80 w-full overflow-y-auto rounded-xl border border-panel-border bg-white p-2 shadow-lg">
-          {books.length === 0 ? (
-            <p className="p-3 text-sm text-panel-text-muted">Bu derse ait kaynak yok.</p>
+      {showBooks ? (
+        <div className="mt-2 space-y-3">
+          <label className="relative block">
+            <Search size={18} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-panel-text-muted" />
+            <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Kaynak veya yayınevi ara" placeholder="Kaynak veya yayınevi ara…" className="min-h-12 w-full rounded-xl border border-panel-border bg-white pl-10 pr-3 text-base text-panel-text focus:border-panel-blue focus:outline-none focus:ring-2 focus:ring-panel-blue-soft" />
+          </label>
+          <p className="text-xs text-panel-text-muted">{filteredBooks.length} kaynak · Devam etmek için bir kitap seçin</p>
+          {filteredBooks.length === 0 ? (
+            <p className="p-3 text-sm text-panel-text-muted">{query ? 'Aramanızla eşleşen kaynak yok.' : 'Bu derse ait kaynak yok.'}</p>
           ) : (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {books.map((book) => (
+              {filteredBooks.map((book) => (
                 <ResourceBookButton
                   key={book.id}
                   book={book}
@@ -1186,6 +1187,7 @@ export default function AddTaskDrawer({
                       </p>
                     ) : (
                       <ResourceBookDropdown
+                        key={effectiveSubjectId}
                         books={filteredResourceBooks}
                         selectedBook={selectedBook}
                         onSelect={handleSelectResourceBook}
@@ -1234,6 +1236,8 @@ export default function AddTaskDrawer({
                     ) : (
                       <div className="flex flex-col gap-1.5">
                         <SchoolResourceDropdown
+                          inline
+                          key={effectiveSchoolSubjectId}
                           resources={schoolResourcesForSubject}
                           selectedResource={selectedSchoolResource}
                           onSelect={handleSelectSchoolResource}
@@ -1273,7 +1277,7 @@ export default function AddTaskDrawer({
                     className="w-full rounded-xl border border-panel-border py-2 pl-9 pr-3 text-sm text-panel-text"
                   />
                 </div>
-                <div className="max-h-72 overflow-y-auto rounded-xl border border-panel-border p-1.5">
+                <div className="rounded-xl border border-panel-border p-1.5">
                   {topics === null ? (
                     <p className="p-2 text-xs text-panel-text-muted">İçerikler yükleniyor...</p>
                   ) : filteredTopics.length === 0 ? (
