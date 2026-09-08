@@ -693,11 +693,13 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
         {TASK_TYPES[task.taskType]?.label || 'Ödev'}
       </span>
       {task.subject ? (
-        <span
-          title={task.subject}
-          className="mt-0.5 block truncate text-[11px] font-semibold leading-snug text-panel-text-muted"
-        >
-          {task.subject}
+        <span className="mt-0.5 flex min-w-0">
+          <span
+            title={task.subject}
+            className={`inline-block max-w-full truncate rounded-md px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${style.tagClassName}`}
+          >
+            {task.subject}
+          </span>
         </span>
       ) : null}
       {/* Yayınevi + kitap adı ilk (kapalı) görünümde gizli; detay okuna basınca aşağıdaki
