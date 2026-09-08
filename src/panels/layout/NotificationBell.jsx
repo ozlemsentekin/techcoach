@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { Bell, CheckCheck, CheckCircle2, CircleDot, HelpCircle, Loader2, PlayCircle, X } from 'lucide-react'
+import { Bell, CheckCircle2, CircleDot, HelpCircle, Loader2, PlayCircle, Trash2, X } from 'lucide-react'
 import { useAuth } from '../../context/useAuth'
 import useVisiblePolling from '../../hooks/useVisiblePolling'
 import { formatDateShort } from '../../utils/time'
@@ -158,15 +158,19 @@ export default function NotificationBell({ role }) {
     }
   }
 
-  const handleMarkAll = async () => {
+  // "Temizle": görünen tüm bildirimleri okundu işaretler → liste (yalnızca okunmamış)
+  // boşalır. İşlem kayıtları silinmez, sadece zilden düşer.
+  const handleClearAll = async () => {
     setMarkingAll(true)
+    setNotifications([])
+    setUnreadCount(0)
     try {
       await service.markAll()
-      await refresh()
     } catch {
-      // sessiz: bir sonraki yoklama düzeltir
+      // hata olursa bir sonraki yoklama gerçek durumu geri getirir
     } finally {
       setMarkingAll(false)
+      refresh()
     }
   }
 
@@ -200,15 +204,15 @@ export default function NotificationBell({ role }) {
         <div className="fixed inset-x-3 top-16 z-50 max-h-[calc(100dvh-5rem)] min-w-0 overflow-y-auto rounded-2xl border border-panel-border bg-panel-surface shadow-[0_18px_48px_rgba(31,36,77,0.16)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-96">
           <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-panel-border bg-panel-surface-soft/95 px-3 py-2 backdrop-blur">
             <span className="text-[13px] font-extrabold text-panel-text">Bildirimler</span>
-            {unreadCount > 0 ? (
+            {notifications.length > 0 ? (
               <button
                 type="button"
-                onClick={handleMarkAll}
+                onClick={handleClearAll}
                 disabled={markingAll}
-                className="flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[11px] font-semibold text-panel-blue hover:bg-panel-blue-soft/50 disabled:opacity-60"
+                className="flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[11px] font-semibold text-panel-text-muted hover:bg-panel-surface hover:text-panel-text disabled:opacity-60"
               >
-                <CheckCheck size={12} aria-hidden="true" />
-                Tümünü okundu
+                <Trash2 size={12} aria-hidden="true" />
+                Temizle
               </button>
             ) : null}
           </div>
