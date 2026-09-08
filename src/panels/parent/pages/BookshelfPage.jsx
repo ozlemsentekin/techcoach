@@ -288,7 +288,7 @@ export default function ParentBookshelfPage() {
 
   const loadBooks = (studentId = selectedStudentId, { resetSubject = false } = {}) => {
     if (!studentId) return Promise.resolve()
-    return cachedGet(`/api/parent/students/${studentId}/resource-books`)
+    return cachedGet(`/api/parent/students/${studentId}/resource-books?assignedOnly=1`)
       .then((data) => {
         setBooks((data.resourceBooks || []).filter((book) => book.assigned))
         setBooksStudentId(studentId)
@@ -300,7 +300,7 @@ export default function ParentBookshelfPage() {
   useEffect(() => {
     if (!selectedStudentId) return undefined
     let ignore = false
-    cachedGet(`/api/parent/students/${selectedStudentId}/resource-books`)
+    cachedGet(`/api/parent/students/${selectedStudentId}/resource-books?assignedOnly=1`)
       .then((data) => {
         if (ignore) return
         setBooks((data.resourceBooks || []).filter((book) => book.assigned))
