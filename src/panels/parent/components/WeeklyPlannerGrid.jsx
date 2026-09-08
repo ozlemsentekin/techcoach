@@ -750,8 +750,8 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
 
   const summaryContent = isHomework ? homeworkSummary : defaultSummary
 
-  // "Tamamla" butonu: kapalı kartta chip'lerin altında, açık kartta detay kutusunun
-  // en sonunda görünür; her iki durumda da kartın içinde kalır.
+  // "Tamamla" butonu yalnızca kart açıkken detay kutusunun en sonunda görünür;
+  // detayı hiç olmayan (nadir) görevde kartın altında standalone kalır.
   const completeButton = canComplete ? (
     <button
       type="button"
@@ -900,7 +900,7 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
           bu bilgi yalnızca detay kutusunda kalır. */}
       {isHomework ? <CreatorNote task={task} /> : null}
 
-      {completeButton && !(expanded && hasDetails) ? (
+      {completeButton && !hasDetails ? (
         <div className="mt-1.5 pl-1 pr-1">{completeButton}</div>
       ) : null}
 
