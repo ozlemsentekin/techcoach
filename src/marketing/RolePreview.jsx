@@ -6,19 +6,19 @@ const defaultTopics = ['Haftalık plan', 'Günlük görevler', 'Optik sonuç gir
 const parentTopics = ['Çocuk profili', 'Kaynak hazırlığı', 'Geçmiş testler', 'Kaynak durumu', 'Plan ve görev', 'Özel öğretmenler', 'Günlük takip', 'Hata defteri', 'Gelişim analizi']
 const summaries = {
   student: [
-    'Haftalık planınla ne çalışacağını bil.',
-    'Bugünün görevini ve kaynağını gör.',
+    'Haftalık planını takip et.',
+    'Bugünkü görevini gör.',
     'Cevaplarını gir, sonucunu kaydet.',
     'Kaynaklarındaki başarını gör.',
-    'Kitabında ne kadar ilerlediğini gör.',
+    'Kitabındaki ilerlemeyi gör.',
     'Sorunu fotoğrafla, hatanı not al.',
     'Gelişimini gör, eksiğine odaklan.',
   ],
   parent: [
     'Çocuğunun profilini oluştur.',
     'Kullandığı kitapları ekle.',
-    'Geçmiş testlerin cevaplarını kaydet.',
-    'İlerlemeyi ve başarıyı birlikte gör.',
+    'Geçmiş cevapları kaydet.',
+    'İlerlemeyi ve başarıyı gör.',
     'Haftasını planla, görev ata.',
     'Varsa özel öğretmenini dahil et.',
     'Görevleri ve sonuçlarını takip et.',
@@ -26,7 +26,7 @@ const summaries = {
     'Gelişimine göre yeni plan oluştur.',
   ],
   teacher: [
-    'Kaynağından haftalık görev planla.',
+    'Kaynağından görev planla.',
     'Verdiğin çalışmayı takip et.',
     'Cevaplarından eksiklerini gör.',
     'Test sonuçlarıyla derse hazırlan.',
@@ -120,24 +120,20 @@ export default function RolePreview({ role, name }) {
     if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) select(slide + (dx < 0 ? 1 : -1))
     else setDragX(0)
   }
-  const summary = summaries[role][slide]
   const visuals = role === 'parent' ? [<ChildProfilePreview />, <ParentBooksPreview />, <PastResultsPreview />, <ParentBookMetricsPreview />, <ParentAssignmentPreview />, <ParentTeachersPreview />, <ParentFollowupPreview />, <Mistakes role={role} />, <Analysis role={role} />] : [<WeeklyPlan role={role} />, <DailyTasks role={role} />, <OpticalResults role={role} />, <BookSuccess role={role} />, <Completion role={role} />, <Mistakes role={role} />, <Analysis role={role} />]
   return <div className={`role-preview-wrap rp-carousel rp-${role}`} role="region" aria-roledescription="slayt gösterisi" aria-label={`${name} panel özellikleri`}>
     <div aria-live="polite" aria-atomic="true">
       <div className="rp-slide" role="group" aria-roledescription="slayt" aria-label={`${slide + 1} / ${topics.length} · ${topics[slide]}`}>
-        <div className="rp-story-heading">
-          <p className="rp-step-summary">{summary}</p>
-        </div>
         <div className="rp-story-stage">
-          <div className="rp-process">
-            <div className="rp-process-header"><span className="rp-process-number">{String(slide + 1).padStart(2, '0')}</span><label className="rp-process-picker"><span>{name} yolculuğu · {topics.length} adım</span><select aria-label="Tüm adımlar" value={slide} onChange={event => select(Number(event.target.value))}>{topics.map((topic, i) => <option key={topic} value={i}>{topic}</option>)}</select></label></div>
-            <div className="rp-process-track" aria-label="Süreç adımları">{topics.map((topic, i) => <button type="button" key={topic} className={i <= slide ? 'reached' : ''} aria-current={slide === i ? 'step' : undefined} aria-label={`${i + 1}. adım: ${topic}`} onClick={() => select(i)} />)}</div>
-          </div>
           <div className="rp-carousel-frame">
             <button className="rp-side-arrow rp-side-prev" type="button" onClick={() => select(slide - 1)} aria-label="Önceki panel görseli"><ArrowLeft size={20} aria-hidden="true" /></button>
             <div className="rp-swipe-area" onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={finishDrag} onPointerCancel={() => { gesture.current = null; setDragX(0) }}>
           <div className="role-preview" style={{ transform: `translateX(${dragX}px)`, opacity: 1 - Math.abs(dragX) / 250 }}>
 
+          <div className="rp-process">
+            <div className="rp-process-header"><span className="rp-process-number">{String(slide + 1).padStart(2, '0')}</span><label className="rp-process-picker"><select aria-label="Tüm adımlar" value={slide} onChange={event => select(Number(event.target.value))}>{topics.map((topic, i) => <option key={topic} value={i}>{summaries[role][i]}</option>)}</select></label></div>
+            <div className="rp-process-track" aria-label="Süreç adımları">{topics.map((topic, i) => <button type="button" key={topic} className={i <= slide ? 'reached' : ''} aria-current={slide === i ? 'step' : undefined} aria-label={`${i + 1}. adım: ${topic}`} onClick={() => select(i)} />)}</div>
+          </div>
             <div className="role-preview-top"><span className="role-preview-brand">Tech<span>Coach</span></span><span className="role-example">{name} paneli · Örnek</span></div>
             <div className="rp-slide-visual">{visuals[slide]}</div>
           </div>

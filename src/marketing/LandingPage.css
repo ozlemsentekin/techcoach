@@ -7052,3 +7052,20 @@ footer {
   .rp-carousel .rp-story-heading { padding: 14px 8px; }
   .rp-carousel .rp-story-heading > .rp-step-summary:last-child { font-size: 13px; }
 }
+
+/* Keep the role selector connected and the journey inside the preview window. */
+.role-section .role-tabs { margin-bottom: 0; border-radius: 12px 12px 0 0; }
+.role-preview-wrap.rp-carousel { border-top: 0; }
+.rp-carousel .rp-story-stage { border-top: 0; padding-top: 16px; }
+.role-preview > .rp-process { margin: 0 0 16px; padding: 0 0 8px; border-bottom: 1px solid #e7eaf3; }
+.role-preview .rp-process-header { gap: 8px; }
+.role-preview .rp-process-number { width: 28px; height: 28px; border-radius: 8px; font-size: 12px; background: #f1f2fa; border: 0; }
+.role-preview .rp-process-picker select { font-size: 14px; min-height: 32px; font-weight: 600; padding: 0; }
+.role-preview .rp-process-track { margin-top: 4px; }
+@media (max-width: 560px) {
+  .rp-carousel .rp-story-stage { padding-top: 10px; }
+  .role-preview .rp-process-header { gap: 5px; }
+  .role-preview .rp-process-number { width: 23px; height: 26px; font-size: 10px; }
+  .role-preview .rp-process-picker select { font-size: 11px; }
+  .role-preview > .rp-process { margin-bottom: 12px; }
+}
