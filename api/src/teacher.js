@@ -80,18 +80,26 @@ const STUDENT_STATUS_FILTERS = new Set(['active', 'inactive', 'all'])
 //    olsun ya da olmasın; öğrenci/veli "Bugün planı"ndan eklediği soru bankası ödevleri de
 //    dahil (bkz. AddTaskDrawer 'soru-bankasi-odevi')
 //  - Öğretmenin dersine ait, kaynağı olmayan ödev-tipi görevler (örn. okuma kitabı, okul ödevi)
-const TEACHER_TASK_IN_SCOPE = `(
-  t.student_teacher_id = @studentTeacherId
+//
+// studentTeacherRef / subjectRef, çağrıya göre bir bind parametresi (@studentTeacherId)
+// ya da bir kolon referansı (ör. bildirim akışındaki `rel` CTE'sinden r.student_teacher_id)
+// olabilir.
+function teacherTaskScopeSql({ studentTeacherRef = '@studentTeacherId', subjectRef = '@subjectId' } = {}) {
+  return `(
+  t.student_teacher_id = ${studentTeacherRef}
   OR EXISTS (
     SELECT 1 FROM dbo.StudentTeacherResourceBooks strb
-    WHERE strb.teacher_id = @studentTeacherId AND strb.resource_book_id = t.resource_book_id
+    WHERE strb.teacher_id = ${studentTeacherRef} AND strb.resource_book_id = t.resource_book_id
   )
   OR (
     t.resource_book_id IS NULL
-    AND t.subject_id = @subjectId
+    AND t.subject_id = ${subjectRef}
     AND t.task_type IN ('odev', 'soru-bankasi-odevi', 'okul-odevi', 'etkinlik-odevi')
   )
 )`
+}
+
+const TEACHER_TASK_IN_SCOPE = teacherTaskScopeSql()
 
 // Bekleyen görevler özeti, haftalık takvimdeki bağlamsal "spor / başka özel ders" kartlarından
 // daha dar olmalı: sadece bu öğretmenin kendi ders/görev ilişkisi ve takip ettiği kaynaklar.
@@ -467,6 +475,35 @@ async function getTeacherStudentHandler(request) {
       return json(404, { error: 'Öğrenci bulunamadı.' })
     }
 
+    // Aynı öğrencinin BAŞKA özel öğretmenleriyle olan sabit ders programı yuvaları — öğretmenin
+    // haftalık takviminde bağlam olarak salt okunur gösterilir. Öğretmen kimliği (ad, ilişki id)
+    // paylaşılmaz; sadece ders adı ve saat bilgisi döner.
+    const otherLessonsDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: record.student_id },
+      selfId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+    })
+    const otherLessonsResult = await otherLessonsDb.query(`
+      SELECT st.schedule_json, st.schedule_exceptions_json, s.name AS subject_name
+      FROM dbo.StudentTeachers st
+      LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
+      WHERE st.student_id = @studentId AND st.id <> @selfId AND st.is_active = 1
+        AND st.teacher_type = 'ozel_ogretmen' AND st.schedule_json IS NOT NULL;
+    `)
+    const otherLessonSchedule = otherLessonsResult.recordset.flatMap((row) =>
+      parseScheduleJson(row.schedule_json)
+        .filter((slot) => slot?.dayOfWeek && slot?.startTime)
+        .map((slot) => ({
+          dayOfWeek: slot.dayOfWeek,
+          startTime: slot.startTime,
+          endTime: slot.endTime || null,
+          startDate: slot.startDate || null,
+          subjectName: row.subject_name || null,
+        })),
+    )
+    const otherLessonScheduleExceptions = otherLessonsResult.recordset.flatMap((row) =>
+      parseScheduleJson(row.schedule_exceptions_json),
+    )
+
     return json(200, {
       student: {
         studentTeacherId: record.student_teacher_id,
@@ -483,6 +520,8 @@ async function getTeacherStudentHandler(request) {
         isActive: Boolean(record.is_active),
         schedule: parseScheduleJson(record.schedule_json),
         scheduleExceptions: parseScheduleJson(record.schedule_exceptions_json),
+        otherLessonSchedule,
+        otherLessonScheduleExceptions,
         resourceCount: Number(record.resource_count) || 0,
         accessGrantedAt: record.access_granted_at || null,
       },
@@ -2636,6 +2675,35 @@ async function getTeacherStudentSchoolScheduleHandler(request) {
   }
 }
 
+// Öğretmenin kapsamındaki tek bir görevin tam kaydı — bildirim merkezinden bir satıra
+// tıklandığında görev detayı / optik sonuç modalını açmak için. Kapsam kontrolü
+// listTeacherStudentTasksHandler ile aynı (TEACHER_TASK_IN_SCOPE).
+async function getTeacherStudentTaskHandler(request) {
+  try {
+    const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    const taskId = request.params.taskId
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+    })
+    const result = await requestDb.query(`
+      ${SELECT_TASK}
+      WHERE t.id = @id AND t.student_id = @studentId AND ${TEACHER_TASK_IN_SCOPE};
+    `)
+    if (!result.recordset[0]) {
+      return json(404, { error: 'Görev bulunamadı.' })
+    }
+
+    return json(200, { task: sanitizeTask(result.recordset[0]) })
+  } catch (error) {
+    return handleError(error, 'getTeacherStudentTaskHandler', 'Görev yüklenemedi.')
+  }
+}
+
 // Öğretmenin, kendi dersine ait ve tamamlanmış bir soru bankası görevinin dijital optik
 // cevap kağıdını salt okunur görebilmesini sağlar. Görevin gerçekten bu öğretmenin
 // (öğrenci, ders) kapsamına ait olduğu, listTeacherStudentTasksHandler'daki aynı
@@ -3313,6 +3381,7 @@ module.exports = {
   updateTeacherHomeworkHandler,
   deleteTeacherHomeworkHandler,
   listTeacherStudentTasksHandler,
+  getTeacherStudentTaskHandler,
   updateTeacherStudentTaskHandler,
   deleteTeacherStudentTaskHandler,
   setTeacherTaskReviewHandler,
@@ -3328,4 +3397,5 @@ module.exports = {
   getTeacherEntitlementHandler,
   updateTeacherProfileHandler,
   createTeacherStudentHandler,
+  teacherTaskScopeSql,
 }

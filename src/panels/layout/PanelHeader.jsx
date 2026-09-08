@@ -18,6 +18,7 @@ import ThemeContext from '../../theme/themeContextObject'
 import { THEMES } from '../../theme/themes'
 import ParentTourContext from '../parent/onboarding/parentTourContext'
 import ChangePasswordDialog from './ChangePasswordDialog'
+import NotificationBell from './NotificationBell'
 import TeacherSubjectsDialog from '../teacher/components/TeacherSubjectsDialog'
 
 const ROLE_LABELS = {
@@ -179,6 +180,10 @@ export default function PanelHeader() {
         <RefreshCw size={16} aria-hidden="true" />
       </button>
       <div className="h-6 w-px shrink-0 bg-panel-border" aria-hidden="true" />
+
+      {isParent || isTeacher ? (
+        <NotificationBell role={isParent ? 'parent' : 'teacher'} />
+      ) : null}
 
       {themeCtx && !themeCtx.locked ? (
         <div className="relative" ref={themeMenuRef}>

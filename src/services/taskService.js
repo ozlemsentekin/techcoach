@@ -36,8 +36,8 @@ export async function getUnscheduledTasks({ studentId } = {}) {
 }
 
 /** @returns {Promise<object>} */
-export async function getTaskById(taskId) {
-  const data = await authRequest(`/api/panel/tasks/${taskId}`, { method: 'GET' })
+export async function getTaskById(taskId, { studentId } = {}) {
+  const data = await authRequest(withStudentId(`/api/panel/tasks/${taskId}`, studentId), { method: 'GET' })
   return data.task
 }
 
