@@ -20,7 +20,9 @@ const TaskOpticalResultModal = lazy(() => import('../teacher/components/TaskOpti
 const TaskDetailModal = lazy(() => import('../teacher/components/TaskDetailModal'))
 
 const POLL_MS = 30000
-const LIST_LIMIT = 40
+// Zil "yeni olanlar" için — uzun bir duvar yerine son birkaç bildirim yeter.
+// "Temizle" sunucu tarafında bu sınırdan bağımsız hepsini okundu işaretler.
+const LIST_LIMIT = 15
 
 const SERVICES = {
   parent: {
@@ -201,7 +203,7 @@ export default function NotificationBell({ role }) {
       </button>
 
       {open ? (
-        <div className="fixed inset-x-3 top-16 z-50 max-h-[calc(100dvh-5rem)] min-w-0 overflow-y-auto rounded-2xl border border-panel-border bg-panel-surface shadow-[0_18px_48px_rgba(31,36,77,0.16)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-96">
+        <div className="fixed inset-x-3 top-16 z-50 max-h-[calc(100dvh-5rem)] min-w-0 overflow-y-auto rounded-2xl border border-panel-border bg-panel-surface shadow-[0_18px_48px_rgba(31,36,77,0.16)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:max-h-[30rem] sm:w-[26rem]">
           <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-panel-border bg-panel-surface-soft/95 px-3 py-2 backdrop-blur">
             <span className="text-[13px] font-extrabold text-panel-text">Bildirimler</span>
             {notifications.length > 0 ? (
@@ -234,14 +236,14 @@ export default function NotificationBell({ role }) {
                   <button
                     type="button"
                     onClick={() => handleRowClick(notif)}
-                    className="flex w-full items-start gap-2 px-3 py-1.5 text-left leading-tight transition-colors hover:bg-panel-surface-soft"
+                    className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-panel-surface-soft"
                   >
-                    <span className="mt-[3px] shrink-0">
+                    <span className="mt-0.5 shrink-0">
                       <ActionIcon action={notif.action} />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-baseline justify-between gap-2">
-                        <span className="truncate text-[13px] font-semibold text-panel-text">
+                        <span className="truncate text-[13px] font-semibold leading-snug text-panel-text">
                           {notif.studentName || 'Öğrenci'}{' '}
                           <span className="font-normal text-panel-text-muted">
                             {ACTION_LABEL[notif.action] || 'işlem yaptı'}
@@ -251,7 +253,7 @@ export default function NotificationBell({ role }) {
                           {formatRelativeTime(notif.createdAt)}
                         </span>
                       </span>
-                      <span className="block truncate text-[11px] text-panel-text-muted" title={buildDetailLine(notif)}>
+                      <span className="mt-1 block text-[12px] leading-snug text-panel-text-muted">
                         {buildDetailLine(notif)}
                       </span>
                     </span>
