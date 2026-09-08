@@ -83,10 +83,12 @@ function getRuntimeConfig() {
     cookieName: process.env.AUTH_COOKIE_NAME || DEFAULT_COOKIE_NAME,
     cookieSecure:
       (process.env.AUTH_COOKIE_SECURE || '').toLowerCase() === 'true' || isProductionLike(),
-    // Set-Cookie'de sabit bir Domain kullanmak için (ör. "techcoach.com.tr"). Boşsa çerez
-    // host-only olur — bu durumda Azure SWA her istekte çereze isteğin geldiği host'u
-    // Domain olarak enjekte ediyor; apex + www aynı anda kullanıldığında aynı isimde iki
-    // ayrı çerez oluşup eskisi yeni oturumu gölgeliyor. Prod'da sabit değer verilmeli.
+    // Set-Cookie'de sabit bir Domain yazmak için. DİKKAT: Azure SWA arkasında BOŞ
+    // bırakılmalı — uygulama Set-Cookie'ye kendi Domain'ini eklediğinde SWA proxy'si
+    // başlığı komple düşürüyor (login/logout çerez basamıyor). SWA zaten isteğin
+    // geldiği host'u Domain olarak enjekte ediyor; apex+www mükerrer çerez sorunu
+    // index.html'deki www→apex redirect ile çözülüyor (bkz. PR #71). Bu knob yalnız
+    // SWA dışı bir barındırma senaryosu için var.
     cookieDomain: process.env.AUTH_COOKIE_DOMAIN || null,
     tokenTtlSeconds: 60 * 60 * 24 * 365,
   }

@@ -30,9 +30,9 @@ function serializeSessionCookie(token, maxAgeSeconds) {
     `Max-Age=${maxAgeSeconds}`,
   ]
 
-  // Domain'i açıkça yaz: aksi halde SWA her host için (apex vs www) ayrı Domain'li
-  // mükerrer çerez üretiyor ve eski oturum yenisini gölgeliyor. Aynı Domain =
-  // tek çerez; login/impersonate/logout hepsi aynı çerezi yazar/siler.
+  // SADECE SWA dışı barındırmada. Azure SWA arkasında AUTH_COOKIE_DOMAIN boş
+  // bırakılır: uygulama Domain yazınca SWA proxy'si Set-Cookie'yi tümden düşürüyor.
+  // (apex+www mükerrer çerezi index.html www→apex redirect ile çözülüyor — PR #71)
   if (cookieDomain) {
     parts.push(`Domain=${cookieDomain}`)
   }
