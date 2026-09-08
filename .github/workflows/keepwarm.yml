@@ -18,7 +18,7 @@ jobs:
         run: |
           for i in 1 2 3; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
-              https://delightful-ground-04b9ac510.1.azurestaticapps.net/api/health || echo 000)
+              https://techcoach.com.tr/api/health || echo 000)
             echo "attempt $i -> HTTP $code"
             [ "$code" = "200" ] && exit 0
             sleep 15
