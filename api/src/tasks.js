@@ -228,7 +228,6 @@ const AUTO_COMPLETE_TASK_TYPES = new Set([
   'spor',
   'sosyal-aktivite',
 ])
-const AUTO_COMPLETE_TASK_TYPE_LIST = [...AUTO_COMPLETE_TASK_TYPES]
 const PRIVATE_LESSON_TASK_TYPE = 'ozel-ders'
 
 // Ebeveynin "Özel Ders" görevi için gönderdiği student_teacher_id'nin gerçekten bu öğrenciye
@@ -260,34 +259,21 @@ const TR_UTC_OFFSET_MS = 3 * 60 * 60 * 1000
 // öğrencinin kendisinin mi yoksa sürenin dolmasıyla sistemin mi bitirdiği ayırt edilebilir.
 // Öğrencinin "Bitir" butonuyla yaptığı manuel tamamlama zaten
 // recordStudentTaskUpdateActivities üzerinden 'ogrenci' aktörüyle loglanıyor.
-async function autoCompleteExpiredBreaks({ studentId, date, isDraft }) {
-  if (isDraft) return
-
-  const selectBindings = {
-    studentId: { type: sql.UniqueIdentifier, value: studentId },
-    date: { type: sql.Date, value: date },
-  }
-  const taskTypeParamNames = AUTO_COMPLETE_TASK_TYPE_LIST.map((taskType, index) => {
-    const paramName = `autoType${index}`
-    selectBindings[paramName] = { type: sql.NVarChar(40), value: taskType }
-    return `@${paramName}`
-  })
-  const selectDb = await withRequest(selectBindings)
-  const pending = await selectDb.query(`
-    SELECT id, title, subject, task_type, date, start_time, end_time
-    FROM dbo.Tasks
-    WHERE student_id = @studentId AND date = @date AND is_draft = 0
-      AND task_type IN (${taskTypeParamNames.join(', ')})
-      AND status = 'bekliyor';
-  `)
-
-  if (!pending.recordset.length) return
+//
+// Perf: eskiden listTasksHandler ana sorgudan ÖNCE ayrı bir SELECT atıyordu (her görev
+// listesi yüklemesinde + her 30sn poll'de +1 seri DB round-trip, Basic tier'da ~0.7s).
+// Artık zaten çekilmiş `rows` (SELECT_TASK çıktısı) üzerinden çalışır: süresi geçmiş görev
+// yoksa hiç DB'ye gitmez; varsa UPDATE + log atıp `rows`'u yerinde günceller (yanıt
+// tamamlanmayı yansıtsın).
+async function autoCompleteExpiredBreakRows(rows, { studentId, isDraft }) {
+  if (isDraft || !rows || !rows.length) return
 
   const nowLocal = new Date(Date.now() + TR_UTC_OFFSET_MS)
   const todayLocalDate = nowLocal.toISOString().slice(0, 10)
   const nowLocalTime = nowLocal.toISOString().slice(11, 16)
 
-  const expired = pending.recordset.filter((row) => {
+  const expired = rows.filter((row) => {
+    if (row.status !== 'bekliyor') return false
     if (!AUTO_COMPLETE_TASK_TYPES.has(row.task_type)) return false
     const rowDate = toISODate(row.date)
     if (rowDate < todayLocalDate) return true
@@ -300,9 +286,7 @@ async function autoCompleteExpiredBreaks({ studentId, date, isDraft }) {
   const completedAt = new Date().toISOString()
 
   // Batch the update and the activity log insert into one round-trip each
-  // instead of two round-trips per expired row — this runs on every task
-  // list load (listTasksHandler calls this before returning), so it's on
-  // the busiest read path in the app.
+  // instead of two round-trips per expired row.
   const updateBindings = {
     studentId: { type: sql.UniqueIdentifier, value: studentId },
     completedAt: { type: sql.DateTime2, value: completedAt },
@@ -329,6 +313,14 @@ async function autoCompleteExpiredBreaks({ studentId, date, isDraft }) {
   const updatedIds = new Set(updateResult.recordset.map((updatedRow) => updatedRow.id))
   const completedRows = expired.filter((row) => updatedIds.has(row.id))
   if (!completedRows.length) return
+
+  // Zaten çekilmiş satırları yerinde güncelle ki bu yanıt tamamlanmayı yansıtsın
+  // (eskiden autoComplete ana SELECT'ten önce koştuğu için SELECT taze durumu görüyordu).
+  const completedAtDate = new Date(completedAt)
+  completedRows.forEach((row) => {
+    row.status = 'tamamlandi'
+    row.completed_at = completedAtDate
+  })
 
   const baseTime = Date.now()
   const activityBindings = {
@@ -365,7 +357,7 @@ async function autoCompleteExpiredBreaks({ studentId, date, isDraft }) {
     `)
   } catch (error) {
     if (error.number !== 208) {
-      console.warn('autoCompleteExpiredBreaks activity log skipped', error)
+      console.warn('autoCompleteExpiredBreakRows activity log skipped', error)
     }
   }
 }
@@ -556,7 +548,7 @@ async function listTasksHandler(request) {
 
     // Geçmiş günlerin tamamlanmamış görevlerini tek istekte listelemek için (bkz. TodayPage
     // history fetch) tekil "date" yerine "from"/"to" aralığı da kabul edilir. Aralık modunda
-    // autoCompleteExpiredBreaks çalıştırılmaz: geçmiş günler için bu kontrol anlamsızdır ve
+    // otomatik tamamlama çalıştırılmaz: geçmiş günler için bu kontrol anlamsızdır ve
     // bugünün süresi dolan molaları zaten ayrı bir "date" isteğiyle/periyodik yenilemeyle işlenir.
     if (from && to) {
       const requestDb = await withRequest({
@@ -578,8 +570,6 @@ async function listTasksHandler(request) {
       return json(400, { error: 'Tarih zorunludur.' })
     }
 
-    await autoCompleteExpiredBreaks({ studentId, date, isDraft })
-
     const requestDb = await withRequest({
       studentId: { type: sql.UniqueIdentifier, value: studentId },
       date: { type: sql.Date, value: date },
@@ -591,6 +581,10 @@ async function listTasksHandler(request) {
         AND t.is_unscheduled = 0
       ORDER BY t.start_time ASC, t.created_at ASC;
     `)
+
+    // Süresi geçmiş mola/serbest zaman görevlerini otomatik tamamla — çekilen satırlar
+    // üzerinden çalışır, süresi geçen yoksa ek DB isteği atmaz.
+    await autoCompleteExpiredBreakRows(result.recordset, { studentId, isDraft })
 
     return json(200, { tasks: result.recordset.map(sanitizeTask) })
   } catch (error) {
