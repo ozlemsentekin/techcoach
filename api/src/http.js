@@ -21,7 +21,7 @@ function getClientIp(request) {
 }
 
 function serializeSessionCookie(token, maxAgeSeconds) {
-  const { cookieName, cookieSecure } = getRuntimeConfig()
+  const { cookieName, cookieSecure, cookieDomain } = getRuntimeConfig()
   const parts = [
     `${cookieName}=${token}`,
     'Path=/',
@@ -29,6 +29,13 @@ function serializeSessionCookie(token, maxAgeSeconds) {
     'SameSite=Strict',
     `Max-Age=${maxAgeSeconds}`,
   ]
+
+  // Domain'i açıkça yaz: aksi halde SWA her host için (apex vs www) ayrı Domain'li
+  // mükerrer çerez üretiyor ve eski oturum yenisini gölgeliyor. Aynı Domain =
+  // tek çerez; login/impersonate/logout hepsi aynı çerezi yazar/siler.
+  if (cookieDomain) {
+    parts.push(`Domain=${cookieDomain}`)
+  }
 
   if (cookieSecure) {
     parts.push('Secure')
