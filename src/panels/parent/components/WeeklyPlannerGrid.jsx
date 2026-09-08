@@ -1134,7 +1134,7 @@ export default function WeeklyPlannerGrid({
       .filter((slot) => !slot.startDate || date >= slot.startDate)
       .filter(
         (slot) =>
-          !(lessonScheduleExceptions || []).some(
+          ![...(lessonScheduleExceptions || []), ...(slot.scheduleExceptions || [])].some(
             (exception) =>
               exception.dayOfWeek === slot.dayOfWeek && exception.startTime === slot.startTime && exception.date === date,
           ),

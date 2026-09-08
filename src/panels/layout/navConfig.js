@@ -7,21 +7,32 @@ const KITAPLIK_PARENT_ITEM = { to: '/parent/bookshelf', label: 'Kitaplık', icon
 const KUTUPHANE_TEACHER_ITEM = { to: '/teacher/library', label: 'Kütüphane', icon: 'Library' }
 const KITAPLIK_TEACHER_ITEM = { to: '/teacher/bookshelf', label: 'Kitaplık', icon: 'BookMarked' }
 
-export const STUDENT_PRIMARY_NAV = [
-  { to: '/student/today', label: 'Bugün', icon: 'Home' },
-  { to: '/student/weekly-plan', label: 'Haftalık Planım', icon: 'CalendarRange' },
-  { to: '/student/mistakes', label: 'Hata Defterim', icon: 'AlertCircle' },
-  { to: '/student/study-history', label: 'Çalışma Geçmişim', icon: 'History' },
-  { to: '/student/progress', label: 'Gelişimim', icon: 'TrendingUp' },
-]
-
-export const STUDENT_MORE_NAV = [
-  { to: '/student/courses', label: 'Derslerim', icon: 'BookOpen' },
+// Öğrenci menüsü iki ana başlık altında gruplanır ("Çalışma Planım", "Çalışma
+// Sonuçlarım"); "Öğretmenlerim" ve "Taleplerim" tekil öğe olarak kalır.
+export const STUDENT_NAV = [
+  {
+    key: 'calisma-planim',
+    label: 'Çalışma Planım',
+    icon: 'CalendarRange',
+    children: [
+      { to: '/student/today', label: 'Bugün', icon: 'Home' },
+      { to: '/student/weekly-plan', label: 'Bu Hafta', icon: 'CalendarRange' },
+    ],
+  },
+  {
+    key: 'calisma-sonuclarim',
+    label: 'Çalışma Sonuçlarım',
+    icon: 'BarChart3',
+    children: [
+      { to: '/student/study-history', label: 'Çalışma Geçmişim', icon: 'History' },
+      { to: '/student/mistakes', label: 'Hata Defterim', icon: 'AlertCircle' },
+      { to: '/student/progress', label: 'Gelişimim', icon: 'TrendingUp' },
+      { to: '/student/courses', label: 'Ders Başarım', icon: 'BookOpen' },
+    ],
+  },
   { to: '/student/teachers', label: 'Öğretmenlerim', icon: 'GraduationCap' },
   { to: '/student/requests', label: 'Taleplerim', icon: 'ClipboardList' },
 ]
-
-export const STUDENT_SIDEBAR_NAV = [...STUDENT_PRIMARY_NAV, ...STUDENT_MORE_NAV]
 
 export const PARENT_STUDENTS_NAV_ITEM = { to: '/parent/students', label: 'Çocuklarım', icon: 'Users' }
 export const PARENT_REQUESTS_NAV_ITEM = { to: '/parent/requests', label: 'Taleplerim', icon: 'ClipboardList' }
@@ -35,33 +46,52 @@ export function getParentStudentsNavItem(studentCount) {
   return { ...PARENT_STUDENTS_NAV_ITEM, label: parentStudentsNavLabel(studentCount) }
 }
 
-// Henüz hiç çocuk profili eklenmemiş bir veli için Bugün/Haftalık Plan sayfalarının
-// hepsi boş/hatalı görünür (bunlar bir öğrenci bağlamı gerektirir); o yüzden ilk kayıtta tek
-// birincil menü öğesi olarak yalnızca Çocuklarım gösterilir.
-export function getParentPrimaryNav(hasStudents, canManageLibrary = false, studentCount = null) {
-  if (!hasStudents) return [getParentStudentsNavItem(studentCount)]
-  return [
-    { to: '/parent/dashboard', label: 'Bugün', icon: 'Home' },
-    { to: '/parent/weekly-plan', label: 'Haftalık Plan', icon: 'CalendarRange' },
-    { to: '/parent/study-history', label: 'Çalışma Geçmişi', icon: 'History' },
-    { to: '/parent/progress', label: 'Gelişim Analizi', icon: 'BarChart3' },
-    canManageLibrary ? KUTUPHANE_PARENT_ITEM : KITAPLIK_PARENT_ITEM,
-  ]
+// Gruplu bir menüyü mobil alt gezinme için ikiye ayırır: ilk grup birincil (alt bar),
+// kalanı grup başlıklarıyla "Daha Fazla" listesine akar. Grup yoksa hepsi birincil olur.
+export function navToMobile(nav) {
+  const firstGroup = nav.findIndex((item) => item.children)
+  if (firstGroup === -1) return { primary: nav, more: [] }
+  const primary = nav[firstGroup].children
+  const more = nav
+    .filter((_, index) => index !== firstGroup)
+    .flatMap((item) => (item.children ? [{ heading: item.label }, ...item.children] : [item]))
+  return { primary, more }
 }
 
-export function getParentMoreNav(isAdmin, hasStudents = true, studentCount = null) {
-  const parentMore = [getParentStudentsNavItem(studentCount), PARENT_REQUESTS_NAV_ITEM]
-  const base = isAdmin
-    ? [KITAPLIK_PARENT_ITEM, ...parentMore]
-    : [...parentMore]
-  // Çocuklarım hiç öğrenci yokken zaten birincil menüde gösteriliyor, burada tekrar etmesin.
-  return hasStudents ? base : base.filter((item) => item.to !== PARENT_STUDENTS_NAV_ITEM.to)
-}
+// Veli menüsü öğrenci paneliyle aynı stilde gruplanır. Henüz hiç çocuk profili
+// eklenmemiş bir veli için Bugün/Haftalık Plan sayfaları boş görünür (öğrenci bağlamı
+// gerektirir); o yüzden ilk kayıtta yalnızca Çocuklarım + Taleplerim gösterilir.
+export function getParentNav({ hasStudents = true, canManageLibrary = false, isAdmin = false, studentCount = null } = {}) {
+  const studentsItem = getParentStudentsNavItem(studentCount)
+  if (!hasStudents) return [studentsItem, PARENT_REQUESTS_NAV_ITEM]
 
-export function getParentSidebarNav(isAdmin, hasStudents = true, canManageLibrary = false, studentCount = null) {
+  const canManage = canManageLibrary || isAdmin
+  const libraryItems = []
+  if (canManage) libraryItems.push(KUTUPHANE_PARENT_ITEM)
+  if (isAdmin || !canManage) libraryItems.push(KITAPLIK_PARENT_ITEM)
+
   return [
-    ...getParentPrimaryNav(hasStudents, canManageLibrary || isAdmin, studentCount),
-    ...getParentMoreNav(isAdmin, hasStudents, studentCount),
+    {
+      key: 'calisma-plani',
+      label: 'Çalışma Planı',
+      icon: 'CalendarRange',
+      children: [
+        { to: '/parent/dashboard', label: 'Bugün', icon: 'Home' },
+        { to: '/parent/weekly-plan', label: 'Bu Hafta', icon: 'CalendarRange' },
+      ],
+    },
+    {
+      key: 'calisma-sonuclari',
+      label: 'Çalışma Sonuçları',
+      icon: 'BarChart3',
+      children: [
+        { to: '/parent/study-history', label: 'Çalışma Geçmişi', icon: 'History' },
+        { to: '/parent/progress', label: 'Gelişim Analizi', icon: 'TrendingUp' },
+      ],
+    },
+    ...libraryItems,
+    studentsItem,
+    PARENT_REQUESTS_NAV_ITEM,
   ]
 }
 
@@ -71,24 +101,32 @@ export function isNavItemActive(to, location) {
   return location.search.replace(/^\?/, '') === search
 }
 
+// Öğretmen menüsü de öğrenci/veli paneliyle aynı stilde gruplanır.
 // "Sınıf Analizi" tüm öğretmenlerde görünür; sayfa, öğrencilerin sınıf bilgisinden
 // sekmeleri kendisi oluşturur (sınıf bilgisi yoksa yönlendirici bir boş durum gösterir).
-export function getTeacherPrimaryNav(canManageLibrary = false) {
+export function getTeacherNav(canManageLibrary = false) {
   return [
-    { to: '/teacher/students', label: 'Öğrencilerim', icon: 'Users' },
-    { to: '/teacher/class-analysis', label: 'Sınıf Analizi', icon: 'BarChart3' },
-    { to: '/teacher/lesson-plan', label: 'Ders Planım', icon: 'CalendarRange' },
-    { to: '/teacher/parents', label: 'Velilerim', icon: 'UserRound' },
+    {
+      key: 'kisilerim',
+      label: 'Kişilerim',
+      icon: 'Users',
+      children: [
+        { to: '/teacher/students', label: 'Öğrencilerim', icon: 'Users' },
+        { to: '/teacher/parents', label: 'Velilerim', icon: 'UserRound' },
+      ],
+    },
+    {
+      key: 'sinifim',
+      label: 'Sınıfım',
+      icon: 'BarChart3',
+      children: [
+        { to: '/teacher/lesson-plan', label: 'Ders Planım', icon: 'CalendarRange' },
+        { to: '/teacher/class-analysis', label: 'Sınıf Analizi', icon: 'BarChart3' },
+      ],
+    },
     canManageLibrary ? KUTUPHANE_TEACHER_ITEM : KITAPLIK_TEACHER_ITEM,
+    { to: '/teacher/requests', label: 'Taleplerim', icon: 'ClipboardList' },
   ]
-}
-
-export const TEACHER_MORE_NAV = [
-  { to: '/teacher/requests', label: 'Taleplerim', icon: 'ClipboardList' },
-]
-
-export function getTeacherSidebarNav(canManageLibrary = false) {
-  return [...getTeacherPrimaryNav(canManageLibrary), ...TEACHER_MORE_NAV]
 }
 
 export const PARENT_ADMIN_NAV = {

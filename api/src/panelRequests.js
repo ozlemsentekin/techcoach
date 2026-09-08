@@ -38,20 +38,32 @@ async function requirePanelUser(request) {
   }
 
   const session = verifySessionToken(token)
-  const userId = session.actingParentId || session.sub
+  // Veli bir çocuğunun "öğrenci görünümüne" geçtiğinde (actingParentId dolu) talepler o
+  // öğrencinin taleplerdir; velinin kendi talepleri bu bağlama sızmamalı. KVKK/aydınlatma
+  // onayı ise velinin hesabında olduğundan denetimi veli kaydı üzerinden yapıyoruz.
+  const isActingAsStudent = Boolean(session.actingParentId)
+  const authId = session.actingParentId || session.sub
+  const ownerId = isActingAsStudent ? session.sub : authId
 
-  const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: userId } })
+  const requestDb = await withRequest({
+    authId: { type: sql.UniqueIdentifier, value: authId },
+    ownerId: { type: sql.UniqueIdentifier, value: ownerId },
+  })
   const result = await requestDb.query(`
-    SELECT TOP 1 id, full_name, role, is_admin, aydinlatma_accepted_at, kvkk_accepted_at
-    FROM dbo.Users WHERE id = @id;
+    SELECT id, full_name, role, is_admin, aydinlatma_accepted_at, kvkk_accepted_at
+    FROM dbo.Users WHERE id IN (@authId, @ownerId);
   `)
-  const record = result.recordset[0]
-  if (!record) {
+  const authRecord = result.recordset.find((row) => String(row.id).toLowerCase() === String(authId).toLowerCase())
+  const ownerRecord = result.recordset.find((row) => String(row.id).toLowerCase() === String(ownerId).toLowerCase())
+  if (!authRecord || !ownerRecord) {
     return { error: json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders()) }
   }
 
-  const role = session.actingParentId ? 'ebeveyn' : record.role
-  if (role !== 'ogretmen' && (!record.aydinlatma_accepted_at || !record.kvkk_accepted_at)) {
+  const role = isActingAsStudent ? 'ogrenci' : authRecord.role
+  if (
+    authRecord.role !== 'ogretmen' &&
+    (!authRecord.aydinlatma_accepted_at || !authRecord.kvkk_accepted_at)
+  ) {
     return {
       error: json(403, {
         error: 'Devam etmek için KVKK ve aydınlatma metnini onaylamalısınız.',
@@ -61,10 +73,10 @@ async function requirePanelUser(request) {
   }
 
   return {
-    userId: record.id,
+    userId: ownerRecord.id,
     role,
-    name: record.full_name,
-    isAdmin: Boolean(record.is_admin),
+    name: ownerRecord.full_name,
+    isAdmin: Boolean(authRecord.is_admin) && !isActingAsStudent,
   }
 }
 

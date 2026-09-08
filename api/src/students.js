@@ -145,6 +145,7 @@ function sanitizeStudentTeacher(record) {
     typeLabel: TEACHER_TYPE_LABELS[record.teacher_type] || record.teacher_type,
     isActive: record.is_active === undefined ? true : Boolean(record.is_active),
     schedule: parseScheduleJson(record.schedule_json),
+    scheduleExceptions: parseScheduleJson(record.schedule_exceptions_json),
     resourceBooks: record.resourceBooks || [],
     resourceCount: Number(record.resource_count) || 0,
     teacherUserId: record.teacher_user_id || null,
@@ -379,6 +380,7 @@ async function fetchStudentTeachers(studentId) {
   const result = await requestDb.query(`
     SELECT st.id, st.student_id, st.subject_id, s.name AS subject_name,
            st.teacher_full_name, st.phone, st.teacher_type, st.schedule_json,
+           st.schedule_exceptions_json,
            st.is_active, st.teacher_user_id, st.access_granted_at,
            st.created_at, st.updated_at
     FROM dbo.StudentTeachers st

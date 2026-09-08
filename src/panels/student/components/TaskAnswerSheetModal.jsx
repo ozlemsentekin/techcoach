@@ -37,6 +37,8 @@ function buildGalleryItems(test, photosMap) {
 }
 
 const OPTIONS = ['A', 'B', 'C', 'D']
+// Backend'deki DONE_STATUSES ile eşleşmeli (api/src/tasks.js).
+const DONE_STATUSES = ['tamamlandi', 'kismen-tamamlandi']
 // Backend'deki BLANK_ANSWER_LABEL ile eşleşmeli (api/src/tasks.js).
 const BLANK_LABEL = '-'
 
@@ -275,6 +277,10 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
     [tests, resultsByTest],
   )
   const allLocked = allGraded && !canRegrade
+  // "Geri Al" sonrası: tüm testler değerlendirilmiş ama görev artık tamamlanmış sayılmıyor.
+  // Öğrenci cevapları değiştiremez, ama görevi tekrar tamamlayabilmeli (kilitli buton yerine
+  // "Görevi Tamamla"). handleSave zaten mevcut cevapları yeniden notlatıp status'ü günceller.
+  const canRecomplete = allLocked && !DONE_STATUSES.includes(task.status)
 
   const handleSelect = (testId, orderNo, label) => {
     setAnswersByTest((prev) => {
@@ -508,16 +514,18 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving || allLocked}
+              disabled={saving || (allLocked && !canRecomplete)}
               className="w-full rounded-xl bg-student-theme-primary px-4 py-3 text-sm font-semibold text-student-theme-button-text hover:bg-student-theme-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary disabled:opacity-60"
             >
               {saving
                 ? 'Kaydediliyor...'
-                : allLocked
-                  ? 'Tüm testler değerlendirildi'
-                  : canRegrade && allGraded
-                    ? 'Yeniden Değerlendir'
-                    : `Kaydet (${totalQuestions} soru)`}
+                : canRecomplete
+                  ? 'Görevi Tamamla'
+                  : allLocked
+                    ? 'Tüm testler değerlendirildi'
+                    : canRegrade && allGraded
+                      ? 'Yeniden Değerlendir'
+                      : `Kaydet (${totalQuestions} soru)`}
             </button>
           </div>
         ) : null}

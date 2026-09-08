@@ -9,13 +9,11 @@ import MobileBottomNavigation from './MobileBottomNavigation'
 import { useAuth } from '../../context/useAuth'
 import { useParentStudentsGate } from '../parent/useParentStudentsGate'
 import {
-  STUDENT_PRIMARY_NAV,
-  STUDENT_MORE_NAV,
-  getParentPrimaryNav,
-  getParentMoreNav,
+  STUDENT_NAV,
+  getParentNav,
+  getTeacherNav,
+  navToMobile,
   PARENT_ADMIN_NAV,
-  getTeacherPrimaryNav,
-  TEACHER_MORE_NAV,
 } from './navConfig'
 
 const SIDEBAR_BY_ROLE = { parent: ParentSidebar, student: StudentSidebar, teacher: TeacherSidebar }
@@ -28,20 +26,20 @@ export default function PanelLayout({ role }) {
   const Sidebar = SIDEBAR_BY_ROLE[role] || StudentSidebar
   const isAdminSection = role === 'parent' && location.pathname.startsWith('/parent/admin')
   const canManageLibrary = Boolean(authUser?.isAdmin || authUser?.canManageLibrary)
-  const primaryItems = isAdminSection
-    ? [RETURN_TO_PANEL_ITEM]
-    : role === 'parent'
-      ? getParentPrimaryNav(hasStudents, canManageLibrary, studentCount)
+  const roleNav =
+    role === 'parent'
+      ? getParentNav({
+          hasStudents,
+          canManageLibrary: Boolean(authUser?.canManageLibrary),
+          isAdmin: Boolean(authUser?.isAdmin),
+          studentCount,
+        })
       : role === 'teacher'
-        ? getTeacherPrimaryNav(canManageLibrary)
-        : STUDENT_PRIMARY_NAV
-  const moreItems = isAdminSection
-    ? PARENT_ADMIN_NAV.children
-    : role === 'parent'
-      ? getParentMoreNav(authUser?.isAdmin, hasStudents, studentCount)
-      : role === 'teacher'
-        ? TEACHER_MORE_NAV
-        : STUDENT_MORE_NAV
+        ? getTeacherNav(canManageLibrary)
+        : STUDENT_NAV
+  const { primary, more } = navToMobile(roleNav)
+  const primaryItems = isAdminSection ? [RETURN_TO_PANEL_ITEM] : primary
+  const moreItems = isAdminSection ? PARENT_ADMIN_NAV.children : more
 
   return (
     <BillingGateProvider>
