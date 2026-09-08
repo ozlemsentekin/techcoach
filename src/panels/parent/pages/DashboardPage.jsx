@@ -23,6 +23,7 @@ const TaskAnswerSheetModal = lazy(() => import('../../student/components/TaskAns
 const TaskCompletionFlow = lazy(() => import('../components/TaskCompletionFlow'))
 
 const date = todayISODate()
+const SELECTED_STUDENT_STORAGE_KEY = 'tc.parent.selectedStudentId'
 const LOW_PRIORITY_BALANCE_WARNINGS = new Set(['Mola eklenmemiş', 'Serbest zaman yok'])
 
 function getPendingRequests(requests) {
@@ -184,7 +185,15 @@ export default function DashboardPage() {
   const { authUser } = useAuth()
   const { restricted: billingRestricted, promptPayment } = useBillingGate()
   const [students, setStudents] = useState(null)
-  const [selectedStudentId, setSelectedStudentId] = useState('')
+  // Son seçilen çocuğu hatırla: sayfa açılır açılmaz görev sorgusu bununla başlar,
+  // /api/parent/students yanıtını beklemeden (kritik yol 2 seri istekten 1'e iner).
+  const [selectedStudentId, setSelectedStudentId] = useState(() => {
+    try {
+      return localStorage.getItem(SELECTED_STUDENT_STORAGE_KEY) || ''
+    } catch {
+      return ''
+    }
+  })
   const [tasks, setTasks] = useState([])
   const [backlogTasks, setBacklogTasks] = useState([])
   const [completedBacklogTasks, setCompletedBacklogTasks] = useState([])
@@ -209,9 +218,13 @@ export default function DashboardPage() {
         if (ignore) return
         const sorted = [...data.students].sort((a, b) => a.fullName.localeCompare(b.fullName, 'tr'))
         setStudents(sorted)
-        setSelectedStudentId((current) =>
-          current && sorted.some((student) => student.id === current) ? current : sorted[0]?.id || '',
-        )
+        const storedIsValid = selectedStudentId && sorted.some((student) => student.id === selectedStudentId)
+        if (!storedIsValid) {
+          // localStorage'daki id boş/bayat: ilk (isme göre) çocuğa düş ve o id ile
+          // erken başlatılmış görev sorgusundan çıkmış olabilecek hatayı temizle.
+          setLoadError('')
+          setSelectedStudentId(sorted[0]?.id || '')
+        }
       })
       .catch((err) => {
         if (!ignore) {
@@ -224,7 +237,19 @@ export default function DashboardPage() {
     return () => {
       ignore = true
     }
+    // selectedStudentId bilerek dışarıda: yalnızca mount anındaki (localStorage'dan
+    // gelen) değeri doğrulamak istiyoruz, her değişimde students'ı yeniden çekmek değil.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authUser?.id])
+
+  useEffect(() => {
+    if (!selectedStudentId) return
+    try {
+      localStorage.setItem(SELECTED_STUDENT_STORAGE_KEY, selectedStudentId)
+    } catch {
+      // localStorage yoksa (gizli sekme vb.) sorun değil — sadece hatırlamaz.
+    }
+  }, [selectedStudentId])
 
   useEffect(() => {
     if (!selectedStudentId) return undefined
