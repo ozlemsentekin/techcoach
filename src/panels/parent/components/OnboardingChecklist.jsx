@@ -109,7 +109,16 @@ export default function OnboardingChecklist({ students, selectedStudentId }) {
   const requiredDone = requiredSteps.filter((step) => step.done).length
   const allRequiredDone = requiredSteps.length > 0 && requiredDone === requiredSteps.length
 
-  if (!student || dismissed || authUser?.actingAdmin) return null
+  // Zorunlu adımlar (kaynak + ilk görev) tamamlanınca rehber işini bitirmiştir:
+  // kalıcı olarak sustur ve bir daha gösterme.
+  useEffect(() => {
+    if (allRequiredDone && parentId && !dismissed) {
+      markDismissed(parentId)
+      setDismissed(true)
+    }
+  }, [allRequiredDone, parentId, dismissed])
+
+  if (!student || dismissed || allRequiredDone || authUser?.actingAdmin) return null
   if (hasPlannedTask === null) return null
 
   const handleHide = () => {
@@ -122,8 +131,8 @@ export default function OnboardingChecklist({ students, selectedStudentId }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-wide text-panel-text-muted">Başlangıç Rehberi</p>
-          <h2 className="mt-1 text-lg font-bold text-panel-text">{allRequiredDone ? 'Günlük takibe hazırsınız' : `${firstName(student.fullName)} için sıradaki adım`}</h2>
-          <p className="mt-2 text-sm leading-6 text-panel-text-muted">{allRequiredDone ? 'İlk göreviniz planlandı. Aşağıdaki günlük akıştan çalışmaları takip edin; sonuçlar biriktikçe Gelişim Analizi’ni inceleyin.' : 'Profil hazır. Şimdi küçük bir çalışma hedefi belirleyerek planı hayata geçirin.'}</p>
+          <h2 className="mt-1 text-lg font-bold text-panel-text">{`${firstName(student.fullName)} için sıradaki adım`}</h2>
+          <p className="mt-2 text-sm leading-6 text-panel-text-muted">Profil hazır. Şimdi küçük bir çalışma hedefi belirleyerek planı hayata geçirin.</p>
         </div>
         <button
           type="button"
@@ -148,7 +157,7 @@ export default function OnboardingChecklist({ students, selectedStudentId }) {
       </div>
 
       <ul className="mt-4 flex flex-col divide-y divide-panel-border">
-        {steps.filter((step) => !allRequiredDone || step.optional).map((step) => (
+        {steps.map((step) => (
           <li key={step.key} className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
             {step.done ? (
               <CheckCircle2 size={20} className="shrink-0 text-panel-sage" aria-hidden="true" />

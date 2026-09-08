@@ -87,6 +87,22 @@ export async function getWrongQuestionPhoto(id, studentId) {
   return data.photoUrl
 }
 
+/**
+ * Hata Defteri'ndeki bir sorunun fotoğrafını yenisiyle değiştirir (yanlış/okunmayan fotoğraf için).
+ * Dönen nesne dolu `photoUrl` taşır — galeri tembel çekim yapmadan yeni fotoğrafı gösterebilir.
+ * @param {string} photoDataUrl data:image/... base64
+ * @param {string} [studentId]
+ * @returns {Promise<WrongQuestion>}
+ */
+export async function updateWrongQuestionPhoto(id, photoDataUrl, studentId) {
+  const body = studentId ? { photo: photoDataUrl, studentId } : { photo: photoDataUrl }
+  const data = await authRequest(`/api/panel/wrong-questions/${id}/photo`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+  return data.wrongQuestion
+}
+
 /** @returns {Promise<WrongQuestion>} */
 export async function addWrongQuestion(entry) {
   const data = await authRequest('/api/panel/wrong-questions', {

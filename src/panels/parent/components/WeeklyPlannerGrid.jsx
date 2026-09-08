@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { HOMEWORK_TASK_TYPES, TASK_TYPES } from '../../../data/taskTypes'
 import TaskReviewControl from '../../shared/TaskReviewControl'
+import TaskAttachment from '../../shared/TaskAttachment'
 import { parseTimeToMinutes, todayISODate, WEEKDAY_KEYS as DAY_KEYS } from '../../../utils/time'
 import { isBacklogTask } from '../../../utils/backlogTasks'
 import { isEndedPrivateLessonForToday } from '../../../utils/lessonTasks'
@@ -609,7 +610,14 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
   const [showBreakMenu, setShowBreakMenu] = useState(false)
   const [expanded, setExpanded] = useState(false)
 
-  if (task.isScheduleSlot) return <ScheduleSlotCard task={task} muted={muted} onManage={muted ? undefined : onManageLessonSlot} />
+  if (task.isScheduleSlot)
+    return (
+      <ScheduleSlotCard
+        task={task}
+        muted={muted}
+        onManage={muted || task.isReadOnlyScheduleSlot ? undefined : onManageLessonSlot}
+      />
+    )
   if (task.isSchoolSlot) return <SchoolSlotCard task={task} muted={muted} />
 
   const style = getTaskStyle(task)
@@ -668,6 +676,7 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
     Boolean(pageProgress) ||
     graded ||
     Boolean(completionTimestampLabel) ||
+    Boolean(task.attachmentUrl) ||
     Boolean(task.createdBy)
 
   const handlePick = (minutes) => {
@@ -990,6 +999,11 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
               onToggle={(next) => onToggleReview(task, next)}
             />
           ) : null}
+          {task.attachmentUrl ? (
+            <div onClick={(event) => event.stopPropagation()} role="presentation">
+              <TaskAttachment url={task.attachmentUrl} name={task.attachmentName} />
+            </div>
+          ) : null}
           {!isHomework ? <CreatorNote task={task} /> : null}
           <CompletionTimerNote
             durationLabel={completionDurationLabel}
@@ -1051,6 +1065,8 @@ export default function WeeklyPlannerGrid({
   tasksByDate,
   lessonSchedule,
   lessonScheduleExceptions,
+  otherLessonSchedule,
+  otherLessonScheduleExceptions,
   schoolSchedule,
   schoolHolidays,
   onAddHomework,
@@ -1131,6 +1147,28 @@ export default function WeeklyPlannerGrid({
         endTime: slot.endTime,
         date,
       }))
+    // Öğrencinin BAŞKA özel öğretmenleriyle olan sabit ders yuvaları — salt okunur, öğretmen
+    // adı olmadan (yalnızca ders + saat). Yönetilemez: onManage verilmez.
+    const otherScheduleSlots = (otherLessonSchedule || [])
+      .filter((slot) => slot.dayOfWeek === DAY_KEYS[index] && slot.startTime)
+      .filter((slot) => !slot.startDate || date >= slot.startDate)
+      .filter(
+        (slot) =>
+          !(otherLessonScheduleExceptions || []).some(
+            (exception) =>
+              exception.dayOfWeek === slot.dayOfWeek && exception.startTime === slot.startTime && exception.date === date,
+          ),
+      )
+      .map((slot, slotIndex) => ({
+        ...slot,
+        id: `other-schedule-${date}-${slotIndex}`,
+        isScheduleSlot: true,
+        isReadOnlyScheduleSlot: true,
+        teacherFullName: undefined,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        date,
+      }))
     const isHoliday = isSchoolHoliday(date, schoolHolidays)
     const schoolSlots = (isHoliday ? [] : schoolSchedule || [])
       .filter((slot) => slot.dayOfWeek === DAY_KEYS[index] && slot.startTime)
@@ -1155,7 +1193,7 @@ export default function WeeklyPlannerGrid({
             },
           ]
         : []
-    const tasks = [...(tasksByDate?.[date] || []), ...scheduleSlots, ...schoolSlots, ...holidaySlots]
+    const tasks = [...(tasksByDate?.[date] || []), ...scheduleSlots, ...otherScheduleSlots, ...schoolSlots, ...holidaySlots]
       // Bugün planlanmış bir özel ders bitiş saatini geçtiyse akıştan otomatik düşer.
       .filter((task) => date !== currentDate || !isEndedPrivateLessonForToday(task, date))
       // Önce saati olanlar (saate göre), sonra saatsiz görevler eklenme tarihine göre.

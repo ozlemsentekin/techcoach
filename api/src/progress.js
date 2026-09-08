@@ -3,6 +3,7 @@ const { isConfigError } = require('./config')
 const { json } = require('./http')
 const { isSessionError } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
+const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
 
 const MISTAKE_REASONS = ['dikkat-hatasi', 'bilgi-eksikligi', 'soruyu-anlamadim']
 
@@ -421,6 +422,53 @@ async function getWrongQuestionPhotoHandler(request) {
   }
 }
 
+// Hata Defterim'de yanlış çekilmiş / okunmayan bir fotoğrafı yenisiyle değiştirir. Yeni fotoğraf
+// dışında hiçbir alanı etkilemez (konu, hata nedeni, inceleme durumu vb. korunur). Cevap kağıdı
+// akışındaki saveWrongQuestionPhotoHandler'ın (tasks.js) Hata Defteri'nden erişilebilen muadili.
+async function updateWrongQuestionPhotoHandler(request) {
+  try {
+    const wrongQuestionId = request.params.wrongQuestionId
+    const payload = await request.json().catch(() => null)
+    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
+    if (error) {
+      return error
+    }
+
+    const photoCheck = sanitizeMistakePhoto(payload?.photo)
+    if (photoCheck.error) {
+      return json(400, { error: photoCheck.error })
+    }
+
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoCheck.value },
+    })
+    const result = await requestDb.query(`
+      UPDATE dbo.WrongQuestions SET photo_url = @photoUrl
+      OUTPUT ${WRONG_QUESTION_OUTPUT_COLUMNS}
+      WHERE id = @id AND student_id = @studentId;
+    `)
+
+    if (!result.recordset[0]) {
+      return json(404, { error: 'Kayıt bulunamadı.' })
+    }
+
+    return json(200, { wrongQuestion: sanitizeWrongQuestion(result.recordset[0]) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('updateWrongQuestionPhotoHandler failed', error)
+    return json(500, { error: 'Fotoğraf güncellenemedi.' })
+  }
+}
+
 async function addWrongQuestionHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
@@ -769,6 +817,237 @@ async function listStudySessionsHandler(request) {
   }
 }
 
+// "Çalışma Geçmişi" (veli + öğrenci): öğrencinin çözüp sonucu kaydedilmiş her testi/ödevi tek bir
+// tarih-saat sıralı listede döner. Üç kaynak birleştirilir:
+//  1) Soru bankası görevlerinde optik formla değerlendirilmiş testler
+//     (dbo.Tasks.test_results_json — testId -> { correct, wrong, blank, gradedAt }): test başına satır.
+//  2) Kitaplık / Kaynaklar ekranından elle optik sonucu girilen testler
+//     (dbo.StudentManualTestCompletions): test başına satır.
+//  3) Tamamlanmış ödev görevleri (okul ödevi dahil) — teste bağlı optik sonucu YOKKEN öğrencinin
+//     görev kapatırken girdiği doğru/yanlış/boş sayıları (dbo.Tasks.correct_count vb.): görev başına
+//     tek toplu satır. Okul ödevleri bir ResourceBook/testine bağlı olmadığından cevap kağıdı yok.
+// Aynı testId hem bir görevde hem de manuel tamamlamada varsa (manuel optik, bağlı görevi
+// otomatik tamamladığından çift sayım olur) görev satırı tutulur, manuel satır atlanır.
+async function listStudyHistoryHandler(request) {
+  try {
+    const { error, studentId } = await requireStudentContext(request)
+    if (error) {
+      return error
+    }
+
+    const bindings = { studentId: { type: sql.UniqueIdentifier, value: studentId } }
+
+    const [tasksResult, manualResult] = await Promise.all([
+      withRequest(bindings).then((requestDb) =>
+        requestDb.query(`
+          SELECT t.id AS task_id, t.title AS task_title, t.subject, t.task_type, t.status,
+                 t.date AS task_date, t.completed_at, t.updated_at, t.test_results_json,
+                 t.selected_test_ids_json, t.correct_count, t.wrong_count, t.blank_count,
+                 t.target_question_count, t.resource_book_id, t.school_resource_id,
+                 rb.name AS resource_book_name, rb.resource_type,
+                 scr.name AS school_resource_name,
+                 p.name AS publisher_name,
+                 COALESCE(s.name, ts.name) AS subject_name
+          FROM dbo.Tasks t
+          LEFT JOIN dbo.ResourceBooks rb ON rb.id = t.resource_book_id
+          LEFT JOIN dbo.SchoolClassResources scr ON scr.id = t.school_resource_id
+          LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+          LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
+          LEFT JOIN dbo.Subjects ts ON ts.id = t.subject_id
+          WHERE t.student_id = @studentId AND t.is_draft = 0
+            AND (
+              (t.test_results_json IS NOT NULL AND t.test_results_json <> '{}')
+              OR (
+                t.status = 'tamamlandi' AND t.correct_count IS NOT NULL
+                AND t.task_type IN ('odev', 'soru-bankasi-odevi', 'okul-odevi', 'etkinlik-odevi')
+              )
+            );
+        `),
+      ),
+      withRequest(bindings).then((requestDb) =>
+        requestDb.query(`
+          SELECT smtc.test_id, smtc.correct_count, smtc.wrong_count, smtc.blank_count,
+                 smtc.marked_at, smtc.answers_json,
+                 tt.name AS test_name, COALESCE(tt.topic_name, rbt.name) AS topic_name,
+                 tt.page_start, tt.page_end, tt.question_count,
+                 rb.id AS resource_book_id, rb.name AS resource_book_name, rb.resource_type,
+                 p.name AS publisher_name, s.name AS subject_name
+          FROM dbo.StudentManualTestCompletions smtc
+          INNER JOIN dbo.ResourceBookTopicTests tt ON tt.id = smtc.test_id
+          INNER JOIN dbo.ResourceBookTopics rbt ON rbt.id = tt.topic_id
+          INNER JOIN dbo.ResourceBooks rb ON rb.id = rbt.resource_book_id
+          LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
+          LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
+          WHERE smtc.student_id = @studentId
+            AND (smtc.correct_count IS NOT NULL OR smtc.wrong_count IS NOT NULL OR smtc.blank_count IS NOT NULL);
+        `),
+      ),
+    ])
+
+    // Görev satırlarında geçen testleri, adı / sayfası / soru sayısı için tek sorguda çöz.
+    const taskEntries = []
+    for (const row of tasksResult.recordset) {
+      const results = parseJson(row.test_results_json, {})
+      for (const [testId, result] of Object.entries(results || {})) {
+        if (!testId || !result) continue
+        taskEntries.push({ row, testId, result })
+      }
+    }
+
+    const testIds = Array.from(new Set(taskEntries.map((entry) => entry.testId)))
+    let testsById = new Map()
+    if (testIds.length) {
+      const testBindings = {}
+      const placeholders = testIds.map((id, index) => {
+        testBindings[`t${index}`] = { type: sql.UniqueIdentifier, value: id }
+        return `@t${index}`
+      })
+      const testsDb = await withRequest(testBindings)
+      const testsResult = await testsDb.query(`
+        SELECT id, name, topic_name, page_start, page_end, question_count
+        FROM dbo.ResourceBookTopicTests
+        WHERE id IN (${placeholders.join(', ')});
+      `)
+      testsById = new Map(testsResult.recordset.map((r) => [r.id, r]))
+    }
+
+    const toInt = (value) => (value === null || value === undefined ? 0 : Number(value) || 0)
+    const successRate = (correct, questionCount) =>
+      questionCount > 0 ? Math.round((correct / questionCount) * 100) : 0
+
+    const items = []
+    const seenTaskTestIds = new Set()
+    const producedTaskIds = new Set()
+
+    for (const { row, testId, result } of taskEntries) {
+      const test = testsById.get(testId)
+      if (!test) continue
+      seenTaskTestIds.add(testId)
+      producedTaskIds.add(row.task_id)
+      const correct = toInt(result.correct)
+      const wrong = toInt(result.wrong)
+      const questionCount = toInt(test.question_count)
+      const blank = result.blank === undefined ? Math.max(0, questionCount - correct - wrong) : toInt(result.blank)
+      items.push({
+        key: `task:${row.task_id}:${testId}`,
+        source: 'task',
+        occurredAt: result.gradedAt || row.completed_at || row.task_date || null,
+        taskId: row.task_id,
+        taskTitle: row.task_title || undefined,
+        taskType: row.task_type || undefined,
+        testId,
+        resourceBookId: row.resource_book_id || undefined,
+        publisherName: row.publisher_name || undefined,
+        resourceBookName: row.resource_book_name || undefined,
+        resourceType: row.resource_type || undefined,
+        subjectName: row.subject_name || row.subject || undefined,
+        testName: test.name,
+        topicName: test.topic_name || undefined,
+        pageStart: test.page_start ?? undefined,
+        pageEnd: test.page_end ?? undefined,
+        questionCount,
+        correct,
+        wrong,
+        blank,
+        successRate: successRate(correct, questionCount),
+        canViewAnswers: true,
+      })
+    }
+
+    for (const row of manualResult.recordset) {
+      if (seenTaskTestIds.has(row.test_id)) continue
+      const correct = toInt(row.correct_count)
+      const wrong = toInt(row.wrong_count)
+      const questionCount = toInt(row.question_count)
+      const blank =
+        row.blank_count === null || row.blank_count === undefined
+          ? Math.max(0, questionCount - correct - wrong)
+          : toInt(row.blank_count)
+      const hasAnswers = Boolean(row.answers_json)
+      items.push({
+        key: `manual:${row.test_id}`,
+        source: 'manual',
+        occurredAt: row.marked_at || null,
+        taskId: null,
+        testId: row.test_id,
+        resourceBookId: row.resource_book_id || undefined,
+        publisherName: row.publisher_name || undefined,
+        resourceBookName: row.resource_book_name || undefined,
+        resourceType: row.resource_type || undefined,
+        subjectName: row.subject_name || undefined,
+        testName: row.test_name,
+        topicName: row.topic_name || undefined,
+        pageStart: row.page_start ?? undefined,
+        pageEnd: row.page_end ?? undefined,
+        questionCount,
+        correct,
+        wrong,
+        blank,
+        successRate: successRate(correct, questionCount),
+        canViewAnswers: hasAnswers,
+        manualAnswers: hasAnswers ? parseJson(row.answers_json, {}) : undefined,
+      })
+    }
+
+    // 3) Teste bağlı optik sonucu üretmeyen ama tamamlanırken doğru/yanlış/boş sayısı girilmiş
+    // ödev görevleri (özellikle okul ödevleri) — görev başına tek toplu satır.
+    for (const row of tasksResult.recordset) {
+      if (producedTaskIds.has(row.task_id)) continue
+      if (row.status !== 'tamamlandi' || row.correct_count === null || row.correct_count === undefined) continue
+      const correct = toInt(row.correct_count)
+      const wrong = toInt(row.wrong_count)
+      const blank = toInt(row.blank_count)
+      const answered = correct + wrong + blank
+      const questionCount = answered > 0 ? answered : toInt(row.target_question_count)
+      const selectedTestIds = parseJson(row.selected_test_ids_json, [])
+      items.push({
+        key: `task-agg:${row.task_id}`,
+        source: 'task',
+        occurredAt: row.completed_at || row.updated_at || row.task_date || null,
+        taskId: row.task_id,
+        taskTitle: row.task_title || undefined,
+        taskType: row.task_type || undefined,
+        testId: null,
+        resourceBookId: row.resource_book_id || undefined,
+        publisherName: row.publisher_name || undefined,
+        resourceBookName: row.resource_book_name || row.school_resource_name || undefined,
+        resourceType: row.resource_type || undefined,
+        subjectName: row.subject_name || row.subject || undefined,
+        testName: row.task_title || row.resource_book_name || row.school_resource_name || 'Ödev',
+        topicName: undefined,
+        pageStart: undefined,
+        pageEnd: undefined,
+        questionCount,
+        correct,
+        wrong,
+        blank,
+        successRate: successRate(correct, questionCount),
+        // Teste bağlı görevde cevap kağıdı açılabilir; okul ödevinde soru bazlı veri yok.
+        canViewAnswers: Array.isArray(selectedTestIds) && selectedTestIds.length > 0,
+      })
+    }
+
+    items.sort((a, b) => {
+      const at = a.occurredAt ? new Date(a.occurredAt).getTime() : 0
+      const bt = b.occurredAt ? new Date(b.occurredAt).getTime() : 0
+      return bt - at
+    })
+
+    return json(200, { items })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('listStudyHistoryHandler failed', error)
+    return json(500, { error: 'Çalışma geçmişi yüklenemedi.' })
+  }
+}
+
 // tasks/sessions/homeworks/manualTestCompletions'ın her biri aynı kitaba defalarca (öğrencinin
 // o kitaptan yaptığı her görev/oturum için bir kez) referans verebilir. rb.image_url'i (kapak
 // fotoğrafı, ~140KB base64) bu dört sorgunun her satırında tekrar seçmek — ve sanitize edilmiş
@@ -1061,6 +1340,7 @@ module.exports = {
   listWrongQuestionsHandler,
   fetchWrongQuestionBookImagesByName,
   getWrongQuestionPhotoHandler,
+  updateWrongQuestionPhotoHandler,
   addWrongQuestionHandler,
   updateWrongQuestionHandler,
   getWrongQuestionTopicStatsHandler,
@@ -1068,6 +1348,7 @@ module.exports = {
   MISTAKE_REASONS,
   listStudySessionsHandler,
   addStudySessionHandler,
+  listStudyHistoryHandler,
   getProgressOverviewHandler,
   fetchResourceBookImagesByIds,
   getSmallGoalHandler,

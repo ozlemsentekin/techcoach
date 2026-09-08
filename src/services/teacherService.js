@@ -281,6 +281,15 @@ export async function addTeacherHomework(studentTeacherId, payload) {
   return data.homework
 }
 
+/** Öğretmenin "Konu Tekrarı" görevi: kaynağa bağlı olmayan, dosya eki taşıyabilen basit plan görevi. */
+export async function addTeacherTopicReview(studentTeacherId, payload) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/topic-review`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return data.task
+}
+
 /** @returns {Promise<Object>} */
 export async function assignTeacherHomeworkTask(studentTeacherId, homeworkId, { date, startTime, durationMinutes }) {
   const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/homeworks/${homeworkId}/task`, {
@@ -330,6 +339,15 @@ export async function updateTeacherStudentTask(studentTeacherId, taskId, { date,
 
 export async function deleteTeacherStudentTask(studentTeacherId, taskId) {
   await authRequest(`/api/panel-teacher/students/${studentTeacherId}/tasks/${taskId}`, { method: 'DELETE' })
+}
+
+/** Öğretmenin oluşturduğu "Konu Tekrarı" görevinin içeriğini (konu/açıklama/saat/süre/dosya) güncellemesi. */
+export async function updateTeacherTopicReview(studentTeacherId, taskId, payload) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/tasks/${taskId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ ...payload, topicReview: true }),
+  })
+  return data.task
 }
 
 /** Öğretmenin, tamamlanmış bir görevin sonucunu "kontrol edildi" işaretlemesi / işareti geri alması. */
@@ -400,5 +418,21 @@ export async function updateTeacherStudentWrongQuestion(studentTeacherId, wrongQ
     method: 'PATCH',
     body: JSON.stringify(updates),
   })
+  return data.wrongQuestion
+}
+
+/**
+ * Öğrencinin Hata Defteri'ndeki bir sorunun fotoğrafını yenisiyle değiştirir. Dönen nesne dolu
+ * `photoUrl` taşır (bkz. wrongQuestionService.updateWrongQuestionPhoto).
+ * @returns {Promise<import('./wrongQuestionService').WrongQuestion>}
+ */
+export async function updateTeacherStudentWrongQuestionPhoto(studentTeacherId, wrongQuestionId, photoDataUrl) {
+  const data = await authRequest(
+    `/api/panel-teacher/students/${studentTeacherId}/wrong-questions/${wrongQuestionId}/photo`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ photo: photoDataUrl }),
+    },
+  )
   return data.wrongQuestion
 }

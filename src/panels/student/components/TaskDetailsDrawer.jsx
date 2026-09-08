@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Coffee, Sun, Utensils, X } from 'lucide-react'
 import { FOCUS_TASK_TYPES } from '../../../data/taskTypes'
+import TaskAttachment from '../../shared/TaskAttachment'
 
 const CREATED_BY_LABELS = {
   ebeveyn: 'Ebeveyn',
@@ -114,6 +115,12 @@ export default function TaskDetailsDrawer({
             <DetailRow label="Öğretmen / Ebeveyn Notu" value={task.parentNote} />
             {!isFreeTimeTask ? <DetailRow label="Kendi Notların" value={task.notes} /> : null}
           </div>
+
+          {task.attachmentUrl ? (
+            <div className="mt-4">
+              <TaskAttachment url={task.attachmentUrl} name={task.attachmentName} />
+            </div>
+          ) : null}
 
           {isFreeTimeTask ? (
             <label className="mt-5 flex flex-col gap-2">

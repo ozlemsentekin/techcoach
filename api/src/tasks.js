@@ -16,6 +16,29 @@ function toISODate(value) {
 
 const HOMEWORK_TASK_TYPE_SET = new Set(['odev', 'soru-bankasi-odevi', 'okul-odevi', 'etkinlik-odevi'])
 
+// Göreve eklenen tek dosya (resim veya PDF), base64 data URL olarak saklanır (bkz.
+// add-task-attachment-schema.sql). Uygulamanın geri kalanıyla aynı yaklaşım: blob depolama yok.
+const MAX_TASK_ATTACHMENT_MB = 5
+const MAX_TASK_ATTACHMENT_LENGTH = Math.ceil((MAX_TASK_ATTACHMENT_MB * 1024 * 1024 * 4) / 3) + 128
+const TASK_ATTACHMENT_DATA_URL_PATTERN = /^data:(image\/(?:jpeg|jpg|png|webp)|application\/pdf);base64,[a-z0-9+/=\s]+$/i
+
+/**
+ * Görev dosya ekini doğrular. `url` boş/undefined ise ek yok (silme = null döner).
+ * Geçersizse { error }, geçerliyse { url, name } döner.
+ */
+function sanitizeTaskAttachment(url, name) {
+  const value = typeof url === 'string' ? url.trim() : ''
+  if (!value) return { url: null, name: null }
+  if (value.length > MAX_TASK_ATTACHMENT_LENGTH) {
+    return { error: `Dosya çok büyük. En fazla ${MAX_TASK_ATTACHMENT_MB} MB olabilir.` }
+  }
+  if (!TASK_ATTACHMENT_DATA_URL_PATTERN.test(value)) {
+    return { error: 'Yalnızca JPG, PNG, WEBP veya PDF dosyası ekleyebilirsiniz.' }
+  }
+  const cleanName = typeof name === 'string' ? name.trim().slice(0, 255) : ''
+  return { url: value.replace(/\s/g, ''), name: cleanName || 'ek-dosya' }
+}
+
 function sanitizeTask(record) {
   return {
     id: record.id,
@@ -91,6 +114,8 @@ function sanitizeTask(record) {
     studentTeacherId: record.student_teacher_id || undefined,
     teacherFullName: record.teacher_full_name || undefined,
     resourceType: record.resource_type || undefined,
+    attachmentUrl: record.attachment_url || undefined,
+    attachmentName: record.attachment_name || undefined,
     hasAnswerKey: record.has_answer_key === null || record.has_answer_key === undefined ? undefined : Boolean(record.has_answer_key),
     publisherName: record.publisher_name || undefined,
     selectedTestIds: record.selected_test_ids_json ? JSON.parse(record.selected_test_ids_json) : undefined,
@@ -117,6 +142,7 @@ const SELECT_TASK = `
          t.blank_count, t.difficulty, t.emotion, t.reflection_answers_json, t.completed_sub_goals_json,
          t.resource_book_id, t.selected_test_ids_json, t.answers_json, t.test_results_json, rb.name AS resource_book_name, rb.resource_type, rb.has_answer_key, p.name AS publisher_name,
          t.school_resource_id, scr.name AS school_resource_name, scr.image_url AS school_resource_image_url,
+         t.attachment_url, t.attachment_name,
          t.student_teacher_id, st.teacher_full_name, cbu.full_name AS created_by_full_name,
          t.reviewed_at, rvu.full_name AS reviewed_by_full_name,
          stu.full_name AS student_full_name, par.full_name AS parent_full_name,
@@ -161,6 +187,8 @@ const FIELD_MAP = {
   priority: (v) => ({ column: 'priority', type: sql.NVarChar(20), value: v }),
   status: (v) => ({ column: 'status', type: sql.NVarChar(30), value: v }),
   description: (v) => ({ column: 'description', type: sql.NVarChar(1000), value: v || null }),
+  attachmentUrl: (v) => ({ column: 'attachment_url', type: sql.NVarChar(sql.MAX), value: v || null }),
+  attachmentName: (v) => ({ column: 'attachment_name', type: sql.NVarChar(255), value: v || null }),
   parentNote: (v) => ({ column: 'parent_note', type: sql.NVarChar(1000), value: v || null }),
   createdBy: (v) => ({ column: 'created_by', type: sql.NVarChar(20), value: v }),
   createdByUserId: (v) => ({ column: 'created_by_user_id', type: sql.UniqueIdentifier, value: v || null }),
@@ -208,6 +236,8 @@ const PLAN_DEFINITION_FIELDS = new Set([
   'durationMinutes',
   'priority',
   'description',
+  'attachmentUrl',
+  'attachmentName',
   'parentNote',
   'isDraft',
   'targetQuestionCount',
@@ -669,6 +699,15 @@ async function createTaskHandler(request) {
       return json(400, { error: 'Başlangıç ve bitiş saati birlikte girilmeli.' })
     }
 
+    if (payload.attachmentUrl !== undefined) {
+      const attachment = sanitizeTaskAttachment(payload.attachmentUrl, payload.attachmentName)
+      if (attachment.error) {
+        return json(400, { error: attachment.error })
+      }
+      payload.attachmentUrl = attachment.url
+      payload.attachmentName = attachment.name
+    }
+
     // Özel ders görevinde öğretmen isteğe bağlıdır: seçili öğretmen varsa öğrenciye ait
     // ve aktif olduğu doğrulanır, ders adı öğretmen kaydından türetilir; öğretmen yoksa
     // görev yalnızca `subject` (ders adı) bilgisiyle kaydedilir.
@@ -743,6 +782,15 @@ async function updateTaskHandler(request) {
     if (payload) {
       delete payload.createdBy
       delete payload.createdByUserId
+    }
+
+    if (payload?.attachmentUrl !== undefined) {
+      const attachment = sanitizeTaskAttachment(payload.attachmentUrl, payload.attachmentName)
+      if (attachment.error) {
+        return json(400, { error: attachment.error })
+      }
+      payload.attachmentUrl = attachment.url
+      payload.attachmentName = attachment.name
     }
 
     const previousDb = await withRequest({
@@ -1561,4 +1609,5 @@ module.exports = {
   syncTasksForManualTestCompletion,
   SELECT_TASK,
   sanitizeTask,
+  sanitizeTaskAttachment,
 }

@@ -8,6 +8,7 @@ import {
   getWrongQuestionTopicStats,
   getWrongQuestionPhoto,
   updateWrongQuestion,
+  updateWrongQuestionPhoto,
 } from '../../../services/wrongQuestionService'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
@@ -86,6 +87,7 @@ export default function MistakesPage() {
       fetchPhoto={(id) => getWrongQuestionPhoto(id, selectedStudent.id)}
       updateMistakeReason={(id, mistakeReason) => updateWrongQuestion(id, { mistakeReason }, selectedStudent.id)}
       updateMistakeMeta={(id, updates) => updateWrongQuestion(id, updates, selectedStudent.id)}
+      updateMistakePhoto={(id, dataUrl) => updateWrongQuestionPhoto(id, dataUrl, selectedStudent.id)}
       title="Hata Defteri"
       subtitle={`${selectedStudent.fullName} için fotoğraflanan yanlış sorular ders ders burada.`}
       headerActions={headerActions}
