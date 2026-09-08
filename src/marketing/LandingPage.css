@@ -7011,3 +7011,44 @@ footer {
   .rp-panel-arrows button { width: 32px; }
   .rp-panel-arrows .rp-play { width: 25px; }
 }
+
+/* Process header and direct, touch-friendly carousel navigation. */
+.rp-process { max-width: 480px; margin: 0 auto 16px; }
+.rp-process-header { display: flex; align-items: center; gap: 12px; }
+.rp-process-number { display: grid; place-items: center; width: 45px; height: 45px; flex-shrink: 0; border: 1px solid #d8dcee; background: white; border-radius: 14px; color: var(--indigo); font-size: 18px; font-weight: 800; }
+.rp-process-picker { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 3px; }
+.rp-process-picker > span { color: #707797; font-size: 10px; letter-spacing: .5px; }
+.rp-process-picker select { width: 100%; border: 0; background: transparent; color: var(--indigo); padding: 3px 0; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
+.rp-process-picker select:focus-visible { outline: 2px solid #d76a26; outline-offset: 3px; border-radius: 4px; }
+.rp-process-track { display: flex; gap: 5px; margin-top: 10px; }
+.rp-process-track button { flex: 1; border: 0; height: 22px; padding: 8px 0; background: transparent; cursor: pointer; }
+.rp-process-track button::after { content: ''; display: block; height: 4px; border-radius: 4px; background: #dde1ed; }
+.rp-process-track button.reached::after { background: #959bc7; }
+.rp-process-track button[aria-current="step"]::after { background: var(--indigo); }
+.rp-carousel-frame { display: grid; grid-template-columns: 44px minmax(0, 480px) 44px; align-items: center; justify-content: center; gap: 16px; max-width: 600px; margin: 0 auto; }
+.rp-side-arrow { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid #dde1ee; border-radius: 50%; background: white; color: var(--indigo); box-shadow: 0 4px 16px #2b2f770a; cursor: pointer; transition: background .15s, color .15s; }
+.rp-side-arrow:hover { background: var(--indigo); color: white; }
+.rp-swipe-area { min-width: 0; touch-action: pan-y pinch-zoom; }
+.rp-swipe-area .role-preview { transition: transform .16s ease-out, opacity .16s ease-out; }
+.rp-swipe-area img { user-select: none; -webkit-user-drag: none; }
+.rp-swipe-hint { display: none; margin: 14px 0 0; color: #707797; font-size: 10px; text-align: center; }
+@media (max-width: 560px) {
+  .rp-process { padding: 0 8px; margin-bottom: 10px; }
+  .rp-process-number { width: 38px; height: 38px; font-size: 16px; border-radius: 11px; }
+  .rp-process-picker select { font-size: 14px; }
+  .rp-carousel-frame { position: relative; display: block; padding: 0 8px; }
+  .rp-side-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; width: 32px; height: 44px; border-radius: 12px; box-shadow: 0 3px 12px #2b2f7714; }
+  .rp-side-prev { left: -10px; }
+  .rp-side-next { right: -10px; }
+  .rp-side-arrow svg { width: 16px; }
+  .rp-swipe-hint { display: block; }
+}
+@media (prefers-reduced-motion: reduce) { .rp-swipe-area .role-preview { transition: none; } }
+
+/* One short sentence replaces the repeated title and subtitle. */
+.rp-carousel .rp-story-heading { max-width: none; padding: 18px 16px; }
+.rp-carousel .rp-story-heading > .rp-step-summary:last-child { margin: 0; font-size: 17px; line-height: 1.5; font-weight: 500; letter-spacing: 0; color: var(--indigo); }
+@media (max-width: 560px) {
+  .rp-carousel .rp-story-heading { padding: 14px 8px; }
+  .rp-carousel .rp-story-heading > .rp-step-summary:last-child { font-size: 13px; }
+}

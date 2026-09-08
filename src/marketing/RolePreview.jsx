@@ -1,40 +1,41 @@
 import { ChildProfilePreview, ParentBooksPreview, PastResultsPreview, ParentBookMetricsPreview, ParentAssignmentPreview, ParentTeachersPreview, ParentFollowupPreview } from './ParentSetupPreview'
-import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, BookOpen, Download, Pause, Play, NotebookPen, Check, TrendingUp, CalendarDays, ClipboardCheck, Camera } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { ArrowLeft, ArrowRight, BookOpen, Download, NotebookPen, Check, TrendingUp, CalendarDays, ClipboardCheck, Camera } from 'lucide-react'
 
 const defaultTopics = ['Haftalık plan', 'Günlük görevler', 'Optik sonuç girişi', 'Kaynak başarısı', 'Tamamlanma oranı', 'Dijital hata defteri', 'Gelişim analizi']
 const parentTopics = ['Çocuk profili', 'Kaynak hazırlığı', 'Geçmiş testler', 'Kaynak durumu', 'Plan ve görev', 'Özel öğretmenler', 'Günlük takip', 'Hata defteri', 'Gelişim analizi']
-const content = {
+const summaries = {
   student: [
-    ['Haftam belli, sıradaki adımım net.', 'Haftalık Plan’da derslerini ve çalışma görevlerini gör.', 'Öğretmenin veya velinin planladığı çalışmaları gün ve saatleriyle takip et; ne çalışacağını aklında tutmak zorunda kalma.'],
-    ['Bugünkü görevimi açıyorum.', 'Bugün ekranından kaynağını ve çalışacağın testi gör.', 'Kitabından çalış, ardından görevdeki Tamamla adımına geç. Planlanan çalışma, kaydedilebilir bir sonuca dönüşsün.'],
-    ['Çalışmam bitti, cevaplarımı giriyorum.', 'Tamamla → optik form → cevapları işaretle → Kaydet.', 'Cevap anahtarı olan testte cevaplarını işaretleyerek doğru, yanlış ve boşlarını gör. Yanlış sorularına fotoğraf ekleyip tekrar için sakla.'],
-    ['Kitabımda ne kadar başarılıyım?', 'Çözdüğün soruların sonucunu kaynak bazında gör.', 'Soru sayısının yanında doğruluğunu da takip et; hangi kaynağa yeniden dönmen gerektiğini fark et.'],
-    ['Kitabımın ne kadarı bitti?', 'Tamamladığın testleri ve kalan yolu birlikte gör.', 'Büyük bir kitabı küçük adımlara böl. Nerede kaldığını bilerek sıradaki çalışmana başla.'],
-    ['Yanlışlarım, tekrar planım.', 'Sorunu fotoğrafla, hata nedenini seç, tekrar için not al.', 'Yalnızca yanlış soruyu değil, neden yanlış yaptığını da kaydet. Fotoğrafın, hata nedenin ve notunla daha bilinçli tekrar yap.'],
-    ['Hangi konuda gelişiyorum?', 'Konu bazında başarı değişimini takip et.', 'İlerlemeni fark et, zorlandığın konuları gör ve çalışmanı ihtiyacına göre şekillendir.'],
+    'Haftalık planınla ne çalışacağını bil.',
+    'Bugünün görevini ve kaynağını gör.',
+    'Cevaplarını gir, sonucunu kaydet.',
+    'Kaynaklarındaki başarını gör.',
+    'Kitabında ne kadar ilerlediğini gör.',
+    'Sorunu fotoğrafla, hatanı not al.',
+    'Gelişimini gör, eksiğine odaklan.',
   ],
   parent: [
-    ['Önce çocuğunun profilini oluştur.', 'Çocuklarım’dan okul ve sınıf bilgilerini tamamla.', 'Kitapları, çalışma planını ve gelişim verilerini çocuğuna ait bir alanda bir araya getir.'],
-    ['Kullandığı kaynakları hazırla.', 'Kütüphaneden seç, çocuğunun kitaplığına ekle.', 'Konu ve testleriyle hazır kaynaklar üzerinden çalışmayı planla. Bulamadığın kitap için özel kaynak oluşturabilir veya ekleme talebi gönderebilirsin.'],
-    ['Önceden çözdüğü testler de kaybolmasın.', 'Kitaplık’tan tamamlanmış testi aç, cevaplarını gir ve kaydet.', 'Sisteme başlamadan önce yapılan çalışmaları da görünür kıl. Yeni görev atamadan, kitaptaki geçmiş cevapları girerek mevcut ilerlemeyi kayda al.'],
-    ['Ne kadarı bitti, ne kadar başarılı?', 'Girilen cevaplar iki ayrı oranı görünür kılar.', 'Kaynağın tamamlanma oranıyla ne kadar çalışıldığını, başarı oranıyla bu çalışmanın sonucunu birlikte gör. Sonraki planı mevcut duruma göre oluştur.'],
-    ['Haftasını planla, sıradaki görevi ata.', 'Haftalık Plan’da gün, saat, kaynak ve test seç.', 'Kalan çalışmaları ulaşılabilir günlük görevlere böl. Verdiğin görev öğrencinin planında yer alsın; ne zaman, hangi kitaptan çalışacağı netleşsin.'],
-    ['Varsa özel öğretmenlerini de dahil et.', 'Öğretmeni çocuğun ve takip edeceği kaynaklarla eşleştir.', 'Panel erişimi vererek öğretmenle aynı çalışmalar üzerinden takip yap. Özel öğretmen bulunması şart değil; sistemi öğretmen eklemeden de kullanabilirsin.'],
-    ['Görevden sonuca, süreci takip et.', 'Bugün ekranında tamamlanan çalışmayı ve cevap sonucunu gör.', 'Önceki kayıtlarla yeni çalışmalar bir araya gelsin. Hem kitapta ilerlemeyi hem başarıyı görerek çocuğuna ihtiyacı olan noktada destek ol.'],
-    ['Yanlışın nedenini birlikte anlamlandır.', 'Soru fotoğrafını, hata nedenini ve öğrenci notunu incele.', 'Bilgi eksikliği mi, dikkat hatası mı? Çocuğunun kaydettiği hata analizinden yararlanarak tekrar ihtiyacını somut sorular üzerinden konuş.'],
-    ['Gelişim analizinden yeni plana geç.', 'Ders ve konu bazında değişimi zaman içinde takip et.', 'Tek bir test yerine biriken sonuçları değerlendir. Gelişen alanları fark et; tekrar gereken konular için yeni görevler planla ve varsa öğretmeniyle paylaş.'],
+    'Çocuğunun profilini oluştur.',
+    'Kullandığı kitapları ekle.',
+    'Geçmiş testlerin cevaplarını kaydet.',
+    'İlerlemeyi ve başarıyı birlikte gör.',
+    'Haftasını planla, görev ata.',
+    'Varsa özel öğretmenini dahil et.',
+    'Görevleri ve sonuçlarını takip et.',
+    'Yanlışlarını ve nedenlerini incele.',
+    'Gelişimine göre yeni plan oluştur.',
   ],
   teacher: [
-    ['Öğrencine kaynak üzerinden görev planla.', 'Öğrenci, kitap, test, gün ve saat: çalışma netleşsin.', 'Öğrencinin haftalık düzenine uygun görevler ver. Bir sonraki derse kadar ne çalışacağını somutlaştır.'],
-    ['Verdiğin görevi dersler arasında takip et.', 'Öğrencinin görevini ve tamamlanma durumunu incele.', 'Ödevin hangi aşamada olduğunu gör; tamamlanan çalışmaların sonuçlarını kontrol ederek ders hazırlığını yap.'],
-    ['Optik sonuçtan eksik konuya ulaş.', 'Öğrencinin kaydettiği cevapları soru bazında incele.', 'Doğru, yanlış ve boşları gör; hatalı sorular üzerinden tekrar ihtiyacını belirle ve görevi kontrol edildi olarak işaretle.'],
-    ['Kaynak sonuçlarından ders odağına.', 'Öğrencinin testlerini doğru, yanlış ve boşlarıyla incele.', 'Hangi testlerde zorlandığını önceden gör; bir sonraki dersin odağını sonuçlara göre belirle.'],
-    ['Verdiğiniz çalışma ne kadar ilerledi?', 'Öğrencilerinin kaynak ilerlemesini karşılaştır.', 'Tamamlanan ve kalan testleri görerek her öğrenci için ulaşılabilir yeni görevler planla.'],
-    ['Bir sonraki dersin soruları hazır.', 'Hata defterinden konuya özel tekrar hazırlığı yap.', 'Hatalı soruları incele, ortak eksikleri belirle ve ders süresini öğrencinin ihtiyaçlarına ayır.'],
-    ['Konu analizinden kişisel yol haritasına.', 'Öğrencilerinin güçlü ve gelişime açık alanlarını gör.', 'Sınıf Analizi ile genel durumu değerlendir; her öğrencinin sonraki çalışmasını kendi eksiğine göre planla.'],
+    'Kaynağından haftalık görev planla.',
+    'Verdiğin çalışmayı takip et.',
+    'Cevaplarından eksiklerini gör.',
+    'Test sonuçlarıyla derse hazırlan.',
+    'Kalan testlere göre görev planla.',
+    'Hatalı sorularla tekrar hazırla.',
+    'Konu analizine göre yol göster.',
   ],
 }
+
 const books = [['Matematik', 'Üslü ifadeler', 75, 60], ['Türkçe', 'Paragraf', 90, 80], ['Fen bilimleri', 'DNA ve genetik kod', 65, 40]]
 
 function WeeklyPlan({ role }) {
@@ -94,45 +95,56 @@ function Analysis({ role }) {
 export default function RolePreview({ role, name }) {
   const topics = role === 'parent' ? parentTopics : defaultTopics
   const [slide, setSlide] = useState(0)
-  const [playing, setPlaying] = useState(false)
-  const [visible, setVisible] = useState(false)
-  const root = useRef(null)
-  const touchStart = useRef(null)
-  useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { threshold: 0.35 })
-    observer.observe(root.current)
-    return () => observer.disconnect()
-  }, [])
-  useEffect(() => {
-    if (!playing || !visible) return
-    const timer = window.setInterval(() => {
-      if (!document.hidden) setSlide(current => (current + 1) % topics.length)
-    }, 6500)
-    return () => window.clearInterval(timer)
-  }, [playing, visible, slide, topics.length])
-  function select(index) { setSlide((index + topics.length) % topics.length); setPlaying(false) }
-  const [title, subtitle] = content[role][slide]
+  const [dragX, setDragX] = useState(0)
+  const gesture = useRef(null)
+  function select(index) {
+    setSlide((index + topics.length) % topics.length)
+    setDragX(0)
+  }
+  function startDrag(event) {
+    if (event.pointerType === 'mouse' || event.target.closest('button, select')) return
+    gesture.current = { x: event.clientX, y: event.clientY }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  function moveDrag(event) {
+    if (!gesture.current) return
+    const dx = event.clientX - gesture.current.x
+    const dy = event.clientY - gesture.current.y
+    if (Math.abs(dx) > Math.abs(dy)) setDragX(Math.max(-65, Math.min(65, dx)))
+  }
+  function finishDrag(event) {
+    if (!gesture.current) return
+    const dx = event.clientX - gesture.current.x
+    const dy = event.clientY - gesture.current.y
+    gesture.current = null
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) select(slide + (dx < 0 ? 1 : -1))
+    else setDragX(0)
+  }
+  const summary = summaries[role][slide]
   const visuals = role === 'parent' ? [<ChildProfilePreview />, <ParentBooksPreview />, <PastResultsPreview />, <ParentBookMetricsPreview />, <ParentAssignmentPreview />, <ParentTeachersPreview />, <ParentFollowupPreview />, <Mistakes role={role} />, <Analysis role={role} />] : [<WeeklyPlan role={role} />, <DailyTasks role={role} />, <OpticalResults role={role} />, <BookSuccess role={role} />, <Completion role={role} />, <Mistakes role={role} />, <Analysis role={role} />]
-  return <div className={`role-preview-wrap rp-carousel rp-${role}`} ref={root} role="region" aria-roledescription="slayt gösterisi" aria-label={`${name} panel özellikleri`} onFocusCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget) && !event.target.closest('.rp-play')) setPlaying(false) }} onTouchStart={event => { touchStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY } }} onTouchEnd={event => { if (!touchStart.current) return; const dx = event.changedTouches[0].clientX - touchStart.current.x; const dy = event.changedTouches[0].clientY - touchStart.current.y; if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) select(slide + (dx < 0 ? 1 : -1)); touchStart.current = null }}>
-    <div aria-live={playing ? 'off' : 'polite'} aria-atomic="true">
+  return <div className={`role-preview-wrap rp-carousel rp-${role}`} role="region" aria-roledescription="slayt gösterisi" aria-label={`${name} panel özellikleri`}>
+    <div aria-live="polite" aria-atomic="true">
       <div className="rp-slide" role="group" aria-roledescription="slayt" aria-label={`${slide + 1} / ${topics.length} · ${topics[slide]}`}>
         <div className="rp-story-heading">
-          <h3>{title}</h3>
-          <p>{subtitle}</p>
+          <p className="rp-step-summary">{summary}</p>
         </div>
         <div className="rp-story-stage">
-          <div className="rp-panel-toolbar">
-            <label className="rp-step-picker"><span>Tüm adımlar</span><select aria-label="Tüm adımlar" value={slide} onChange={event => select(Number(event.target.value))}>{topics.map((topic, i) => <option key={topic} value={i}>{i + 1} / {topics.length} · {topic}</option>)}</select></label>
-            <div className="rp-panel-arrows">
-              <button type="button" onClick={() => select(slide - 1)} aria-label="Önceki panel görseli" title="Önceki adım"><ArrowLeft size={18} aria-hidden="true" /></button>
-              <button type="button" onClick={() => select(slide + 1)} aria-label="Sonraki panel görseli" title="Sonraki adım"><ArrowRight size={18} aria-hidden="true" /></button>
-              <button type="button" className="rp-play" onClick={() => setPlaying(value => !value)} aria-label={playing ? 'Otomatik geçişi durdur' : 'Otomatik geçişi başlat'} title={playing ? 'Durdur' : 'Oynat'}>{playing ? <Pause size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}</button>
-            </div>
+          <div className="rp-process">
+            <div className="rp-process-header"><span className="rp-process-number">{String(slide + 1).padStart(2, '0')}</span><label className="rp-process-picker"><span>{name} yolculuğu · {topics.length} adım</span><select aria-label="Tüm adımlar" value={slide} onChange={event => select(Number(event.target.value))}>{topics.map((topic, i) => <option key={topic} value={i}>{topic}</option>)}</select></label></div>
+            <div className="rp-process-track" aria-label="Süreç adımları">{topics.map((topic, i) => <button type="button" key={topic} className={i <= slide ? 'reached' : ''} aria-current={slide === i ? 'step' : undefined} aria-label={`${i + 1}. adım: ${topic}`} onClick={() => select(i)} />)}</div>
           </div>
-          <div className="role-preview">
+          <div className="rp-carousel-frame">
+            <button className="rp-side-arrow rp-side-prev" type="button" onClick={() => select(slide - 1)} aria-label="Önceki panel görseli"><ArrowLeft size={20} aria-hidden="true" /></button>
+            <div className="rp-swipe-area" onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={finishDrag} onPointerCancel={() => { gesture.current = null; setDragX(0) }}>
+          <div className="role-preview" style={{ transform: `translateX(${dragX}px)`, opacity: 1 - Math.abs(dragX) / 250 }}>
+
             <div className="role-preview-top"><span className="role-preview-brand">Tech<span>Coach</span></span><span className="role-example">{name} paneli · Örnek</span></div>
             <div className="rp-slide-visual">{visuals[slide]}</div>
           </div>
+            </div>
+            <button className="rp-side-arrow rp-side-next" type="button" onClick={() => select(slide + 1)} aria-label="Sonraki panel görseli"><ArrowRight size={20} aria-hidden="true" /></button>
+          </div>
+          <p className="rp-swipe-hint">Diğer adımlar için sağa veya sola kaydırın</p>
         </div>
       </div>
     </div>
