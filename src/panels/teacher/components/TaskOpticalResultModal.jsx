@@ -137,6 +137,13 @@ function TestSection({ test, photos, onOpenGallery }) {
                     >
                       <Camera size={13} aria-hidden="true" />
                     </button>
+                  ) : isWrongOrBlank ? (
+                    <span
+                      className="flex shrink-0 items-center gap-0.5 whitespace-nowrap text-[10px] italic leading-none text-panel-text-muted"
+                      title="Bu soru için hata defterine görsel yüklenmedi"
+                    >
+                      <Camera size={11} aria-hidden="true" /> yok
+                    </span>
                   ) : null}
                 </div>
               ) : null}

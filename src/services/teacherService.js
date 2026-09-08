@@ -356,6 +356,14 @@ export async function getTeacherTaskAnswerSheet(studentTeacherId, taskId) {
   })
 }
 
+/** Öğretmenin kapsamındaki tek bir görevin tam kaydı (bildirim detayından açılır). @returns {Promise<Object>} */
+export async function getTeacherStudentTask(studentTeacherId, taskId) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/tasks/${taskId}`, {
+    method: 'GET',
+  })
+  return data.task
+}
+
 /** @returns {Promise<Object>} */
 export async function getTeacherStudentProgressOverview(studentTeacherId) {
   return authRequest(`/api/panel-teacher/students/${studentTeacherId}/progress-overview`, { method: 'GET' })

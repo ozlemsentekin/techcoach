@@ -80,6 +80,7 @@ const {
   updateTeacherHomeworkHandler,
   deleteTeacherHomeworkHandler,
   listTeacherStudentTasksHandler,
+  getTeacherStudentTaskHandler,
   updateTeacherStudentTaskHandler,
   deleteTeacherStudentTaskHandler,
   setTeacherTaskReviewHandler,
@@ -166,6 +167,14 @@ const {
 } = require('./tasks')
 const { verifyMistakePhotoQuestionNumberHandler } = require('./mistakePhoto')
 const { listTaskActivityLogsHandler } = require('./taskActivity')
+const {
+  listParentNotificationsHandler,
+  markParentNotificationReadHandler,
+  markAllParentNotificationsReadHandler,
+  listTeacherNotificationsHandler,
+  markTeacherNotificationReadHandler,
+  markAllTeacherNotificationsReadHandler,
+} = require('./notifications')
 const {
   listCoachNotesHandler,
   addCoachNoteHandler,
@@ -748,6 +757,13 @@ registerHttp('panel-teacher-tasks-list', {
   handler: listTeacherStudentTasksHandler,
 })
 
+registerHttp('panel-teacher-tasks-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/tasks/{taskId}',
+  handler: getTeacherStudentTaskHandler,
+})
+
 registerHttp('panel-teacher-tasks-update', {
   authLevel: 'anonymous',
   methods: ['PATCH'],
@@ -767,6 +783,27 @@ registerHttp('panel-teacher-tasks-review-set', {
   methods: ['PATCH'],
   route: 'panel-teacher/students/{studentTeacherId}/tasks/{taskId}/review',
   handler: setTeacherTaskReviewHandler,
+})
+
+registerHttp('panel-teacher-notifications-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/notifications',
+  handler: listTeacherNotificationsHandler,
+})
+
+registerHttp('panel-teacher-notifications-mark-read', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-teacher/notifications/{activityId}/read',
+  handler: markTeacherNotificationReadHandler,
+})
+
+registerHttp('panel-teacher-notifications-mark-all-read', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/notifications/read-all',
+  handler: markAllTeacherNotificationsReadHandler,
 })
 
 registerHttp('panel-teacher-student-school-schedule-get', {
@@ -1404,6 +1441,27 @@ registerHttp('panel-task-activity-list', {
   methods: ['GET'],
   route: 'panel/task-activity',
   handler: listTaskActivityLogsHandler,
+})
+
+registerHttp('panel-notifications-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/notifications',
+  handler: listParentNotificationsHandler,
+})
+
+registerHttp('panel-notifications-mark-read', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel/notifications/{activityId}/read',
+  handler: markParentNotificationReadHandler,
+})
+
+registerHttp('panel-notifications-mark-all-read', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel/notifications/read-all',
+  handler: markAllParentNotificationsReadHandler,
 })
 
 registerHttp('panel-tasks-answer-sheet-get', {
