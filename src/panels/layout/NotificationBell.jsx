@@ -43,10 +43,10 @@ const ACTION_LABEL = {
 }
 
 function ActionIcon({ action }) {
-  if (action === 'task_completed') return <CheckCircle2 size={16} className="text-emerald-600" aria-hidden="true" />
-  if (action === 'task_partially_completed') return <CircleDot size={16} className="text-amber-500" aria-hidden="true" />
-  if (action === 'help_requested') return <HelpCircle size={16} className="text-panel-red" aria-hidden="true" />
-  return <PlayCircle size={16} className="text-panel-blue" aria-hidden="true" />
+  if (action === 'task_completed') return <CheckCircle2 size={14} className="text-emerald-600" aria-hidden="true" />
+  if (action === 'task_partially_completed') return <CircleDot size={14} className="text-amber-500" aria-hidden="true" />
+  if (action === 'help_requested') return <HelpCircle size={14} className="text-panel-red" aria-hidden="true" />
+  return <PlayCircle size={14} className="text-panel-blue" aria-hidden="true" />
 }
 
 function formatRelativeTime(iso) {
@@ -200,62 +200,57 @@ export default function NotificationBell({ role }) {
 
       {open ? (
         <div className="fixed inset-x-3 top-16 z-50 max-h-[calc(100dvh-5rem)] min-w-0 overflow-y-auto rounded-2xl border border-panel-border bg-panel-surface shadow-[0_18px_48px_rgba(31,36,77,0.16)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-96">
-          <div className="flex items-center justify-between gap-2 border-b border-panel-border bg-panel-surface-soft/60 px-4 py-3">
-            <span className="text-sm font-extrabold text-panel-text">Bildirimler</span>
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-panel-border bg-panel-surface-soft/95 px-3 py-2 backdrop-blur">
+            <span className="text-[13px] font-extrabold text-panel-text">Bildirimler</span>
             {unreadCount > 0 ? (
               <button
                 type="button"
                 onClick={handleMarkAll}
                 disabled={markingAll}
-                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-panel-blue hover:bg-panel-blue-soft/50 disabled:opacity-60"
+                className="flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[11px] font-semibold text-panel-blue hover:bg-panel-blue-soft/50 disabled:opacity-60"
               >
-                <CheckCheck size={13} aria-hidden="true" />
+                <CheckCheck size={12} aria-hidden="true" />
                 Tümünü okundu
               </button>
             ) : null}
           </div>
 
           {loading && notifications.length === 0 ? (
-            <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-panel-text-muted">
-              <Loader2 size={16} className="animate-spin" aria-hidden="true" /> Yükleniyor...
+            <div className="flex items-center justify-center gap-2 px-4 py-6 text-[13px] text-panel-text-muted">
+              <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Yükleniyor...
             </div>
           ) : error && notifications.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-panel-text-muted">{error}</div>
+            <div className="px-4 py-6 text-center text-[13px] text-panel-text-muted">{error}</div>
           ) : notifications.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-panel-text-muted">
+            <div className="px-4 py-6 text-center text-[13px] text-panel-text-muted">
               Henüz bildirim yok.
             </div>
           ) : (
-            <ul className="divide-y divide-panel-border">
+            <ul className="divide-y divide-panel-border/70">
               {notifications.map((notif) => (
                 <li key={notif.id}>
                   <button
                     type="button"
                     onClick={() => handleRowClick(notif)}
-                    className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-panel-surface-soft ${
-                      notif.isRead ? '' : 'bg-panel-blue-soft/25'
-                    }`}
+                    className="flex w-full items-start gap-2 px-3 py-1.5 text-left leading-tight transition-colors hover:bg-panel-surface-soft"
                   >
-                    <span className="mt-0.5 shrink-0">
+                    <span className="mt-[3px] shrink-0">
                       <ActionIcon action={notif.action} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-1.5">
-                        {notif.isRead ? null : (
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-panel-blue" aria-hidden="true" />
-                        )}
-                        <span className="truncate text-sm font-bold text-panel-text">
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span className="truncate text-[13px] font-semibold text-panel-text">
                           {notif.studentName || 'Öğrenci'}{' '}
-                          <span className="font-medium text-panel-text-muted">
+                          <span className="font-normal text-panel-text-muted">
                             {ACTION_LABEL[notif.action] || 'işlem yaptı'}
                           </span>
                         </span>
+                        <span className="shrink-0 text-[10px] text-panel-text-muted/80">
+                          {formatRelativeTime(notif.createdAt)}
+                        </span>
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-panel-text-muted" title={buildDetailLine(notif)}>
+                      <span className="block truncate text-[11px] text-panel-text-muted" title={buildDetailLine(notif)}>
                         {buildDetailLine(notif)}
-                      </span>
-                      <span className="mt-0.5 block text-[11px] text-panel-text-muted/80">
-                        {formatRelativeTime(notif.createdAt)}
                       </span>
                     </span>
                   </button>
