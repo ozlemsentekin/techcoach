@@ -230,21 +230,27 @@ export default function DashboardPage() {
     if (!selectedStudentId) return undefined
     let ignore = false
 
-    Promise.all([
-      getTasksForDate(date, { studentId: selectedStudentId }),
-      getBacklogAndCompletedTasks(date, 30, { studentId: selectedStudentId }),
-    ])
-      .then(([tasksData, backlogAndCompleted]) => {
-        if (ignore) return
-        setTasks(tasksData)
-        setBacklogTasks(backlogAndCompleted.backlog)
-        setCompletedBacklogTasks(backlogAndCompleted.completedOn)
+    // Bugünün planı geldiği an sayfayı aç; ağır 30 günlük "biriken" sorgusunu bekleme.
+    getTasksForDate(date, { studentId: selectedStudentId })
+      .then((tasksData) => {
+        if (!ignore) setTasks(tasksData)
       })
       .catch((err) => {
         if (!ignore) setLoadError(err.message)
       })
       .finally(() => {
         if (!ignore) setLoading(false)
+      })
+
+    // Biriken / bugün tamamlanan görevler: ağır 30 günlük sorgu, akışa sonradan düşer.
+    getBacklogAndCompletedTasks(date, 30, { studentId: selectedStudentId })
+      .then((backlogAndCompleted) => {
+        if (ignore) return
+        setBacklogTasks(backlogAndCompleted.backlog)
+        setCompletedBacklogTasks(backlogAndCompleted.completedOn)
+      })
+      .catch((err) => {
+        if (!ignore) setLoadError(err.message)
       })
 
     // Ek bilgiler görev akışının görünmesini bekletmesin.
@@ -450,6 +456,10 @@ export default function DashboardPage() {
         selectedStudentId={selectedStudentId}
         onSelectStudent={(studentId) => {
           setLoading(true)
+          // Biriken akış spinner beklemeden ayrı yükleniyor; önceki öğrencinin
+          // biriken görevleri yeni öğrencinin akışında kısa süre görünmesin.
+          setBacklogTasks([])
+          setCompletedBacklogTasks([])
           setSelectedStudentId(studentId)
         }}
       />
