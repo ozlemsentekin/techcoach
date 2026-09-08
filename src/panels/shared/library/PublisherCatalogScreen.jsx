@@ -950,8 +950,10 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
   const [publishers, setPublishers] = useState(null)
   const [resourceBooks, setResourceBooks] = useState(null)
   const [subjects, setSubjects] = useState(null)
-  const [topics, setTopics] = useState(null)
-  const [tests, setTests] = useState(null)
+  // topics/tests yalnızca bir kitap genişletildiğinde gerekiyor; ilk boyamayı
+  // bekletmesinler diye [] ile başlar ve arka planda yüklenirler.
+  const [topics, setTopics] = useState([])
+  const [tests, setTests] = useState([])
   const [error, setError] = useState('')
   const [showPublisherModal, setShowPublisherModal] = useState(false)
   const [bookModalPublisher, setBookModalPublisher] = useState(null)
@@ -971,22 +973,28 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
   const [previewImage, setPreviewImage] = useState(null)
 
   const loadData = () => {
+    // İlk boyama: yalnızca yayın evi + kaynak + ders listesi. Tüm katalogun
+    // konu/test dökümü (ağır sorgular) ekranı bekletmesin — arka planda gelir.
     Promise.all([
       authRequest('/api/panel-admin/publishers', { method: 'GET' }),
       authRequest('/api/panel-admin/resource-books', { method: 'GET' }),
       authRequest('/api/panel/subjects', { method: 'GET' }),
-      authRequest('/api/panel-admin/resource-book-topics', { method: 'GET' }),
-      authRequest('/api/panel-admin/resource-book-topic-tests', { method: 'GET' }),
-      authRequest('/api/panel-admin/resource-books/missing-answer-key', { method: 'GET' }),
     ])
-      .then(([publishersData, booksData, subjectsData, topicsData, testsData, missingAnswerKeyData]) => {
+      .then(([publishersData, booksData, subjectsData]) => {
         setPublishers(publishersData.publishers)
         setResourceBooks(booksData.resourceBooks)
         setSubjects(subjectsData.subjects)
-        setTopics(topicsData.topics)
-        setTests(testsData.tests)
-        setMissingAnswerKeyBooks(missingAnswerKeyData.resourceBooks)
       })
+      .catch((err) => setError(err.message))
+
+    authRequest('/api/panel-admin/resource-book-topics', { method: 'GET' })
+      .then((data) => setTopics(data.topics))
+      .catch((err) => setError(err.message))
+    authRequest('/api/panel-admin/resource-book-topic-tests', { method: 'GET' })
+      .then((data) => setTests(data.tests))
+      .catch((err) => setError(err.message))
+    authRequest('/api/panel-admin/resource-books/missing-answer-key', { method: 'GET' })
+      .then((data) => setMissingAnswerKeyBooks(data.resourceBooks))
       .catch((err) => setError(err.message))
   }
 
@@ -1230,7 +1238,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
 
       {error ? (
         <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
-      ) : publishers === null || resourceBooks === null || subjects === null || topics === null || tests === null ? (
+      ) : publishers === null || resourceBooks === null || subjects === null ? (
         <LoadingState label="Yayın evleri yükleniyor..." />
       ) : publishers.length === 0 ? (
         <EmptyState

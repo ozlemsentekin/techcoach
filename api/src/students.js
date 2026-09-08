@@ -343,11 +343,13 @@ async function verifyParentOwnsTeacher(parentId, studentId, teacherId) {
   return Boolean(result.recordset[0])
 }
 
-async function fetchStudentResourceBooks(studentId, actorUserId) {
+async function fetchStudentResourceBooks(studentId, actorUserId, { assignedOnly = false } = {}) {
   const requestDb = await withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
     actorUserId: { type: sql.UniqueIdentifier, value: actorUserId || null },
   })
+  // Kitaplık ekranı yalnızca atanmış kitapları gösteriyor; tüm katalog taranmasın
+  // diye INNER JOIN + assigned filtresi ile sorgu ~150 satırdan ~10-20'ye iner.
   const result = await requestDb.query(`
     SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
            rb.name, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.grade, rb.status,
@@ -357,7 +359,7 @@ async function fetchStudentResourceBooks(studentId, actorUserId) {
     FROM dbo.ResourceBooks rb
     LEFT JOIN dbo.Publishers p ON p.id = rb.publisher_id
     LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
-    LEFT JOIN dbo.StudentResourceBooks srb
+    ${assignedOnly ? 'INNER' : 'LEFT'} JOIN dbo.StudentResourceBooks srb
       ON srb.resource_book_id = rb.id AND srb.student_id = @studentId
     LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = @studentId
     WHERE rb.is_active = 1
@@ -890,7 +892,8 @@ async function listStudentResourceBooksHandler(request) {
       return json(404, { error: 'Öğrenci bulunamadı.' })
     }
 
-    const resourceBooks = await fetchStudentResourceBooks(studentId, parentId)
+    const assignedOnly = request.query.get('assignedOnly') === '1'
+    const resourceBooks = await fetchStudentResourceBooks(studentId, parentId, { assignedOnly })
     return json(200, { resourceBooks })
   } catch (error) {
     if (isConfigError(error)) {
