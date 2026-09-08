@@ -11,6 +11,7 @@ export const STUDENT_PRIMARY_NAV = [
   { to: '/student/today', label: 'Bugün', icon: 'Home' },
   { to: '/student/weekly-plan', label: 'Haftalık Planım', icon: 'CalendarRange' },
   { to: '/student/mistakes', label: 'Hata Defterim', icon: 'AlertCircle' },
+  { to: '/student/study-history', label: 'Çalışma Geçmişim', icon: 'History' },
   { to: '/student/progress', label: 'Gelişimim', icon: 'TrendingUp' },
 ]
 
@@ -42,6 +43,7 @@ export function getParentPrimaryNav(hasStudents, canManageLibrary = false, stude
   return [
     { to: '/parent/dashboard', label: 'Bugün', icon: 'Home' },
     { to: '/parent/weekly-plan', label: 'Haftalık Plan', icon: 'CalendarRange' },
+    { to: '/parent/study-history', label: 'Çalışma Geçmişi', icon: 'History' },
     { to: '/parent/progress', label: 'Gelişim Analizi', icon: 'BarChart3' },
     canManageLibrary ? KUTUPHANE_PARENT_ITEM : KITAPLIK_PARENT_ITEM,
   ]

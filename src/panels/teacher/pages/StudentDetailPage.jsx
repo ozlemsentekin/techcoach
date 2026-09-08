@@ -17,6 +17,8 @@ import {
   getTeacherStudentTasksForDate,
   getTeacherStudentSchoolSchedule,
   addTeacherHomework,
+  addTeacherTopicReview,
+  updateTeacherTopicReview,
   assignTeacherHomeworkTask,
   updateTeacherHomework,
   deleteTeacherHomework,
@@ -25,6 +27,7 @@ import {
   getTeacherStudentWrongQuestionTopicStats,
   getTeacherStudentWrongQuestionPhoto,
   updateTeacherStudentWrongQuestion,
+  updateTeacherStudentWrongQuestionPhoto,
   updateTeacherStudentTask,
   deleteTeacherStudentTask,
   setTeacherTaskReview,
@@ -61,6 +64,7 @@ export default function StudentDetailPage() {
   const [weekError, setWeekError] = useState('')
 
   const [homeworkModalDate, setHomeworkModalDate] = useState('')
+  const [editingTopicReview, setEditingTopicReview] = useState(null)
   const [rescheduleHomework, setRescheduleHomework] = useState(null)
   const [editingHomework, setEditingHomework] = useState(null)
   const [deletingHomework, setDeletingHomework] = useState(null)
@@ -138,10 +142,28 @@ export default function StudentDetailPage() {
   }
 
   const handleSaveHomework = async (payload) => {
-    await addTeacherHomework(studentTeacherId, payload)
+    if (payload.homeworkType === 'konu-tekrari') {
+      const body = {
+        date: payload.taskDate,
+        topic: payload.topic,
+        description: payload.description,
+        startTime: payload.taskTime,
+        durationMinutes: payload.taskDurationMinutes,
+        attachmentUrl: payload.attachmentUrl,
+        attachmentName: payload.attachmentName,
+      }
+      if (payload.mode === 'edit') {
+        await updateTeacherTopicReview(studentTeacherId, payload.taskId, body)
+      } else {
+        await addTeacherTopicReview(studentTeacherId, body)
+      }
+    } else {
+      await addTeacherHomework(studentTeacherId, payload)
+    }
     await refreshWeek()
     setHomeworkModalDate('')
-    showBanner('Görev atandı.')
+    setEditingTopicReview(null)
+    showBanner(payload.mode === 'edit' ? 'Görev güncellendi.' : 'Görev atandı.')
   }
 
   const handleReschedule = async ({ date, startTime, durationMinutes }) => {
@@ -174,7 +196,10 @@ export default function StudentDetailPage() {
   // Ödev kaydına bağlı olmayan (homeworkId yok) ama öğretmenin takip ettiği kaynağa ait,
   // öğrenci/veli eklemiş plan görevleri: görev tabanlı uçlarla yeniden planlanır/silinir.
   const isManageableStandaloneTask = (task) =>
-    Boolean(task) && !task.homeworkId && HOMEWORK_TASK_TYPES.has(task.taskType)
+    Boolean(task) &&
+    !task.homeworkId &&
+    (HOMEWORK_TASK_TYPES.has(task.taskType) ||
+      (task.taskType === 'konu-tekrari' && task.createdBy === 'ogretmen'))
 
   const handleTaskReschedule = async ({ date, startTime, durationMinutes }) => {
     await updateTeacherStudentTask(studentTeacherId, reschedulingTask.id, { date, startTime, durationMinutes })
@@ -250,6 +275,10 @@ export default function StudentDetailPage() {
   )
   const updateMistakeMeta = useCallback(
     (id, updates) => updateTeacherStudentWrongQuestion(studentTeacherId, id, updates),
+    [studentTeacherId],
+  )
+  const updateMistakePhoto = useCallback(
+    (id, dataUrl) => updateTeacherStudentWrongQuestionPhoto(studentTeacherId, id, dataUrl),
     [studentTeacherId],
   )
 
@@ -390,6 +419,8 @@ export default function StudentDetailPage() {
                 tasksByDate={tasksByDate}
                 lessonSchedule={student.schedule}
                 lessonScheduleExceptions={student.scheduleExceptions}
+                otherLessonSchedule={student.otherLessonSchedule}
+                otherLessonScheduleExceptions={student.otherLessonScheduleExceptions}
                 schoolSchedule={schoolSchedule}
                 schoolHolidays={schoolHolidays}
                 onAddHomework={(date) => setHomeworkModalDate(date)}
@@ -416,6 +447,7 @@ export default function StudentDetailPage() {
             fetchPhoto={fetchPhoto}
             updateMistakeReason={updateMistakeReason}
             updateMistakeMeta={updateMistakeMeta}
+            updateMistakePhoto={updateMistakePhoto}
             hideHeaderWhenUnselected
           />
         )}
@@ -427,9 +459,20 @@ export default function StudentDetailPage() {
           studentTeacherId={studentTeacherId}
           subjectName={student.subjectName}
           defaultTaskDate={homeworkModalDate}
-          initialHomeworkType={student.teacherType === 'okul_ogretmeni' ? 'okul-odevi' : 'soru-bankasi-odevi'}
+          defaultHomeworkType={student.teacherType === 'okul_ogretmeni' ? 'okul-odevi' : 'soru-bankasi-odevi'}
           onSave={handleSaveHomework}
           onClose={() => setHomeworkModalDate('')}
+        />
+      ) : null}
+
+      {editingTopicReview ? (
+        <AssignHomeworkModal
+          studentTeacherId={studentTeacherId}
+          subjectName={student.subjectName}
+          defaultTaskDate={editingTopicReview.date}
+          editTask={editingTopicReview}
+          onSave={handleSaveHomework}
+          onClose={() => setEditingTopicReview(null)}
         />
       ) : null}
 
@@ -446,7 +489,16 @@ export default function StudentDetailPage() {
                   }
                 : undefined
           }
-          onEdit={detailTask.homeworkId ? () => openEditForTask(detailTask) : undefined}
+          onEdit={
+            detailTask.homeworkId
+              ? () => openEditForTask(detailTask)
+              : detailTask.taskType === 'konu-tekrari' && isManageableStandaloneTask(detailTask)
+                ? () => {
+                    setEditingTopicReview(detailTask)
+                    setDetailTask(null)
+                  }
+                : undefined
+          }
           onDelete={
             detailTask.homeworkId
               ? () => openDeleteForTask(detailTask)

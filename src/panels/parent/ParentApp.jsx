@@ -29,6 +29,7 @@ const RequestsPage = lazy(() => import('./pages/RequestsPage'))
 const AdminBookRequestsPage = lazy(() => import('./pages/AdminBookRequestsPage'))
 const TestsPage = lazy(() => import('./pages/TestsPage'))
 const MistakesPage = lazy(() => import('./pages/MistakesPage'))
+const StudyHistoryPage = lazy(() => import('./pages/StudyHistoryPage'))
 
 function RequireAdmin({ children }) {
   const { authUser } = useAuth()
@@ -125,6 +126,10 @@ export default function ParentApp() {
             <Route path="homework" element={<Navigate to="/parent/weekly-plan" replace />} />
             <Route path="tests" element={pageElement(TestsPage)} />
             <Route path="mistakes" element={pageElement(MistakesPage)} />
+            <Route
+              path="study-history"
+              element={<RequireStudents>{pageElement(StudyHistoryPage)}</RequireStudents>}
+            />
             <Route path="students" element={pageElement(StudentsPage)} />
             <Route path="guide" element={pageElement(GettingStartedPage)} />
             <Route path="teachers" element={pageElement(TeachersPage)} />

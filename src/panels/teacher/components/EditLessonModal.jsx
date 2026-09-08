@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Loader2, Trash2, X } from 'lucide-react'
-import { todayISODate } from '../../../utils/time'
+import { addDaysISO, todayISODate } from '../../../utils/time'
 import {
   updateTeacherRecurringLesson,
   deleteTeacherRecurringLesson,
   deleteTeacherRecurringLessonOccurrence,
+  moveTeacherRecurringLessonOccurrence,
   updateTeacherOneTimeLesson,
   deleteTeacherOneTimeLesson,
 } from '../../../services/teacherService'
@@ -86,9 +87,31 @@ export default function EditLessonModal({ entry, onSave, onDelete, onClose }) {
   const [deleting, setDeleting] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [confirmingSave, setConfirmingSave] = useState(false)
 
-  const handleSubmit = async (event) => {
+  // Tekrarlayan dersin "sadece bu hafta" güncellenmesi, oluşumun bu haftadaki tarihini gerektirir;
+  // gün değiştirildiyse aynı haftadaki yeni güne kaydırılır. Geçmiş tarihler taşınamaz.
+  const occurrenceTargetDate =
+    !entry.isOneTime && entry.occurrenceDate
+      ? addDaysISO(
+          entry.occurrenceDate,
+          WEEKDAYS.findIndex((day) => day.id === dayOfWeek) - WEEKDAYS.findIndex((day) => day.id === entry.dayOfWeek),
+        )
+      : null
+  const canEditThisWeekOnly = Boolean(occurrenceTargetDate) && occurrenceTargetDate >= todayISODate()
+
+  const handleSubmit = (event) => {
     event.preventDefault()
+    if (saving || deleting) return
+    if (entry.isOneTime) {
+      persist('one-time')
+      return
+    }
+    setConfirmingDelete(false)
+    setConfirmingSave(true)
+  }
+
+  const persist = async (scope) => {
     if (saving || deleting) return
 
     setSaving(true)
@@ -96,6 +119,15 @@ export default function EditLessonModal({ entry, onSave, onDelete, onClose }) {
     try {
       if (entry.isOneTime) {
         await updateTeacherOneTimeLesson(entry.studentTeacherId, entry.id, { date, startTime, durationMinutes })
+      } else if (scope === 'occurrence') {
+        await moveTeacherRecurringLessonOccurrence(entry.studentTeacherId, {
+          dayOfWeek: entry.dayOfWeek,
+          originalStartTime: entry.startTime,
+          originalDate: entry.occurrenceDate,
+          date: occurrenceTargetDate,
+          startTime,
+          durationMinutes,
+        })
       } else {
         await updateTeacherRecurringLesson(entry.studentTeacherId, {
           originalDayOfWeek: entry.dayOfWeek,
@@ -108,7 +140,6 @@ export default function EditLessonModal({ entry, onSave, onDelete, onClose }) {
       await onSave()
     } catch (err) {
       setSaveError(err.message || 'Bir hata oluştu, tekrar deneyin.')
-    } finally {
       setSaving(false)
     }
   }
@@ -203,6 +234,42 @@ export default function EditLessonModal({ entry, onSave, onDelete, onClose }) {
 
           {saveError ? <span className="text-xs text-panel-warm">{saveError}</span> : null}
 
+          {!entry.isOneTime && confirmingSave ? (
+            <div className="flex flex-col gap-2 rounded-xl border border-panel-blue/40 bg-panel-blue-soft/40 p-3">
+              <span className="text-xs font-medium text-panel-text">
+                Bu ders her hafta tekrar ediyor. Değişiklik nereye uygulansın?
+              </span>
+              {canEditThisWeekOnly ? (
+                <button
+                  type="button"
+                  onClick={() => persist('occurrence')}
+                  disabled={saving || deleting}
+                  className="flex h-11 items-center justify-center gap-2 rounded-xl border border-panel-blue/40 px-4 text-sm font-semibold text-panel-blue hover:bg-panel-blue-soft disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : null}
+                  Sadece {formatOccurrenceDate(occurrenceTargetDate)} dersini güncelle
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => persist('series')}
+                disabled={saving || deleting}
+                className="flex h-11 items-center justify-center gap-2 rounded-xl border border-panel-blue/40 px-4 text-sm font-semibold text-panel-blue hover:bg-panel-blue-soft disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {saving ? <Loader2 size={16} className="animate-spin" /> : null}
+                Tüm haftalar için güncelle
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingSave(false)}
+                disabled={saving || deleting}
+                className="flex h-11 items-center justify-center rounded-xl border border-panel-border px-4 text-sm font-semibold text-panel-text hover:bg-panel-surface-soft disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Vazgeç
+              </button>
+            </div>
+          ) : null}
+
           {!entry.isOneTime && confirmingDelete ? (
             <div className="flex flex-col gap-2 rounded-xl border border-panel-warm/40 bg-panel-warm/5 p-3">
               <span className="text-xs font-medium text-panel-text">
@@ -240,7 +307,14 @@ export default function EditLessonModal({ entry, onSave, onDelete, onClose }) {
           <div className="flex flex-col gap-2 min-[420px]:flex-row">
             <button
               type="button"
-              onClick={() => (entry.isOneTime ? handleDelete('series') : setConfirmingDelete(true))}
+              onClick={() => {
+                if (entry.isOneTime) {
+                  handleDelete('series')
+                  return
+                }
+                setConfirmingSave(false)
+                setConfirmingDelete(true)
+              }}
               disabled={saving || deleting || (!entry.isOneTime && confirmingDelete)}
               className="flex h-12 items-center justify-center gap-2 rounded-xl border border-panel-warm/40 px-4 text-sm font-semibold text-panel-warm hover:bg-panel-warm/10 disabled:cursor-not-allowed disabled:opacity-70"
             >
@@ -249,7 +323,7 @@ export default function EditLessonModal({ entry, onSave, onDelete, onClose }) {
             </button>
             <button
               type="submit"
-              disabled={saving || deleting}
+              disabled={saving || deleting || (!entry.isOneTime && confirmingSave)}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-panel-blue px-4 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : null}

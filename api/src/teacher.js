@@ -42,7 +42,7 @@ function addDaysISO(dateISO, days) {
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
-const { SELECT_TASK, sanitizeTask, fetchTaskAnswerSheetData } = require('./tasks')
+const { SELECT_TASK, sanitizeTask, sanitizeTaskAttachment, fetchTaskAnswerSheetData } = require('./tasks')
 const { resolveStudentSchoolSchedule } = require('./schoolSchedule')
 const {
   fetchResourceBookTopicsWithTests,
@@ -2415,6 +2415,90 @@ async function createTeacherHomeworkHandler(request) {
   }
 }
 
+// Öğretmenin "Konu Tekrarı" görevi: kaynağa/teste bağlı olmayan, ders + konu + açıklama +
+// (isteğe bağlı) dosya eki taşıyan basit bir plan görevi. Doğrudan dbo.Tasks'a yazılır;
+// student_teacher_id set edildiğinden teacherTaskScopeSql kapsamına otomatik girer.
+async function createTeacherTopicReviewHandler(request) {
+  try {
+    const payload = await request.json().catch(() => null)
+    const { error, studentId, subjectId, studentTeacherId, actorId: teacherUserId } =
+      await requireTeacherStudentContext(request, { studentTeacherId: payload?.studentTeacherId })
+    if (error) return error
+
+    if ((await getTeacherQuota(teacherUserId)).billingState === 'restricted') {
+      return billingRestrictedResponse()
+    }
+
+    const date = payload?.date
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return json(400, { error: 'Geçerli bir tarih seçilmeli.' })
+    }
+
+    const topic = typeof payload?.topic === 'string' ? payload.topic.trim().slice(0, 200) : ''
+    const description = typeof payload?.description === 'string' ? payload.description.trim().slice(0, 1000) : ''
+    if (!topic && !description) {
+      return json(400, { error: 'Konu veya açıklama girmelisiniz.' })
+    }
+
+    const startTime = payload?.startTime || null
+    if (startTime && !isValidTime(startTime)) {
+      return json(400, { error: 'Geçerli bir başlangıç saati seçilmeli.' })
+    }
+    const durationMinutes = payload?.durationMinutes != null ? Number(payload.durationMinutes) : null
+    if (durationMinutes != null && (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480)) {
+      return json(400, { error: 'Süre 5 ile 480 dakika arasında olmalı.' })
+    }
+    const endTime = startTime && durationMinutes ? computeEndTime(startTime, durationMinutes) : null
+
+    const attachment = sanitizeTaskAttachment(payload?.attachmentUrl, payload?.attachmentName)
+    if (attachment.error) {
+      return json(400, { error: attachment.error })
+    }
+
+    const subjectDb = await withRequest({ subjectId: { type: sql.UniqueIdentifier, value: subjectId } })
+    const subjectResult = await subjectDb.query(`SELECT TOP 1 name FROM dbo.Subjects WHERE id = @subjectId;`)
+    const subjectName = subjectResult.recordset[0]?.name || null
+    const title = [subjectName, 'Konu Tekrarı'].filter(Boolean).join(' - ').slice(0, 200)
+
+    const insertDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
+      subjectId: { type: sql.UniqueIdentifier, value: subjectId || null },
+      date: { type: sql.Date, value: date },
+      title: { type: sql.NVarChar(200), value: title },
+      subject: { type: sql.NVarChar(100), value: subjectName },
+      topic: { type: sql.NVarChar(200), value: topic || null },
+      description: { type: sql.NVarChar(1000), value: description || null },
+      startTime: { type: sql.Char(5), value: startTime },
+      endTime: { type: sql.Char(5), value: endTime },
+      durationMinutes: { type: sql.Int, value: durationMinutes || 0 },
+      attachmentUrl: { type: sql.NVarChar(sql.MAX), value: attachment.url },
+      attachmentName: { type: sql.NVarChar(255), value: attachment.name },
+      createdByUserId: { type: sql.UniqueIdentifier, value: teacherUserId || null },
+    })
+    const insertResult = await insertDb.query(`
+      INSERT INTO dbo.Tasks (
+        student_id, student_teacher_id, subject_id, date, title, subject, topic, description,
+        task_type, start_time, end_time, duration_minutes, status, priority,
+        created_by, created_by_user_id, is_draft, attachment_url, attachment_name
+      )
+      OUTPUT inserted.id
+      VALUES (
+        @studentId, @studentTeacherId, @subjectId, @date, @title, @subject, @topic, @description,
+        'konu-tekrari', @startTime, @endTime, @durationMinutes, 'bekliyor', 'orta',
+        'ogretmen', @createdByUserId, 0, @attachmentUrl, @attachmentName
+      );
+    `)
+
+    const insertedId = insertResult.recordset[0].id
+    const fetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: insertedId } })
+    const fetchResult = await fetchDb.query(`${SELECT_TASK} WHERE t.id = @id;`)
+    return json(201, { task: sanitizeTask(fetchResult.recordset[0]) })
+  } catch (error) {
+    return handleError(error, 'createTeacherTopicReviewHandler', 'Konu tekrarı görevi oluşturulamadı.')
+  }
+}
+
 async function assignTeacherHomeworkTaskHandler(request) {
   try {
     const homeworkId = request.params.homeworkId
@@ -2751,6 +2835,7 @@ async function updateTeacherStudentTaskHandler(request) {
     const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
     if (error) return error
 
+    const isTopicReviewEdit = Boolean(payload?.topicReview)
     const date = payload?.date
     const startTime = payload?.startTime || null
     const durationMinutes = Number(payload?.durationMinutes)
@@ -2761,7 +2846,12 @@ async function updateTeacherStudentTaskHandler(request) {
     if (startTime && !isValidTime(startTime)) {
       return json(400, { error: 'Geçerli bir başlangıç saati seçilmeli.' })
     }
-    if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
+    // Konu Tekrarı görevi saatsiz olabilir; diğer (yeniden planlama) çağrıları süre zorunlu tutar.
+    if (isTopicReviewEdit) {
+      if (startTime && (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480)) {
+        return json(400, { error: 'Süre 5 ile 480 dakika arasında olmalı.' })
+      }
+    } else if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
       return json(400, { error: 'Süre 5 ile 480 dakika arasında olmalı.' })
     }
 
@@ -2772,13 +2862,54 @@ async function updateTeacherStudentTaskHandler(request) {
       studentTeacherId: { type: sql.UniqueIdentifier, value: studentTeacherId },
     })
     const scopeResult = await scopeDb.query(`
-      SELECT TOP 1 t.id, t.homework_id
+      SELECT TOP 1 t.id, t.homework_id, t.task_type, t.created_by
       FROM dbo.Tasks t
       WHERE t.id = @id AND t.student_id = @studentId AND ${TEACHER_TASK_IN_SCOPE};
     `)
     const scoped = scopeResult.recordset[0]
     if (!scoped) {
       return json(404, { error: 'Görev bulunamadı.' })
+    }
+
+    // --- Konu Tekrarı içeriği düzenleme (konu / açıklama / saat / süre / dosya) ---
+    if (isTopicReviewEdit) {
+      if (scoped.task_type !== 'konu-tekrari' || scoped.created_by !== 'ogretmen') {
+        return json(400, { error: 'Bu görev bu şekilde düzenlenemez.' })
+      }
+      const topic = typeof payload?.topic === 'string' ? payload.topic.trim().slice(0, 200) : ''
+      const description = typeof payload?.description === 'string' ? payload.description.trim().slice(0, 1000) : ''
+      if (!topic && !description) {
+        return json(400, { error: 'Konu veya açıklama girmelisiniz.' })
+      }
+      const attachment = sanitizeTaskAttachment(payload?.attachmentUrl, payload?.attachmentName)
+      if (attachment.error) {
+        return json(400, { error: attachment.error })
+      }
+      const trEndTime = startTime && durationMinutes ? computeEndTime(startTime, durationMinutes) : null
+
+      const trDb = await withRequest({
+        id: { type: sql.UniqueIdentifier, value: taskId },
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        date: { type: sql.Date, value: date },
+        topic: { type: sql.NVarChar(200), value: topic || null },
+        description: { type: sql.NVarChar(1000), value: description || null },
+        startTime: { type: sql.Char(5), value: startTime },
+        endTime: { type: sql.Char(5), value: trEndTime },
+        durationMinutes: { type: sql.Int, value: startTime && durationMinutes ? durationMinutes : 0 },
+        attachmentUrl: { type: sql.NVarChar(sql.MAX), value: attachment.url },
+        attachmentName: { type: sql.NVarChar(255), value: attachment.name },
+      })
+      await trDb.query(`
+        UPDATE dbo.Tasks
+        SET date = @date, topic = @topic, description = @description,
+            start_time = @startTime, end_time = @endTime, duration_minutes = @durationMinutes,
+            attachment_url = @attachmentUrl, attachment_name = @attachmentName
+        WHERE id = @id AND student_id = @studentId;
+      `)
+
+      const trFetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: taskId } })
+      const trFetchResult = await trFetchDb.query(`${SELECT_TASK} WHERE t.id = @id;`)
+      return json(200, { task: sanitizeTask(trFetchResult.recordset[0]) })
     }
 
     const endTime = startTime ? computeEndTime(startTime, durationMinutes) : null
@@ -3348,6 +3479,45 @@ async function updateTeacherStudentWrongQuestionHandler(request) {
   }
 }
 
+// Öğretmenin, öğrencinin Hata Defteri'ndeki yanlış çekilmiş bir fotoğrafı yenisiyle değiştirmesi
+// (bkz. progress.js updateWrongQuestionPhotoHandler — panel muadili). Sadece kendi dersindeki kayıt.
+async function updateTeacherStudentWrongQuestionPhotoHandler(request) {
+  try {
+    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    const wrongQuestionId = request.params.wrongQuestionId
+    const payload = await request.json().catch(() => null)
+
+    const photoCheck = sanitizeMistakePhoto(payload?.photo)
+    if (photoCheck.error) {
+      return json(400, { error: photoCheck.error })
+    }
+
+    const subjectName = await resolveTeacherSubjectName(subjectId)
+
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      subject: { type: sql.NVarChar(100), value: subjectName },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoCheck.value },
+    })
+    const result = await requestDb.query(`
+      UPDATE dbo.WrongQuestions SET photo_url = @photoUrl
+      OUTPUT ${WRONG_QUESTION_OUTPUT_COLUMNS}
+      WHERE id = @id AND student_id = @studentId AND subject = @subject;
+    `)
+
+    if (!result.recordset[0]) {
+      return json(404, { error: 'Kayıt bulunamadı.' })
+    }
+
+    return json(200, { wrongQuestion: sanitizeWrongQuestion(result.recordset[0]) })
+  } catch (error) {
+    return handleError(error, 'updateTeacherStudentWrongQuestionPhotoHandler', 'Fotoğraf güncellenemedi.')
+  }
+}
+
 module.exports = {
   listTeacherStudentsHandler,
   getTeacherStudentHandler,
@@ -3377,6 +3547,7 @@ module.exports = {
   saveTeacherManualWrongQuestionPhotoHandler,
   listTeacherStudentHomeworksHandler,
   createTeacherHomeworkHandler,
+  createTeacherTopicReviewHandler,
   assignTeacherHomeworkTaskHandler,
   updateTeacherHomeworkHandler,
   deleteTeacherHomeworkHandler,
@@ -3391,6 +3562,7 @@ module.exports = {
   loadStudentProgressOverview,
   listTeacherStudentWrongQuestionsHandler,
   getTeacherStudentWrongQuestionPhotoHandler,
+  updateTeacherStudentWrongQuestionPhotoHandler,
   getTeacherStudentWrongQuestionTopicStatsHandler,
   updateTeacherStudentWrongQuestionHandler,
   grantParentAccessHandler,

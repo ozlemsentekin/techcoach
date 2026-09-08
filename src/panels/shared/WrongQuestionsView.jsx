@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, ArrowLeft, BookOpen, ChevronDown, ChevronRight, Download, Layers, Loader2, Search, Tag } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowLeft,
+  BookOpen,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Layers,
+  Loader2,
+  Search,
+  Tag,
+} from 'lucide-react'
 import PageHeader from '../layout/PageHeader'
 import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
@@ -7,6 +19,8 @@ import Button from '../ui/Button'
 import Badge from '../ui/Badge'
 import { cn } from '../ui/utils'
 import WrongQuestionGalleryModal from './WrongQuestionGalleryModal'
+import MistakePhotoCaptureModal from '../student/components/MistakePhotoCaptureModal'
+import { verifyMistakePhotoQuestionNumber } from '../../services/mistakePhotoService'
 import { ResourceBookAvatar } from './ResourceBookCard'
 import { RATE_TONES, successRateTone } from './rateTones'
 
@@ -155,20 +169,37 @@ function SubjectShelfCard({ subject, count, stats, tone, onClick }) {
   )
 }
 
-function ContentTopicCard({ topic, wrongCount, stats, scopeLabel, onClick }) {
+function ContentTopicCard({ topic, wrongCount, stats, scopeLabel, onClick, selectMode = false, selected = false }) {
   const successPercent = stats?.successRate != null ? Math.round(stats.successRate * 100) : null
   const colors = RATE_TONES[successRateTone(stats?.successRate)]
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-col gap-3 rounded-2xl border border-panel-border bg-panel-surface p-4 text-left shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-md"
+      aria-pressed={selectMode ? selected : undefined}
+      className={cn(
+        'flex flex-col gap-3 rounded-2xl border bg-panel-surface p-4 text-left shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-md',
+        selectMode && selected ? 'border-panel-blue ring-2 ring-panel-blue/40' : 'border-panel-border',
+      )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2">
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
-            <Layers size={16} aria-hidden="true" />
-          </span>
+          {selectMode ? (
+            <span
+              className={cn(
+                'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border',
+                selected
+                  ? 'border-panel-blue bg-panel-blue text-white'
+                  : 'border-panel-border bg-panel-surface-soft text-transparent',
+              )}
+            >
+              <Check size={16} aria-hidden="true" />
+            </span>
+          ) : (
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
+              <Layers size={16} aria-hidden="true" />
+            </span>
+          )}
           <h3 className="line-clamp-2 min-h-10 text-sm font-semibold leading-snug text-panel-text">
             {topic || 'Genel'}
           </h3>
@@ -299,14 +330,18 @@ function TopicAccordionHeader({ topic, wrongCount, stats, isOpen, onToggle }) {
 // mount edilmediği için fotoğraf istemez — WrongQuestionGalleryModal'daki tembel yükleme deseniyle
 // aynı fikir, tek farkı burada tüm grup için paralel çalışır.
 function WrongQuestionThumbnail({ item, fetchPhoto, onClick }) {
-  const [photoUrl, setPhotoUrl] = useState(null)
+  const [fetchedPhotoUrl, setFetchedPhotoUrl] = useState(null)
   const [error, setError] = useState('')
+  // Hata Defteri'nden fotoğraf değiştirildiğinde üst bileşen item'a taze `photoUrl` yazar; o
+  // durumda tembel çekim atlanır ve yeni fotoğraf anında görünür (galeriyle aynı desen).
+  const photoUrl = item.photoUrl || fetchedPhotoUrl
 
   useEffect(() => {
+    if (item.photoUrl) return undefined
     let ignore = false
     fetchPhoto(item.id)
       .then((url) => {
-        if (!ignore) setPhotoUrl(url)
+        if (!ignore) setFetchedPhotoUrl(url)
       })
       .catch((err) => {
         if (!ignore) setError(err.message || 'Fotoğraf yüklenemedi.')
@@ -314,7 +349,7 @@ function WrongQuestionThumbnail({ item, fetchPhoto, onClick }) {
     return () => {
       ignore = true
     }
-  }, [item.id, fetchPhoto])
+  }, [item.id, item.photoUrl, fetchPhoto])
 
   // topic (içerik grubu) zaten akordeon başlığında gösteriliyor; burada tekrar etmemek için
   // başlıkta sadece test adı ve soru numarası yer alır (bkz. kullanıcı isteği).
@@ -488,6 +523,91 @@ function SourcePdfExportButton({ subject, source, fetchPhoto }) {
   )
 }
 
+// "İçerik Grubuna Göre" görünümünde birden fazla içerik grubunu (konuyu) işaretleyip hepsindeki
+// fotoğraflı yanlışları tek bir PDF'e aktarmak için üst araç çubuğu. Fotoğraflar SourcePdfExportButton
+// ile aynı şekilde buildWrongQuestionsPdf içinde tembel çekilir; ilerleme "n/toplam" olarak gösterilir.
+function ContentTopicExportToolbar({
+  selectMode,
+  onEnterSelectMode,
+  onExitSelectMode,
+  selectedTopicCount,
+  selectedQuestionCount,
+  onSelectAll,
+  onClear,
+  onExport,
+}) {
+  const [status, setStatus] = useState('idle')
+  const [progress, setProgress] = useState({ done: 0, total: 0 })
+  const [error, setError] = useState('')
+
+  const handleExport = async () => {
+    if (status === 'loading' || selectedQuestionCount === 0) return
+    setStatus('loading')
+    setError('')
+    setProgress({ done: 0, total: 0 })
+    try {
+      await onExport((done, total) => setProgress({ done, total }))
+    } catch (err) {
+      setError(err.message || 'PDF oluşturulamadı.')
+    } finally {
+      setStatus('idle')
+    }
+  }
+
+  if (!selectMode) {
+    return (
+      <div className="flex justify-end">
+        <Button variant="secondary" size="sm" onClick={onEnterSelectMode}>
+          <Download size={15} aria-hidden="true" />
+          PDF'e Aktar
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-panel-blue/40 bg-panel-blue-soft/40 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-panel-text">
+          {selectedTopicCount > 0
+            ? `${selectedTopicCount} içerik grubu · ${selectedQuestionCount} soru seçildi`
+            : 'PDF’e aktarmak istediğin içerik gruplarını işaretle'}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={onSelectAll}>
+            Tümünü Seç
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onClear} disabled={selectedTopicCount === 0}>
+            Temizle
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onExitSelectMode}
+            disabled={status === 'loading'}
+          >
+            Vazgeç
+          </Button>
+          <Button size="sm" onClick={handleExport} disabled={status === 'loading' || selectedQuestionCount === 0}>
+            {status === 'loading' ? (
+              <>
+                <Loader2 size={15} className="animate-spin" aria-hidden="true" />
+                {progress.total ? `PDF hazırlanıyor (${progress.done}/${progress.total})` : 'PDF hazırlanıyor...'}
+              </>
+            ) : (
+              <>
+                <Download size={15} aria-hidden="true" />
+                PDF İndir
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+      {error ? <span className="text-xs text-panel-warm">{error}</span> : null}
+    </div>
+  )
+}
+
 // Öğrenci/veli/öğretmen panellerinin ortak Hata Defteri görünümü: ders kartları -> içerik (konu)
 // kartları -> fotoğraf galerisi + Dikkat Hatası/Bilgi Eksikliği etiketleme. Kimin verisini
 // gösterdiği tamamen fetchWrongQuestions/fetchTopicStats/updateMistakeReason prop'larıyla
@@ -498,6 +618,7 @@ export default function WrongQuestionsView({
   fetchPhoto,
   updateMistakeReason,
   updateMistakeMeta,
+  updateMistakePhoto,
   title = 'Hata Defterim',
   subtitle = 'Fotoğrafını çektiğin yanlış sorular ders ders burada.',
   headerActions,
@@ -514,6 +635,9 @@ export default function WrongQuestionsView({
   const [selectedSourceKey, setSelectedSourceKey] = useState(null)
   const [galleryTopicKey, setGalleryTopicKey] = useState(null)
   const [sourceGallerySelection, setSourceGallerySelection] = useState(null)
+  const [topicSelectMode, setTopicSelectMode] = useState(false)
+  const [selectedTopicKeys, setSelectedTopicKeys] = useState(() => new Set())
+  const [replacingPhotoItem, setReplacingPhotoItem] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -632,19 +756,61 @@ export default function WrongQuestionsView({
     (topicGroup) => topicStatsKey(effectiveSelectedSubject, topicGroup.topic) === galleryTopicKey,
   )
 
+  const resetTopicSelection = () => {
+    setTopicSelectMode(false)
+    setSelectedTopicKeys(new Set())
+  }
+
   const handleSelectSubject = (subject) => {
     setSelectedSubject(subject)
     setSelectedSourceKey(null)
+    resetTopicSelection()
   }
 
   const handleBackToSubjects = () => {
     setSelectedSubject(null)
     setSelectedSourceKey(null)
+    resetTopicSelection()
   }
 
   const handleChangeGroupMode = (mode) => {
     setGroupMode(mode)
     setSelectedSourceKey(null)
+    resetTopicSelection()
+  }
+
+  const toggleTopicSelection = (key) => {
+    setSelectedTopicKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const selectedTopicGroups = (selectedContentGroup?.topics || []).filter((topicGroup) =>
+    selectedTopicKeys.has(topicStatsKey(effectiveSelectedSubject, topicGroup.topic)),
+  )
+  const selectedTopicQuestionCount = selectedTopicGroups.reduce((sum, group) => sum + group.items.length, 0)
+
+  const handleExportSelectedTopics = async (onProgress) => {
+    if (!selectedTopicGroups.length) return
+    const [{ buildWrongQuestionsPdf, buildWrongQuestionsPdfFileName }, { savePdfDocument }] = await Promise.all([
+      import('../../utils/wrongQuestionsPdf'),
+      import('../../utils/savePdfDocument'),
+    ])
+    const source = {
+      bookName: `${effectiveSelectedSubject} — Seçili İçerik Grupları`,
+      publisherName: null,
+      topics: selectedTopicGroups.map((topicGroup) => ({ topic: topicGroup.topic, items: topicGroup.items })),
+    }
+    const doc = await buildWrongQuestionsPdf({
+      subject: effectiveSelectedSubject,
+      source,
+      fetchPhoto,
+      onProgress,
+    })
+    await savePdfDocument(doc, buildWrongQuestionsPdfFileName(`${effectiveSelectedSubject}-icerik-gruplari`))
   }
 
   const handleUpdateMistakeReason = async (wrongQuestionId, mistakeReason) => {
@@ -670,6 +836,23 @@ export default function WrongQuestionsView({
         )
       }
     : undefined
+
+  // Hata Defteri'nde yanlış / okunmayan bir fotoğrafı yenisiyle değiştirir. Dönen kayıt dolu
+  // photoUrl taşıdığı için galeri ve küçük resimler tembel çekim yapmadan yeni fotoğrafı gösterir.
+  const handleReplacePhoto = async (dataUrl) => {
+    if (!replacingPhotoItem || !updateMistakePhoto) return
+    const updated = await updateMistakePhoto(replacingPhotoItem.id, dataUrl)
+    const nextPhotoUrl = updated?.photoUrl || dataUrl
+    setWrongQuestions((prev) =>
+      prev
+        ? prev.map((item) =>
+            item.id === replacingPhotoItem.id ? { ...item, photoUrl: nextPhotoUrl, hasPhoto: true } : item,
+          )
+        : prev,
+    )
+  }
+
+  const openReplacePhoto = updateMistakePhoto ? (item) => setReplacingPhotoItem(item) : undefined
 
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
@@ -760,19 +943,46 @@ export default function WrongQuestionsView({
               ))}
             </div>
           ) : (
-            <div
-              className="fade-slide-in grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
-            >
-              {selectedContentGroup?.topics.map((topicGroup) => (
-                <ContentTopicCard
-                  key={topicStatsKey(effectiveSelectedSubject, topicGroup.topic)}
-                  topic={topicGroup.topic}
-                  wrongCount={topicGroup.items.length}
-                  stats={topicStatsMap.get(topicStatsKey(effectiveSelectedSubject, topicGroup.topic))}
-                  scopeLabel="tüm kaynaklar"
-                  onClick={() => setGalleryTopicKey(topicStatsKey(effectiveSelectedSubject, topicGroup.topic))}
-                />
-              ))}
+            <div className="flex flex-col gap-3">
+              <ContentTopicExportToolbar
+                selectMode={topicSelectMode}
+                onEnterSelectMode={() => setTopicSelectMode(true)}
+                onExitSelectMode={resetTopicSelection}
+                selectedTopicCount={selectedTopicGroups.length}
+                selectedQuestionCount={selectedTopicQuestionCount}
+                onSelectAll={() =>
+                  setSelectedTopicKeys(
+                    new Set(
+                      (selectedContentGroup?.topics || []).map((topicGroup) =>
+                        topicStatsKey(effectiveSelectedSubject, topicGroup.topic),
+                      ),
+                    ),
+                  )
+                }
+                onClear={() => setSelectedTopicKeys(new Set())}
+                onExport={handleExportSelectedTopics}
+              />
+              <div className="fade-slide-in grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+                {selectedContentGroup?.topics.map((topicGroup) => {
+                  const topicKey = topicStatsKey(effectiveSelectedSubject, topicGroup.topic)
+                  return (
+                    <ContentTopicCard
+                      key={topicKey}
+                      topic={topicGroup.topic}
+                      wrongCount={topicGroup.items.length}
+                      stats={topicStatsMap.get(topicKey)}
+                      scopeLabel="tüm kaynaklar"
+                      selectMode={topicSelectMode}
+                      selected={selectedTopicKeys.has(topicKey)}
+                      onClick={() =>
+                        topicSelectMode
+                          ? toggleTopicSelection(topicKey)
+                          : setGalleryTopicKey(topicKey)
+                      }
+                    />
+                  )
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -793,7 +1003,7 @@ export default function WrongQuestionsView({
         </div>
       )}
 
-      {galleryTopicGroup ? (
+      {galleryTopicGroup && !replacingPhotoItem ? (
         <WrongQuestionGalleryModal
           title={galleryTopicGroup.topic || 'Genel'}
           items={galleryTopicGroup.items}
@@ -801,10 +1011,11 @@ export default function WrongQuestionsView({
           onClose={() => setGalleryTopicKey(null)}
           onUpdateMistakeReason={handleUpdateMistakeReason}
           onUpdateMistakeMeta={handleUpdateMistakeMeta}
+          onCapturePhoto={openReplacePhoto}
         />
       ) : null}
 
-      {sourceGallerySelection ? (
+      {sourceGallerySelection && !replacingPhotoItem ? (
         <WrongQuestionGalleryModal
           title={activeSource?.bookName || 'Kaynak'}
           items={sourceGallerySelection.items}
@@ -813,6 +1024,20 @@ export default function WrongQuestionsView({
           onClose={() => setSourceGallerySelection(null)}
           onUpdateMistakeReason={handleUpdateMistakeReason}
           onUpdateMistakeMeta={handleUpdateMistakeMeta}
+          onCapturePhoto={openReplacePhoto}
+        />
+      ) : null}
+
+      {replacingPhotoItem ? (
+        <MistakePhotoCaptureModal
+          questionLabel={replacingPhotoItem.questionNumber}
+          onVerifyQuestionNumber={
+            replacingPhotoItem.questionNumber
+              ? (dataUrl) => verifyMistakePhotoQuestionNumber(dataUrl, replacingPhotoItem.questionNumber)
+              : undefined
+          }
+          onClose={() => setReplacingPhotoItem(null)}
+          onSave={handleReplacePhoto}
         />
       ) : null}
     </div>

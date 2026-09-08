@@ -7,12 +7,16 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  FileText,
   ListChecks,
   Loader2,
+  Paperclip,
+  RotateCcw,
   Search,
   X,
   XCircle,
 } from 'lucide-react'
+import { ATTACHMENT_ACCEPT, pickAttachment } from '../../../utils/fileAttachment'
 import { todayISODate } from '../../../utils/time'
 import Badge from '../../ui/Badge'
 import LoadingState from '../../shared/LoadingState'
@@ -80,24 +84,36 @@ export default function AssignHomeworkModal({
   studentTeacherId,
   subjectName,
   defaultTaskDate,
-  initialHomeworkType,
+  defaultHomeworkType,
+  editTask,
   onSave,
   onClose,
 }) {
-  // Öğretmen türü sabitse (özel öğretmen → soru bankası, okul öğretmeni → okul ödevi) tür
-  // seçimi adımı atlanır; doğrudan kaynak seçimiyle başlanır.
-  const [step, setStep] = useState(initialHomeworkType ? 'source' : 'type')
-  const [homeworkType, setHomeworkType] = useState(initialHomeworkType || 'soru-bankasi-odevi')
+  const isEditTopicReview = Boolean(editTask)
+  const seedDuration = Number(editTask?.durationMinutes) || 0
+  // Görev türü her zaman seçilir (Soru Bankası Ödevi / Okul Ödevi / Konu Tekrarı) —
+  // düzenlemede doğrudan Konu Tekrarı formu açılır.
+  const [step, setStep] = useState(isEditTopicReview ? 'topic-review' : 'type')
+  const [homeworkType, setHomeworkType] = useState(
+    isEditTopicReview ? 'konu-tekrari' : defaultHomeworkType || 'soru-bankasi-odevi',
+  )
+  const [topicText, setTopicText] = useState(editTask?.topic || '')
+  const [attachment, setAttachment] = useState(
+    editTask?.attachmentUrl ? { url: editTask.attachmentUrl, name: editTask.attachmentName || 'ek-dosya' } : null,
+  )
+  const [attachmentError, setAttachmentError] = useState('')
   const [resourceBookId, setResourceBookId] = useState('')
   const [schoolResourceId, setSchoolResourceId] = useState('')
   const [schoolResources, setSchoolResources] = useState(null)
   const [schoolResourcesError, setSchoolResourcesError] = useState('')
-  const [note, setNote] = useState('')
+  const [note, setNote] = useState(editTask?.description || '')
   const [totalQuestionCount, setTotalQuestionCount] = useState(0)
   const [totalPageCount, setTotalPageCount] = useState(0)
-  const [taskTime, setTaskTime] = useState('')
-  const [durationPreset, setDurationPreset] = useState(DEFAULT_TASK_DURATION_MINUTES)
-  const [customDuration, setCustomDuration] = useState(30)
+  const [taskTime, setTaskTime] = useState(editTask?.startTime || '')
+  const [durationPreset, setDurationPreset] = useState(
+    DURATION_PRESETS.includes(seedDuration) ? seedDuration : seedDuration > 0 ? 'custom' : DEFAULT_TASK_DURATION_MINUTES,
+  )
+  const [customDuration, setCustomDuration] = useState(seedDuration > 0 ? seedDuration : 30)
   const [resourceBooks, setResourceBooks] = useState(null)
   const [resourceBooksError, setResourceBooksError] = useState('')
   const [topics, setTopics] = useState(null)
@@ -125,6 +141,20 @@ export default function AssignHomeworkModal({
   }, [studentTeacherId])
 
   const isSchoolHomework = homeworkType === 'okul-odevi'
+  const isTopicReview = homeworkType === 'konu-tekrari'
+
+  const handleAttachmentChange = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setAttachmentError('')
+    const result = await pickAttachment(file)
+    if (result.error) {
+      setAttachmentError(result.error)
+      return
+    }
+    setAttachment({ url: result.url, name: result.name })
+  }
 
   useEffect(() => {
     if (!isSchoolHomework || schoolResources !== null || schoolResourcesError) return undefined
@@ -169,11 +199,11 @@ export default function AssignHomeworkModal({
   const selectedSchoolResource = schoolResources?.find((resource) => resource.id === schoolResourceId) || null
 
   useEffect(() => {
-    if (isReadingBook || isSchoolHomework) return
+    if (isReadingBook || isSchoolHomework || isTopicReview) return
     setNote(buildNote(selectedBook?.name || '', topics, selectedTestIds))
     setTotalQuestionCount(sumSelectedQuestions(topics, selectedTestIds))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTestIds, topics, isReadingBook, isSchoolHomework])
+  }, [selectedTestIds, topics, isReadingBook, isSchoolHomework, isTopicReview])
 
   useEffect(() => {
     if (!isReadingBook || isSchoolHomework) return
@@ -194,7 +224,7 @@ export default function AssignHomeworkModal({
     setTotalPageCount(0)
     setSelectedTestIds(new Set())
     setSaveError('')
-    setStep('source')
+    setStep(nextType === 'konu-tekrari' ? 'topic-review' : 'source')
   }
 
   const handleSelectResourceBook = (book) => {
@@ -244,6 +274,39 @@ export default function AssignHomeworkModal({
   const handleSubmit = async (event) => {
     event.preventDefault()
     if (saving) return
+
+    if (isTopicReview) {
+      const trimmedTopic = topicText.trim()
+      const trimmedNote = note.trim()
+      if (!trimmedTopic && !trimmedNote) {
+        setSaveError('Konu veya açıklama girmelisiniz.')
+        return
+      }
+      const trimmedTime = taskTime.trim()
+      const selectedDuration = durationPreset === 'custom' ? Number(customDuration) || 0 : durationPreset
+      setSaving(true)
+      setSaveError('')
+      try {
+        await onSave({
+          homeworkType: 'konu-tekrari',
+          mode: isEditTopicReview ? 'edit' : 'create',
+          taskId: editTask?.id,
+          topic: trimmedTopic || undefined,
+          description: trimmedNote || undefined,
+          taskDate: isEditTopicReview ? editTask.date : defaultTaskDate,
+          taskTime: trimmedTime || null,
+          taskDurationMinutes: trimmedTime ? selectedDuration || DEFAULT_TASK_DURATION_MINUTES : null,
+          attachmentUrl: attachment?.url || null,
+          attachmentName: attachment?.name || null,
+        })
+      } catch (err) {
+        setSaveError(err.message || 'Bir hata oluştu, tekrar deneyin.')
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+
     if (isSchoolHomework) {
       if (!schoolResourceId) {
         setSaveError('Okul ödevi için bir okul kaynağı seçmelisiniz.')
@@ -296,7 +359,7 @@ export default function AssignHomeworkModal({
         {/* Koyu başlık çubuğu */}
         <div className="flex shrink-0 items-center justify-between gap-3 bg-panel-blue px-4 py-3 text-white">
           <div className="flex min-w-0 items-center gap-1.5">
-            {step === 'content' || (step === 'source' && !initialHomeworkType) ? (
+            {!isEditTopicReview && (step === 'content' || step === 'topic-review' || step === 'source') ? (
               <button
                 type="button"
                 onClick={step === 'content' ? handleBackToSource : handleBackToType}
@@ -308,18 +371,22 @@ export default function AssignHomeworkModal({
             ) : null}
             <div className="min-w-0">
               <h2 className="truncate text-sm font-semibold sm:text-base">
-                {step === 'content'
-                  ? (isSchoolHomework ? selectedSchoolResource?.name : selectedBook?.name) || 'Ödev Ata'
-                  : 'Ödev Ata'}
+                {step === 'topic-review'
+                  ? 'Konu Tekrarı'
+                  : step === 'content'
+                    ? (isSchoolHomework ? selectedSchoolResource?.name : selectedBook?.name) || 'Ödev Ata'
+                    : 'Ödev Ata'}
               </h2>
               <p className="truncate text-[11px] text-white/70">
                 {step === 'type'
-                  ? 'Ödev türünü seçin'
-                  : step === 'source'
-                    ? isSchoolHomework
-                      ? '1. Adım · Okul kaynağı seçin'
-                      : '1. Adım · Kaynak seçin'
-                    : '2. Adım · İçerik ve detaylar'}
+                  ? 'Görev türünü seçin'
+                  : step === 'topic-review'
+                    ? `${subjectName ? `${subjectName} · ` : ''}${isEditTopicReview ? 'Görevi düzenle' : 'Konu ve detaylar'}`
+                    : step === 'source'
+                      ? isSchoolHomework
+                        ? '1. Adım · Okul kaynağı seçin'
+                        : '1. Adım · Kaynak seçin'
+                      : '2. Adım · İçerik ve detaylar'}
               </p>
             </div>
           </div>
@@ -351,9 +418,132 @@ export default function AssignHomeworkModal({
         ) : null}
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          {step === 'type' ? (
+          {step === 'topic-review' ? (
             <div className="flex flex-col gap-3">
-              <p className="text-sm text-panel-text-muted">Ne tür bir ödev atamak istiyorsunuz?</p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                {subjectName ? (
+                  <span className="w-fit rounded-full bg-panel-blue-soft px-2.5 py-1 text-xs font-semibold text-panel-blue">
+                    {subjectName}
+                  </span>
+                ) : null}
+                <span className="inline-flex items-center gap-1 text-xs font-medium capitalize text-panel-text-muted">
+                  <CalendarDays size={13} aria-hidden="true" />
+                  {formattedDate}
+                </span>
+              </div>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-panel-text-muted">Konu</span>
+                <input
+                  type="text"
+                  value={topicText}
+                  onChange={(event) => setTopicText(event.target.value)}
+                  placeholder="örn. Üslü Sayılar"
+                  className="rounded-xl border border-panel-border p-2.5 text-sm text-panel-text"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-panel-text-muted">Açıklama (isteğe bağlı)</span>
+                <textarea
+                  rows={3}
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder="Öğrenciye not: nelere çalışsın, hangi kaynaktan tekrar etsin…"
+                  className="rounded-xl border border-panel-border p-2.5 text-sm text-panel-text"
+                />
+              </label>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-panel-text-muted">Dosya ekle (isteğe bağlı)</span>
+                {attachment ? (
+                  <div className="flex items-center gap-3 rounded-xl border border-panel-border p-2.5">
+                    {attachment.url.startsWith('data:image/') ? (
+                      <img src={attachment.url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                    ) : (
+                      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
+                        <FileText size={20} aria-hidden="true" />
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1 truncate text-sm text-panel-text">{attachment.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setAttachment(null)}
+                      className="shrink-0 rounded-lg p-1.5 text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-warm"
+                      aria-label="Dosyayı kaldır"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex cursor-pointer items-center gap-2 self-start rounded-xl border border-dashed border-panel-border px-3 py-2.5 text-sm font-medium text-panel-blue hover:border-panel-blue hover:bg-panel-blue-soft">
+                    <Paperclip size={16} aria-hidden="true" />
+                    Dosya seç (JPG, PNG, WEBP, PDF · en fazla 5 MB)
+                    <input type="file" accept={ATTACHMENT_ACCEPT} onChange={handleAttachmentChange} className="sr-only" />
+                  </label>
+                )}
+                {attachmentError ? <span className="text-xs text-panel-warm">{attachmentError}</span> : null}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-panel-text-muted">Başlangıç saati (isteğe bağlı)</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="time"
+                    value={taskTime}
+                    onChange={(event) => setTaskTime(event.target.value)}
+                    className="w-32 shrink-0 rounded-xl border border-panel-border p-2.5 text-sm text-panel-text"
+                  />
+                  {taskTime ? (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {DURATION_PRESETS.map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setDurationPreset(preset)}
+                          className={cn(
+                            'rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors',
+                            durationPreset === preset
+                              ? 'bg-panel-warm text-white'
+                              : 'bg-panel-warm-soft text-panel-warm hover:bg-panel-warm hover:text-white',
+                          )}
+                        >
+                          {preset} dk
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setDurationPreset('custom')}
+                        className={cn(
+                          'rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors',
+                          durationPreset === 'custom'
+                            ? 'bg-panel-warm text-white'
+                            : 'bg-panel-warm-soft text-panel-warm hover:bg-panel-warm hover:text-white',
+                        )}
+                      >
+                        Özel
+                      </button>
+                      {durationPreset === 'custom' ? (
+                        <input
+                          type="number"
+                          min="5"
+                          max="480"
+                          value={customDuration}
+                          onChange={(event) => setCustomDuration(event.target.value)}
+                          placeholder="dk"
+                          className="w-16 rounded-lg border border-panel-border p-1.5 text-xs text-panel-text"
+                        />
+                      ) : null}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-panel-text-muted">Boş bırakılırsa görev saatsiz eklenir.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : step === 'type' ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-panel-text-muted">Ne tür bir görev atamak istiyorsunuz?</p>
               <button
                 type="button"
                 onClick={() => handleSelectHomeworkType('soru-bankasi-odevi')}
@@ -374,6 +564,17 @@ export default function AssignHomeworkModal({
                 <span className="flex flex-col gap-0.5">
                   <span className="text-sm font-semibold text-panel-text">Okul Ödevi</span>
                   <span className="text-xs text-panel-text-muted">Öğrencinin okulu/sınıfı için tanımlı okul kaynağından ödev verin.</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectHomeworkType('konu-tekrari')}
+                className="flex items-start gap-3 rounded-xl border border-panel-border p-4 text-left transition-colors hover:border-panel-warm hover:bg-panel-warm-soft/40"
+              >
+                <RotateCcw size={20} className="mt-0.5 shrink-0 text-panel-sage" aria-hidden="true" />
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-sm font-semibold text-panel-text">Konu Tekrarı</span>
+                  <span className="text-xs text-panel-text-muted">Konu + açıklama ve isterseniz bir dosya ile tekrar görevi verin.</span>
                 </span>
               </button>
             </div>
@@ -632,7 +833,7 @@ export default function AssignHomeworkModal({
           )}
         </div>
 
-        {step === 'content' ? (
+        {step === 'content' || step === 'topic-review' ? (
           <div className="shrink-0 border-t border-panel-border px-4 py-3">
             {saveError ? <p className="mb-2 text-xs text-panel-warm">{saveError}</p> : null}
             <button
@@ -641,7 +842,13 @@ export default function AssignHomeworkModal({
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-panel-warm px-4 py-3 text-sm font-semibold text-white hover:bg-panel-warm/90 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : null}
-              {saving ? 'Kaydediliyor...' : 'Ödevi Kaydet'}
+              {saving
+                ? 'Kaydediliyor...'
+                : isEditTopicReview
+                  ? 'Değişiklikleri Kaydet'
+                  : isTopicReview
+                    ? 'Görevi Kaydet'
+                    : 'Ödevi Kaydet'}
             </button>
           </div>
         ) : null}

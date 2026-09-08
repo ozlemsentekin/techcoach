@@ -76,6 +76,7 @@ const {
   saveTeacherManualWrongQuestionPhotoHandler,
   listTeacherStudentHomeworksHandler,
   createTeacherHomeworkHandler,
+  createTeacherTopicReviewHandler,
   assignTeacherHomeworkTaskHandler,
   updateTeacherHomeworkHandler,
   deleteTeacherHomeworkHandler,
@@ -89,6 +90,7 @@ const {
   getTeacherStudentProgressOverviewHandler,
   listTeacherStudentWrongQuestionsHandler,
   getTeacherStudentWrongQuestionPhotoHandler,
+  updateTeacherStudentWrongQuestionPhotoHandler,
   getTeacherStudentWrongQuestionTopicStatsHandler,
   updateTeacherStudentWrongQuestionHandler,
   grantParentAccessHandler,
@@ -194,11 +196,13 @@ const {
   saveCheckInHandler,
   listWrongQuestionsHandler,
   getWrongQuestionPhotoHandler,
+  updateWrongQuestionPhotoHandler,
   addWrongQuestionHandler,
   updateWrongQuestionHandler,
   getWrongQuestionTopicStatsHandler,
   listStudySessionsHandler,
   addStudySessionHandler,
+  listStudyHistoryHandler,
   getProgressOverviewHandler,
   getSmallGoalHandler,
   setSmallGoalHandler,
@@ -729,6 +733,13 @@ registerHttp('panel-teacher-homeworks-create', {
   handler: createTeacherHomeworkHandler,
 })
 
+registerHttp('panel-teacher-topic-review-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/students/{studentTeacherId}/topic-review',
+  handler: createTeacherTopicReviewHandler,
+})
+
 registerHttp('panel-teacher-homeworks-assign-task', {
   authLevel: 'anonymous',
   methods: ['PUT'],
@@ -853,6 +864,13 @@ registerHttp('panel-teacher-wrong-questions-photo', {
   methods: ['GET'],
   route: 'panel-teacher/students/{studentTeacherId}/wrong-questions/{wrongQuestionId}/photo',
   handler: getTeacherStudentWrongQuestionPhotoHandler,
+})
+
+registerHttp('panel-teacher-wrong-questions-photo-update', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel-teacher/students/{studentTeacherId}/wrong-questions/{wrongQuestionId}/photo',
+  handler: updateTeacherStudentWrongQuestionPhotoHandler,
 })
 
 registerHttp('parent-return', {
@@ -1583,6 +1601,13 @@ registerHttp('panel-wrong-questions-photo', {
   handler: getWrongQuestionPhotoHandler,
 })
 
+registerHttp('panel-wrong-questions-photo-update', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel/wrong-questions/{wrongQuestionId}/photo',
+  handler: updateWrongQuestionPhotoHandler,
+})
+
 registerHttp('panel-wrong-question-topic-stats', {
   authLevel: 'anonymous',
   methods: ['GET'],
@@ -1602,6 +1627,13 @@ registerHttp('panel-study-sessions-create', {
   methods: ['POST'],
   route: 'panel/study-sessions',
   handler: addStudySessionHandler,
+})
+
+registerHttp('panel-study-history-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/study-history',
+  handler: listStudyHistoryHandler,
 })
 
 registerHttp('panel-progress-overview', {
