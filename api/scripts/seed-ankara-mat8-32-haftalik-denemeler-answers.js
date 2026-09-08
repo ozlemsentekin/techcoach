@@ -18,9 +18,8 @@ const PUBLISHER_NAME = 'Ankara Yayıncılık'
 const BOOK_NAME = 'Güçlendiren 32 Haftalık Kazanım Denemeleri Matematik'
 
 // Transcribed from the book's own "Cevap Anahtarı" summary pages.
-// Deneme 12, 13 and 32 are intentionally omitted: the photos cut off before
-// questions 17-20 (and 7-10 for Deneme 32), so those answer keys are left
-// unset for now and should be completed later via the admin panel.
+// Deneme 12, 13 and 32 were omitted here (photos cut off at the time) and are
+// filled in separately by fill-ankara-mat8-32-haftalik-deneme-12-13-32-answers.js.
 const ANSWER_KEYS = {
   1: 'CADDCBCDCBADBAADCBDA',
   2: 'ABCDCAAADACDCBCBCDCD',
