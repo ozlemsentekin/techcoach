@@ -6,7 +6,7 @@ import { isNavItemActive } from './navConfig'
 export default function MobileBottomNavigation({ primaryItems, moreItems = [] }) {
   const [showMore, setShowMore] = useState(false)
   const location = useLocation()
-  const isMoreActive = moreItems.some((item) => isNavItemActive(item.to, location))
+  const isMoreActive = moreItems.some((item) => item.to && isNavItemActive(item.to, location))
 
   return (
     <>
@@ -63,21 +63,30 @@ export default function MobileBottomNavigation({ primaryItems, moreItems = [] })
               </button>
             </div>
             <div className="flex flex-col gap-1">
-              {moreItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => setShowMore(false)}
-                  className={() =>
-                    `flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-base font-medium ${
-                      isNavItemActive(item.to, location) ? 'bg-student-theme-primary text-student-theme-button-text' : 'text-panel-text'
-                    }`
-                  }
-                >
-                  <NavIcon name={item.icon} size={20} />
-                  <span className="min-w-0 truncate">{item.label}</span>
-                </NavLink>
-              ))}
+              {moreItems.map((item) =>
+                item.heading ? (
+                  <div
+                    key={`heading-${item.heading}`}
+                    className="px-3 pb-1 pt-3 text-xs font-bold uppercase tracking-wide text-panel-text-muted first:pt-0"
+                  >
+                    {item.heading}
+                  </div>
+                ) : (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setShowMore(false)}
+                    className={() =>
+                      `flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-base font-medium ${
+                        isNavItemActive(item.to, location) ? 'bg-student-theme-primary text-student-theme-button-text' : 'text-panel-text'
+                      }`
+                    }
+                  >
+                    <NavIcon name={item.icon} size={20} />
+                    <span className="min-w-0 truncate">{item.label}</span>
+                  </NavLink>
+                ),
+              )}
             </div>
           </div>
         </div>

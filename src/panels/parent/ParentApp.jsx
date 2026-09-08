@@ -37,7 +37,7 @@ function RequireAdmin({ children }) {
 }
 
 // Bugün/Haftalık Plan bir öğrenci bağlamı gerektirir; hiç çocuk profili eklenmemiş
-// bir veli için bunlar yerine Çocuklarım'a yönlendirir (bkz. navConfig.getParentPrimaryNav).
+// bir veli için bunlar yerine Çocuklarım'a yönlendirir (bkz. navConfig.getParentNav).
 function RequireStudents({ children }) {
   const { studentsLoading, hasStudents } = useParentStudentsGate()
   if (studentsLoading) {

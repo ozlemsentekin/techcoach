@@ -34,6 +34,9 @@ function normalizeTeacherLessonSchedule(teachers = []) {
         dayOfWeek: slot.dayOfWeek,
         startTime: slot.startTime,
         endTime: slot.endTime,
+        startDate: slot.startDate || null,
+        // Bu slotun tek tek iptal/taşınmış oluşumları (bkz. StudentTeachers.schedule_exceptions_json).
+        scheduleExceptions: teacher.scheduleExceptions || [],
         durationMinutes: durationBetween(slot.startTime, slot.endTime),
       })),
     )
@@ -198,6 +201,18 @@ export function buildTeacherLessonTasksForDate(lessonSchedule, dateISO) {
 
   return (lessonSchedule || [])
     .filter((slot) => slot.dayOfWeek === dayOfWeek && slot.startTime)
+    // Slot, eklendiği tarihten önceki haftalarda görünmez.
+    .filter((slot) => !slot.startDate || dateISO >= slot.startDate)
+    // O güne ait oluşum başka saate taşınmış / silinmişse slot bu tarihte gösterilmez.
+    .filter(
+      (slot) =>
+        !(slot.scheduleExceptions || []).some(
+          (exception) =>
+            exception.dayOfWeek === slot.dayOfWeek &&
+            exception.startTime === slot.startTime &&
+            exception.date === dateISO,
+        ),
+    )
     .map((slot, index) => ({
       id: `${slot.id || 'teacher-lesson'}-${dateISO}-${index}`,
       date: dateISO,
