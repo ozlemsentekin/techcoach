@@ -191,17 +191,21 @@ async function markAllParentNotificationsReadHandler(request) {
 
 const TEACHER_REL_CTE = `
   rel AS (
-    SELECT st.id AS student_teacher_id, st.student_id, st.subject_id
+    SELECT st.id AS student_teacher_id, st.student_id, st.subject_id, st.teacher_type
     FROM dbo.StudentTeachers st
     WHERE st.teacher_user_id = @teacherUserId AND st.is_active = 1
   )
 `
 
 // rel CTE'sindeki bir ilişkinin görevi kapsayıp kapsamadığı (kolon referanslı scope).
-const TEACHER_REL_SCOPE = teacherTaskScopeSql({
-  studentTeacherRef: 'r.student_teacher_id',
-  subjectRef: 'r.subject_id',
-})
+// Özel öğretmen (teacher_type = 'ozel_ogretmen') için "Okul Ödevi" tipindeki görevler
+// bağlamsız olduğundan bildirim olarak da gösterilmez — listTeacherStudentTasksHandler'daki
+// hideSchoolHomeworkClause ile aynı kural, ama ilişki bazında (öğretmen aynı öğrencinin
+// hem okul hem özel öğretmeni olabilir).
+const TEACHER_REL_SCOPE = `(
+  ${teacherTaskScopeSql({ studentTeacherRef: 'r.student_teacher_id', subjectRef: 'r.subject_id' })}
+  AND NOT (r.teacher_type = N'ozel_ogretmen' AND t.task_type = N'okul-odevi')
+)`
 
 async function listTeacherNotificationsHandler(request) {
   try {
