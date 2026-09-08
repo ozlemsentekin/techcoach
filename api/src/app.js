@@ -97,6 +97,7 @@ const {
 } = require('./teacher')
 const { getTeacherClassAnalysisHandler } = require('./classAnalysis')
 const { listProvincesHandler, listDistrictsHandler, listSchoolsHandler } = require('./geo')
+const { healthHandler } = require('./health')
 const {
   listSubjectsHandler,
   createSubjectHandler,
@@ -1067,6 +1068,13 @@ registerHttp('public-pricing', {
   methods: ['GET'],
   route: 'pricing',
   handler: getPublicPricingHandler,
+})
+
+registerHttp('health', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'health',
+  handler: healthHandler,
 })
 
 registerHttp('panel-admin-pricing-plans-list', {

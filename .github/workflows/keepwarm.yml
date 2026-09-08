@@ -1,0 +1,27 @@
+name: Keep API warm
+
+# SWA managed functions (Free SKU) ile Azure SQL bağlantı havuzunu sıcak tutar.
+# Uzun boşluk sonrası ilk gerçek isteğin cold start + TLS handshake bedelini
+# ödememesi için /api/health ucunu düzenli aralıklarla çağırır. Public repo
+# olduğu için GitHub Actions dakikaları ücretsiz.
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /api/health
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+              https://delightful-ground-04b9ac510.1.azurestaticapps.net/api/health || echo 000)
+            echo "attempt $i -> HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 15
+          done
+          echo "health endpoint did not return 200"
+          exit 1
