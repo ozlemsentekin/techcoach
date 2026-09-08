@@ -130,18 +130,16 @@ export default function NotificationBell({ role }) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [open])
 
-  const applyRead = (activityId) => {
-    setNotifications((rows) =>
-      rows.map((row) => (row.id === activityId ? { ...row, isRead: true } : row)),
-    )
+  // Liste yalnızca okunmamışları gösterir: okunan satır listeden düşer.
+  const dismissRow = (activityId) => {
+    setNotifications((rows) => rows.filter((row) => row.id !== activityId))
     setUnreadCount((count) => Math.max(0, count - 1))
   }
 
   const handleRowClick = async (notif) => {
-    if (!notif.isRead) {
-      applyRead(notif.id)
-      service.markRead(notif.id).catch(() => {})
-    }
+    dismissRow(notif.id)
+    service.markRead(notif.id).catch(() => refresh())
+
     if (!notif.taskId) return
 
     setOpen(false)
@@ -223,7 +221,7 @@ export default function NotificationBell({ role }) {
             <div className="px-4 py-6 text-center text-[13px] text-panel-text-muted">{error}</div>
           ) : notifications.length === 0 ? (
             <div className="px-4 py-6 text-center text-[13px] text-panel-text-muted">
-              Henüz bildirim yok.
+              Yeni bildirim yok.
             </div>
           ) : (
             <ul className="divide-y divide-panel-border/70">

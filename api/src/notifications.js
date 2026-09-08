@@ -6,6 +6,11 @@ const { requireParentSession } = require('./students')
 const { requireTeacherSession } = require('./teacherScope')
 const { teacherTaskScopeSql } = require('./teacher')
 
+// Bildirim listesi YALNIZCA okunmamışları gösterir (zil = "yeni olanlar"): bir
+// satır okunduğunda / "Tümünü okundu" ile listeden düşer. dbo.TaskActivityReads
+// (activity_id, user_id) = o izleyici için okundu işareti. Geçmişe dönük tam
+// aktivite dökümü için Gelişim Analizi / Haftalık Plan var.
+//
 // Öğrencinin kendi yaptığı, veli/öğretmen için "bildirim değeri" olan işlemler.
 // dbo.TaskActivityLogs.action kümesinin bir alt kümesi (bkz. api/src/tasks.js
 // buildTaskUpdateActivities). timer_*, progress_updated, answers_saved,
@@ -117,14 +122,12 @@ async function listParentNotificationsHandler(request) {
       ${NOTIFICATION_JOINS}
       LEFT JOIN dbo.TaskActivityReads ar ON ar.activity_id = l.id AND ar.user_id = @parentId
       WHERE l.actor_role = 'ogrenci' AND l.action IN (${actions})
+        AND ar.activity_id IS NULL
       ORDER BY l.created_at DESC, l.id DESC;
     `)
 
     const notifications = result.recordset.map(sanitizeNotification)
-    return json(200, {
-      notifications,
-      unreadCount: notifications.filter((item) => !item.isRead).length,
-    })
+    return json(200, { notifications, unreadCount: notifications.length })
   } catch (error) {
     return handleNotificationError(error, 'listParentNotificationsHandler')
   }
@@ -230,6 +233,7 @@ async function listTeacherNotificationsHandler(request) {
       LEFT JOIN dbo.TaskActivityReads ar ON ar.activity_id = l.id AND ar.user_id = @teacherUserId
       WHERE l.actor_role = 'ogrenci' AND l.action IN (${actions})
         AND l.created_at >= DATEADD(day, -@lookbackDays, SYSUTCDATETIME())
+        AND ar.activity_id IS NULL
         AND EXISTS (
           SELECT 1 FROM rel r
           WHERE r.student_id = l.student_id AND ${TEACHER_REL_SCOPE}
@@ -238,10 +242,7 @@ async function listTeacherNotificationsHandler(request) {
     `)
 
     const notifications = result.recordset.map(sanitizeNotification)
-    return json(200, {
-      notifications,
-      unreadCount: notifications.filter((item) => !item.isRead).length,
-    })
+    return json(200, { notifications, unreadCount: notifications.length })
   } catch (error) {
     return handleNotificationError(error, 'listTeacherNotificationsHandler')
   }
