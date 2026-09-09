@@ -13,7 +13,8 @@ export default function MistakesPage() {
       fetchWrongQuestions={getWrongQuestions}
       fetchTopicStats={getWrongQuestionTopicStats}
       fetchPhoto={getWrongQuestionPhoto}
-      updateMistakeReason={(id, mistakeReason) => updateWrongQuestion(id, { mistakeReason })}
+      viewerRole="ogrenci"
+      updateMistakeAnalysis={(id, analysis) => updateWrongQuestion(id, { analysis })}
       updateMistakeMeta={(id, updates) => updateWrongQuestion(id, updates)}
       updateMistakePhoto={(id, dataUrl) => updateWrongQuestionPhoto(id, dataUrl)}
     />

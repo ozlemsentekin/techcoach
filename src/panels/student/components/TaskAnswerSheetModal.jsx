@@ -31,6 +31,7 @@ function buildGalleryItems(test, photosMap, result) {
       correctAnswer: result?.correctLabels?.[String(orderNo)] || undefined,
       studentNote: entry.studentNote,
       mistakeReason: entry.mistakeReason,
+      analyses: entry.analyses || { ogrenci: { mistakeReason: entry.mistakeReason, note: entry.studentNote } },
       photoUrl: entry.photoUrl,
     })
   }
@@ -371,16 +372,21 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
     })
   }
 
-  const handleUpdateMistakeReason = async (wrongQuestionId, mistakeReason) => {
-    const updated = await updateWrongQuestion(wrongQuestionId, { mistakeReason }, studentId)
-    applyWrongQuestionUpdate(wrongQuestionId, { mistakeReason: updated.mistakeReason })
+  const handleUpdateMistakeAnalysis = async (wrongQuestionId, analysis) => {
+    const updated = await updateWrongQuestion(wrongQuestionId, { analysis }, studentId)
+    const lane = updated.analyses?.ogrenci || {}
+    applyWrongQuestionUpdate(wrongQuestionId, {
+      analyses: updated.analyses,
+      mistakeReason: lane.mistakeReason,
+      studentNote: lane.note,
+    })
+    return updated
   }
 
   const handleUpdateMistakeMeta = async (wrongQuestionId, updates) => {
     const updated = await updateWrongQuestion(wrongQuestionId, updates, studentId)
     const patch = {}
     if ('topic' in updates) patch.topic = updated.topic || ''
-    if ('studentNote' in updates) patch.studentNote = updated.studentNote || undefined
     applyWrongQuestionUpdate(wrongQuestionId, patch)
     return updated
   }
@@ -390,6 +396,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
     const { testId, orderNo, reopenGallery } = capturingQuestion
     const key = String(orderNo)
     const wrongQuestion = await saveWrongQuestionPhoto(task.id, testId, key, dataUrl, studentId)
+    window.dispatchEvent(new Event('student-mistake-photo-updated'))
     const photoUrl = wrongQuestion.photoUrl || dataUrl
     const nextPhotos = {
       ...photosByTest,
@@ -565,7 +572,8 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
           items={gallery.items}
           initialIndex={gallery.index}
           fetchPhoto={(wrongQuestionId) => getWrongQuestionPhoto(wrongQuestionId, studentId)}
-          onUpdateMistakeReason={handleUpdateMistakeReason}
+          viewerRole="ogrenci"
+          onUpdateMistakeAnalysis={handleUpdateMistakeAnalysis}
           onUpdateMistakeMeta={handleUpdateMistakeMeta}
           onCapturePhoto={
             photoMode === 'view'

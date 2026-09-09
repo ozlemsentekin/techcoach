@@ -40,6 +40,7 @@ function buildGalleryItems(test, photos) {
       correctAnswer: test.result?.correctLabels?.[String(orderNo)] || undefined,
       studentNote: entry.studentNote,
       mistakeReason: entry.mistakeReason,
+      analyses: entry.analyses || { ogretmen: { mistakeReason: entry.mistakeReason, note: entry.studentNote } },
     })
   }
   return items
@@ -212,16 +213,21 @@ export default function TaskOpticalResultModal({ task, studentTeacherId, onToggl
     })
   }
 
-  const handleUpdateMistakeReason = async (wrongQuestionId, mistakeReason) => {
-    const updated = await updateTeacherStudentWrongQuestion(studentTeacherId, wrongQuestionId, { mistakeReason })
-    applyWrongQuestionUpdate(wrongQuestionId, { mistakeReason: updated.mistakeReason })
+  const handleUpdateMistakeAnalysis = async (wrongQuestionId, analysis) => {
+    const updated = await updateTeacherStudentWrongQuestion(studentTeacherId, wrongQuestionId, { analysis })
+    const lane = updated.analyses?.ogretmen || {}
+    applyWrongQuestionUpdate(wrongQuestionId, {
+      analyses: updated.analyses,
+      mistakeReason: lane.mistakeReason,
+      studentNote: lane.note,
+    })
+    return updated
   }
 
   const handleUpdateMistakeMeta = async (wrongQuestionId, updates) => {
     const updated = await updateTeacherStudentWrongQuestion(studentTeacherId, wrongQuestionId, updates)
     const patch = {}
     if ('topic' in updates) patch.topic = updated.topic || ''
-    if ('studentNote' in updates) patch.studentNote = updated.studentNote || undefined
     applyWrongQuestionUpdate(wrongQuestionId, patch)
     return updated
   }
@@ -278,7 +284,8 @@ export default function TaskOpticalResultModal({ task, studentTeacherId, onToggl
           items={gallery.items}
           initialIndex={gallery.index}
           fetchPhoto={(wrongQuestionId) => getTeacherStudentWrongQuestionPhoto(studentTeacherId, wrongQuestionId)}
-          onUpdateMistakeReason={handleUpdateMistakeReason}
+          viewerRole="ogretmen"
+          onUpdateMistakeAnalysis={handleUpdateMistakeAnalysis}
           onUpdateMistakeMeta={handleUpdateMistakeMeta}
           onClose={() => setGallery(null)}
         />

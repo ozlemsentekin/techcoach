@@ -434,8 +434,9 @@ export default function TodayPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
-      <StudentWelcomeBanner studentId={authUser?.id} studentName={authUser?.fullName || ''} grade={authUser?.grade} tasks={tasks} checkIn={checkIn} />
+    <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4">
+      <StudentWelcomeBanner studentId={authUser?.id} studentName={authUser?.fullName || ''} grade={authUser?.grade} tasks={listTasks} checkIn={checkIn} />
+      <StudentStatsCards tasks={listTasks} />
 
       {loadError ? (
         <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{loadError}</div>
@@ -448,10 +449,6 @@ export default function TodayPage() {
       ) : null}
 
       <div className="flex flex-col gap-5">
-        <div className="order-2 md:order-none">
-          <StudentStatsCards tasks={tasks} />
-        </div>
-
         <div className="order-1 md:order-none">
           <TaskListSection
             tasks={listTasks}

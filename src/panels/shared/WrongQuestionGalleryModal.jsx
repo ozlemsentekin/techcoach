@@ -1,12 +1,20 @@
 import { useEffect, useState } from 'react'
 import { BookOpen, Camera, Check, ChevronLeft, ChevronRight, FileText, Hash, HelpCircle, Loader2, X } from 'lucide-react'
 import { cn } from '../ui/utils'
+import { ANALYSIS_LANES, MISTAKE_REASON_LABELS, laneLabel } from './mistakeAnalysis'
 
 const MISTAKE_REASON_OPTIONS = [
   { value: 'dikkat-hatasi', label: 'Dikkat Hatası' },
   { value: 'bilgi-eksikligi', label: 'Bilgi Eksikliği' },
   { value: 'soruyu-anlamadim', label: 'Soruyu Anlamadım' },
 ]
+
+// Analiz kulvarı editörünün başlığı izleyicinin rolüne göre değişir.
+const ANALYSIS_PROMPT_BY_ROLE = {
+  ogrenci: 'Bu soruyu neden yanlış yaptın?',
+  ebeveyn: 'Sence çocuğun bu soruyu neden yanlış yaptı?',
+  ogretmen: 'Öğrencinin bu sorudaki hatası ne?',
+}
 
 function InfoField({ icon, label, value }) {
   if (!value) return null
@@ -39,7 +47,8 @@ export default function WrongQuestionGalleryModal({
   initialIndex = 0,
   fetchPhoto,
   onClose,
-  onUpdateMistakeReason,
+  viewerRole = 'ogrenci',
+  onUpdateMistakeAnalysis,
   onUpdateMistakeMeta,
   onCapturePhoto,
   onIndexChange,
@@ -50,14 +59,20 @@ export default function WrongQuestionGalleryModal({
   const [photoError, setPhotoError] = useState('')
   const [zoomed, setZoomed] = useState(false)
   // Konu/Not alanları: item değişince testin içerik adıyla ön-dolu gelir, alandan çıkınca (blur)
-  // yalnızca değişmişse kaydedilir. savedMeta son kaydedilen/başlangıç değerini tutar.
-  const [meta, setMeta] = useState({ topic: '', studentNote: '' })
-  const [savedMeta, setSavedMeta] = useState({ topic: '', studentNote: '' })
+  // yalnızca değişmişse kaydedilir. savedMeta son kaydedilen/başlangıç değerini tutar. `note`
+  // izleyicinin kendi analiz kulvarının notudur (onUpdateMistakeAnalysis), `topic` ise soruya
+  // aittir (onUpdateMistakeMeta).
+  const [meta, setMeta] = useState({ topic: '', note: '' })
+  const [savedMeta, setSavedMeta] = useState({ topic: '', note: '' })
   const [metaStatus, setMetaStatus] = useState('idle') // idle | saving | saved | error
 
   const item = items[index]
   const hasMultiple = items.length > 1
   const currentPhotoUrl = item ? item.photoUrl || photosById[item.id] : undefined
+  const viewerAnalysis = item?.analyses?.[viewerRole]
+  const otherLaneAnalyses = ANALYSIS_LANES.filter(
+    (lane) => lane.role !== viewerRole && item?.analyses?.[lane.role]?.mistakeReason,
+  )
 
   const goTo = (nextIndex) => {
     setZoomed(false)
@@ -115,31 +130,34 @@ export default function WrongQuestionGalleryModal({
     if (!item || savingReason) return
     setSavingReason(true)
     try {
-      await onUpdateMistakeReason(item.id, reason)
+      await onUpdateMistakeAnalysis(item.id, { mistakeReason: reason })
     } finally {
       setSavingReason(false)
     }
   }
 
   // Konu alanı için varsayılan: kayıtlı konu yoksa testin içerik/test adı otomatik dolar.
+  // Not alanı izleyicinin kendi analiz kulvarından gelir.
   useEffect(() => {
     const initial = {
       topic: item ? item.topic || item.testName || title || '' : '',
-      studentNote: item?.studentNote || '',
+      note: item?.analyses?.[viewerRole]?.note || '',
     }
     setMeta(initial)
     setSavedMeta(initial)
     setMetaStatus('idle')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item?.id])
+  }, [item?.id, viewerRole])
 
   const commitMetaField = async (field) => {
-    if (!item || !onUpdateMistakeMeta) return
+    if (!item) return
     const value = meta[field].trim()
     if (value === (savedMeta[field] || '').trim()) return
+    const persist = field === 'note' ? onUpdateMistakeAnalysis : onUpdateMistakeMeta
+    if (!persist) return
     setMetaStatus('saving')
     try {
-      await onUpdateMistakeMeta(item.id, { [field]: value })
+      await persist(item.id, field === 'note' ? { note: value } : { topic: value })
       setSavedMeta((prev) => ({ ...prev, [field]: value }))
       setMeta((prev) => ({ ...prev, [field]: value }))
       setMetaStatus('saved')
@@ -199,57 +217,64 @@ export default function WrongQuestionGalleryModal({
       <div className="flex shrink-0 flex-col items-center gap-2 px-3 pb-2">
         <div className="w-full max-w-2xl rounded-2xl border-2 border-panel-accent bg-panel-surface px-4 py-3 shadow-panel-2">
           <div className="flex flex-col items-center gap-2">
-            <span className="flex items-center gap-2 text-base font-extrabold uppercase tracking-wide text-panel-warm sm:text-lg">
+            <span className="flex items-center gap-2 text-center text-base font-extrabold uppercase tracking-wide text-panel-warm sm:text-lg">
               <HelpCircle size={22} className="shrink-0" aria-hidden="true" />
-              Bu soruyu neden yanlış yaptın?
+              {ANALYSIS_PROMPT_BY_ROLE[viewerRole] || ANALYSIS_PROMPT_BY_ROLE.ogrenci}
             </span>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
-              {MISTAKE_REASON_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={item.mistakeReason === option.value}
-                  disabled={savingReason}
-                  onClick={() => handleSelectReason(option.value)}
-                  className={cn(
-                    'rounded-full border-2 px-4 py-2 text-center text-sm font-bold transition-colors disabled:opacity-50',
-                    item.mistakeReason === option.value
-                      ? 'border-panel-blue bg-panel-blue text-white'
-                      : 'border-panel-border text-panel-text hover:border-panel-blue hover:text-panel-blue',
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
+              {MISTAKE_REASON_OPTIONS.map((option) => {
+                const selected = viewerAnalysis?.mistakeReason === option.value
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={selected}
+                    disabled={savingReason}
+                    onClick={() => handleSelectReason(option.value)}
+                    className={cn(
+                      'rounded-full border-2 px-4 py-2 text-center text-sm font-bold transition-colors disabled:opacity-50',
+                      selected
+                        ? 'border-panel-blue bg-panel-blue text-white'
+                        : 'border-panel-border text-panel-text hover:border-panel-blue hover:text-panel-blue',
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
-          {onUpdateMistakeMeta ? (
+          {onUpdateMistakeMeta || onUpdateMistakeAnalysis ? (
             <div className="mt-3 grid grid-cols-1 gap-2 border-t border-panel-border pt-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-              <label className="flex flex-col gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">Konu</span>
-                <input
-                  type="text"
-                  value={meta.topic}
-                  onChange={(event) => setMeta((prev) => ({ ...prev, topic: event.target.value }))}
-                  onBlur={() => commitMetaField('topic')}
-                  placeholder="Konu"
-                  className="w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-1.5 text-sm text-panel-text focus:border-panel-blue focus:outline-none"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">
-                  Not <span className="font-normal normal-case">(isteğe bağlı)</span>
-                </span>
-                <textarea
-                  rows={2}
-                  value={meta.studentNote}
-                  onChange={(event) => setMeta((prev) => ({ ...prev, studentNote: event.target.value }))}
-                  onBlur={() => commitMetaField('studentNote')}
-                  placeholder="Bu hataya dair bir not ekleyebilirsin"
-                  className="w-full resize-none rounded-lg border border-panel-border bg-panel-surface px-3 py-1.5 text-sm text-panel-text focus:border-panel-blue focus:outline-none"
-                />
-              </label>
+              {onUpdateMistakeMeta ? (
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">Konu</span>
+                  <input
+                    type="text"
+                    value={meta.topic}
+                    onChange={(event) => setMeta((prev) => ({ ...prev, topic: event.target.value }))}
+                    onBlur={() => commitMetaField('topic')}
+                    placeholder="Konu"
+                    className="w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-1.5 text-sm text-panel-text focus:border-panel-blue focus:outline-none"
+                  />
+                </label>
+              ) : null}
+              {onUpdateMistakeAnalysis ? (
+                <label className={cn('flex flex-col gap-1', onUpdateMistakeMeta ? '' : 'sm:col-span-2')}>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">
+                    {laneLabel(viewerRole)} notu <span className="font-normal normal-case">(isteğe bağlı)</span>
+                  </span>
+                  <textarea
+                    rows={2}
+                    value={meta.note}
+                    onChange={(event) => setMeta((prev) => ({ ...prev, note: event.target.value }))}
+                    onBlur={() => commitMetaField('note')}
+                    placeholder="Bu hataya dair bir not ekleyebilirsin"
+                    className="w-full resize-none rounded-lg border border-panel-border bg-panel-surface px-3 py-1.5 text-sm text-panel-text focus:border-panel-blue focus:outline-none"
+                  />
+                </label>
+              ) : null}
               <div className="sm:col-span-2">
                 {metaStatus === 'saving' ? (
                   <span className="flex items-center gap-1 text-[11px] text-panel-text-muted">
@@ -263,6 +288,32 @@ export default function WrongQuestionGalleryModal({
                   <span className="text-[11px] text-panel-red">Kaydedilemedi, tekrar dene.</span>
                 ) : null}
               </div>
+            </div>
+          ) : null}
+
+          {otherLaneAnalyses.length > 0 ? (
+            <div className="mt-3 flex flex-col gap-2 border-t border-panel-border pt-3">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">
+                Diğer analizler
+              </span>
+              {otherLaneAnalyses.map((lane) => {
+                const laneData = item.analyses[lane.role]
+                return (
+                  <div
+                    key={lane.role}
+                    className="rounded-lg border border-panel-border bg-panel-surface-soft px-3 py-2 text-sm text-panel-text"
+                  >
+                    <span className="font-semibold">
+                      {laneData.analyzedByName ? `${lane.label} · ${laneData.analyzedByName}` : lane.label}
+                    </span>
+                    <span className="text-panel-text-muted">
+                      {' — '}
+                      {MISTAKE_REASON_LABELS[laneData.mistakeReason] || laneData.mistakeReason}
+                    </span>
+                    {laneData.note ? <p className="mt-0.5 text-panel-text-muted">“{laneData.note}”</p> : null}
+                  </div>
+                )
+              })}
             </div>
           ) : null}
         </div>

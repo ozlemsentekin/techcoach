@@ -401,7 +401,11 @@ export async function getTeacherStudentWrongQuestionTopicStats(studentTeacherId)
   const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/wrong-question-topic-stats`, {
     method: 'GET',
   })
-  return { topicStats: data.topicStats || [], sourceTopicStats: data.sourceTopicStats || [] }
+  return {
+    topicStats: data.topicStats || [],
+    sourceTopicStats: data.sourceTopicStats || [],
+    sourceBookStats: data.sourceBookStats || [],
+  }
 }
 
 /** @returns {Promise<string>} photoUrl */

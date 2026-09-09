@@ -85,7 +85,8 @@ export default function MistakesPage() {
       fetchWrongQuestions={() => getWrongQuestions(selectedStudent.id)}
       fetchTopicStats={() => getWrongQuestionTopicStats(selectedStudent.id)}
       fetchPhoto={(id) => getWrongQuestionPhoto(id, selectedStudent.id)}
-      updateMistakeReason={(id, mistakeReason) => updateWrongQuestion(id, { mistakeReason }, selectedStudent.id)}
+      viewerRole="ebeveyn"
+      updateMistakeAnalysis={(id, analysis) => updateWrongQuestion(id, { analysis }, selectedStudent.id)}
       updateMistakeMeta={(id, updates) => updateWrongQuestion(id, updates, selectedStudent.id)}
       updateMistakePhoto={(id, dataUrl) => updateWrongQuestionPhoto(id, dataUrl, selectedStudent.id)}
       title="Hata Defteri"

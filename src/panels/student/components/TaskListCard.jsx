@@ -21,7 +21,7 @@ import { calculateNet } from '../../../utils/netCalculator'
 import { getAssignmentStatus } from '../../../utils/assignmentStatus'
 import { parseAssignmentDetails } from '../../../utils/assignmentDetails'
 import { daysLate, formatDateShort, formatSecondsAsTimer, taskTimeState, todayISODate } from '../../../utils/time'
-import { BREAK_TASK_TYPES, HOMEWORK_TASK_TYPES } from '../../../data/taskTypes'
+import { BREAK_TASK_TYPES, HOMEWORK_TASK_TYPES, TASK_TYPES } from '../../../data/taskTypes'
 import { SUBJECT_STYLES, DEFAULT_SUBJECT_STYLE } from './subjectStyles'
 
 const STATUS_ICONS = { Circle, Timer, CheckCircle2, Eye, HelpCircle, RotateCcw, AlertTriangle, BookOpen }
@@ -41,7 +41,6 @@ const ACTIVITY_TASK_TYPES = new Set(['serbest-zaman', 'sosyal-aktivite', 'spor']
 const BREAK_STYLE = { text: 'text-panel-warm', soft: 'bg-panel-accent-soft', border: 'border-l-panel-sage', dot: 'bg-panel-sage' }
 const FREE_TIME_STYLE = { text: 'text-panel-warm', soft: 'bg-panel-accent-soft', border: 'border-l-panel-sage', dot: 'bg-panel-sage' }
 const TEACHER_LESSON_STYLE = { text: 'text-panel-warm', soft: 'bg-panel-accent-soft', border: 'border-l-panel-warm', dot: 'bg-panel-warm' }
-const SOFT_TIME_BADGE_CLASS = 'border border-panel-border bg-panel-surface text-panel-text-muted'
 
 function BreakTypeIcon({ taskType, size = 16 }) {
   if (taskType === 'yemek' || taskType === 'yemek-dinlenme') {
@@ -51,15 +50,32 @@ function BreakTypeIcon({ taskType, size = 16 }) {
   return <Coffee size={size} aria-hidden="true" />
 }
 
+// Kaynağın adı önce bağlı kaynaktan (task.resourceBookName) okunur; öğretmen/veli görev notunun
+// ilk satırını serbest metinle değiştirmiş olsa bile kitap adı doğru görünsün. Bağlı kaynak yoksa
+// notun ilk satırına (details.kaynak) düşülür.
+function getResourceName(task, details) {
+  return task.resourceBookName || details.kaynak || null
+}
+
 function getPrimaryText(task, details) {
-  if (details.kaynak) {
-    return `${task.publisherName ? `${task.publisherName} - ` : ''}${details.kaynak}`
+  const resourceName = getResourceName(task, details)
+  if (resourceName) {
+    return `${task.publisherName ? `${task.publisherName} - ` : ''}${resourceName}`
   }
   return details.rawText || task.title || 'Görev'
 }
 
-function getSecondaryItems(details) {
+function getSecondaryItems(task, details) {
   const items = []
+  // Birincil metin bağlı kaynağın adını gösterdiğinde, notun ilk satırı (öğretmenin/velinin yazdığı
+  // serbest talimat) buradan farklıysa ikincil satıra taşınır — aksi halde kaybolurdu.
+  if (
+    task.resourceBookName &&
+    details.kaynak &&
+    details.kaynak.trim() !== task.resourceBookName.trim()
+  ) {
+    items.push(details.kaynak)
+  }
   if (details.testGroups.length) {
     items.push(
       ...details.testGroups.map((item) => {
@@ -146,32 +162,20 @@ function OpticalResultSummary({ task, className = '' }) {
   ]
 
   return (
-    <div className={`${className} rounded-[12px] border border-panel-border bg-white px-3 py-2.5 shadow-sm`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-bold uppercase tracking-wide text-panel-sage">Optik sonucu</span>
-        {result.totalQuestions > 0 ? (
-          <span className="rounded-full bg-panel-surface px-2 py-0.5 text-[11px] font-semibold text-panel-text-muted">
-            {result.totalQuestions} soru
+    <div className={`${className} flex w-fit max-w-full flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-panel-surface-soft/70 px-3 py-2`}>
+      <span className="text-xs font-medium text-panel-text-muted">Optik sonucu</span>
+      {items.map((item) => {
+        const Icon = item.icon
+        return (
+          <span key={item.label} className={`inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold ${item.className}`}>
+            <Icon size={13} className="shrink-0" aria-hidden="true" />
+            {formatResultNumber(item.value)} {item.label}
           </span>
-        ) : null}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {items.map((item) => {
-          const Icon = item.icon
-          return (
-            <span
-              key={item.label}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-panel-surface px-2.5 text-xs font-bold ${item.className}`}
-            >
-              <Icon size={14} className="shrink-0" aria-hidden="true" />
-              {formatResultNumber(item.value)} {item.label}
-            </span>
-          )
-        })}
-        <span className="inline-flex h-8 items-center rounded-[10px] bg-student-theme-soft px-2.5 text-xs font-bold text-student-theme-text">
-          {formatResultNumber(result.net)} net
-        </span>
-      </div>
+        )
+      })}
+      <span className="inline-flex items-center whitespace-nowrap rounded-md bg-student-theme-soft px-2 py-1 text-xs font-bold text-student-theme-text">
+        {formatResultNumber(result.net)} net
+      </span>
     </div>
   )
 }
@@ -228,7 +232,7 @@ export default function TaskListCard({
     ? { filterKey: 'pending', label: 'Planlı Ders', tone: 'accent', icon: 'BookOpen' }
     : getAssignmentStatus(task)
   if (isOverdueIncomplete) {
-    status = { ...status, label: 'Gecikti', tone: 'red', icon: 'AlertTriangle' }
+    status = { ...status, label: `${overdueDays} gün gecikme`, tone: 'red', icon: 'AlertTriangle' }
   } else if (isNowTask) {
     status = { ...status, label: `Şimdi · ${timeState.minutesUntilEnd} dk kaldı`, tone: 'now', icon: 'Timer' }
   } else if (!isTeacherLessonSlot && isBehindToday) {
@@ -237,15 +241,17 @@ export default function TaskListCard({
   const StatusIcon = STATUS_ICONS[status.icon]
 
   const isReading = task.resourceType === 'okuma_kitabi'
-  const completed = isReading ? task.completedPageCount || 0 : task.completedQuestionCount || 0
   const total = isReading ? task.targetPageCount || 0 : task.targetQuestionCount || 0
   const unit = isReading ? 'sayfa' : 'soru'
-  const showProgress = total > 0
-  const progressPct = task.status === 'tamamlandi' ? 100 : total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0
-  const secondaryItems = getSecondaryItems(details)
+  const hasTargetQuantity = total > 0
+  const secondaryItems = getSecondaryItems(task, details)
+  const resourceText = getPrimaryText(task, details)
+  const hasTopicHeading = Boolean(getResourceName(task, details) && secondaryItems.length)
+  const headingText = hasTopicHeading ? secondaryItems[0] : resourceText
+  const supportingItems = hasTopicHeading ? [resourceText, ...secondaryItems.slice(1)] : secondaryItems
   const displayLessonLabel = String(lessonLabel || '').toLocaleUpperCase('tr-TR')
   const isCompletedStatus = status.filterKey === 'done'
-  const showStatusBadge = !isBreakTask && !isActivityTask
+  const showStatusBadge = !isBreakTask && !isActivityTask && status.icon !== 'Circle'
   const showUndoButton = isCompletedStatus && Boolean(onUndoComplete)
   const showQuickFinishButton = (isBreakTask || isActivityTask) && isActive && !isCompletedStatus && Boolean(onCompleteTask)
   const showActionButton = !isTeacherLessonSlot && !isActivityTask && !isBreakTask
@@ -319,16 +325,30 @@ export default function TaskListCard({
     runAction('complete', () => onCompleteTask(task))
   }
 
-  const cardGridClass =
-    showProgress && showActionColumn
-      ? 'lg:grid-cols-[minmax(0,1fr)_minmax(180px,230px)_156px]'
-      : showProgress
-        ? 'lg:grid-cols-[minmax(0,1fr)_minmax(180px,230px)]'
-        : showActionColumn || showQuickFinishButton
-          ? 'lg:grid-cols-[minmax(0,1fr)_156px]'
-          : 'lg:grid-cols-[minmax(0,1fr)]'
+  const cardGridClass = showActionColumn || showQuickFinishButton
+    ? 'lg:grid-cols-[minmax(0,1fr)_156px]'
+    : 'lg:grid-cols-[minmax(0,1fr)]'
 
   const isCompactBreakRow = timeline && isBreakTask
+  const kindStyle = isBreakTask
+    ? { border: 'border-l-panel-lilac', text: 'text-panel-lilac', soft: 'bg-panel-lilac-soft', label: 'Mola' }
+    : isActivityTask
+      ? { border: 'border-l-panel-sage', text: 'text-panel-sage', soft: 'bg-panel-sage-soft', label: 'Aktivite' }
+      : isTeacherLessonSlot
+        ? { border: 'border-l-panel-accent', text: 'text-panel-warm', soft: 'bg-panel-accent-soft', label: 'Planlı Ders' }
+        : task.taskType === 'okul-odevi'
+          ? { border: 'border-l-panel-slate', text: 'text-panel-slate', soft: 'bg-panel-slate-soft', label: 'Okul Ödevi' }
+        : HOMEWORK_TASK_TYPES.has(task.taskType)
+          ? { border: 'border-l-panel-warm', text: 'text-panel-warm', soft: 'bg-panel-warm-soft', label: 'Ödev' }
+          : { border: 'border-l-student-theme-primary', text: 'text-student-theme-text', soft: 'bg-student-theme-soft', label: 'Ders' }
+
+  const taskKindLabel = isTeacherLessonSlot
+    ? 'Özel Ders'
+    : task.taskType === 'odev' && task.resourceType === 'soru_bankasi'
+      ? 'Soru Bankası Ödevi'
+      : task.taskType === 'odev' && task.resourceType === 'okuma_kitabi'
+        ? 'Kitap Okuma'
+        : TASK_TYPES[task.taskType]?.label || 'Görev'
 
   const cardSurfaceClass = isActivityTask
     ? 'bg-panel-sage-soft/15 hover:bg-panel-sage-soft/25'
@@ -342,31 +362,20 @@ export default function TaskListCard({
     ? 'border-l-4 border-l-student-theme-primary'
     : isBehindToday
       ? 'border-l-4 border-l-panel-yellow'
-      : 'border-l-4 border-l-transparent'
+      :  `border-l-4 ${kindStyle.border}`
 
   const rowStateClass = highlight
-    ? 'bg-student-theme-soft/55'
+    ? 'bg-student-theme-soft/25'
     : isNowTask
       ? 'bg-student-theme-soft/40 ring-1 ring-inset ring-student-theme-primary/40'
       : isBehindToday
         ? 'bg-panel-yellow-soft/35'
         : cardSurfaceClass
 
-  const progressNode = showProgress ? (
-    <div className="min-w-0 rounded-[12px] bg-panel-surface-soft/70 p-2 sm:p-3 lg:bg-transparent lg:p-0">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[10px] font-semibold text-panel-text-muted sm:text-[11px]">İlerleme (%{progressPct})</span>
-        <span className="text-xs font-bold text-panel-text sm:text-sm">
-          {completed} / {total} {unit}
-        </span>
-      </div>
-      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-panel-surface-soft sm:mt-2 sm:h-2.5 lg:bg-student-theme-soft/45">
-        <div
-          className="h-full rounded-full bg-student-theme-primary transition-[width] duration-300"
-          style={{ width: `${progressPct}%` }}
-        />
-      </div>
-    </div>
+  const quantityNode = hasTargetQuantity ? (
+    <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-surface-soft px-2 py-0.5 text-xs font-medium text-panel-text-muted sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-sm">
+      {total} {unit}
+    </span>
   ) : null
 
   const actionNode = showActionColumn ? (
@@ -484,20 +493,22 @@ export default function TaskListCard({
         ) : null}
 
         {showLessonLabel && task.durationMinutes ? (
-          <span className="inline-flex min-h-6 items-center gap-1 rounded-[10px] bg-panel-surface-soft px-2 py-0.5 text-xs font-semibold text-panel-text-muted sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-sm">
+          <span className="inline-flex min-h-6 items-center gap-1 rounded-[10px] px-2 py-0.5 text-xs font-medium text-panel-text-muted sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-sm">
             <Clock size={13} aria-hidden="true" />
             {task.durationMinutes} dk
           </span>
         ) : null}
 
+        {quantityNode}
+
         {isCompactBreakRow && task.startTime ? (
-          <span className="inline-flex min-h-6 items-center gap-1 rounded-[10px] bg-panel-surface-soft px-2 py-0.5 text-xs font-semibold text-panel-text-muted sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-sm">
+          <span className="inline-flex min-h-6 items-center gap-1 rounded-[10px] px-2 py-0.5 text-xs font-medium text-panel-text-muted sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-sm">
             {task.startTime}{task.endTime ? ` - ${task.endTime}` : ''}
           </span>
         ) : null}
 
         {task.date && (!emphasizeTime || showDateBadge) ? (
-          <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-surface-soft px-2 py-0.5 text-[10px] font-medium text-panel-text-muted sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-xs">
+          <span className="inline-flex min-h-6 items-center rounded-[10px] px-2 py-0.5 text-[10px] font-medium text-panel-text-muted sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-xs">
             {formatDateShort(task.date)}
             {task.startTime ? ` - ${task.startTime}` : ''}
           </span>
@@ -515,13 +526,13 @@ export default function TaskListCard({
 
       {isCompactBreakRow ? null : (
         <>
-          <p className={`mt-2 line-clamp-2 text-sm font-semibold leading-snug sm:mt-3 sm:text-base ${isOverdueIncomplete ? 'text-panel-red' : 'text-panel-text'}`}>
-            {getPrimaryText(task, details)}
+          <p className="mt-2 text-sm font-semibold leading-snug text-panel-text sm:text-base">
+            {headingText}
           </p>
 
-          {secondaryItems.length > 0 ? (
+          {supportingItems.length > 0 ? (
             <div className="mt-1.5 space-y-0.5 sm:mt-2 sm:space-y-1">
-              {secondaryItems.map((item, index) => (
+              {supportingItems.map((item, index) => (
                 <p key={`${task.id}-detail-${index}`} className="text-xs leading-snug text-panel-text-muted sm:text-sm sm:leading-relaxed">
                   {item}
                 </p>
@@ -538,18 +549,14 @@ export default function TaskListCard({
             </div>
           ) : null}
 
-          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-panel-text-muted sm:mt-3 sm:gap-2 sm:text-xs">
+          {isReading && task.currentPageNumber ? <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-panel-text-muted sm:mt-3 sm:gap-2 sm:text-xs">
             {isReading && task.currentPageNumber ? (
               <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-surface-soft px-2 py-0.5 font-medium sm:min-h-8 sm:px-2.5 sm:py-1">
                 <span className="font-semibold text-panel-text">Kaldığı Sayfa:</span>&nbsp;{task.currentPageNumber}
               </span>
             ) : null}
-            {isOverdueIncomplete ? (
-              <span className="inline-flex min-h-6 items-center rounded-[10px] bg-panel-red-soft px-2 py-0.5 font-semibold text-panel-red sm:min-h-8 sm:px-2.5 sm:py-1">
-                {overdueDays} gün gecikme
-              </span>
-            ) : null}
-          </div>
+
+          </div> : null}
         </>
       )}
     </div>
@@ -563,34 +570,30 @@ export default function TaskListCard({
         onClick={isOpenableRow ? () => onOpenDetails(task) : undefined}
         onKeyDown={handleCardKeyDown}
         aria-label={isOpenableRow ? `${task.title} detayını aç` : undefined}
-        className={`grid grid-cols-[4.5rem_1.25rem_minmax(0,1fr)] gap-x-2 transition-colors sm:grid-cols-[4.9rem_1.5rem_minmax(0,1fr)] sm:gap-x-3 lg:grid-cols-[5.15rem_1.5rem_minmax(0,1fr)_minmax(170px,220px)_156px] lg:items-center ${
-          isCompactBreakRow ? 'px-2.5 py-1.5 sm:px-4 sm:py-2' : 'px-2.5 py-2.5 sm:px-4 sm:py-4'
-        } ${
-          rowStateClass
-        } ${
-          timeStateBorderClass
-        } ${
-          isOpenableRow ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-accent' : ''
-        }`}
+        className={`grid grid-cols-1 gap-y-3 px-4 py-4 transition-colors sm:grid-cols-[6rem_1.5rem_minmax(0,1fr)] sm:gap-x-4 sm:gap-y-0 sm:px-5 lg:grid-cols-[7rem_1.5rem_minmax(0,1fr)_156px] ${rowStateClass} ${timeStateBorderClass} ${isOpenableRow ? 'cursor-pointer focus-visible:outline-2 focus-visible:outline-panel-accent' : ''}`}
       >
-        {isCompactBreakRow ? null : (
-          <div className="col-start-1 row-span-4 min-w-0 pt-0.5">
-            <p className={`inline-flex h-7 min-w-14 items-center justify-center rounded-[10px] px-2 text-xs font-extrabold leading-none shadow-sm sm:h-9 sm:min-w-16 sm:px-2.5 sm:text-[15px] ${
-              isActivityTask ? SOFT_TIME_BADGE_CLASS : 'student-theme-time-badge'
-            } ${isNowTask ? 'ring-2 ring-student-theme-primary ring-offset-2 ring-offset-panel-surface' : ''}`}>
-              {task.startTime || '--:--'}
-            </p>
-            {task.endTime ? <p className="mt-1 pl-1 text-[10px] font-medium text-panel-text-muted sm:mt-1.5 sm:text-xs">{task.endTime}</p> : null}
-          </div>
-        )}
+        <div className="flex min-w-0 items-center justify-between gap-2 sm:col-start-1 sm:row-start-1 sm:block">
+          {task.startTime ? (
+            <div>
+              <p className="text-sm font-bold text-panel-text">{task.startTime}</p>
+              {task.endTime ? <p className="mt-0.5 text-xs text-panel-text-muted">{task.endTime}</p> : null}
+            </div>
+          ) : null}
+          <span className={`inline-flex max-w-full items-start gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold ${task.startTime ? 'sm:mt-2' : ''} ${kindStyle.soft} ${kindStyle.text}`}>
+            <span className="mt-0.5 shrink-0">
+              {isBreakTask ? <BreakTypeIcon taskType={task.taskType} size={13} /> : <BookOpen size={13} aria-hidden="true" />}
+            </span>
+            <span>{taskKindLabel}</span>
+          </span>
+        </div>
 
-        <div className="relative col-start-2 row-span-4 flex justify-center">
+        <div className="relative col-start-2 row-start-1 hidden justify-center sm:flex">
           {isCompactBreakRow ? (
-            <span className="absolute inset-y-0 w-0 border-l-2 border-dashed border-panel-border-strong" aria-hidden="true" />
+            <span className="absolute inset-y-0 w-0 border-l border-panel-border" aria-hidden="true" />
           ) : (
             <>
-              {!isFirst ? <span className="absolute top-0 h-5 w-0 border-l-2 border-dashed border-panel-border-strong" aria-hidden="true" /> : null}
-              {!isLast ? <span className="absolute bottom-0 top-5 w-0 border-l-2 border-dashed border-panel-border-strong" aria-hidden="true" /> : null}
+              {!isFirst ? <span className="absolute top-0 h-5 w-0 border-l border-panel-border" aria-hidden="true" /> : null}
+              {!isLast ? <span className="absolute bottom-0 top-5 w-0 border-l border-panel-border" aria-hidden="true" /> : null}
             </>
           )}
           {isCompactBreakRow ? null : (
@@ -613,19 +616,20 @@ export default function TaskListCard({
           )}
         </div>
 
-        <div className="col-start-3 min-w-0 lg:col-start-3">
+        <div className="min-w-0 sm:col-start-3 sm:row-start-1">
           {highlight ? (
             <span className="mb-1.5 inline-flex rounded-full bg-student-theme-primary px-2 py-0.5 text-[10px] font-bold text-student-theme-button-text sm:mb-2 sm:px-2.5 sm:py-1 sm:text-[11px]">
               Sıradaki görev
             </span>
           ) : null}
           {bodyNode}
+          <OpticalResultSummary task={task} className="mt-2" />
         </div>
-
-        {progressNode ? <div className="col-start-3 mt-2 min-w-0 sm:mt-3 lg:col-start-4 lg:mt-0">{progressNode}</div> : null}
-        {actionNode ? <div className="col-start-3 mt-1.5 min-w-0 sm:mt-2 lg:col-start-5 lg:mt-0">{actionNode}</div> : null}
-        {quickFinishNode ? <div className="col-start-3 mt-1.5 min-w-0 sm:mt-2 lg:col-start-5 lg:mt-0">{quickFinishNode}</div> : null}
-        <OpticalResultSummary task={task} className="col-start-3 mt-3 lg:col-span-3 lg:col-start-3" />
+        {actionNode || quickFinishNode ? (
+          <div className="min-w-0 sm:col-start-3 sm:mt-3 lg:col-start-4 lg:row-start-1 lg:mt-0 lg:self-center">
+            {actionNode || quickFinishNode}
+          </div>
+        ) : null}
       </article>
     )
   }
@@ -641,15 +645,15 @@ export default function TaskListCard({
         isOpenableRow ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-accent' : ''
       }`}
     >
-      {bodyNode}
-
-      {progressNode}
+      <div className="min-w-0">
+        {bodyNode}
+        <OpticalResultSummary task={task} className="mt-2" />
+      </div>
 
       {actionNode}
 
       {quickFinishNode}
 
-      <OpticalResultSummary task={task} className="lg:col-span-full" />
     </article>
   )
 }

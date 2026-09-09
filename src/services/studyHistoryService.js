@@ -22,6 +22,7 @@ import { authRequest } from './authClient'
  * @property {number} blank
  * @property {number} successRate
  * @property {boolean} canViewAnswers
+ * @property {'uploaded' | 'missing' | null} [mistakePhotoStatus] Yanlış/boş sorusu olan çalışmada hata görseli durumu.
  * @property {Record<string, string>} [manualAnswers]
  */
 
