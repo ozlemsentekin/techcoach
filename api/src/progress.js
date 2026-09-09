@@ -31,6 +31,7 @@ function sanitizeWrongQuestion(record) {
     topic: record.topic || undefined,
     topicName: record.topic_name || undefined,
     testName: record.test_name || undefined,
+    correctAnswer: record.correct_answer ? String(record.correct_answer).trim() : undefined,
     bookName: record.book_name || undefined,
     publisherName: record.publisher_name || undefined,
     questionNumber: record.question_number || undefined,
@@ -349,12 +350,14 @@ async function listWrongQuestionsHandler(request) {
                COALESCE(tp.name, wq.topic) AS topic,
                COALESCE(rb.name, wq.book_name) AS book_name,
                COALESCE(pub.name, wq.publisher_name) AS publisher_name,
-               t.topic_name, t.page_start, t.page_end
+               t.topic_name, t.page_start, t.page_end,
+               tak.correct_label AS correct_answer
         FROM dbo.WrongQuestions wq
         LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
         LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
         LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
         LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
+        LEFT JOIN dbo.TestAnswerKeys tak ON tak.test_id = wq.test_id AND tak.order_no = wq.question_number
         WHERE wq.student_id = @studentId AND wq.test_id IS NOT NULL
         ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''}
         ORDER BY wq.created_at DESC;

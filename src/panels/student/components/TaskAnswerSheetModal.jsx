@@ -16,7 +16,7 @@ import WrongQuestionGalleryModal from '../../shared/WrongQuestionGalleryModal'
 import MistakePhotoCaptureModal from './MistakePhotoCaptureModal'
 
 // Bir testin fotoğraflı yanlış/boş sorularını WrongQuestionGalleryModal item şekline çevirir.
-function buildGalleryItems(test, photosMap) {
+function buildGalleryItems(test, photosMap, result) {
   const testPhotos = photosMap?.[test.id] || {}
   const items = []
   for (let orderNo = 1; orderNo <= test.questionCount; orderNo += 1) {
@@ -28,6 +28,7 @@ function buildGalleryItems(test, photosMap) {
       testName: test.name,
       topicName: test.topicName,
       topic: entry.topic || test.topicName || test.name || '',
+      correctAnswer: result?.correctLabels?.[String(orderNo)] || undefined,
       studentNote: entry.studentNote,
       mistakeReason: entry.mistakeReason,
       photoUrl: entry.photoUrl,
@@ -342,7 +343,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
   }
 
   const openGallery = (test, orderNo, photosMap) => {
-    const items = buildGalleryItems(test, photosMap || photosByTest)
+    const items = buildGalleryItems(test, photosMap || photosByTest, resultsByTest[test.id])
     if (!items.length) return
     const idx = items.findIndex((entry) => entry.questionNumber === orderNo)
     setGallery({ testId: test.id, items, index: idx < 0 ? 0 : idx })
