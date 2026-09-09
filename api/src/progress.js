@@ -635,9 +635,15 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
       FROM OPENJSON(@topicKeysJson)
     ),
     WantedTests AS (
+      -- Konu adı eşleşmesi rbt.name (içerik/ünite adı) üzerinden yapılır, tt.topic_name üzerinden
+      -- DEĞİL: WrongQuestions.topic her zaman ResourceBookTopics.name ile yazılıyor (bkz. tasks.js /
+      -- catalog.js / teacher.js'deki "tp.name AS topic_name") ve listWrongQuestionsHandler de aynı
+      -- COALESCE(tp.name, wq.topic) adını gösteriyor. Bazı kaynaklarda (ör. Ankara "Güçlendiren
+      -- Dilbilgisi 8") her testin kendi tt.topic_name'i üniteden farklı bir alt başlık; buna göre
+      -- eşleştirseydik bu kaynaklarda çözülen soru / başarı istatistiği hiç eşleşmez.
       SELECT DISTINCT tt.id AS test_id,
              LTRIM(RTRIM(COALESCE(s.name, N''))) AS subject_name,
-             LTRIM(RTRIM(COALESCE(tt.topic_name, rbt.name, N''))) AS topic_name,
+             LTRIM(RTRIM(COALESCE(rbt.name, N''))) AS topic_name,
              rb.name AS book_name
       FROM dbo.ResourceBookTopicTests tt
       INNER JOIN dbo.ResourceBookTopics rbt ON rbt.id = tt.topic_id
@@ -647,7 +653,7 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
       ${teacherId ? 'INNER JOIN dbo.StudentTeacherResourceBooks strb ON strb.teacher_id = @teacherId AND strb.resource_book_id = rb.id' : ''}
       INNER JOIN WantedTopics wt
         ON wt.subject_name = LTRIM(RTRIM(COALESCE(s.name, N'')))
-       AND wt.topic_name = LTRIM(RTRIM(COALESCE(tt.topic_name, rbt.name, N'')))
+       AND wt.topic_name = LTRIM(RTRIM(COALESCE(rbt.name, N'')))
       WHERE rb.is_active = 1
     ),
     DigitalCandidates AS (
