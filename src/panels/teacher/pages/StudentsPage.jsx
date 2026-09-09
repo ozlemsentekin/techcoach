@@ -6,8 +6,10 @@ import {
   BookOpen,
   CalendarClock,
   CalendarDays,
+  CheckCircle2,
   ChevronDown,
   ClipboardList,
+  Clock,
   GraduationCap,
   IdCard,
   Phone,
@@ -72,6 +74,73 @@ function nextLessonText(student) {
   if (!lesson) return null
   const weekday = new Date(`${lesson.date}T00:00:00`).toLocaleDateString('tr-TR', { weekday: 'long' })
   return `${formatDateShort(lesson.date)} ${weekday}, ${lesson.startTime}-${lesson.endTime}`
+}
+
+// Öğrencinin sistemdeki son işlemi (last_seen_at, her yazma isteğinde ~10 dk throttle ile güncellenir).
+function formatLastSeen(iso) {
+  if (!iso) return null
+  const then = new Date(iso).getTime()
+  if (!Number.isFinite(then)) return null
+  const diffSec = Math.round((Date.now() - then) / 1000)
+  if (diffSec < 90) return 'az önce'
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} dk önce`
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} sa önce`
+  if (diffSec < 604800) return `${Math.floor(diffSec / 86400)} gün önce`
+  return new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })
+}
+
+function StudentStatsRow({ student, onOpenPendingTasks }) {
+  const lastSeen = formatLastSeen(student.lastSeenAt)
+  const pending = student.pendingTaskCount || 0
+  const overdue = student.overdueTaskCount || 0
+
+  let pendingChip
+  if (pending === 0) {
+    pendingChip = (
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-panel-sage-soft px-2 py-1 text-xs font-semibold text-panel-text">
+        <CheckCircle2 size={13} className="shrink-0" aria-hidden="true" />
+        Bekleyen görev yok
+      </span>
+    )
+  } else {
+    const danger = overdue > 0
+    pendingChip = (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          onOpenPendingTasks(student)
+        }}
+        disabled={!student.isActive}
+        className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+          danger
+            ? 'bg-panel-red-soft text-panel-red hover:bg-panel-red-soft/70'
+            : 'bg-panel-blue-soft text-panel-blue hover:bg-panel-blue-soft/70'
+        }`}
+        title="Bekleyen görevleri aç"
+      >
+        {danger ? (
+          <AlertTriangle size={13} className="shrink-0" aria-hidden="true" />
+        ) : (
+          <ClipboardList size={13} className="shrink-0" aria-hidden="true" />
+        )}
+        {overdue > 0 ? `${pending} bekleyen · ${overdue} geç` : `${pending} bekleyen görev`}
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-t border-panel-border/60 pt-2.5">
+      <span
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-panel-surface-soft px-2 py-1 text-xs font-semibold text-panel-text-muted"
+        title={student.lastSeenAt ? new Date(student.lastSeenAt).toLocaleString('tr-TR') : undefined}
+      >
+        <Clock size={13} className="shrink-0" aria-hidden="true" />
+        {lastSeen ? `Son işlem ${lastSeen}` : 'Henüz işlem yok'}
+      </span>
+      {pendingChip}
+    </div>
+  )
 }
 
 function schoolText(student) {
@@ -629,6 +698,8 @@ export default function StudentsPage() {
                     </p>
                   ) : null}
                 </div>
+
+                <StudentStatsRow student={student} onOpenPendingTasks={setPendingTasksStudent} />
 
                 <div className="mt-auto" onClick={(event) => event.stopPropagation()}>
                   <button
