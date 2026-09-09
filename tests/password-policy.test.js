@@ -8,7 +8,7 @@ const { hashPassword } = require('../api/src/security.js')
 test('initial password requires change; chosen passwords do not; reset is detected', async () => {
   const record = { phone_number: '+905001234567', password_hash: await hashPassword('234567') }
   assert.equal(await requiresPasswordChange(record), true)
-  record.password_hash = await hashPassword('MyNewPassword7')
+  record.password_hash = await hashPassword('918273')
   assert.equal(await requiresPasswordChange(record), false)
   record.password_hash = await hashPassword('234567')
   assert.equal(await requiresPasswordChange(record), true)
@@ -28,12 +28,13 @@ test('session token carries mustChangePassword for own sessions, omits it for de
   assert.equal('mustChangePassword' in delegated, false)
 })
 
-test('new password cannot equal current/default or exceed bcrypt byte limit', () => {
+test('new password must be digits-only, cannot equal current/default, min 6 digits', () => {
   assert.ok(passwordChangeError('234567', '234567', '+905001234567'))
-  assert.ok(passwordChangeError('oldpassword', '234567', '+905001234567'))
-  assert.ok(passwordChangeError('oldpassword', 'ab', '+905001234567'))
-  assert.ok(passwordChangeError('oldpassword', 'ş'.repeat(40), '+905001234567'))
-  assert.equal(passwordChangeError('234567', 'MyNewPassword7', '+905001234567'), null)
+  assert.ok(passwordChangeError('918273', '234567', '+905001234567'))
+  assert.ok(passwordChangeError('918273', '12345', '+905001234567'))
+  assert.ok(passwordChangeError('918273', 'MyNewPassword7', '+905001234567'))
+  assert.ok(passwordChangeError('918273', 'abc123', '+905001234567'))
+  assert.equal(passwordChangeError('234567', '918273', '+905001234567'), null)
 })
 
 test('API gate blocks temporary credentials, preserves recovery and delegated access, fails closed', async () => {
@@ -58,7 +59,7 @@ test('API gate blocks temporary credentials, preserves recovery and delegated ac
     session = { sub: 'child', actingParentId: 'parent' }
     assert.equal((await guarded({}, context)).status, 200)
     session = { sub: 'parent' }
-    record = { ...record, password_hash: await hashPassword('MyNewPassword7') }
+    record = { ...record, password_hash: await hashPassword('918273') }
     assert.equal((await guarded({}, context)).status, 200)
     failDb = true
     assert.equal((await guarded({}, context)).status, 503)

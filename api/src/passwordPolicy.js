@@ -16,7 +16,10 @@ async function requiresPasswordChange(record) {
 }
 
 function passwordChangeError(currentPassword, newPassword, phone) {
-  if (newPassword.length < 6 || newPassword.length > 72 || Buffer.byteLength(newPassword, 'utf8') > 72) return 'Yeni şifre 6 ile 72 karakter arasında ve en fazla 72 bayt olmalı.'
+  // Giriş ekranı yalnızca rakamlı şifre kabul ediyor (pattern="[0-9]*"); yeni şifre de
+  // rakam dışı karakter içerirse kullanıcı bir daha giriş yapamaz.
+  if (!/^\d+$/.test(newPassword)) return 'Yeni şifre yalnızca rakamlardan oluşmalı.'
+  if (newPassword.length < 6 || newPassword.length > 72) return 'Yeni şifre en az 6 rakam olmalı.'
   if (newPassword === currentPassword) return 'Yeni şifreniz mevcut şifrenizden farklı olmalı.'
   if (newPassword === defaultPasswordForPhone(phone)) return 'Telefon numaranızın son 6 hanesini yeni şifre olarak kullanamazsınız.'
   return null
