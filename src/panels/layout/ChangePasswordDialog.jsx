@@ -2,6 +2,10 @@ import { useState } from 'react'
 import { Check, Eye, EyeOff, KeyRound, Loader2, X } from 'lucide-react'
 import { authRequest } from '../../services/authClient'
 
+// Giriş ekranı yalnızca rakamlı şifre kabul ettiği için (pattern="[0-9]*"),
+// burada belirlenen yeni şifre de yalnızca rakamlardan oluşmalı.
+const onlyDigits = (value) => String(value || '').replace(/\D/g, '').slice(0, 32)
+
 function PasswordField({ label, value, onChange, autoComplete, visible, onToggleVisible }) {
   return (
     <label className="block">
@@ -10,7 +14,9 @@ function PasswordField({ label, value, onChange, autoComplete, visible, onToggle
         <input
           type={visible ? 'text' : 'password'}
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => onChange(onlyDigits(event.target.value))}
+          inputMode="numeric"
+          pattern="[0-9]*"
           autoComplete={autoComplete}
           autoFocus={autoComplete === 'current-password'}
           required
@@ -42,8 +48,12 @@ export default function ChangePasswordDialog({ onClose, required = false, onSave
     event.preventDefault()
     setError('')
 
+    if (!/^\d+$/.test(newPassword)) {
+      setError('Yeni şifre yalnızca rakamlardan oluşmalı.')
+      return
+    }
     if (newPassword.length < 6) {
-      setError('Yeni şifre en az 6 karakter olmalı.')
+      setError('Yeni şifre en az 6 rakam olmalı.')
       return
     }
     if (newPassword !== confirmPassword) {
@@ -108,7 +118,7 @@ export default function ChangePasswordDialog({ onClose, required = false, onSave
           </button> : null}
         </div>
 
-        {required ? <p className="mt-4 text-sm leading-6 text-panel-text-muted">Başlangıç şifreniz, bu hesaba kayıtlı telefon numarasının son 6 hanesidir. Panele devam etmek için yalnızca sizin bildiğiniz yeni bir şifre belirleyin. Yeni şifre en az 6 karakter olmalı ve başlangıç şifresinden farklı olmalıdır.</p> : null}
+        {required ? <p className="mt-4 text-sm leading-6 text-panel-text-muted">Başlangıç şifreniz, bu hesaba kayıtlı telefon numarasının son 6 hanesidir. Panele devam etmek için yalnızca sizin bildiğiniz yeni bir şifre belirleyin. Yeni şifre yalnızca rakamlardan oluşmalı, en az 6 rakam olmalı ve başlangıç şifresinden farklı olmalıdır.</p> : null}
         <div className="mt-4 flex flex-col gap-3">
           <PasswordField
             label={required ? 'Başlangıç şifresi (telefonun son 6 hanesi)' : 'Mevcut şifre'}
