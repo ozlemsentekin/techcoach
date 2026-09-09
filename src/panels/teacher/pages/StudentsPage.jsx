@@ -124,7 +124,7 @@ function StudentStatsRow({ student, onOpenPendingTasks }) {
         ) : (
           <ClipboardList size={13} className="shrink-0" aria-hidden="true" />
         )}
-        {overdue > 0 ? `${pending} bekleyen · ${overdue} geç` : `${pending} bekleyen görev`}
+        {overdue > 0 ? `${pending} bekleyen, ${overdue} geciken görev` : `${pending} bekleyen görev`}
       </button>
     )
   }
