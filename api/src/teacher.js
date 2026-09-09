@@ -388,25 +388,26 @@ async function listTeacherStudentsHandler(request) {
     })
     const result = await requestDb.query(`
       SELECT st.id AS student_teacher_id, st.student_id, u.full_name AS student_full_name, u.phone_number AS student_phone,
-             u.last_seen_at AS student_last_seen_at,
              st.subject_id, s.name AS subject_name, st.teacher_type, st.schedule_json, st.access_granted_at,
              st.is_active,
              sp.grade AS student_grade, sp.photo_url AS student_photo_url, sch.name AS school_name,
              (SELECT COUNT(*) FROM dbo.StudentTeacherResourceBooks strb WHERE strb.teacher_id = st.id) AS resource_count,
-             pt.pending_count, pt.overdue_count
+             pt.pending_count, pt.overdue_count, pt.last_completed_at
       FROM dbo.StudentTeachers st
       INNER JOIN dbo.Users u ON u.id = st.student_id
       LEFT JOIN dbo.Subjects s ON s.id = st.subject_id
       LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = st.student_id
       LEFT JOIN dbo.Schools sch ON sch.id = sp.school_id
-      -- Öğretmenin kapsamındaki tamamlanmamış görev sayısı (kart üzerinde özet rozet).
-      -- Kapsam ve durum filtresi "Bekliyor" modalıyla (listTeacherStudentTasksHandler pending) birebir.
+      -- Öğretmen kapsamındaki görev özeti (kart rozeti): bekleyen + geciken sayısı ve
+      -- öğrencinin en son görev tamamlama zamanı (öğrenci hiç login olmamış olabilir).
+      -- Kapsam + bekleyen durumu "Bekliyor" modalıyla (listTeacherStudentTasksHandler pending) birebir.
       OUTER APPLY (
-        SELECT COUNT(*) AS pending_count,
-               COUNT(CASE WHEN t.date < CAST(SYSUTCDATETIME() AS DATE) THEN 1 END) AS overdue_count
+        SELECT
+          COUNT(CASE WHEN t.status IN ('bekliyor', 'devam-ediyor', 'yardim-bekliyor') AND t.date IS NOT NULL THEN 1 END) AS pending_count,
+          COUNT(CASE WHEN t.status IN ('bekliyor', 'devam-ediyor', 'yardim-bekliyor') AND t.date < CAST(SYSUTCDATETIME() AS DATE) THEN 1 END) AS overdue_count,
+          MAX(CASE WHEN t.status = 'tamamlandi' THEN t.completed_at END) AS last_completed_at
         FROM dbo.Tasks t
-        WHERE t.student_id = st.student_id AND t.date IS NOT NULL AND t.is_draft = 0 AND t.is_unscheduled = 0
-          AND t.status IN ('bekliyor', 'devam-ediyor', 'yardim-bekliyor')
+        WHERE t.student_id = st.student_id AND t.is_draft = 0 AND t.is_unscheduled = 0
           AND (st.teacher_type <> 'ozel_ogretmen' OR t.task_type <> 'okul-odevi')
           AND (
             t.student_teacher_id = st.id
@@ -452,7 +453,7 @@ async function listTeacherStudentsHandler(request) {
         nextLesson,
         resourceCount: Number(record.resource_count) || 0,
         accessGrantedAt: record.access_granted_at || null,
-        lastSeenAt: record.student_last_seen_at || null,
+        lastActivityAt: record.last_completed_at || null,
         pendingTaskCount: Number(record.pending_count) || 0,
         overdueTaskCount: Number(record.overdue_count) || 0,
         successRate: successRateByStudentTeacherId.get(record.student_teacher_id) ?? null,
