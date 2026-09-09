@@ -63,6 +63,29 @@ function formatRelativeTime(iso) {
   return new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })
 }
 
+// İşlem tarihinin yanında birebir saat de görünsün: bugünse "14:32",
+// daha eskiyse "7 Eyl · 14:32".
+function formatExactTimestamp(iso) {
+  if (!iso) return ''
+  const date = new Date(iso)
+  if (!Number.isFinite(date.getTime())) return ''
+  const time = date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+  const now = new Date()
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  if (sameDay) return time
+  return `${date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })} · ${time}`
+}
+
+const ACTION_ACCENT = {
+  task_completed: 'border-l-emerald-400',
+  task_partially_completed: 'border-l-amber-400',
+  help_requested: 'border-l-panel-red',
+  task_started: 'border-l-panel-blue',
+}
+
 function resourceLabel(notif) {
   if (notif.resourceBookName) {
     return notif.publisherName ? `${notif.publisherName} — ${notif.resourceBookName}` : notif.resourceBookName
@@ -230,15 +253,17 @@ export default function NotificationBell({ role }) {
               Yeni bildirim yok.
             </div>
           ) : (
-            <ul className="divide-y divide-panel-border/70">
+            <ul className="divide-y divide-panel-border/60">
               {notifications.map((notif) => (
                 <li key={notif.id}>
                   <button
                     type="button"
                     onClick={() => handleRowClick(notif)}
-                    className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-panel-surface-soft"
+                    className={`flex w-full items-start gap-2.5 border-l-2 px-3 py-3 text-left transition-colors hover:bg-panel-surface-soft ${
+                      ACTION_ACCENT[notif.action] || 'border-l-panel-border'
+                    }`}
                   >
-                    <span className="mt-0.5 shrink-0">
+                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-panel-surface-soft">
                       <ActionIcon action={notif.action} />
                     </span>
                     <span className="min-w-0 flex-1">
@@ -249,8 +274,13 @@ export default function NotificationBell({ role }) {
                             {ACTION_LABEL[notif.action] || 'işlem yaptı'}
                           </span>
                         </span>
-                        <span className="shrink-0 text-[10px] text-panel-text-muted/80">
-                          {formatRelativeTime(notif.createdAt)}
+                        <span className="flex shrink-0 flex-col items-end leading-tight">
+                          <span className="text-[10px] font-medium text-panel-text-muted/80">
+                            {formatRelativeTime(notif.createdAt)}
+                          </span>
+                          <span className="text-[10px] tabular-nums text-panel-text-muted/60">
+                            {formatExactTimestamp(notif.createdAt)}
+                          </span>
                         </span>
                       </span>
                       <span className="mt-1 block text-[12px] leading-snug text-panel-text-muted">
