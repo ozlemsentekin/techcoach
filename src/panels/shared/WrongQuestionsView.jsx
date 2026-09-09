@@ -22,7 +22,9 @@ import WrongQuestionGalleryModal from './WrongQuestionGalleryModal'
 import MistakePhotoCaptureModal from '../student/components/MistakePhotoCaptureModal'
 import { verifyMistakePhotoQuestionNumber } from '../../services/mistakePhotoService'
 import { ResourceBookAvatar } from './ResourceBookCard'
-import { RATE_TONES, successRateTone } from './rateTones'
+import { RATE_TONES, completionRateTone, successRateTone } from './rateTones'
+import MistakeAnalysisBadges from './MistakeAnalysisBadges'
+import { analysisFilterOptions, applyAnalysisFilter, pendingAnalysisCount } from './mistakeAnalysis'
 
 const NO_BOOK_KEY = '__kaynaksiz__'
 const sourceKeyFor = (bookName) => bookName || NO_BOOK_KEY
@@ -130,7 +132,21 @@ function groupBySubjectAndSource(wrongQuestions, bookImages) {
   }))
 }
 
-function SubjectShelfCard({ subject, count, stats, tone, onClick }) {
+function PendingAnalysisChip({ count, className }) {
+  if (!count) return null
+  return (
+    <span
+      className={cn(
+        'inline-flex w-fit items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700',
+        className,
+      )}
+    >
+      {count} analiz bekliyor
+    </span>
+  )
+}
+
+function SubjectShelfCard({ subject, count, stats, tone, pendingCount, onClick }) {
   const solvedCount = stats?.totalAnswered ?? null
   const successPercent = stats?.successRate != null ? Math.round(stats.successRate * 100) : null
   const colors = RATE_TONES[successRateTone(stats?.successRate)]
@@ -149,16 +165,19 @@ function SubjectShelfCard({ subject, count, stats, tone, onClick }) {
           {count} yanlış
           {solvedCount != null && solvedCount > 0 ? ` · ${solvedCount} soru çözüldü` : ''}
         </p>
-        {solvedCount != null && solvedCount > 0 ? (
-          <span
-            className={cn(
-              'mt-1.5 inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[11px] font-semibold',
-              colors.chip,
-            )}
-          >
-            %{successPercent ?? 0} başarı
-          </span>
-        ) : null}
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {solvedCount != null && solvedCount > 0 ? (
+            <span
+              className={cn(
+                'inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                colors.chip,
+              )}
+            >
+              %{successPercent ?? 0} başarı
+            </span>
+          ) : null}
+          <PendingAnalysisChip count={pendingCount} />
+        </div>
       </div>
       <ChevronRight
         size={18}
@@ -169,7 +188,16 @@ function SubjectShelfCard({ subject, count, stats, tone, onClick }) {
   )
 }
 
-function ContentTopicCard({ topic, wrongCount, stats, scopeLabel, onClick, selectMode = false, selected = false }) {
+function ContentTopicCard({
+  topic,
+  wrongCount,
+  stats,
+  scopeLabel,
+  pendingCount,
+  onClick,
+  selectMode = false,
+  selected = false,
+}) {
   const successPercent = stats?.successRate != null ? Math.round(stats.successRate * 100) : null
   const colors = RATE_TONES[successRateTone(stats?.successRate)]
   return (
@@ -204,9 +232,10 @@ function ContentTopicCard({ topic, wrongCount, stats, scopeLabel, onClick, selec
             {topic || 'Genel'}
           </h3>
         </div>
-        <Badge tone="warm" className="shrink-0">
-          {wrongCount} yanlış
-        </Badge>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Badge tone="warm">{wrongCount} yanlış</Badge>
+          <PendingAnalysisChip count={pendingCount} />
+        </div>
       </div>
 
       <div className={cn('rounded-lg px-2 py-1.5', colors.chip)}>
@@ -259,7 +288,69 @@ function GroupModeToggle({ mode, onChange }) {
   )
 }
 
-function SourceProfileCard({ bookName, publisherName, bookImageUrl, wrongCount, stats, onClick }) {
+// Kaynak kartının sağ üst köşesinde kitabın tamamlanma oranını (çözülen test / toplam test)
+// gösteren küçük halka. Yüzde değeri halkanın ortasında yazar (Kitaplık donut'larıyla aynı ton).
+function CompletionRing({ value, size = 44 }) {
+  const hasValue = value !== null && value !== undefined
+  const percentage = hasValue ? Math.round(value * 100) : 0
+  const colors = RATE_TONES[completionRateTone(value)]
+  const strokeWidth = 4
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const dash = (Math.min(Math.max(percentage, 0), 100) / 100) * circumference
+
+  return (
+    <span
+      className="relative block shrink-0"
+      style={{ width: size, height: size }}
+      title={hasValue ? `Kitap tamamlanma: %${percentage}` : 'Kitap tamamlanma verisi yok'}
+    >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          className="text-panel-border"
+        />
+        {hasValue ? (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={`${dash} ${circumference}`}
+            className={cn('transition-all', colors.text)}
+          />
+        ) : null}
+      </svg>
+      <span
+        className={cn(
+          'absolute inset-0 flex items-center justify-center text-[11px] font-bold tabular-nums',
+          hasValue ? colors.text : 'text-panel-text-muted',
+        )}
+      >
+        {hasValue ? `%${percentage}` : '—'}
+      </span>
+    </span>
+  )
+}
+
+function SourceProfileCard({
+  bookName,
+  publisherName,
+  bookImageUrl,
+  wrongCount,
+  stats,
+  completionRate,
+  pendingCount,
+  onClick,
+}) {
   const solvedCount = stats?.totalAnswered ?? null
   const successPercent = stats?.successRate != null ? Math.round(stats.successRate * 100) : null
   const colors = RATE_TONES[successRateTone(stats?.successRate)]
@@ -267,8 +358,11 @@ function SourceProfileCard({ bookName, publisherName, bookImageUrl, wrongCount, 
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-col gap-3 rounded-2xl border border-panel-border bg-panel-surface p-4 text-left shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-md"
+      className="relative flex flex-col gap-3 rounded-2xl border border-panel-border bg-panel-surface p-4 pr-14 text-left shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-md"
     >
+      <span className="absolute right-3 top-3">
+        <CompletionRing value={completionRate} />
+      </span>
       <span className="inline-flex w-fit items-center gap-1 rounded-full bg-panel-slate-soft px-2.5 py-1 text-[11px] font-semibold text-panel-slate">
         <Tag size={11} aria-hidden="true" />
         {publisherName || 'Yayın evi belirtilmemiş'}
@@ -288,6 +382,7 @@ function SourceProfileCard({ bookName, publisherName, bookImageUrl, wrongCount, 
             (%{successPercent} başarı)
           </span>
         ) : null}
+        <PendingAnalysisChip count={pendingCount} />
       </div>
     </button>
   )
@@ -329,7 +424,7 @@ function TopicAccordionHeader({ topic, wrongCount, stats, isOpen, onToggle }) {
 // bileşen mount olduğunda (yani içerik grubu açıldığında) tembel çekilir; kapalı gruplar hiç
 // mount edilmediği için fotoğraf istemez — WrongQuestionGalleryModal'daki tembel yükleme deseniyle
 // aynı fikir, tek farkı burada tüm grup için paralel çalışır.
-function WrongQuestionThumbnail({ item, fetchPhoto, onClick }) {
+function WrongQuestionThumbnail({ item, fetchPhoto, onClick, viewerRole }) {
   const [fetchedPhotoUrl, setFetchedPhotoUrl] = useState(null)
   const [error, setError] = useState('')
   // Hata Defteri'nden fotoğraf değiştirildiğinde üst bileşen item'a taze `photoUrl` yazar; o
@@ -363,9 +458,12 @@ function WrongQuestionThumbnail({ item, fetchPhoto, onClick }) {
       onClick={onClick}
       className="group flex flex-col overflow-hidden rounded-xl border border-panel-border bg-panel-surface text-left shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-md"
     >
-      <p className="line-clamp-2 px-2 py-1.5 text-[11px] font-medium leading-snug text-panel-text" title={caption}>
-        {caption}
-      </p>
+      <div className="flex items-start justify-between gap-1 px-2 py-1.5">
+        <p className="line-clamp-2 text-[11px] font-medium leading-snug text-panel-text" title={caption}>
+          {caption}
+        </p>
+        <MistakeAnalysisBadges analyses={item.analyses} viewerRole={viewerRole} className="shrink-0" />
+      </div>
       <div className="flex aspect-square w-full items-center justify-center overflow-hidden bg-panel-surface-soft">
         {photoUrl ? (
           <img
@@ -388,7 +486,7 @@ function WrongQuestionThumbnail({ item, fetchPhoto, onClick }) {
 // Bir kaynağa (kitaba) tıklandığında açılan ekran: içerik gruplarına (konulara) göre kapalı
 // gelen akordeonlar ve her grubun altında tüm sorulara ait fotoğrafların ızgara görünümü. Test
 // adı/konuya göre arama, eşleşen gruplardaki soruları otomatik açar.
-function SourceQuestionBoard({ subject, topics, statsForTopic, fetchPhoto, onSelectItem }) {
+function SourceQuestionBoard({ subject, topics, statsForTopic, fetchPhoto, onSelectItem, viewerRole }) {
   const [query, setQuery] = useState('')
   const [expandedKeys, setExpandedKeys] = useState(() => new Set())
 
@@ -458,6 +556,7 @@ function SourceQuestionBoard({ subject, topics, statsForTopic, fetchPhoto, onSel
                       key={item.id}
                       item={item}
                       fetchPhoto={fetchPhoto}
+                      viewerRole={viewerRole}
                       onClick={() => onSelectItem(topicGroup.items, itemIndex)}
                     />
                   ))}
@@ -609,16 +708,18 @@ function ContentTopicExportToolbar({
 }
 
 // Öğrenci/veli/öğretmen panellerinin ortak Hata Defteri görünümü: ders kartları -> içerik (konu)
-// kartları -> fotoğraf galerisi + Dikkat Hatası/Bilgi Eksikliği etiketleme. Kimin verisini
-// gösterdiği tamamen fetchWrongQuestions/fetchTopicStats/updateMistakeReason prop'larıyla
-// belirlenir (bkz. StudentProgressView.jsx'teki aynı "fetchOverview prop olarak" deseni).
+// kartları -> fotoğraf galerisi + rol bazlı hata analizi (öğrenci / veli / öğretmen kulvarları).
+// Kimin verisini gösterdiği ve hangi kulvarda yazdığı fetchWrongQuestions/fetchTopicStats/
+// updateMistakeAnalysis prop'ları ve viewerRole ile belirlenir (bkz. StudentProgressView.jsx'teki
+// aynı "fetchOverview prop olarak" deseni).
 export default function WrongQuestionsView({
   fetchWrongQuestions,
   fetchTopicStats,
   fetchPhoto,
-  updateMistakeReason,
+  updateMistakeAnalysis,
   updateMistakeMeta,
   updateMistakePhoto,
+  viewerRole = 'ogrenci',
   title = 'Hata Defterim',
   subtitle = 'Fotoğrafını çektiğin yanlış sorular ders ders burada.',
   headerActions,
@@ -629,6 +730,7 @@ export default function WrongQuestionsView({
   const [bookImages, setBookImages] = useState({})
   const [topicStats, setTopicStats] = useState([])
   const [sourceTopicStats, setSourceTopicStats] = useState([])
+  const [sourceBookStats, setSourceBookStats] = useState([])
   const [error, setError] = useState('')
   const [selectedSubject, setSelectedSubject] = useState(null)
   const [groupMode, setGroupMode] = useState('source')
@@ -638,6 +740,7 @@ export default function WrongQuestionsView({
   const [topicSelectMode, setTopicSelectMode] = useState(false)
   const [selectedTopicKeys, setSelectedTopicKeys] = useState(() => new Set())
   const [replacingPhotoItem, setReplacingPhotoItem] = useState(null)
+  const [analysisFilter, setAnalysisFilter] = useState('tumu')
 
   useEffect(() => {
     let ignore = false
@@ -658,11 +761,13 @@ export default function WrongQuestionsView({
         if (ignore) return
         setTopicStats(statsData?.topicStats || [])
         setSourceTopicStats(statsData?.sourceTopicStats || [])
+        setSourceBookStats(statsData?.sourceBookStats || [])
       })
       .catch(() => {
         if (ignore) return
         setTopicStats([])
         setSourceTopicStats([])
+        setSourceBookStats([])
       })
 
     return () => {
@@ -670,10 +775,15 @@ export default function WrongQuestionsView({
     }
   }, [fetchWrongQuestions, fetchTopicStats])
 
-  const photoQuestions = useMemo(
+  const allPhotoQuestions = useMemo(
     () => (wrongQuestions ? wrongQuestions.filter((item) => item.hasPhoto) : []),
     [wrongQuestions],
   )
+  const photoQuestions = useMemo(
+    () => applyAnalysisFilter(allPhotoQuestions, analysisFilter),
+    [allPhotoQuestions, analysisFilter],
+  )
+  const filterOptions = useMemo(() => analysisFilterOptions(viewerRole), [viewerRole])
 
   const contentGroups = useMemo(() => groupBySubjectAndTopic(photoQuestions), [photoQuestions])
   const sourceGroups = useMemo(() => groupBySubjectAndSource(photoQuestions, bookImages), [photoQuestions, bookImages])
@@ -689,6 +799,20 @@ export default function WrongQuestionsView({
     groupMode === 'source' && selectedSourceKey
       ? selectedSourceGroup?.sources.find((source) => sourceKeyFor(source.bookName) === selectedSourceKey) || null
       : null
+
+  // Filtre çubuğundaki sayaçlar (analiz eksik / gösterilen) o an görüntülenen kırılıma göre
+  // daraltılır: ders seçiliyse o ders, kaynak da seçiliyse o kaynak. Ders seçilmemiş üst
+  // seviyede tüm dersler kapsanır.
+  const scopedPhotoQuestions = useMemo(() => {
+    let list = allPhotoQuestions
+    if (effectiveSelectedSubject) list = list.filter((item) => item.subject === effectiveSelectedSubject)
+    if (activeSource) list = list.filter((item) => sourceKeyFor(item.bookName) === selectedSourceKey)
+    return list
+  }, [allPhotoQuestions, effectiveSelectedSubject, activeSource, selectedSourceKey])
+  const scopedFilteredCount = useMemo(
+    () => applyAnalysisFilter(scopedPhotoQuestions, analysisFilter).length,
+    [scopedPhotoQuestions, analysisFilter],
+  )
 
   const topicStatsMap = useMemo(() => {
     const map = new Map()
@@ -725,6 +849,16 @@ export default function WrongQuestionsView({
       ]),
     )
   }, [sourceTopicStats])
+
+  // "Kaynağa Göre" kartlarının sağ üst köşesindeki halka için, backend'in kitap düzeyinde
+  // hesapladığı genel tamamlanma oranını (Kitaplık donut'larıyla aynı) (ders, kitap) anahtarına eşler.
+  const sourceBookCompletionMap = useMemo(() => {
+    const map = new Map()
+    sourceBookStats.forEach((stat) => {
+      map.set(sourceBookKey(stat.subject, stat.bookName), stat.completionRate ?? null)
+    })
+    return map
+  }, [sourceBookStats])
 
   // Ders kartlarında, o derste fotoğraflı yanlışı olan tüm konulardan çözülen toplam soru
   // sayısını ve birleşik başarı oranını göstermek için topicStats'i ders düzeyinde toplar
@@ -813,10 +947,16 @@ export default function WrongQuestionsView({
     await savePdfDocument(doc, buildWrongQuestionsPdfFileName(`${effectiveSelectedSubject}-icerik-gruplari`))
   }
 
-  const handleUpdateMistakeReason = async (wrongQuestionId, mistakeReason) => {
-    const updated = await updateMistakeReason(wrongQuestionId, mistakeReason)
+  // Hata nedeni ve/veya not izleyicinin kendi analiz kulvarına yazılır; dönen `analyses`
+  // haritası (üç kulvar birden) ilgili satıra işlenir.
+  const handleUpdateMistakeAnalysis = async (wrongQuestionId, analysis) => {
+    const updated = await updateMistakeAnalysis(wrongQuestionId, analysis)
     setWrongQuestions((prev) =>
-      prev ? prev.map((item) => (item.id === wrongQuestionId ? { ...item, mistakeReason: updated.mistakeReason } : item)) : prev,
+      prev
+        ? prev.map((item) =>
+            item.id === wrongQuestionId ? { ...item, analyses: updated.analyses || item.analyses } : item,
+          )
+        : prev,
     )
   }
 
@@ -829,7 +969,6 @@ export default function WrongQuestionsView({
                 if (item.id !== wrongQuestionId) return item
                 const next = { ...item }
                 if ('topic' in updates) next.topic = updated.topic || undefined
-                if ('studentNote' in updates) next.studentNote = updated.studentNote || undefined
                 return next
               })
             : prev,
@@ -903,16 +1042,65 @@ export default function WrongQuestionsView({
         <PageHeader title={title} subtitle={subtitle} actions={headerActions} />
       )}
 
+      {allPhotoQuestions.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3 py-2">
+          <label htmlFor="mistake-analysis-filter" className="text-xs font-semibold text-panel-text-muted">
+            Analiz durumu
+          </label>
+          <select
+            id="mistake-analysis-filter"
+            value={analysisFilter}
+            onChange={(event) => setAnalysisFilter(event.target.value)}
+            className="h-9 rounded-lg border border-panel-border bg-panel-surface px-2 text-sm font-medium text-panel-text focus:border-panel-blue focus:outline-none"
+          >
+            {filterOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          {(() => {
+            const pending = pendingAnalysisCount(scopedPhotoQuestions, viewerRole)
+            const scopePrefix = activeSource
+              ? `${activeSource.bookName || 'Bu kaynakta'}: `
+              : effectiveSelectedSubject
+                ? `${effectiveSelectedSubject}: `
+                : ''
+            return pending > 0 ? (
+              <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                {scopePrefix}
+                {pending} soruda senin analizin eksik
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                {scopePrefix}tüm sorular analiz edildi
+              </span>
+            )
+          })()}
+          {analysisFilter !== 'tumu' ? (
+            <span className="text-[11px] text-panel-text-muted">{scopedFilteredCount} soru gösteriliyor</span>
+          ) : null}
+        </div>
+      ) : null}
+
       {error ? (
         <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
       ) : wrongQuestions === null ? (
         <LoadingState label="Hata defteri yükleniyor..." />
       ) : contentGroups.length === 0 ? (
-        <EmptyState
-          icon={AlertCircle}
-          title="Henüz fotoğraflanmış yanlış yok"
-          description="Cevap kağıdında yanlış işaretlenen bir soruya tıklayıp fotoğrafını eklediğinde burada görünecek."
-        />
+        analysisFilter !== 'tumu' && allPhotoQuestions.length > 0 ? (
+          <EmptyState
+            icon={AlertCircle}
+            title="Bu filtreye uyan soru yok"
+            description="Seçtiğin analiz durumundaki tüm sorular tamamlanmış. Filtreyi 'Tüm sorular' yaparak hepsini görebilirsin."
+          />
+        ) : (
+          <EmptyState
+            icon={AlertCircle}
+            title="Henüz fotoğraflanmış yanlış yok"
+            description="Cevap kağıdında yanlış işaretlenen bir soruya tıklayıp fotoğrafını eklediğinde burada görünecek."
+          />
+        )
       ) : activeSource ? (
         <SourceQuestionBoard
           subject={effectiveSelectedSubject}
@@ -921,6 +1109,7 @@ export default function WrongQuestionsView({
             sourceTopicStatsMap.get(sourceStatsKey(effectiveSelectedSubject, topic, activeSource.bookName))
           }
           fetchPhoto={fetchPhoto}
+          viewerRole={viewerRole}
           onSelectItem={(items, index) => setSourceGallerySelection({ items, index })}
         />
       ) : effectiveSelectedSubject ? (
@@ -938,6 +1127,10 @@ export default function WrongQuestionsView({
                   bookImageUrl={source.bookImageUrl}
                   wrongCount={source.items.length}
                   stats={sourceBookStatsMap.get(sourceBookKey(effectiveSelectedSubject, source.bookName))}
+                  completionRate={sourceBookCompletionMap.get(
+                    sourceBookKey(effectiveSelectedSubject, source.bookName),
+                  )}
+                  pendingCount={pendingAnalysisCount(source.items, viewerRole)}
                   onClick={() => setSelectedSourceKey(sourceKeyFor(source.bookName))}
                 />
               ))}
@@ -972,6 +1165,7 @@ export default function WrongQuestionsView({
                       wrongCount={topicGroup.items.length}
                       stats={topicStatsMap.get(topicKey)}
                       scopeLabel="tüm kaynaklar"
+                      pendingCount={pendingAnalysisCount(topicGroup.items, viewerRole)}
                       selectMode={topicSelectMode}
                       selected={selectedTopicKeys.has(topicKey)}
                       onClick={() =>
@@ -997,6 +1191,7 @@ export default function WrongQuestionsView({
               count={group.items.length}
               stats={subjectStatsMap.get(group.subject)}
               tone={SHELF_TONES[index % SHELF_TONES.length]}
+              pendingCount={pendingAnalysisCount(group.items, viewerRole)}
               onClick={() => handleSelectSubject(group.subject)}
             />
           ))}
@@ -1009,7 +1204,8 @@ export default function WrongQuestionsView({
           items={galleryTopicGroup.items}
           fetchPhoto={fetchPhoto}
           onClose={() => setGalleryTopicKey(null)}
-          onUpdateMistakeReason={handleUpdateMistakeReason}
+          viewerRole={viewerRole}
+          onUpdateMistakeAnalysis={handleUpdateMistakeAnalysis}
           onUpdateMistakeMeta={handleUpdateMistakeMeta}
           onCapturePhoto={openReplacePhoto}
         />
@@ -1022,7 +1218,8 @@ export default function WrongQuestionsView({
           initialIndex={sourceGallerySelection.index}
           fetchPhoto={fetchPhoto}
           onClose={() => setSourceGallerySelection(null)}
-          onUpdateMistakeReason={handleUpdateMistakeReason}
+          viewerRole={viewerRole}
+          onUpdateMistakeAnalysis={handleUpdateMistakeAnalysis}
           onUpdateMistakeMeta={handleUpdateMistakeMeta}
           onCapturePhoto={openReplacePhoto}
         />

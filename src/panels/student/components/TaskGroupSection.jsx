@@ -28,24 +28,23 @@ export default function TaskGroupSection({
   const isKnownSubject = Boolean(SUBJECT_STYLES[subject])
   const hasOverdueTask = tasks.some(isTaskOverdue)
   const HeaderIcon = hasOverdueTask ? AlertTriangle : isKnownSubject ? BookOpen : CalendarDays
-  const accentBorderClass = hasOverdueTask ? 'border-l-panel-red/60' : style.border
   const accentChipClass = hasOverdueTask ? 'bg-panel-red-soft text-panel-red' : `${style.soft} ${style.text}`
-  const accentTextClass = hasOverdueTask ? 'text-panel-red' : style.text
+  const accentTextClass = 'text-panel-text'
 
   return (
-    <section className={`border-t-2 border-l-4 border-panel-border-strong bg-panel-surface first:border-t-0 ${accentBorderClass}`}>
+    <section className="border-t border-panel-border bg-panel-surface first:border-t-0">
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
-        className="group flex w-full items-center gap-3 bg-panel-surface px-3 py-3.5 text-left transition-colors hover:bg-panel-surface-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary sm:px-4"
+        className="group flex w-full items-center gap-3 bg-panel-surface-soft/60 px-3 py-2 text-left transition-colors hover:bg-panel-surface-soft/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary sm:px-4"
       >
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] ${accentChipClass}`}>
+        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[11px] ${accentChipClass}`}>
           <HeaderIcon size={17} aria-hidden="true" />
         </span>
-        <span className="min-w-0 flex-1">
-          <span className={`block truncate text-sm font-bold tracking-wide sm:text-base ${accentTextClass}`}>
-            {subject.toLocaleUpperCase('tr-TR')}
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className={`block truncate text-sm font-semibold ${accentTextClass}`}>
+            {subject}
           </span>
           <span className="block text-xs font-medium text-panel-text-muted">{tasks.length} görev</span>
         </span>
@@ -59,7 +58,7 @@ export default function TaskGroupSection({
       </button>
 
       {expanded ? (
-        <div className="divide-y divide-panel-border border-t-2 border-panel-border-strong">
+        <div className="divide-y divide-panel-border border-t border-panel-border">
           {tasks.map((task, index) => (
             <TaskListCard
               key={task.id}

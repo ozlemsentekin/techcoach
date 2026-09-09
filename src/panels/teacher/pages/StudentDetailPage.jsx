@@ -269,8 +269,8 @@ export default function StudentDetailPage() {
     (id) => getTeacherStudentWrongQuestionPhoto(studentTeacherId, id),
     [studentTeacherId],
   )
-  const updateMistakeReason = useCallback(
-    (id, mistakeReason) => updateTeacherStudentWrongQuestion(studentTeacherId, id, { mistakeReason }),
+  const updateMistakeAnalysis = useCallback(
+    (id, analysis) => updateTeacherStudentWrongQuestion(studentTeacherId, id, { analysis }),
     [studentTeacherId],
   )
   const updateMistakeMeta = useCallback(
@@ -445,7 +445,8 @@ export default function StudentDetailPage() {
             fetchWrongQuestions={fetchWrongQuestions}
             fetchTopicStats={fetchTopicStats}
             fetchPhoto={fetchPhoto}
-            updateMistakeReason={updateMistakeReason}
+            viewerRole="ogretmen"
+            updateMistakeAnalysis={updateMistakeAnalysis}
             updateMistakeMeta={updateMistakeMeta}
             updateMistakePhoto={updateMistakePhoto}
             hideHeaderWhenUnselected

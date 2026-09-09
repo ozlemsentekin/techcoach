@@ -59,6 +59,8 @@ const {
   sanitizeManualTestCompletion,
   computeWrongQuestionTopicStats,
   fetchWrongQuestionBookImagesByName,
+  fetchWrongQuestionAnalyses,
+  upsertWrongQuestionAnalysis,
   fetchResourceBookImagesByIds,
   MISTAKE_REASONS,
 } = require('./progress')
@@ -3351,10 +3353,10 @@ async function listTeacherStudentWrongQuestionsHandler(request) {
     // rb.image_url'i (kapak fotoğrafı, ~140KB base64) burada her satırda tekrar seçmek yerine
     // fetchWrongQuestionBookImagesByName ile bir kez çekip book_name üzerinden eşliyoruz —
     // bkz. progress.js'deki aynı fonksiyonun yorumu.
-    const [result, bookImageByName] = await Promise.all([
+    const [result, bookImageByName, analysesMap] = await Promise.all([
       requestDb.query(`
         SELECT wq.id, wq.student_id, wq.task_id, wq.test_id, wq.subject, wq.test_name,
-               wq.question_number, wq.error_type, wq.student_note, wq.mistake_reason,
+               wq.question_number, wq.error_type,
                wq.review_status, wq.resolved_at,
                CAST(1 AS bit) AS has_photo, wq.created_at,
                COALESCE(tp.name, wq.topic) AS topic,
@@ -3373,10 +3375,14 @@ async function listTeacherStudentWrongQuestionsHandler(request) {
         ORDER BY wq.created_at DESC;
       `),
       fetchWrongQuestionBookImagesByName(studentId, { resourceBookId }),
+      fetchWrongQuestionAnalyses(studentId, { subject: subjectName }),
     ])
 
     return json(200, {
-      wrongQuestions: result.recordset.map(sanitizeWrongQuestion),
+      wrongQuestions: result.recordset.map((row) => ({
+        ...sanitizeWrongQuestion(row),
+        analyses: analysesMap.get(row.id) || {},
+      })),
       bookImages: Object.fromEntries(bookImageByName),
     })
   } catch (error) {
@@ -3435,10 +3441,12 @@ async function getTeacherStudentWrongQuestionTopicStatsHandler(request) {
       WHERE wq.student_id = @studentId AND wq.subject = @subject AND wq.test_id IS NOT NULL;
     `)
 
-    const { topicStats, sourceTopicStats } = await computeWrongQuestionTopicStats(studentId, result.recordset, {
-      teacherId: studentTeacherId,
-    })
-    return json(200, { topicStats, sourceTopicStats })
+    const { topicStats, sourceTopicStats, sourceBookStats } = await computeWrongQuestionTopicStats(
+      studentId,
+      result.recordset,
+      { teacherId: studentTeacherId },
+    )
+    return json(200, { topicStats, sourceTopicStats, sourceBookStats })
   } catch (error) {
     return handleError(error, 'getTeacherStudentWrongQuestionTopicStatsHandler', 'İçerik istatistikleri yüklenemedi.')
   }
@@ -3446,13 +3454,20 @@ async function getTeacherStudentWrongQuestionTopicStatsHandler(request) {
 
 async function updateTeacherStudentWrongQuestionHandler(request) {
   try {
-    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
+    const { error, studentId, subjectId, actorId: teacherUserId } = await requireTeacherStudentContext(request)
     if (error) return error
 
     const wrongQuestionId = request.params.wrongQuestionId
     const payload = await request.json().catch(() => null)
 
     const subjectName = await resolveTeacherSubjectName(subjectId)
+
+    const analysis = payload?.analysis
+    if (analysis && analysis.mistakeReason !== undefined && analysis.mistakeReason !== null) {
+      if (!MISTAKE_REASONS.includes(analysis.mistakeReason)) {
+        return json(400, { error: 'Geçersiz hata nedeni.' })
+      }
+    }
 
     const setClauses = []
     const bindings = {
@@ -3461,44 +3476,64 @@ async function updateTeacherStudentWrongQuestionHandler(request) {
       subject: { type: sql.NVarChar(100), value: subjectName },
     }
 
-    if (payload?.mistakeReason !== undefined) {
-      if (!MISTAKE_REASONS.includes(payload.mistakeReason)) {
-        return json(400, { error: 'Geçersiz hata nedeni.' })
-      }
-      setClauses.push('mistake_reason = @mistakeReason')
-      bindings.mistakeReason = { type: sql.NVarChar(30), value: payload.mistakeReason }
-    }
-    if (payload?.studentNote !== undefined) {
-      setClauses.push('student_note = @studentNote')
-      bindings.studentNote = { type: sql.NVarChar(1000), value: payload.studentNote || null }
-    }
+    // topic soruya aittir (kulvara değil) → WrongQuestions'ta kalır. Hata nedeni / not
+    // öğretmen kulvarına (dbo.WrongQuestionAnalyses role='ogretmen') yazılır.
     if (payload?.topic !== undefined) {
       setClauses.push('topic = @topic')
       bindings.topic = { type: sql.NVarChar(200), value: payload.topic || null }
     }
 
-    if (setClauses.length === 0) {
+    if (setClauses.length === 0 && !analysis) {
       return json(400, { error: 'Güncellenecek alan bulunamadı.' })
     }
 
-    const requestDb = await withRequest(bindings)
-    const result = await requestDb.query(`
-      UPDATE dbo.WrongQuestions SET ${setClauses.join(', ')}
-      WHERE id = @id AND student_id = @studentId AND subject = @subject;
-    `)
-
-    if (!result.rowsAffected[0]) {
+    // Sahiplik + ders kapsamı doğrulaması (analiz-tek güncellemede UPDATE çalışmadığından ayrı).
+    const ownerDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      subject: { type: sql.NVarChar(100), value: subjectName },
+    })
+    const ownerResult = await ownerDb.query(
+      `SELECT 1 AS ok FROM dbo.WrongQuestions WHERE id = @id AND student_id = @studentId AND subject = @subject;`,
+    )
+    if (!ownerResult.recordset.length) {
       return json(404, { error: 'Kayıt bulunamadı.' })
     }
 
-    const fetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: wrongQuestionId } })
-    const fetchResult = await fetchDb.query(`
-      SELECT id, student_id, task_id, subject, topic, question_number, error_type, student_note, mistake_reason,
-             review_status, resolved_at, created_at
-      FROM dbo.WrongQuestions WHERE id = @id;
-    `)
+    if (setClauses.length > 0) {
+      const requestDb = await withRequest(bindings)
+      await requestDb.query(`
+        UPDATE dbo.WrongQuestions SET ${setClauses.join(', ')}
+        WHERE id = @id AND student_id = @studentId AND subject = @subject;
+      `)
+    }
 
-    return json(200, { wrongQuestion: sanitizeWrongQuestion(fetchResult.recordset[0]) })
+    if (analysis) {
+      await upsertWrongQuestionAnalysis(
+        wrongQuestionId,
+        'ogretmen',
+        { mistakeReason: analysis.mistakeReason, note: analysis.note },
+        teacherUserId,
+      )
+    }
+
+    const [fetchResult, analysesMap] = await Promise.all([
+      withRequest({ id: { type: sql.UniqueIdentifier, value: wrongQuestionId } }).then((db) =>
+        db.query(`
+          SELECT id, student_id, task_id, subject, topic, question_number, error_type,
+                 review_status, resolved_at, created_at
+          FROM dbo.WrongQuestions WHERE id = @id;
+        `),
+      ),
+      fetchWrongQuestionAnalyses(studentId, { subject: subjectName }),
+    ])
+
+    return json(200, {
+      wrongQuestion: {
+        ...sanitizeWrongQuestion(fetchResult.recordset[0]),
+        analyses: analysesMap.get(wrongQuestionId) || {},
+      },
+    })
   } catch (error) {
     return handleError(error, 'updateTeacherStudentWrongQuestionHandler', 'Kayıt güncellenemedi.')
   }

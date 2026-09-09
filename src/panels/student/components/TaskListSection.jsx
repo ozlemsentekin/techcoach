@@ -57,7 +57,7 @@ function shouldExpandGroup({ filter, viewMode, index }) {
 
 function SegmentedControl({ items, value, onChange, ariaLabel }) {
   return (
-    <div className="student-theme-control-group flex min-w-0 gap-1 rounded-[12px] border border-white/15 bg-white/10 p-1" aria-label={ariaLabel}>
+    <div className="flex min-w-0 gap-1 rounded-[12px] border border-white/15 bg-white/10 p-1" aria-label={ariaLabel}>
       {items.map((item) => {
         const Icon = item.icon
         const selected = value === item.key
@@ -68,10 +68,10 @@ function SegmentedControl({ items, value, onChange, ariaLabel }) {
             type="button"
             aria-pressed={selected}
             onClick={() => onChange(item.key)}
-            className={`student-theme-control-button inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-[9px] px-2.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary sm:px-3 ${
+            className={`inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-[9px] px-2.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary sm:px-3 ${
               selected
                 ? 'bg-panel-surface text-student-theme-text shadow-sm'
-                : 'text-white/80 hover:bg-white/10 hover:text-white'
+                : 'text-white/75 hover:bg-white/10 hover:text-white'
             }`}
           >
             <Icon size={14} aria-hidden="true" />
@@ -95,7 +95,7 @@ function ViewModeMenu({ value, onChange }) {
         aria-expanded={open}
         aria-haspopup="menu"
         title={`Gösterim şekli: ${selected.label}`}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-[12px] border border-white/15 bg-white/10 text-white/85 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        className="inline-flex h-10 w-10 items-center justify-center rounded-[12px] border border-white/15 bg-white/10 text-white/80 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary"
       >
         <SlidersHorizontal size={17} aria-hidden="true" />
         <span className="sr-only">Gösterim şekli: {selected.label}</span>
@@ -209,20 +209,20 @@ export default function TaskListSection({
   const highlightTaskId = viewMode === 'time' && filter === 'pending' ? filtered[0]?.id : null
 
   return (
-    <section className="panel-card overflow-hidden bg-panel-surface">
-      <div className="student-theme-flow-header px-3 py-3 sm:px-4">
+    <section className="overflow-hidden rounded-2xl border border-panel-border bg-panel-surface">
+      <div className="bg-[var(--color-student-theme-badge-bg)] px-4 py-4 text-white sm:px-5">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <span className="student-theme-section-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-white/10 text-white">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-white/15 text-white">
             <ListChecks size={18} aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <h2 className="student-theme-section-title text-lg font-bold leading-tight text-white sm:text-xl">Görev Akışı</h2>
-            <p className="student-theme-section-muted text-xs font-medium sm:text-sm">
+            <h2 className="text-lg font-bold leading-tight text-white sm:text-xl">Günün Akışı</h2>
+            <p className="text-white/70 text-xs font-medium sm:text-sm">
               {filtered.length} görev
             </p>
           </div>
 
-          <div className="ml-auto flex min-w-0 items-center gap-2">
+          <div className="flex w-full min-w-0 items-center gap-2 sm:ml-auto sm:w-auto">
             <ViewModeMenu value={viewMode} onChange={setViewMode} />
             <SegmentedControl items={FILTERS} value={filter} onChange={setFilter} ariaLabel="Görev durumu" />
           </div>

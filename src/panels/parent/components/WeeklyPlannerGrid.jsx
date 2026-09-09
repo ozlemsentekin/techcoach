@@ -29,6 +29,7 @@ import TaskReviewControl from '../../shared/TaskReviewControl'
 import TaskAttachment from '../../shared/TaskAttachment'
 import { parseTimeToMinutes, todayISODate, WEEKDAY_KEYS as DAY_KEYS } from '../../../utils/time'
 import { isBacklogTask } from '../../../utils/backlogTasks'
+import { getSubjectBarClass, getSubjectStyle } from '../../../utils/subjectStyles'
 import { isEndedPrivateLessonForToday } from '../../../utils/lessonTasks'
 import Badge from '../../ui/Badge'
 import { isSchoolHoliday } from '../../../services/weeklyPlanService'
@@ -621,6 +622,7 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
   if (task.isSchoolSlot) return <SchoolSlotCard task={task} muted={muted} />
 
   const style = getTaskStyle(task)
+  const subjectStyle = getSubjectStyle(task.subject)
   const isHomework = HOMEWORK_TASK_TYPES.has(task.taskType)
   const backlog = isBacklogTask(task)
   const homeworkStatus = getHomeworkStatusIcon(task)
@@ -656,15 +658,15 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
   const typeLabel = hasTypeAccent ? TASK_TYPES[task.taskType]?.label : null
   const compactDetailLabel = getCompactDetailLabel({ source, testRows, fallbackDetail })
   const resourceEntries = isHomework ? getTaskResourceEntries(task) : []
-  // Ödev kartında baştaki durum ikonu kaldırıldı; tamamlandı/bekliyor ayrımını yer kaplamayan
-  // ince renkli sol çubukla veriyoruz (yeşil = tamamlandı, sarı = bekliyor, kırmızı = biriken).
+  // Ödev kartındaki ince sol çubuğu dersin rengine boyuyoruz; böylece veli hangi dersin
+  // ödevi olduğunu okumadan ayırt eder (bkz. getSubjectBarClass). Biriken görev, ders
+  // renginden önce gelen kırmızı uyarı çubuğunu korur; tamamlanma durumu karttaki tik
+  // rozeti + detaydaki tarihle verilir.
   const homeworkBarClass =
     isHomework && !muted
       ? backlog
         ? 'bg-panel-red'
-        : task.status === 'tamamlandi'
-          ? 'bg-emerald-500'
-          : 'bg-amber-400'
+        : getSubjectBarClass(task.subject)
       : null
   const showAccentBar = hasTypeAccent || Boolean(homeworkBarClass)
   const accentBarClass = homeworkBarClass || style.barClassName
@@ -698,14 +700,17 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
           {formatTaskTime(task)}
         </span>
       ) : null}
-      <span className="block truncate text-xs font-extrabold leading-snug text-panel-text">
-        {TASK_TYPES[task.taskType]?.label || 'Ödev'}
+      <span className="flex min-w-0 items-center gap-1 text-xs font-extrabold leading-snug text-panel-text">
+        {task.status === 'tamamlandi' ? (
+          <CheckCircle2 size={13} className="shrink-0 text-emerald-500" aria-label="Tamamlandı" />
+        ) : null}
+        <span className="truncate">{TASK_TYPES[task.taskType]?.label || 'Ödev'}</span>
       </span>
       {task.subject ? (
         <span className="mt-0.5 flex min-w-0">
           <span
             title={task.subject}
-            className={`inline-block max-w-full truncate rounded-md px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${style.tagClassName}`}
+            className={`inline-block max-w-full truncate rounded-md px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${subjectStyle.soft} ${subjectStyle.text}`}
           >
             {task.subject}
           </span>

@@ -7,6 +7,78 @@ const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mista
 
 const MISTAKE_REASONS = ['dikkat-hatasi', 'bilgi-eksikligi', 'soruyu-anlamadim']
 
+// Hata Defteri analiz kulvarları: her yanlış soruda rol başına bağımsız analiz tutulur
+// (bkz. dbo.WrongQuestionAnalyses / create-wrong-question-analyses-schema.sql). 'ebeveyn'
+// studentScope.actorRole ile aynı yazımdır (veli); 'koc' ayrı bir kulvar olarak ele alınmaz.
+const ANALYSIS_ROLES = ['ogrenci', 'ebeveyn', 'ogretmen']
+
+// Verilen öğrencinin tüm yanlış sorularına ait analiz kulvarlarını tek sorguda çekip
+// wrong_question_id -> { ogrenci?, ebeveyn?, ogretmen? } haritasına dönüştürür. Her kulvar
+// { mistakeReason, note, analyzedByName } taşır. subject verilirse (öğretmen ucu) sadece o
+// derse ait yanlışların analizleri döner.
+async function fetchWrongQuestionAnalyses(studentId, { subject } = {}) {
+  const requestDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    ...(subject ? { subject: { type: sql.NVarChar(100), value: subject } } : {}),
+  })
+  const result = await requestDb.query(`
+    SELECT a.wrong_question_id, a.role, a.mistake_reason, a.note, u.full_name AS analyzed_by_name
+    FROM dbo.WrongQuestionAnalyses a
+    LEFT JOIN dbo.Users u ON u.id = a.analyzed_by_user_id
+    WHERE a.wrong_question_id IN (
+      SELECT id FROM dbo.WrongQuestions
+      WHERE student_id = @studentId ${subject ? 'AND subject = @subject' : ''}
+    );
+  `)
+
+  const map = new Map()
+  result.recordset.forEach((row) => {
+    if (!ANALYSIS_ROLES.includes(row.role)) return
+    const entry = map.get(row.wrong_question_id) || {}
+    entry[row.role] = {
+      mistakeReason: row.mistake_reason || undefined,
+      note: row.note || undefined,
+      analyzedByName: row.analyzed_by_name || undefined,
+    }
+    map.set(row.wrong_question_id, entry)
+  })
+  return map
+}
+
+// Tek bir yanlış sorunun analiz kulvarını upsert eder (rol başına tek kayıt). mistakeReason
+// verilmişse çağıran katman MISTAKE_REASONS ile doğrulamalıdır.
+async function upsertWrongQuestionAnalysis(wrongQuestionId, role, { mistakeReason, note }, analyzedByUserId) {
+  const bindings = {
+    wrongQuestionId: { type: sql.UniqueIdentifier, value: wrongQuestionId },
+    role: { type: sql.NVarChar(20), value: role },
+    analyzedByUserId: { type: sql.UniqueIdentifier, value: analyzedByUserId || null },
+  }
+  const setClauses = ['updated_at = SYSUTCDATETIME()', 'analyzed_by_user_id = @analyzedByUserId']
+  const insertCols = ['wrong_question_id', 'role', 'analyzed_by_user_id']
+  const insertVals = ['@wrongQuestionId', '@role', '@analyzedByUserId']
+  if (mistakeReason !== undefined) {
+    bindings.mistakeReason = { type: sql.NVarChar(30), value: mistakeReason || null }
+    setClauses.push('mistake_reason = @mistakeReason')
+    insertCols.push('mistake_reason')
+    insertVals.push('@mistakeReason')
+  }
+  if (note !== undefined) {
+    bindings.note = { type: sql.NVarChar(1000), value: note || null }
+    setClauses.push('note = @note')
+    insertCols.push('note')
+    insertVals.push('@note')
+  }
+
+  const requestDb = await withRequest(bindings)
+  await requestDb.query(`
+    UPDATE dbo.WrongQuestionAnalyses SET ${setClauses.join(', ')}
+    WHERE wrong_question_id = @wrongQuestionId AND role = @role;
+    IF @@ROWCOUNT = 0
+      INSERT INTO dbo.WrongQuestionAnalyses (${insertCols.join(', ')})
+      VALUES (${insertVals.join(', ')});
+  `)
+}
+
 function toISODate(value) {
   if (!value) return null
   return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10)
@@ -341,10 +413,10 @@ async function listWrongQuestionsHandler(request) {
     // ünitede toplanırsa) eski kayıt bayatlar. Bu yüzden test_id üzerinden katalogdaki güncel
     // konu/kitap/yayın evi adına öncelik veriyoruz; test_id'siz eski manuel kayıtlarda tabloya
     // kaydedilmiş metne geri düşülür.
-    const [result, bookImageByName] = await Promise.all([
+    const [result, bookImageByName, analysesMap] = await Promise.all([
       requestDb.query(`
         SELECT wq.id, wq.student_id, wq.task_id, wq.test_id, wq.subject, wq.test_name,
-               wq.question_number, wq.error_type, wq.student_note, wq.mistake_reason,
+               wq.question_number, wq.error_type,
                wq.review_status, wq.resolved_at,
                CAST(1 AS bit) AS has_photo, wq.created_at,
                COALESCE(tp.name, wq.topic) AS topic,
@@ -363,13 +435,17 @@ async function listWrongQuestionsHandler(request) {
         ORDER BY wq.created_at DESC;
       `),
       fetchWrongQuestionBookImagesByName(studentId, { resourceBookId }),
+      fetchWrongQuestionAnalyses(studentId),
     ])
 
     // bookImageUrl'i her satırda tekrar tekrar döndürmek yerine (bkz. yukarıdaki
     // fetchWrongQuestionBookImagesByName yorumu) ayrı, kitap başına tek girişli bir harita
     // olarak gönderiyoruz; istemci bunu book_name ile eşleyip sadece görüntülerken kullanır.
     return json(200, {
-      wrongQuestions: result.recordset.map(sanitizeWrongQuestion),
+      wrongQuestions: result.recordset.map((row) => ({
+        ...sanitizeWrongQuestion(row),
+        analyses: analysesMap.get(row.id) || {},
+      })),
       bookImages: Object.fromEntries(bookImageByName),
     })
   } catch (error) {
@@ -521,9 +597,21 @@ async function updateWrongQuestionHandler(request) {
   try {
     const wrongQuestionId = request.params.wrongQuestionId
     const payload = await request.json().catch(() => null)
-    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
+    const { error, studentId, actorRole, actorId } = await requireStudentWriteContext(request, {
+      studentId: payload?.studentId,
+    })
     if (error) {
       return error
+    }
+
+    // Analiz kulvarı çağıranın rolünden belirlenir (client'tan alınmaz): veli 'ebeveyn',
+    // diğer her durum (öğrencinin kendisi) 'ogrenci'.
+    const analysisRole = actorRole === 'ebeveyn' ? 'ebeveyn' : 'ogrenci'
+    const analysis = payload?.analysis
+    if (analysis && analysis.mistakeReason !== undefined && analysis.mistakeReason !== null) {
+      if (!MISTAKE_REASONS.includes(analysis.mistakeReason)) {
+        return json(400, { error: 'Geçersiz hata nedeni.' })
+      }
     }
 
     const setClauses = []
@@ -540,43 +628,60 @@ async function updateWrongQuestionHandler(request) {
       setClauses.push('resolved_at = @resolvedAt')
       bindings.resolvedAt = { type: sql.DateTime2, value: payload.resolvedAt }
     }
-    if (payload?.studentNote !== undefined) {
-      setClauses.push('student_note = @studentNote')
-      bindings.studentNote = { type: sql.NVarChar(1000), value: payload.studentNote || null }
-    }
     if (payload?.topic !== undefined) {
       setClauses.push('topic = @topic')
       bindings.topic = { type: sql.NVarChar(200), value: payload.topic || null }
     }
-    if (payload?.mistakeReason !== undefined) {
-      if (!MISTAKE_REASONS.includes(payload.mistakeReason)) {
-        return json(400, { error: 'Geçersiz hata nedeni.' })
-      }
-      setClauses.push('mistake_reason = @mistakeReason')
-      bindings.mistakeReason = { type: sql.NVarChar(30), value: payload.mistakeReason }
-    }
 
-    if (setClauses.length === 0) {
+    if (setClauses.length === 0 && !analysis) {
       return json(400, { error: 'Güncellenecek alan bulunamadı.' })
     }
 
-    const requestDb = await withRequest(bindings)
-    const result = await requestDb.query(`
-      UPDATE dbo.WrongQuestions SET ${setClauses.join(', ')} WHERE id = @id AND student_id = @studentId;
-    `)
-
-    if (!result.rowsAffected[0]) {
+    // Analiz-tek güncellemede WrongQuestions UPDATE'i çalışmadığından sahiplik ayrı doğrulanır.
+    const ownerDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const ownerResult = await ownerDb.query(
+      `SELECT 1 AS ok FROM dbo.WrongQuestions WHERE id = @id AND student_id = @studentId;`,
+    )
+    if (!ownerResult.recordset.length) {
       return json(404, { error: 'Kayıt bulunamadı.' })
     }
 
-    const fetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: wrongQuestionId } })
-    const fetchResult = await fetchDb.query(`
-      SELECT id, student_id, task_id, subject, topic, question_number, error_type, student_note, mistake_reason,
-             review_status, resolved_at, created_at
-      FROM dbo.WrongQuestions WHERE id = @id;
-    `)
+    if (setClauses.length > 0) {
+      const requestDb = await withRequest(bindings)
+      await requestDb.query(`
+        UPDATE dbo.WrongQuestions SET ${setClauses.join(', ')} WHERE id = @id AND student_id = @studentId;
+      `)
+    }
 
-    return json(200, { wrongQuestion: sanitizeWrongQuestion(fetchResult.recordset[0]) })
+    if (analysis) {
+      await upsertWrongQuestionAnalysis(
+        wrongQuestionId,
+        analysisRole,
+        { mistakeReason: analysis.mistakeReason, note: analysis.note },
+        actorId,
+      )
+    }
+
+    const [fetchResult, analysesMap] = await Promise.all([
+      withRequest({ id: { type: sql.UniqueIdentifier, value: wrongQuestionId } }).then((db) =>
+        db.query(`
+          SELECT id, student_id, task_id, subject, topic, question_number, error_type,
+                 review_status, resolved_at, created_at
+          FROM dbo.WrongQuestions WHERE id = @id;
+        `),
+      ),
+      fetchWrongQuestionAnalyses(studentId),
+    ])
+
+    return json(200, {
+      wrongQuestion: {
+        ...sanitizeWrongQuestion(fetchResult.recordset[0]),
+        analyses: analysesMap.get(wrongQuestionId) || {},
+      },
+    })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -754,7 +859,62 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
     }
   })
 
-  return { topicStats, sourceTopicStats }
+  // "Kaynağa Göre" kartlarında kitabın genel tamamlanma oranını (çözülen test / kitaptaki
+  // toplam test) göstermek için, yanlışı olan konuların ait olduğu kitapları bulup
+  // catalog.js'deki aynı toplu istatistik hesabını kullanırız — böylece bu oran Kitaplık
+  // donut'larıyla birebir aynıdır. catalog.js progress.js'i require ettiği için döngüsel
+  // bağımlılığı önlemek adına burada tembel require ediyoruz.
+  const sourceBookStats = await computeWrongQuestionSourceBookStats(studentId, normalizedTopicKeys, { teacherId })
+
+  return { topicStats, sourceTopicStats, sourceBookStats }
+}
+
+// computeWrongQuestionTopicStats için yardımcı: fotoğraflı yanlışı olan konuların ait olduğu
+// (öğrenciye atanmış, aktif) kaynak kitapları bulur ve her biri için kitap düzeyinde tamamlanma
+// oranını hesaplar. teacherId verildiğinde kitaplar ayrıca o öğretmene atanmışlarla sınırlanır.
+async function computeWrongQuestionSourceBookStats(studentId, normalizedTopicKeys, { teacherId } = {}) {
+  if (!normalizedTopicKeys.length) return []
+
+  const booksDb = await withRequest({
+    studentId: { type: sql.UniqueIdentifier, value: studentId },
+    topicKeysJson: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(normalizedTopicKeys) },
+    ...(teacherId ? { teacherId: { type: sql.UniqueIdentifier, value: teacherId } } : {}),
+  })
+  const booksResult = await booksDb.query(`
+    WITH WantedTopics AS (
+      SELECT DISTINCT
+             LTRIM(RTRIM(COALESCE(JSON_VALUE([value], '$.subject'), N''))) AS subject_name,
+             LTRIM(RTRIM(COALESCE(JSON_VALUE([value], '$.topic'), N''))) AS topic_name
+      FROM OPENJSON(@topicKeysJson)
+    )
+    SELECT DISTINCT rb.id AS book_id,
+           rb.name AS book_name,
+           LTRIM(RTRIM(COALESCE(s.name, N''))) AS subject_name
+    FROM dbo.ResourceBooks rb
+    INNER JOIN dbo.StudentResourceBooks srb ON srb.resource_book_id = rb.id AND srb.student_id = @studentId
+    INNER JOIN dbo.ResourceBookTopics rbt ON rbt.resource_book_id = rb.id
+    LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
+    ${teacherId ? 'INNER JOIN dbo.StudentTeacherResourceBooks strb ON strb.teacher_id = @teacherId AND strb.resource_book_id = rb.id' : ''}
+    INNER JOIN WantedTopics wt
+      ON wt.subject_name = LTRIM(RTRIM(COALESCE(s.name, N'')))
+     AND wt.topic_name = LTRIM(RTRIM(COALESCE(rbt.name, N'')))
+    WHERE rb.is_active = 1;
+  `)
+
+  if (!booksResult.recordset.length) return []
+
+  const { fetchResourceBookStatsForStudent } = require('./catalog')
+  const bookIds = booksResult.recordset.map((row) => row.book_id)
+  const bookStatsById = await fetchResourceBookStatsForStudent(studentId, bookIds)
+
+  return booksResult.recordset.map((row) => {
+    const entry = bookStatsById.get(row.book_id)
+    return {
+      subject: row.subject_name,
+      bookName: row.book_name || null,
+      completionRate: entry ? entry.completionRate : null,
+    }
+  })
 }
 
 async function getWrongQuestionTopicStatsHandler(request) {
@@ -777,8 +937,11 @@ async function getWrongQuestionTopicStatsHandler(request) {
       WHERE wq.student_id = @studentId AND wq.test_id IS NOT NULL;
     `)
 
-    const { topicStats, sourceTopicStats } = await computeWrongQuestionTopicStats(studentId, result.recordset)
-    return json(200, { topicStats, sourceTopicStats })
+    const { topicStats, sourceTopicStats, sourceBookStats } = await computeWrongQuestionTopicStats(
+      studentId,
+      result.recordset,
+    )
+    return json(200, { topicStats, sourceTopicStats, sourceBookStats })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -846,7 +1009,7 @@ async function listStudyHistoryHandler(request) {
 
     const bindings = { studentId: { type: sql.UniqueIdentifier, value: studentId } }
 
-    const [tasksResult, manualResult] = await Promise.all([
+    const [tasksResult, manualResult, mistakePhotoResult] = await Promise.all([
       withRequest(bindings).then((requestDb) =>
         requestDb.query(`
           SELECT t.id AS task_id, t.title AS task_title, t.subject, t.task_type, t.status,
@@ -889,6 +1052,16 @@ async function listStudyHistoryHandler(request) {
           LEFT JOIN dbo.Subjects s ON s.id = rb.subject_id
           WHERE smtc.student_id = @studentId
             AND (smtc.correct_count IS NOT NULL OR smtc.wrong_count IS NOT NULL OR smtc.blank_count IS NOT NULL);
+        `),
+      ),
+      // Uyarı bandı + "eksik görsel" filtresi soru bazında saymaz; bir çalışmada (görev+test ya da
+      // test) EN AZ BİR hata görseli var mı yok mu — sadece bu "var/yok" ilişkisi gerekir. Tek
+      // gruplu sorgu, öğrenci başına küçük sonuç kümesi (N+1 yok).
+      withRequest(bindings).then((requestDb) =>
+        requestDb.query(`
+          SELECT DISTINCT task_id, test_id
+          FROM dbo.WrongQuestions
+          WHERE student_id = @studentId AND photo_url IS NOT NULL AND test_id IS NOT NULL;
         `),
       ),
     ])
@@ -1036,13 +1209,40 @@ async function listStudyHistoryHandler(request) {
       })
     }
 
+    // Hangi (görev,test) / (test) için en az bir hata görseli yüklenmiş — bkz. yukarıdaki sorgu.
+    const photoTaskTestKeys = new Set()
+    const photoTestIds = new Set()
+    for (const row of mistakePhotoResult.recordset) {
+      photoTestIds.add(row.test_id)
+      if (row.task_id) photoTaskTestKeys.add(`${row.task_id}:${row.test_id}`)
+    }
+
+    // Teste bağlı, yanlış veya boş sorusu olan çalışmalarda hata görseli durumu:
+    //   'uploaded' → en az bir görsel var, 'missing' → hiç yok, null → uygun değil
+    //   (hata yok ya da teste bağlı değil, ikon gösterilmez).
+    // Görev kaynaklı satırda görsel o göreve, elle (Kitaplık) satırda teste bağlı aranır.
+    for (const item of items) {
+      const hasMistakes = (item.wrong || 0) + (item.blank || 0) > 0
+      if (!item.testId || !hasMistakes) {
+        item.mistakePhotoStatus = null
+        continue
+      }
+      const hasPhoto = item.taskId
+        ? photoTaskTestKeys.has(`${item.taskId}:${item.testId}`)
+        : photoTestIds.has(item.testId)
+      item.mistakePhotoStatus = hasPhoto ? 'uploaded' : 'missing'
+    }
+
     items.sort((a, b) => {
       const at = a.occurredAt ? new Date(a.occurredAt).getTime() : 0
       const bt = b.occurredAt ? new Date(b.occurredAt).getTime() : 0
       return bt - at
     })
 
-    return json(200, { items })
+    return json(200, {
+      items,
+      hasMissingMistakePhotos: items.some((item) => item.mistakePhotoStatus === 'missing'),
+    })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -1354,7 +1554,10 @@ module.exports = {
   updateWrongQuestionHandler,
   getWrongQuestionTopicStatsHandler,
   computeWrongQuestionTopicStats,
+  fetchWrongQuestionAnalyses,
+  upsertWrongQuestionAnalysis,
   MISTAKE_REASONS,
+  ANALYSIS_ROLES,
   listStudySessionsHandler,
   addStudySessionHandler,
   listStudyHistoryHandler,

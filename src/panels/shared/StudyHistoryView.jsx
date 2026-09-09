@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, History, ScanLine, Search, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, History, Image as ImageIcon, ImageOff, ScanLine, Search, X } from 'lucide-react'
 import { getStudyHistory } from '../../services/studyHistoryService'
 import { authRequest } from '../../services/authClient'
 import { verifyMistakePhotoQuestionNumber } from '../../services/mistakePhotoService'
@@ -123,6 +123,18 @@ function NumCell({ value, className = '' }) {
   return <td className={`px-2 py-3 text-center text-sm tabular-nums ${className}`}>{value}</td>
 }
 
+// Yanlış/boş sorusu olan bir çalışmada hata görseli var mı yok mu — sade, metinsiz ikon.
+// null (uygun değil: hata yok / teste bağlı değil) → soluk tire.
+function PhotoStatusIcon({ status }) {
+  if (status === 'uploaded') {
+    return <ImageIcon size={16} className="mx-auto text-emerald-600" aria-label="Hata görseli yüklendi" />
+  }
+  if (status === 'missing') {
+    return <ImageOff size={16} className="mx-auto text-amber-500" aria-label="Hata görseli yüklenmedi" />
+  }
+  return <span className="text-panel-text-muted/30" aria-hidden="true">–</span>
+}
+
 function DateTimeCell({ value }) {
   const date = parseDate(value)
   return (
@@ -159,6 +171,9 @@ function StudyHistoryRow({ item, onOpen }) {
       <NumCell value={item.correct} className="font-semibold text-emerald-600" />
       <NumCell value={item.wrong} className="font-semibold text-panel-red" />
       <NumCell value={item.blank} className="text-panel-text-muted" />
+      <td className="px-2 py-3 text-center">
+        <PhotoStatusIcon status={item.mistakePhotoStatus} />
+      </td>
       <td className="px-3 py-3 text-center">
         <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${successTone(item.successRate)}`}>
           %{item.successRate}
@@ -203,6 +218,7 @@ function StudyHistoryCard({ item, onOpen }) {
           <span className="text-emerald-600">{item.correct} D</span>
           <span className="text-panel-red">{item.wrong} Y</span>
           <span className="text-panel-text-muted">{item.blank} B</span>
+          {item.mistakePhotoStatus ? <PhotoStatusIcon status={item.mistakePhotoStatus} /> : null}
         </div>
         <ViewAnswersButton item={item} onClick={onOpen} />
       </div>
@@ -225,6 +241,7 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
   const [activeItem, setActiveItem] = useState(null)
   const [search, setSearch] = useState('')
   const [subject, setSubject] = useState('')
+  const [onlyMissingPhoto, setOnlyMissingPhoto] = useState(false)
   const [page, setPage] = useState(1)
 
   const studentKey = studentId || ''
@@ -258,11 +275,21 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
     )
   }, [items])
 
+  // Uyarı bandı yalnızca "var/yok" ilişkisi: backend her satıra missingMistakePhoto işaretledi,
+  // burada sadece böyle bir satır var mı diye bakıyoruz (sayım ucuz, ~birkaç yüz satır).
+  const missingPhotoCount = useMemo(
+    () => (items ? items.reduce((n, it) => (it.mistakePhotoStatus === 'missing' ? n + 1 : n), 0) : 0),
+    [items],
+  )
+  // Eksik görsel kalmayınca (ör. son fotoğraf yüklenince) filtre kendiliğinden pasifleşir.
+  const missingFilterActive = onlyMissingPhoto && missingPhotoCount > 0
+
   const filtered = useMemo(() => {
     if (!items) return []
     const q = lower(search).trim()
     return items.filter((it) => {
       if (subject && it.subjectName !== subject) return false
+      if (missingFilterActive && it.mistakePhotoStatus !== 'missing') return false
       if (!q) return true
       return [
         it.testName,
@@ -275,7 +302,7 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
         it.pageEnd != null ? String(it.pageEnd) : '',
       ].some((field) => lower(field).includes(q))
     })
-  }, [items, search, subject])
+  }, [items, search, subject, missingFilterActive])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
@@ -297,6 +324,10 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
   )
 
   const resetPage = () => setPage(1)
+  const toggleMissingPhoto = () => {
+    setOnlyMissingPhoto((v) => !v)
+    resetPage()
+  }
 
   if (error && !items) {
     return <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
@@ -374,6 +405,26 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
           </select>
         </div>
 
+        {/* Yanlış/boş sorusu olup hiç hata görseli yüklenmemiş çalışma varsa uyarı bandı. */}
+        {missingPhotoCount > 0 ? (
+          <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2.5">
+              <ImageOff size={18} className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
+              <p className="text-sm text-amber-800">
+                <span className="font-semibold">{missingPhotoCount} çalışmada</span> yanlış veya boş soru var ama
+                hata görseli yüklenmemiş. Bu soruların fotoğrafını ekleyip hata defterine düşür.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={toggleMissingPhoto}
+              className="shrink-0 self-start rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-700 sm:self-auto"
+            >
+              {missingFilterActive ? 'Filtreyi kaldır' : 'Eksik olanları göster'}
+            </button>
+          </div>
+        ) : null}
+
         <p className="text-sm text-panel-text-muted">
           {filtered.length} test · {totals.questions} soru ·{' '}
           <span className="font-semibold text-emerald-600">{totals.correct} doğru</span> ·{' '}
@@ -383,7 +434,9 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
 
         {filtered.length === 0 ? (
           <div className="rounded-2xl border border-panel-border bg-panel-surface px-4 py-10 text-center text-sm text-panel-text-muted">
-            Aramayla eşleşen test bulunamadı.
+            {missingFilterActive
+              ? 'Bu filtreyle eşleşen çalışma bulunamadı.'
+              : 'Aramayla eşleşen test bulunamadı.'}
           </div>
         ) : (
           <>
@@ -397,7 +450,7 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
             {/* Masaüstü: tablo */}
             <div className="hidden min-w-0 overflow-hidden rounded-2xl border border-panel-border bg-panel-surface shadow-sm md:block">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[920px] border-collapse text-left">
+                <table className="w-full min-w-[980px] border-collapse text-left">
                   <thead>
                     <tr className="border-b border-panel-border bg-panel-surface-soft text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">
                       <th className="px-4 py-3 font-semibold">Tarih · Saat</th>
@@ -408,6 +461,7 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
                       <th className="px-2 py-3 text-center font-semibold">D</th>
                       <th className="px-2 py-3 text-center font-semibold">Y</th>
                       <th className="px-2 py-3 text-center font-semibold">B</th>
+                      <th className="px-2 py-3 text-center font-semibold">Görsel</th>
                       <th className="px-3 py-3 text-center font-semibold">Başarı</th>
                       <th className="px-3 py-3 text-right font-semibold">Cevaplar</th>
                     </tr>

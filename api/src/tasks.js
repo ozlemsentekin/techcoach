@@ -4,7 +4,7 @@ const { json } = require('./http')
 const { isSessionError } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
 const { recordTaskActivities } = require('./taskActivity')
-const { sanitizeWrongQuestion } = require('./progress')
+const { sanitizeWrongQuestion, fetchWrongQuestionAnalyses } = require('./progress')
 const { sanitizeAnswers, gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGrading')
 const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
 const { getUserBillingState, billingRestrictedResponse } = require('./entitlements')
@@ -987,20 +987,23 @@ async function fetchTaskAnswerSheetData(taskId, studentId) {
     }))
 
   const photosDb = await withRequest({ taskId: { type: sql.UniqueIdentifier, value: taskId } })
-  const photosResult = await photosDb.query(`
-    SELECT id, test_id, question_number, topic, student_note, mistake_reason, 1 AS has_photo FROM dbo.WrongQuestions
-    WHERE task_id = @taskId AND photo_url IS NOT NULL;
-  `)
+  const [photosResult, analysesMap] = await Promise.all([
+    photosDb.query(`
+      SELECT id, test_id, question_number, topic, 1 AS has_photo FROM dbo.WrongQuestions
+      WHERE task_id = @taskId AND photo_url IS NOT NULL;
+    `),
+    fetchWrongQuestionAnalyses(studentId),
+  ])
   const photos = {}
   photosResult.recordset.forEach((row) => {
     if (!row.test_id) return
+    const analyses = analysesMap.get(row.id) || {}
     photos[row.test_id] = photos[row.test_id] || {}
     photos[row.test_id][row.question_number] = {
       id: row.id,
       hasPhoto: Boolean(row.has_photo),
       topic: row.topic || undefined,
-      studentNote: row.student_note || undefined,
-      mistakeReason: row.mistake_reason || undefined,
+      analyses,
     }
   })
 
