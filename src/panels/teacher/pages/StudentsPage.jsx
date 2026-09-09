@@ -76,8 +76,9 @@ function nextLessonText(student) {
   return `${formatDateShort(lesson.date)} ${weekday}, ${lesson.startTime}-${lesson.endTime}`
 }
 
-// Öğrencinin sistemdeki son işlemi (last_seen_at, her yazma isteğinde ~10 dk throttle ile güncellenir).
-function formatLastSeen(iso) {
+// Öğrencinin en son görev tamamlama zamanı — öğrenci hiç login olmamış olabilir, bu yüzden
+// login yerine görev aktivitesini gösteriyoruz.
+function formatLastActivity(iso) {
   if (!iso) return null
   const then = new Date(iso).getTime()
   if (!Number.isFinite(then)) return null
@@ -90,7 +91,7 @@ function formatLastSeen(iso) {
 }
 
 function StudentStatsRow({ student, onOpenPendingTasks }) {
-  const lastSeen = formatLastSeen(student.lastSeenAt)
+  const lastActivity = formatLastActivity(student.lastActivityAt)
   const pending = student.pendingTaskCount || 0
   const overdue = student.overdueTaskCount || 0
 
@@ -133,10 +134,10 @@ function StudentStatsRow({ student, onOpenPendingTasks }) {
     <div className="flex flex-wrap items-center gap-2 border-t border-panel-border/60 pt-2.5">
       <span
         className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-panel-surface-soft px-2 py-1 text-xs font-semibold text-panel-text-muted"
-        title={student.lastSeenAt ? new Date(student.lastSeenAt).toLocaleString('tr-TR') : undefined}
+        title={student.lastActivityAt ? new Date(student.lastActivityAt).toLocaleString('tr-TR') : undefined}
       >
         <Clock size={13} className="shrink-0" aria-hidden="true" />
-        {lastSeen ? `Son işlem ${lastSeen}` : 'Henüz işlem yok'}
+        {lastActivity ? `Son işlem ${lastActivity}` : 'Tamamlanan görev yok'}
       </span>
       {pendingChip}
     </div>
@@ -667,36 +668,45 @@ export default function StudentsPage() {
                   </div>
                 </div>
 
+                {/* Kart bilgileri her öğrenci için aynı sırada ve hizalı: okul·sınıf / telefon·kaynak /
+                    ders planı / son işlem·bekleyen görev. Boş alanlar da satır yeri kaplar. */}
                 <div className="flex flex-col gap-1.5 text-sm text-panel-text-muted">
-                  {school || student.studentPhone || student.resourceCount ? (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      {school ? (
-                        <span className="inline-flex min-w-0 items-center gap-1.5">
-                          <School size={14} className="shrink-0" aria-hidden="true" />
-                          <span className="truncate">{school}</span>
-                        </span>
-                      ) : null}
-                      {student.studentPhone ? (
-                        <span className="inline-flex shrink-0 items-center gap-1.5">
-                          <Phone size={14} className="shrink-0" aria-hidden="true" />
-                          {student.studentPhone}
-                        </span>
-                      ) : null}
-                      <span className="inline-flex shrink-0 items-center gap-1.5">
-                        <BookOpen size={14} className="shrink-0" aria-hidden="true" />
-                        {student.resourceCount} kaynak
-                      </span>
-                    </div>
-                  ) : null}
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <School size={14} className="shrink-0" aria-hidden="true" />
+                    {school ? (
+                      <span className="truncate">{school}</span>
+                    ) : (
+                      <span className="truncate text-panel-text-muted/60">Okul bilgisi yok</span>
+                    )}
+                  </div>
+
                   {!student.studentGrade ? (
                     <MissingGradeFix student={student} onSaved={handleGradeSaved} />
                   ) : null}
-                  {lesson ? (
-                    <p className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-panel-blue-soft px-2 py-1 text-xs font-bold text-panel-blue">
-                      <CalendarDays size={14} className="shrink-0" aria-hidden="true" />
-                      <span className="truncate">{lesson}</span>
-                    </p>
-                  ) : null}
+
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="inline-flex min-w-0 items-center gap-1.5">
+                      <Phone size={14} className="shrink-0" aria-hidden="true" />
+                      {student.studentPhone ? (
+                        <span className="truncate">{student.studentPhone}</span>
+                      ) : (
+                        <span className="text-panel-text-muted/50">Telefon yok</span>
+                      )}
+                    </span>
+                    <span className="inline-flex shrink-0 items-center gap-1.5">
+                      <BookOpen size={14} className="shrink-0" aria-hidden="true" />
+                      {student.resourceCount} kaynak
+                    </span>
+                  </div>
+
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <CalendarDays size={14} className="shrink-0" aria-hidden="true" />
+                    {lesson ? (
+                      <span className="truncate font-semibold text-panel-blue">{lesson}</span>
+                    ) : (
+                      <span className="truncate text-panel-text-muted/60">Planlı ders yok</span>
+                    )}
+                  </div>
                 </div>
 
                 <StudentStatsRow student={student} onOpenPendingTasks={setPendingTasksStudent} />
