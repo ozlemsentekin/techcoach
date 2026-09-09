@@ -150,6 +150,13 @@ export default function WrongQuestionGalleryModal({
 
   if (!item) return null
 
+  // "Test Konusu - Test Adı" — konu ile test adı aynıysa ya da konu yoksa sadece test adı.
+  const testTopic = item.topicName || item.topic || ''
+  const testLabel =
+    testTopic && testTopic !== item.testName
+      ? `${testTopic}${item.testName ? ` - ${item.testName}` : ''}`
+      : item.testName
+
   return (
     <div
       className="fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-panel-text"
@@ -322,8 +329,9 @@ export default function WrongQuestionGalleryModal({
         <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-panel-border" aria-hidden="true" />
         <div className="mx-auto grid w-full max-w-4xl grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
           <InfoField icon={BookOpen} label="Kaynak" value={item.publisherName} />
-          <InfoField icon={FileText} label="Test" value={item.testName} />
+          <InfoField icon={FileText} label="Test" value={testLabel} />
           <InfoField icon={Hash} label="Soru No" value={item.questionNumber} />
+          <InfoField icon={Check} label="Doğru Cevap" value={item.correctAnswer} />
         </div>
       </div>
 

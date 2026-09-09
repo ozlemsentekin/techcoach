@@ -37,6 +37,7 @@ function buildGalleryItems(test, photos) {
       testName: test.name,
       topicName: test.topicName,
       topic: entry.topic || test.topicName || test.name || '',
+      correctAnswer: test.result?.correctLabels?.[String(orderNo)] || undefined,
       studentNote: entry.studentNote,
       mistakeReason: entry.mistakeReason,
     })
