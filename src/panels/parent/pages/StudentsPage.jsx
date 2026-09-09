@@ -482,7 +482,7 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
   )
 }
 
-function StudentCard({ student, onOpenLibrary, onOpenProfile, onOpenTeachers }) {
+function StudentCard({ student, onOpenProfile, onOpenTeachers }) {
   const navigate = useNavigate()
 
   const gradeText = student.grade ? (/^\d+$/.test(student.grade) ? `${student.grade}. Sınıf` : student.grade) : null
@@ -519,16 +519,6 @@ function StudentCard({ student, onOpenLibrary, onOpenProfile, onOpenTeachers }) 
         >
           <UserRound size={16} className="shrink-0" aria-hidden="true" />
           Detay
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => onOpenLibrary(student)}
-          className="h-auto w-full justify-start gap-2.5 px-3 py-2"
-        >
-          <BookOpen size={16} className="shrink-0" aria-hidden="true" />
-          Kaynaklar
         </Button>
         <Button
           type="button"
@@ -701,7 +691,6 @@ export default function StudentsPage() {
               <StudentCard
                 key={student.id}
                 student={student}
-                onOpenLibrary={setLibraryModalStudent}
                 onOpenProfile={setProfileModalStudent}
                 onOpenTeachers={setTeacherModalStudent}
               />
