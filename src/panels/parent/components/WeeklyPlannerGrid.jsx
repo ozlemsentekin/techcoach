@@ -219,6 +219,17 @@ function getQuestionProgress(task) {
   return `${task.targetQuestionCount} soru`
 }
 
+// O güne planlanmış "Soru Bankası Ödevi" görevlerinde hedeflenen toplam soru sayısı.
+// Gün kartının başındaki şeritte gösterilir; sayfa hedefli ya da başka türdeki görevler
+// bu toplama katılmaz.
+function getSoruBankasiQuestionTotal(tasks) {
+  return (tasks || []).reduce((total, task) => {
+    if (task.taskType !== 'soru-bankasi-odevi') return total
+    const count = Number(task.targetQuestionCount)
+    return Number.isFinite(count) && count > 0 ? total + count : total
+  }, 0)
+}
+
 function getPageProgress(task) {
   if (!task.targetPageCount) return null
   return `${task.targetPageCount} sayfa`
@@ -1212,6 +1223,7 @@ export default function WeeklyPlannerGrid({
         const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0
         return aCreated - bCreated
       })
+    const soruBankasiQuestionTotal = getSoruBankasiQuestionTotal(tasks)
     const isPastDay = date < currentDate
     const isToday = date === currentDate
     const isPastDayExpanded = expandedPastDates.has(date)
@@ -1295,6 +1307,18 @@ export default function WeeklyPlannerGrid({
 
         {isCollapsed ? null : (
         <div className={`flex flex-1 flex-col gap-3 px-3 py-3.5 ${isPastDay ? 'bg-slate-50/70' : ''}`}>
+          <div
+            className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold ${
+              soruBankasiQuestionTotal > 0
+                ? 'border-panel-blue-soft bg-panel-blue-soft/40 text-panel-blue'
+                : 'border-dashed border-panel-border bg-panel-surface-soft/60 text-panel-text-muted'
+            }`}
+            title="Bu gün soru bankası kitaplarından verilen toplam soru sayısı"
+          >
+            <ListChecks size={14} aria-hidden="true" />
+            Soru bankası: {soruBankasiQuestionTotal} soru
+          </div>
+
           {isPastDay || typeof onAddHomework !== 'function' ? null : (
             <button
               type="button"

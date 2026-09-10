@@ -745,3 +745,19 @@ button {
     animation-timing-function: ease-out;
   }
 }
+
+/*
+ * iyzico abonelik ödeme formu, kendi kök elementine sabit bir yükseklik + iç scroll
+ * veriyor; bu da kartın kenarında sürekli görünen bir kaydırma çubuğu bırakıyor.
+ * Formu doğal yüksekliğine bırakıyoruz — taşma olursa IyzicoCheckoutOverlay'in
+ * kendi zemini kaydırıyor.
+ */
+#iyzipay-checkout-form,
+#iyzipay-checkout-form > div,
+#iyzipay-checkout-form [class*="ontent"],
+#iyzipay-checkout-form [class*="rapper"],
+#iyzipay-checkout-form [class*="ontainer"] {
+  max-height: none !important;
+  height: auto !important;
+  overflow: visible !important;
+}

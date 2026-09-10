@@ -117,7 +117,6 @@ function SubjectInlineBreakdown({ items, formatValue, expanded, onToggle, label 
 
 export default function StudentStatsCards({ tasks = [] }) {
   const [expanded, setExpanded] = useState(false)
-  const [mistakeDetailsOpen, setMistakeDetailsOpen] = useState(false)
   const [photos, setPhotos] = useState(null)
   const [photoError, setPhotoError] = useState(false)
   const mistakeDetailsId = useId()
@@ -134,6 +133,12 @@ export default function StudentStatsCards({ tasks = [] }) {
   const { pendingTasks, completedTasks, completed, total, progress } = getDailyTaskSummary(tasks, todayISODate())
   const mistakes = getTaskMistakeSummary(completedTasks, photos)
   const allMistakePhotosUploaded = mistakes.total > 0 && mistakes.missingPhotos === 0
+  const missingTaskIds = completedTasks.filter((task) =>
+    getTaskMistakeSummary([task], photos).missingPhotos > 0,
+  ).map((task) => task.id)
+  const historyQuery = new URLSearchParams({
+    completedOn: todayISODate(), missingPhotos: '1', taskIds: missingTaskIds.join(','),
+  })
   const pendingBySubject = aggregateBySubject(pendingTasks, () => 1)
   const questionsBySubject = aggregateBySubject(completedTasks, (task) => task.completedQuestionCount)
   const totalQuestions = questionsBySubject.reduce((sum, item) => sum + item.value, 0)
@@ -197,26 +202,28 @@ export default function StudentStatsCards({ tasks = [] }) {
         title="yanlış / boş soru"
         mainValue={mistakes.total}
         supportingContent={
-          <p className={cn('text-xs leading-relaxed', allMistakePhotosUploaded ? 'font-medium text-panel-sage' : 'text-panel-text-muted')} role="status">
+          <p className={cn('text-xs leading-relaxed', allMistakePhotosUploaded ? 'whitespace-nowrap font-medium text-panel-sage' : 'text-panel-text-muted')} role="status">
             {allMistakePhotosUploaded
-              ? 'Tüm görseller tamam, eline sağlık! Tekrar için hazırsın.'
+              ? 'Görseller tamam, harikasın!'
               : mistakes.missingPhotos == null
                 ? photoError ? 'Görsel bilgisi alınamadı' : 'Görseller kontrol ediliyor…'
                 : `${mistakes.missingPhotos} sorunun görseli eksik`}
           </p>
         }
       >
-        <button type="button" onClick={() => setMistakeDetailsOpen((value) => !value)}
-          aria-expanded={mistakeDetailsOpen} aria-controls={mistakeDetailsId}
+        {!allMistakePhotosUploaded && mistakes.total > 0 ? <>
+        <button type="button" onClick={toggleBreakdowns}
+          aria-expanded={expanded} aria-controls={mistakeDetailsId}
           className="flex items-center gap-1 text-xs font-medium text-panel-text-muted hover:text-panel-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary">
           Detay
-          <ChevronDown size={13} className={`transition-transform ${mistakeDetailsOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+          <ChevronDown size={13} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" />
         </button>
-        <div id={mistakeDetailsId} hidden={!mistakeDetailsOpen} className="mt-3 border-t border-panel-border pt-3 text-xs leading-relaxed text-panel-text-muted">
+        <div id={mistakeDetailsId} hidden={!expanded} className="mt-3 border-t border-panel-border pt-3 text-xs leading-relaxed text-panel-text-muted">
           <p>Bugün tamamladığın görevlerdeki yanlış ve boş soruların toplamı.</p>
           <p className="mt-2">Bu soruların fotoğraflarını optik formdaki kamera simgesinden yükle. Hata Defterim’den PDF olarak indirip konular ilerledikçe tekrar çöz, hatalarından öğren.</p>
-          <Link to="/student/mistakes" className="mt-2 inline-flex font-semibold text-student-theme-text underline underline-offset-4">Hata Defterim’e git</Link>
+          <Link to={`/student/study-history?${historyQuery}`} className="mt-2 inline-flex font-semibold text-student-theme-text underline underline-offset-4">Eksik görselleri tamamla</Link>
         </div>
+        </> : null}
       </StatCard>
     </div>
   )

@@ -12,7 +12,9 @@ const CoursesPage = lazy(() => import('./pages/CoursesPage'))
 const MistakesPage = lazy(() => import('./pages/MistakesPage'))
 const ProgressPage = lazy(() => import('./pages/ProgressPage'))
 const StudyHistoryPage = lazy(() => import('./pages/StudyHistoryPage'))
+const MockExamsPage = lazy(() => import('./pages/MockExamsPage'))
 const TeachersPage = lazy(() => import('./pages/TeachersPage'))
+const GuidePage = lazy(() => import('../shared/GuidePage'))
 const RequestsPage = lazy(() => import('./pages/RequestsPage'))
 
 function pageElement(Page) {
@@ -37,6 +39,7 @@ export default function StudentApp() {
           <Route path="courses" element={pageElement(CoursesPage)} />
           <Route path="teachers" element={pageElement(TeachersPage)} />
           <Route path="requests" element={pageElement(RequestsPage)} />
+            <Route path="guide" element={pageElement(GuidePage)} />
           {/* Ödev/görev tekilleştirme (Faz 2): ayrı "Ödevlerim" sayfası kaldırıldı; ders-tipi
               görevler artık Haftalık Plan üzerinden yönetiliyor. Eski yer imleri yönlendirilir. */}
           <Route path="homework" element={<Navigate to="/student/weekly-plan" replace />} />
@@ -44,6 +47,7 @@ export default function StudentApp() {
           <Route path="bookshelf" element={<Navigate to="today" replace />} />
           <Route path="mistakes" element={pageElement(MistakesPage)} />
           <Route path="study-history" element={pageElement(StudyHistoryPage)} />
+          <Route path="mock-exams" element={pageElement(MockExamsPage)} />
           <Route path="progress" element={pageElement(ProgressPage)} />
           <Route path="*" element={<Navigate to="today" replace />} />
         </Route>

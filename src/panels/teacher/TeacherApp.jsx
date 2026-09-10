@@ -13,6 +13,7 @@ const ParentsPage = lazy(() => import('./pages/ParentsPage'))
 const LessonPlanPage = lazy(() => import('./pages/LessonPlanPage'))
 const LibraryPage = lazy(() => import('./pages/LibraryPage'))
 const BookshelfPage = lazy(() => import('./pages/BookshelfPage'))
+const GuidePage = lazy(() => import('../shared/GuidePage'))
 const RequestsPage = lazy(() => import('./pages/RequestsPage'))
 const ClassAnalysisPage = lazy(() => import('./pages/ClassAnalysisPage'))
 
@@ -82,6 +83,7 @@ export default function TeacherApp() {
             <Route path="bookshelf" element={pageElement(BookshelfPage)} />
             <Route path="class-analysis" element={pageElement(ClassAnalysisPage)} />
             <Route path="requests" element={pageElement(RequestsPage)} />
+            <Route path="guide" element={pageElement(GuidePage)} />
             <Route path="*" element={<Navigate to="students" replace />} />
           </Route>
         </Routes>

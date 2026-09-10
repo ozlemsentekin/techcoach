@@ -430,7 +430,8 @@ async function listWrongQuestionsHandler(request) {
         LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
         LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
         LEFT JOIN dbo.TestAnswerKeys tak ON tak.test_id = wq.test_id AND tak.order_no = wq.question_number
-        WHERE wq.student_id = @studentId AND wq.test_id IS NOT NULL
+        WHERE wq.student_id = @studentId
+          AND (wq.test_id IS NOT NULL OR wq.mock_exam_subject_id IS NOT NULL)
         ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''}
         ORDER BY wq.created_at DESC;
       `),
@@ -1114,6 +1115,7 @@ async function listStudyHistoryHandler(request) {
         key: `task:${row.task_id}:${testId}`,
         source: 'task',
         occurredAt: result.gradedAt || row.completed_at || row.task_date || null,
+        completedAt: row.completed_at || null,
         taskId: row.task_id,
         taskTitle: row.task_title || undefined,
         taskType: row.task_type || undefined,
@@ -1186,6 +1188,7 @@ async function listStudyHistoryHandler(request) {
         key: `task-agg:${row.task_id}`,
         source: 'task',
         occurredAt: row.completed_at || row.updated_at || row.task_date || null,
+        completedAt: row.completed_at || null,
         taskId: row.task_id,
         taskTitle: row.task_title || undefined,
         taskType: row.task_type || undefined,

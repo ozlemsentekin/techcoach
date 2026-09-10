@@ -23,7 +23,8 @@ async function requireTeacherSession(request) {
   if (!record) {
     return { error: json(401, { error: 'Oturum geçersiz.' }) }
   }
-  if (record.is_active === false) {
+  // Admin delege oturumu (actingAdminId) pasife alınmış öğretmen hesabını da yönetebilir.
+  if (record.is_active === false && !session.actingAdminId) {
     return { error: accountDisabledResponse() }
   }
   if (record.role !== 'ogretmen') {

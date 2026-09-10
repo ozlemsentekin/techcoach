@@ -116,7 +116,7 @@ async function main() {
       console.log('\nDRY-RUN (rollback). Yazmak için: --commit')
     }
   } catch (e) {
-    try { await tx.rollback() } catch {}
+    try { await tx.rollback() } catch { /* rollback da başarısızsa asıl hatayı fırlat */ }
     throw e
   } finally {
     await pool.close()

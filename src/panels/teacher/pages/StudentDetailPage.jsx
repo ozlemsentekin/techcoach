@@ -1,6 +1,6 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { AlertCircle, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, GraduationCap, Phone, TrendingUp } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, FileCheck2, GraduationCap, Phone, TrendingUp } from 'lucide-react'
 import LoadingState from '../../shared/LoadingState'
 import Button from '../../ui/Button'
 import WeeklyPlannerGrid from '../../parent/components/WeeklyPlannerGrid'
@@ -31,6 +31,7 @@ import {
   updateTeacherStudentTask,
   deleteTeacherStudentTask,
   setTeacherTaskReview,
+  makeTeacherMockExamFetchers,
 } from '../../../services/teacherService'
 import { addDaysISO, getMondayOfWeek, todayISODate } from '../../../utils/time'
 import { getWeekDates } from '../../../services/weeklyPlanService'
@@ -38,10 +39,11 @@ import { HOMEWORK_TASK_TYPES } from '../../../data/taskTypes'
 
 const StudentProgressView = lazy(() => import('../../shared/StudentProgressView'))
 const WrongQuestionsView = lazy(() => import('../../shared/WrongQuestionsView'))
+const MockExamsView = lazy(() => import('../../shared/MockExamsView'))
 
 const currentWeekStart = getMondayOfWeek(todayISODate())
 
-const VALID_TABS = ['calendar', 'analysis', 'mistakes']
+const VALID_TABS = ['calendar', 'analysis', 'mistakes', 'mock-exams']
 
 export default function StudentDetailPage() {
   const { studentTeacherId } = useParams()
@@ -281,6 +283,7 @@ export default function StudentDetailPage() {
     (id, dataUrl) => updateTeacherStudentWrongQuestionPhoto(studentTeacherId, id, dataUrl),
     [studentTeacherId],
   )
+  const mockExamFetchers = useMemo(() => makeTeacherMockExamFetchers(studentTeacherId), [studentTeacherId])
 
   if (studentError) {
     return (
@@ -362,6 +365,16 @@ export default function StudentDetailPage() {
           <AlertCircle size={15} aria-hidden="true" />
           Hata Defteri
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('mock-exams')}
+          className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+            activeTab === 'mock-exams' ? 'bg-panel-blue text-white' : 'text-panel-text-muted hover:text-panel-text'
+          }`}
+        >
+          <FileCheck2 size={15} aria-hidden="true" />
+          Deneme Sonuçları
+        </button>
       </div>
 
       {banner ? (
@@ -440,7 +453,7 @@ export default function StudentDetailPage() {
             buildSubtitle={(subjectLabel) => `${subjectLabel} için emek, doğruluk ve kaynak ilerlemesi.`}
             fetchOverview={getTeacherStudentProgressOverview}
           />
-        ) : (
+        ) : activeTab === 'mistakes' ? (
           <WrongQuestionsView
             fetchWrongQuestions={fetchWrongQuestions}
             fetchTopicStats={fetchTopicStats}
@@ -450,6 +463,14 @@ export default function StudentDetailPage() {
             updateMistakeMeta={updateMistakeMeta}
             updateMistakePhoto={updateMistakePhoto}
             hideHeaderWhenUnselected
+          />
+        ) : (
+          <MockExamsView
+            readOnly
+            embedded
+            fetchMockExams={mockExamFetchers.fetchMockExams}
+            fetchMockExam={mockExamFetchers.fetchMockExam}
+            fetchPhoto={mockExamFetchers.fetchPhoto}
           />
         )}
 

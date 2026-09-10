@@ -431,7 +431,9 @@ async function meHandler(request) {
       return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
     }
 
-    if (record.is_active === false) {
+    // Admin delege oturumu (actingAdminId) pasife alınmış hesabı da yönetebilsin diye
+    // is_active kontrolünü atlar; gerçek oturumsa pasif hesap erişemez.
+    if (record.is_active === false && !session.actingAdminId) {
       return accountDisabledResponse()
     }
 
