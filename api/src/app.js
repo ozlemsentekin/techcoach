@@ -99,6 +99,19 @@ const {
   createTeacherStudentHandler,
 } = require('./teacher')
 const { getTeacherClassAnalysisHandler } = require('./classAnalysis')
+const {
+  listMockExamsHandler,
+  getMockExamHandler,
+  createMockExamHandler,
+  updateMockExamHandler,
+  deleteMockExamHandler,
+  addMockExamPhotoHandler,
+  deleteMockExamPhotoHandler,
+  listTeacherMockExamsHandler,
+  getTeacherMockExamHandler,
+  getTeacherMockExamPhotoHandler,
+  getTeacherClassMockExamAnalysisHandler,
+} = require('./mockExams')
 const { listProvincesHandler, listDistrictsHandler, listSchoolsHandler } = require('./geo')
 const { healthHandler } = require('./health')
 const {
@@ -584,6 +597,34 @@ registerHttp('panel-teacher-class-analysis', {
   methods: ['GET'],
   route: 'panel-teacher/class-analysis',
   handler: getTeacherClassAnalysisHandler,
+})
+
+registerHttp('panel-teacher-class-analysis-mock-exams', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/class-analysis/mock-exams',
+  handler: getTeacherClassMockExamAnalysisHandler,
+})
+
+registerHttp('panel-teacher-student-mock-exams-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/mock-exams',
+  handler: listTeacherMockExamsHandler,
+})
+
+registerHttp('panel-teacher-student-mock-exam-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/mock-exams/{mockExamId}',
+  handler: getTeacherMockExamHandler,
+})
+
+registerHttp('panel-teacher-student-mock-exam-photo', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/mock-exams/photos/{wrongQuestionId}',
+  handler: getTeacherMockExamPhotoHandler,
 })
 
 registerHttp('panel-teacher-profile-update', {
@@ -1641,6 +1682,55 @@ registerHttp('panel-progress-overview', {
   methods: ['GET'],
   route: 'panel/progress-overview',
   handler: getProgressOverviewHandler,
+})
+
+registerHttp('panel-mock-exams-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/mock-exams',
+  handler: listMockExamsHandler,
+})
+
+registerHttp('panel-mock-exams-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel/mock-exams',
+  handler: createMockExamHandler,
+})
+
+registerHttp('panel-mock-exam-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/mock-exams/{mockExamId}',
+  handler: getMockExamHandler,
+})
+
+registerHttp('panel-mock-exam-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel/mock-exams/{mockExamId}',
+  handler: updateMockExamHandler,
+})
+
+registerHttp('panel-mock-exam-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel/mock-exams/{mockExamId}',
+  handler: deleteMockExamHandler,
+})
+
+registerHttp('panel-mock-exam-subject-photo-add', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel/mock-exams/{mockExamId}/subjects/{subjectRowId}/photos',
+  handler: addMockExamPhotoHandler,
+})
+
+registerHttp('panel-mock-exam-photo-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel/mock-exams/photos/{wrongQuestionId}',
+  handler: deleteMockExamPhotoHandler,
 })
 
 registerHttp('panel-parent-messages-list', {

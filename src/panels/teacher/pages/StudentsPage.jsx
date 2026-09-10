@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ClipboardList,
   Clock,
+  FileCheck2,
   GraduationCap,
   IdCard,
   Phone,
@@ -798,6 +799,17 @@ export default function StudentsPage() {
                   >
                     <TrendingUp size={16} className="shrink-0" aria-hidden="true" />
                     <span className="min-w-0 truncate">Gelişim Analizi</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => navigate(`/teacher/students/${student.studentTeacherId}?tab=mock-exams`)}
+                    disabled={!student.isActive || isBusy}
+                    className="h-10 w-full justify-start rounded-lg px-3 text-left text-[13px] font-semibold"
+                  >
+                    <FileCheck2 size={16} className="shrink-0" aria-hidden="true" />
+                    <span className="min-w-0 truncate">Deneme Sonuçları</span>
                   </Button>
                 </div>
                   ) : null}

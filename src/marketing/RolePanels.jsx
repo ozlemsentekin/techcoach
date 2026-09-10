@@ -44,7 +44,7 @@ export default function RolePanels() {
         <div className="role-detail" role="tabpanel" id={`role-panel-${role.id}`} aria-labelledby={`role-tab-${role.id}`} tabIndex={0} key={role.id}>
           <RolePreview key={role.id} role={role.id} name={role.name} />
         </div>
-        <div className="role-cycle"><div className="role-cycle-heading"><ChartNoAxesCombined size={24} aria-hidden="true" /><div><h3>Bir çalışma, herkes için anlamlı bilgi.</h3><p>Öğrenci eksiklerini görür, öğretmen sonraki adımı planlar, veli gelişime eşlik eder.</p></div></div><ol>{['Kaynak ekle', 'Görev planla', 'Kitaptan çalış', 'Sonucu ve yanlışları kaydet', 'Gelişimi birlikte takip et'].map((step, index) => <li key={step}><span>{index + 1}</span>{step}</li>)}</ol></div>
+        <div className="role-cycle"><div className="role-cycle-heading"><ChartNoAxesCombined size={24} aria-hidden="true" /><div><h3>Bir çalışma, herkes için anlamlı bilgi.</h3><p>Sonuçları öğrenci veya veli kaydeder; öğrenci, veli ve öğretmen gelişimi birlikte takip eder.</p></div></div><ol>{['Kaynak ekle', 'Görev planla', 'Kitaptan çalış', 'Sonucu ve yanlışları kaydet', 'Gelişimi birlikte takip et'].map((step, index) => <li key={step}><span>{index + 1}</span>{step}</li>)}</ol></div>
       </div>
     </section>
   )

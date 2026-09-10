@@ -62,7 +62,7 @@ function ResourceAvatar({ book }) {
  * Kaydetme sorumluluğu üst bileşende: `onReady` ile verilen `save` fonksiyonu çağrılınca seçili
  * kaynaklar `PUT /api/parent/students/:id/resource-books` ile öğrenciye atanır (seçim yoksa no-op).
  */
-export default function StudentResourcePicker({ studentId, onReady }) {
+export default function StudentResourcePicker({ studentId, onReady, hasResourceRequest = false, onResourceRequested }) {
   const [resourceBooks, setResourceBooks] = useState(null)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
@@ -92,19 +92,26 @@ export default function StudentResourcePicker({ studentId, onReady }) {
   // Üst bileşene (sihirbaz) kaydetme fonksiyonunu ver.
   useEffect(() => {
     if (typeof onReady !== 'function') return
-    const save = async () => {
+    const save = async ({ requireResource = false } = {}) => {
+      if (resourceBooksRef.current === null) {
+        throw new Error('Kaynaklar yüklenemedi veya henüz hazır değil. Lütfen tekrar deneyin.')
+      }
       const selected = [...selectedIdsRef.current]
-      if (selected.length === 0) return
-      const assignedIds = (resourceBooksRef.current || [])
+      const assignedIds = resourceBooksRef.current
         .filter((book) => book.assigned)
         .map((book) => book.id)
+      if (requireResource && !hasResourceRequest && assignedIds.length === 0 && selected.length === 0) {
+        throw new Error('Kurulumu tamamlamak için en az bir kaynak seçin. Kitabınız listede yoksa kitap ekleme talebi oluşturun.')
+      }
+      if (selected.length === 0) return
       await authRequest(`/api/parent/students/${studentId}/resource-books`, {
         method: 'PUT',
         body: JSON.stringify({ resourceBookIds: [...assignedIds, ...selected] }),
       })
     }
     onReady({ save })
-  }, [studentId, onReady])
+    return () => onReady(null)
+  }, [studentId, onReady, hasResourceRequest])
 
   const assignableBooks = useMemo(
     () => (resourceBooks || []).filter((book) => book.scope === 'catalog' && !book.assigned),
@@ -146,24 +153,31 @@ export default function StudentResourcePicker({ studentId, onReady }) {
     })
   }
 
-  if (resourceBooks === null) {
-    return <LoadingState label="Kaynaklar yükleniyor..." />
-  }
+  const requestStatus = hasResourceRequest ? (
+    <p role="status" className="rounded-xl bg-panel-sage-soft p-3 text-sm text-panel-text">
+      Kitap ekleme talebiniz alındı. Kurulumu tamamlayabilir, talebinizi Taleplerim menüsünden takip edebilirsiniz.
+    </p>
+  ) : null
 
   if (error) {
     return <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
+  }
+
+  if (resourceBooks === null) {
+    return <LoadingState label="Kaynaklar yükleniyor..." />
   }
 
   // Katalogda öğrencinin sınıfına uygun hiç kaynak yok → Kitaplık rehberi.
   if (assignableBooks.length === 0) {
     return (
       <div className="flex flex-col gap-4">
+        {requestStatus}
         <div className="rounded-xl border border-dashed border-panel-border bg-panel-blue-soft/40 px-4 py-4 text-sm leading-6 text-panel-text">
-          <p className="font-semibold">Kütüphanede bu sınıf için hazır kaynak bulunamadı.</p>
+          <p className="font-semibold">{resourceBooks.some((book) => book.assigned) ? 'Çocuğunuza atanmış kaynaklar var; kurulumu tamamlayabilirsiniz.' : 'Kütüphanede bu sınıf için hazır kaynak bulunamadı.'}</p>
           <p className="mt-1 text-panel-text-muted">
             Çocuğunun kullandığı kitabı kendin ekleyebilir ya da eklenmesi için talep oluşturabilirsin.
-            Bu adımı şimdi atlayıp daha sonra <span className="font-medium">Kitaplık</span> menüsünden de
-            yapabilirsin.
+            Kaynak eklemek için <span className="font-medium">Kitaplık’tan kaynak ekle</span> düğmesini kullanabilirsin.
+            Kitabın kütüphanede yoksa kitap ekleme talebi oluşturarak kurulumu tamamlayabilirsin.
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -181,7 +195,7 @@ export default function StudentResourcePicker({ studentId, onReady }) {
         {showRequest ? (
           <BookAdditionRequestModal
             onClose={() => setShowRequest(false)}
-            onSubmitted={() => setShowRequest(false)}
+            onSubmitted={() => { onResourceRequested?.(); setShowRequest(false) }}
             onGoToRequests={() => setShowRequest(false)}
           />
         ) : null}
@@ -191,6 +205,11 @@ export default function StudentResourcePicker({ studentId, onReady }) {
 
   return (
     <div className="flex flex-col gap-4">
+        {requestStatus}
+      <Button type="button" variant="secondary" size="md" onClick={() => setShowRequest(true)}>
+        <FilePlus2 size={16} aria-hidden="true" />
+        Kitabım listede yok — Kitap Ekleme Talebi Oluştur
+      </Button>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="relative w-full sm:w-72">
           <Search
@@ -288,7 +307,7 @@ export default function StudentResourcePicker({ studentId, onReady }) {
       {showRequest ? (
         <BookAdditionRequestModal
           onClose={() => setShowRequest(false)}
-          onSubmitted={() => setShowRequest(false)}
+          onSubmitted={() => { onResourceRequested?.(); setShowRequest(false) }}
           onGoToRequests={() => setShowRequest(false)}
         />
       ) : null}

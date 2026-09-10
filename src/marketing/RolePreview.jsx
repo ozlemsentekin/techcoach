@@ -1,40 +1,6 @@
 import { ChildProfilePreview, ParentBooksPreview, PastResultsPreview, ParentBookMetricsPreview, ParentAssignmentPreview, ParentTeachersPreview, ParentFollowupPreview } from './ParentSetupPreview'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { ArrowLeft, ArrowRight, BookOpen, Download, NotebookPen, Check, TrendingUp, CalendarDays, ClipboardCheck, Camera } from 'lucide-react'
-
-const defaultTopics = ['Haftalık plan', 'Günlük görevler', 'Optik sonuç girişi', 'Kaynak başarısı', 'Tamamlanma oranı', 'Dijital hata defteri', 'Gelişim analizi']
-const parentTopics = ['Çocuk profili', 'Kaynak hazırlığı', 'Geçmiş testler', 'Kaynak durumu', 'Plan ve görev', 'Özel öğretmenler', 'Günlük takip', 'Hata defteri', 'Gelişim analizi']
-const summaries = {
-  student: [
-    'Haftalık planını takip et.',
-    'Bugünkü görevini gör.',
-    'Cevaplarını gir, sonucunu kaydet.',
-    'Kaynaklarındaki başarını gör.',
-    'Kitabındaki ilerlemeyi gör.',
-    'Sorunu fotoğrafla, hatanı not al.',
-    'Gelişimini gör, eksiğine odaklan.',
-  ],
-  parent: [
-    'Çocuğunun profilini oluştur.',
-    'Kullandığı kitapları ekle.',
-    'Geçmiş cevapları kaydet.',
-    'İlerlemeyi ve başarıyı gör.',
-    'Haftasını planla, görev ata.',
-    'Varsa özel öğretmenini dahil et.',
-    'Görevleri ve sonuçlarını takip et.',
-    'Yanlışlarını ve nedenlerini incele.',
-    'Gelişimine göre yeni plan oluştur.',
-  ],
-  teacher: [
-    'Kaynağından görev planla.',
-    'Verdiğin çalışmayı takip et.',
-    'Cevaplarından eksiklerini gör.',
-    'Test sonuçlarıyla derse hazırlan.',
-    'Kalan testlere göre görev planla.',
-    'Hatalı sorularla tekrar hazırla.',
-    'Konu analizine göre yol göster.',
-  ],
-}
 
 const books = [['Matematik', 'Üslü ifadeler', 75, 60], ['Türkçe', 'Paragraf', 90, 80], ['Fen bilimleri', 'DNA ve genetik kod', 65, 40]]
 
@@ -48,7 +14,7 @@ function DailyTasks({ role }) {
 
 function OpticalResults({ role }) {
   const answers = ['A', 'C', 'D', 'B', 'C']
-  return <><div className="rp-optical-heading"><strong>Optik Form · Test 4</strong><span>Üslü ifadeler · 5 soru</span></div><div className="rp-optical" aria-label="Optik cevap örneği: 1 A, 2 C, 3 D, 4 B, 5 C. Dördüncü soru yanlış, doğru cevap A.">{answers.map((answer, i) => <div className="rp-optical-row" key={i}><b>{i + 1}</b><div>{['A', 'B', 'C', 'D'].map(option => <span key={option} className={option === answer ? (i === 3 ? 'wrong' : 'marked') : i === 3 && option === 'A' ? 'correct' : ''}>{option}</span>)}</div>{i === 3 ? <Camera size={16} aria-label="Yanlış soruya fotoğraf ekle" /> : <span className="rp-optical-check">✓</span>}</div>)}</div><p className="rp-small-note">5 sorunun tamamı gösteriliyor · Sarı: doğru cevap · Kırmızı: yanlış cevap</p><div className="rp-result-strip"><span><b>4</b>Doğru</span><span><b>1</b>Yanlış</span><span><b>0</b>Boş</span></div><div className="rp-assignment"><strong>{role === 'student' ? 'Kaydet (5 soru)' : role === 'teacher' ? '✓ Kontrol edildi' : 'Optik sonucu · %80 başarı'}</strong><span>{role === 'student' ? 'Cevaplarını kaydet, görevini tamamla' : role === 'teacher' ? 'Yanlışları incele, sonraki dersi planla' : 'Görev tamamlandı; sonuçları birlikte incele'}</span></div><p className="rp-small-note">{role === 'student' ? 'Cevap anahtarı olmayan testlerde doğru, yanlış ve boş sayıları girilir.' : 'Öğrencinin kaydettiği sonuçlar üzerinden temsili gösterim.'}</p></>
+  return <><div className="rp-optical-heading"><strong>Optik Form · Test 4</strong><span>Üslü ifadeler · 5 soru</span></div><div className="rp-optical" aria-label="Optik cevap örneği: 1 A, 2 C, 3 D, 4 B, 5 C. Dördüncü soru yanlış, doğru cevap A.">{answers.map((answer, i) => <div className="rp-optical-row" key={i}><b>{i + 1}</b><div>{['A', 'B', 'C', 'D'].map(option => <span key={option} className={option === answer ? (i === 3 ? 'wrong' : 'marked') : i === 3 && option === 'A' ? 'correct' : ''}>{option}</span>)}</div>{i === 3 ? <Camera size={16} aria-label="Yanlış soruya fotoğraf ekle" /> : <span className="rp-optical-check">✓</span>}</div>)}</div><p className="rp-small-note">5 sorunun tamamı gösteriliyor · Sarı: doğru cevap · Kırmızı: yanlış cevap</p><div className="rp-result-strip"><span><b>4</b>Doğru</span><span><b>1</b>Yanlış</span><span><b>0</b>Boş</span></div><div className="rp-assignment"><strong>{role === 'student' ? 'Kaydet (5 soru)' : role === 'teacher' ? '✓ Kontrol edildi' : 'Optik sonucu · %80 başarı'}</strong><span>{role === 'student' ? 'Cevaplarını kaydet, görevini tamamla' : role === 'teacher' ? 'Yanlışları incele, sonraki dersi planla' : 'Görev tamamlandı; sonuçları birlikte incele'}</span></div><p className="rp-small-note">{role === 'student' ? 'Cevap anahtarı olmayan testlerde doğru, yanlış ve boş sayıları girilir.' : 'Öğrenci veya velinin kaydedebildiği sonuçların temsili gösterimi.'}</p></>
 }
 
 function Meter({ label, value, orange = false }) {
@@ -92,59 +58,77 @@ function Analysis({ role }) {
   return <><div className="rp-chart-heading"><div><span className="rp-overline">{role === 'student' ? 'ÜSLÜ İFADELER · BAŞARIM' : 'ECE · MATEMATİK BAŞARISI'}</span><strong>%75 <small><TrendingUp size={15} aria-hidden="true" /> +25 puan</small></strong></div></div><div className="rp-chart" aria-label="Dört haftalık başarı: yüzde 50, 60, 65, 75">{[50, 60, 65, 75].map((value, i) => <div key={i}><strong>%{value}</strong><span style={{ height: `${value * 1.4}px` }} /><small>{i + 1}. hafta</small></div>)}</div><div className="rp-analysis-topics"><span><b>Güçlü alan</b>Çarpanlar · %90</span><span><b>Tekrar alanı</b>Kareköklü ifadeler · %60</span></div><div className="rp-callout">{role === 'student' ? 'İlerlememi görüyorum; sıradaki odağım kareköklü ifadeler.' : 'Matematikteki gelişimi fark et; tekrar alanı için öğretmeniyle birlikte plan yap.'}</div></>
 }
 
-export default function RolePreview({ role, name }) {
-  const topics = role === 'parent' ? parentTopics : defaultTopics
-  const [slide, setSlide] = useState(0)
-  const [dragX, setDragX] = useState(0)
-  const gesture = useRef(null)
-  function select(index) {
-    setSlide((index + topics.length) % topics.length)
-    setDragX(0)
-  }
-  function startDrag(event) {
-    if (event.pointerType === 'mouse' || event.target.closest('button, select')) return
-    gesture.current = { x: event.clientX, y: event.clientY }
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
-  function moveDrag(event) {
-    if (!gesture.current) return
-    const dx = event.clientX - gesture.current.x
-    const dy = event.clientY - gesture.current.y
-    if (Math.abs(dx) > Math.abs(dy)) setDragX(Math.max(-65, Math.min(65, dx)))
-  }
-  function finishDrag(event) {
-    if (!gesture.current) return
-    const dx = event.clientX - gesture.current.x
-    const dy = event.clientY - gesture.current.y
-    gesture.current = null
-    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) select(slide + (dx < 0 ? 1 : -1))
-    else setDragX(0)
-  }
-  const visuals = role === 'parent' ? [<ChildProfilePreview />, <ParentBooksPreview />, <PastResultsPreview />, <ParentBookMetricsPreview />, <ParentAssignmentPreview />, <ParentTeachersPreview />, <ParentFollowupPreview />, <Mistakes role={role} />, <Analysis role={role} />] : [<WeeklyPlan role={role} />, <DailyTasks role={role} />, <OpticalResults role={role} />, <BookSuccess role={role} />, <Completion role={role} />, <Mistakes role={role} />, <Analysis role={role} />]
-  return <div className={`role-preview-wrap rp-carousel rp-${role}`} role="region" aria-roledescription="slayt gösterisi" aria-label={`${name} panel özellikleri`}>
-    <div aria-live="polite" aria-atomic="true">
-      <div className="rp-slide" role="group" aria-roledescription="slayt" aria-label={`${slide + 1} / ${topics.length} · ${topics[slide]}`}>
-        <div className="rp-story-stage">
-          <div className="rp-carousel-frame">
-            <button className="rp-side-arrow rp-side-prev" type="button" onClick={() => select(slide - 1)} aria-label="Önceki panel görseli"><ArrowLeft size={20} aria-hidden="true" /></button>
-            <div className="rp-swipe-area" onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={finishDrag} onPointerCancel={() => { gesture.current = null; setDragX(0) }}>
-          <div className="role-preview" style={{ transform: `translateX(${dragX}px)`, opacity: 1 - Math.abs(dragX) / 250 }}>
+function MockExamPreview() {
+  return <><div className="rp-summary"><strong>Deneme Sınavları</strong><small>Branş İzleme · Genel Deneme · Etüt</small></div><div className="rp-task-card"><h5>Matematik · Branş İzleme</h5><p>Örnek sınav · 20 soru</p><div className="rp-result-strip"><span><b>15</b>Doğru</span><span><b>3</b>Yanlış</span><span><b>2</b>Boş</span></div><div className="rp-assignment"><strong>14 net</strong><span>Yanlış ve boş soruları tekrar için sakla</span></div></div><div className="rp-callout">Sonuçları öğrenci veya veli kaydedebilir. Öğretmen, öğrencisinin sonuçlarını değerlendirebilir.</div></>
+}
 
-          <div className="rp-process">
-            <div className="rp-process-header"><span className="rp-process-number">{String(slide + 1).padStart(2, '0')}</span><label className="rp-process-picker"><select aria-label="Tüm adımlar" value={slide} onChange={event => select(Number(event.target.value))}>{topics.map((topic, i) => <option key={topic} value={i}>{summaries[role][i]}</option>)}</select></label></div>
-            <div className="rp-process-track" aria-label="Süreç adımları">{topics.map((topic, i) => <button type="button" key={topic} className={i <= slide ? 'reached' : ''} aria-current={slide === i ? 'step' : undefined} aria-label={`${i + 1}. adım: ${topic}`} onClick={() => select(i)} />)}</div>
-          </div>
-            <div className="role-preview-top"><span className="role-preview-brand">Tech<span>Coach</span></span><span className="role-example">{name} paneli · Örnek</span></div>
-            <div className="rp-slide-visual">{visuals[slide]}</div>
-          </div>
-            </div>
-            <button className="rp-side-arrow rp-side-next" type="button" onClick={() => select(slide + 1)} aria-label="Sonraki panel görseli"><ArrowRight size={20} aria-hidden="true" /></button>
-          </div>
-          <p className="rp-swipe-hint">Diğer adımlar için sağa veya sola kaydırın</p>
+function getJourney(role) {
+  if (role === 'parent') return {
+    phases: [
+      ['Çocuğunu Tanımla', 'Çocuğunuzun çalışma alanını oluşturun.', [0]],
+      ['Çalışma Ortamını Hazırla', 'Kullandığı kaynak kitaplarını ekleyin.', [1, 2, 3]],
+      ['Öğretmen İlişkisi Kur', 'Varsa özel öğretmenleriyle bağlantı kurun.', [4]],
+      ['Planla ve İzle', 'Çalışmaları, denemeleri ve gelişimi takip edin.', [5, 6, 7, 8, 9]],
+    ],
+    steps: [
+      ['Çocuk profili', 'Çocuğunuza ait bir çalışma alanı', 'Çocuğunuzun profilini ve sınıf bilgilerini tanımlayın. Birden fazla çocuğunuzun planını ve gelişimini ayrı ayrı takip edin.', ChildProfilePreview],
+      ['Kaynak kitaplar', 'Kullandığı kitaplar bir arada', 'Kaynaklarını ekleyerek konu ve testleri çalışma planıyla buluşturun.', ParentBooksPreview],
+      ['Geçmiş sonuçlar', 'Başlamak için sıfırdan başlamanız gerekmez', 'Daha önce çözülmüş testlerin sonuçlarını kaydederek mevcut çalışmalarını da takibe dahil edin.', PastResultsPreview],
+      ['Kaynak ilerlemesi', 'Başarıyı ve tamamlanmayı birlikte görün', 'Kaynağın ne kadarının çalışıldığını ve çözülen sorulardaki başarıyı ayrı ayrı değerlendirin.', ParentBookMetricsPreview],
+      ['Özel öğretmenler', 'Öğretmeniyle aynı süreci takip edin', 'Varsa özel öğretmenlerini ilişkilendirin. Çocuğunuzun kaynakları ve çalışmaları üzerinden birlikte ilerleyin.', ParentTeachersPreview],
+      ['Çalışma planı', 'Haftanın planı, günün görevi', 'Okul, özel ders ve bireysel çalışmaları bir arada planlayın. Çocuğunuz kitabından çalışırken siz süreci takip edin.', ParentAssignmentPreview],
+      ['Paylaşımlı kullanım', 'Sonuçları siz veya çocuğunuz kaydedin', 'Çocuğunuz cihaz kullanmak zorunda değil. Veli profilinden “Öğrenciye geç” ile görevi tamamlayabilir; sistemi veri takibi ve analiz için kullanabilirsiniz. Aynı sonucu iki kez girmeniz gerekmez.', ParentFollowupPreview],
+      ['Hata defteri', 'Yanlışlar bir sonraki çalışmaya yol göstersin', 'Soru fotoğraflarını ve hata notlarını saklayın; tekrar edilmesi gereken sorulara birlikte dönün.', Mistakes],
+      ['Deneme Sınavları', 'Deneme sonuçlarını bir arada takip edin', 'Branş İzleme, Genel Deneme ve Etüt sonuçlarını kaydedin. Doğru, yanlış, boş ve net bilgileriyle sınav performansını değerlendirin.', MockExamPreview],
+      ['Gelişim Analizi', 'Verilerle sonraki adımı belirleyin', 'Derslerin doğruluk oranlarını, çalışma sonuçlarını ve kaynak ilerlemesini inceleyin. Destek gereken alanlara göre yeni plan oluşturun.', Analysis],
+    ],
+  }
+  const student = role === 'student'
+  return {
+    phases: student ? [
+      ['Planını Gör', 'Gününü ve haftanı düzenle.', [0, 1]],
+      ['Çalış ve Kaydet', 'Kitabından çalış, sonuçlarını paylaş.', [2]],
+      ['Tekrar Et', 'Kaynaklarını ve yanlışlarını incele.', [3, 4, 5]],
+      ['Gelişimini İzle', 'Denemelerini ve ilerlemeni gör.', [6, 7]],
+    ] : [
+      ['Planla', 'Kaynaklardan çalışma planı oluştur.', [0]],
+      ['Takip Et', 'Görevleri ve sonuçlarını incele.', [1, 2]],
+      ['Yön Ver', 'Kaynaklar ve yanlışlarla tekrar planla.', [3, 4, 5]],
+      ['Değerlendir', 'Deneme ve gelişim verilerini yorumla.', [6, 7]],
+    ],
+    steps: [
+      ['Haftalık plan', student ? 'Haftanı bir bakışta gör' : 'Öğrencinin sonraki çalışmasını planla', 'Okul, ders ve bireysel çalışma zamanlarını aynı planda takip edin.', WeeklyPlan],
+      ['Günlük görevler', student ? 'Bugün ne çalışacağını bil' : 'Verilen çalışmanın durumunu gör', 'Günlük görevlerde kaynak, konu ve test bilgilerine ulaşın; tamamlanan çalışmaları takip edin.', DailyTasks],
+      ['Sonuç girişi', 'Paylaşımlı kullanım, ortak takip', 'Sonuçları öğrenci veya veli kaydedebilir. Çocuk cihaz kullanmıyorsa veli kendi profilinden öğrenciye geçerek görevi tamamlayabilir. Öğretmen kaydedilen sonuçları inceleyebilir.', OpticalResults],
+      ['Kaynak başarısı', 'Çözülen testlerin başarısını gör', 'Doğru, yanlış ve boş sayılarını inceleyerek hangi konularda desteğe ihtiyaç olduğunu belirleyin.', BookSuccess],
+      ['Kaynak ilerlemesi', 'Kaynakta ne kadar ilerlediğini gör', 'Tamamlanan ve kalan testleri takip edin. Başarı oranıyla tamamlanma oranını birlikte değerlendirin.', Completion],
+      ['Hata defteri', 'Yanlış sorulardan tekrar planına', 'Yanlış soruların fotoğraflarını ve hata notlarını saklayın; sonraki çalışmada bu sorulara dönün.', Mistakes],
+      ['Deneme Sınavları', 'Sınav sonuçlarını takip et', 'Branş İzleme, Genel Deneme ve Etüt sonuçlarını doğru, yanlış, boş ve net bilgileriyle değerlendirin.', MockExamPreview],
+      ['Gelişim Analizi', student ? 'Gelişimini gör, tekrar alanını seç' : 'Gelişime göre sonraki dersi şekillendir', student ? 'Çalışma sonuçlarını ve güçlü ya da tekrar gerektiren konularını gör. Sonuçları velin kaydetse de gelişimini takip edebilirsin.' : 'Öğrencilerin sonuçlarını ve sınıf analizini inceleyerek her öğrenci için farklı bir çalışma odağı belirleyin.', Analysis],
+    ],
+  }
+}
+
+export default function RolePreview({ role, name }) {
+  const [selected, setSelected] = useState(0)
+  const { phases, steps } = getJourney(role)
+  const phaseIndex = phases.findIndex((phase) => phase[2].includes(selected))
+  const [, title, description, Visual] = steps[selected]
+  return (
+    <div className="marketing-journey" role="region" aria-label={`${name} kullanım yol haritası`}>
+      <nav className="mj-phases" aria-label={`${name} süreçleri`}>
+        {phases.map(([label, detail, indices], index) => <button type="button" key={label} aria-current={phaseIndex === index ? 'step' : undefined} onClick={() => setSelected(indices[0])}><span className="mj-number">{index + 1}</span><span><strong>{label}</strong><small>{detail}</small></span></button>)}
+      </nav>
+      <nav className="mj-steps" aria-label={`${name} alt adımları`}>
+        {phases[phaseIndex][2].map(index => <button type="button" key={steps[index][0]} aria-current={selected === index ? 'step' : undefined} onClick={() => setSelected(index)}>{steps[index][0]}</button>)}
+      </nav>
+      <div className="mj-card">
+        <div className="mj-content">
+          <div className="mj-copy" aria-live="polite" aria-atomic="true"><span className="mj-count">Adım {selected + 1} / {steps.length}</span><h3>{title}</h3><p>{description}</p><span className="mj-example-note">Temsili verilerle örnek {name.toLocaleLowerCase('tr')} paneli.</span></div>
+          <div key={selected} className="role-preview" tabIndex={0} role="region" aria-label={`${name} örnek ekranı; uzun içerik kaydırılabilir`}><div className="role-preview-top"><span className="role-preview-brand">Tech<span>Coach</span></span><span className="role-example">{name} · Örnek</span></div><div className="rp-slide-visual"><Visual role={role} /></div></div>
         </div>
+        <div className="mj-controls"><button type="button" disabled={selected === 0} onClick={() => setSelected(selected - 1)}><ArrowLeft size={18} aria-hidden="true" />Önceki</button><span>Adımları sırayla keşfet</span><button type="button" disabled={selected === steps.length - 1} onClick={() => setSelected(selected + 1)}>Sonraki<ArrowRight size={18} aria-hidden="true" /></button></div>
       </div>
     </div>
-
-    <p className="role-preview-caption">Temsili veriler ve örnek panel görünümleri.</p>
-  </div>
+  )
 }

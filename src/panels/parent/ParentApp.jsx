@@ -30,6 +30,7 @@ const AdminBookRequestsPage = lazy(() => import('./pages/AdminBookRequestsPage')
 const TestsPage = lazy(() => import('./pages/TestsPage'))
 const MistakesPage = lazy(() => import('./pages/MistakesPage'))
 const StudyHistoryPage = lazy(() => import('./pages/StudyHistoryPage'))
+const MockExamsPage = lazy(() => import('./pages/MockExamsPage'))
 
 function RequireAdmin({ children }) {
   const { authUser } = useAuth()
@@ -129,6 +130,10 @@ export default function ParentApp() {
             <Route
               path="study-history"
               element={<RequireStudents>{pageElement(StudyHistoryPage)}</RequireStudents>}
+            />
+            <Route
+              path="mock-exams"
+              element={<RequireStudents>{pageElement(MockExamsPage)}</RequireStudents>}
             />
             <Route path="students" element={pageElement(StudentsPage)} />
             <Route path="guide" element={pageElement(GettingStartedPage)} />

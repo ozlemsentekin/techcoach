@@ -1,7 +1,6 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  AlertCircle,
   BookOpen,
   GraduationCap,
   Phone,
@@ -66,6 +65,7 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
   const [step, setStep] = useState(1)
   const [studentId, setStudentId] = useState(null)
   const [createdStudent, setCreatedStudent] = useState(null)
+  const [hasResourceRequest, setHasResourceRequest] = useState(false)
   const [form, setForm] = useState(INITIAL_FORM)
   const [photoUrl, setPhotoUrl] = useState('')
   const [provinceId, setProvinceId] = useState(null)
@@ -190,20 +190,16 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
     }
   }
 
-  const handleSkipSchool = () => {
-    setError('')
-    setStep(3)
-  }
-
   // Kaynak Seçimi adımı: seçilen kaynakları StudentResourcePicker kendi PUT'u ile atar.
   const handleSaveResources = async () => {
     setError('')
     setLoading(true)
     try {
-      if (resourcePickerRef.current?.save) {
-        await resourcePickerRef.current.save()
-        invalidateCache('/api/parent/students')
+      if (!resourcePickerRef.current?.save) {
+        throw new Error('Kaynaklar henüz hazır değil. Lütfen tekrar deneyin.')
       }
+      await resourcePickerRef.current.save({ requireResource: true })
+      invalidateCache('/api/parent/students')
       setStep(4)
     } catch (err) {
       setError(err.message)
@@ -255,7 +251,7 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
 
           {step === 1 ? (
             <form id="add-student-step1" onSubmit={handleCreate} className="flex flex-col gap-3">
-              <p className="rounded-xl bg-panel-blue-soft p-3 text-sm leading-6 text-panel-text">Çocuğunuzun bilgileriyle başlayın. Sınıf bilgisi uygun kaynakları seçmenize yardımcı olur. Fotoğraf eklemek isteğe bağlıdır; sonraki okul ve kaynak adımlarını atlayabilirsiniz.</p>
+              <p className="rounded-xl bg-panel-blue-soft p-3 text-sm leading-6 text-panel-text">Çocuğunuzun bilgileriyle başlayın. Sınıf bilgisi uygun kaynakları seçmenize yardımcı olur. Fotoğraf eklemek isteğe bağlıdır. Kurulumu tamamlamak için sonraki adımlarda okulunu ve kullandığı kaynak kitapları seçin veya kitabı kütüphanede yoksa ekleme talebi oluşturun.</p>
               <div className="flex flex-col gap-3 sm:flex-row sm:gap-5">
                 <div className="flex justify-center sm:w-2/5 sm:items-start">
                   <ResourceImageField value={photoUrl} onChange={setPhotoUrl} shape="circle" compact size={160} />
@@ -374,8 +370,7 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
           {step === 2 ? (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-panel-text-muted">
-                Çocuğunuzun okulunu il, ilçe ve okul adına göre seçin. Şu an bilmiyorsanız bu adımı atlayıp daha
-                sonra "Detay" ekranından ekleyebilirsiniz.
+                Çocuğunuzun okulunu il, ilçe ve okul adına göre seçin. Devam etmek için okul seçimi gereklidir.
               </p>
               <SchoolPicker
                 provinceId={provinceId}
@@ -391,10 +386,16 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
           {step === 3 && studentId ? (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-panel-text-muted">
-                Çocuğunuzun kullandığı kaynak kitapları kütüphaneden seçin. Bu adım zorunlu değildir —
-                daha sonra "Kitaplık" menüsünden de kaynak ekleyebilirsiniz.
+                Çocuğunuzun kullandığı kaynak kitapları kütüphaneden seçin. Kurulumu tamamlamak ve çalışma
+                planında kullanmak üzere en az bir kaynak seçin. Kitabınız kütüphanede yoksa kitap ekleme talebi
+                oluşturarak kurulumu tamamlayabilirsiniz.
               </p>
-              <StudentResourcePicker studentId={studentId} onReady={handleResourcePickerReady} />
+              <StudentResourcePicker
+                studentId={studentId}
+                onReady={handleResourcePickerReady}
+                hasResourceRequest={hasResourceRequest}
+                onResourceRequested={() => { setHasResourceRequest(true); setError('') }}
+              />
             </div>
           ) : null}
 
@@ -408,8 +409,9 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
                   {(createdStudent?.fullName || form.firstName || 'Çocuğunuz').trim().split(/\s+/)[0]} için profil hazır
                 </h3>
                 <p className="mx-auto mt-1.5 max-w-sm text-sm leading-6 text-panel-text-muted">
-                  Şimdi Haftalık Plan’da bir gün seçip ilk çalışma görevini ekleyin.
-                  Ardından “Bugün” ekranından günlük görevleri ve tamamlanma durumunu takip edin.
+                  {hasResourceRequest
+                    ? 'Kitap ekleme talebinizi Taleplerim menüsünden takip edebilirsiniz. Kitap kütüphaneye eklendiğinde çocuğunuza kaynak olarak ekleyip çalışma planında kullanabilirsiniz.'
+                    : 'Şimdi Haftalık Plan’da bir gün seçip ilk çalışma görevini ekleyin. Ardından “Bugün” ekranından günlük görevleri ve tamamlanma durumunu takip edin.'}
                 </p>
               </div>
               <div className="mt-1 flex w-full max-w-sm flex-col gap-2">
@@ -421,10 +423,10 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
                   type="button"
                   size="md"
                   className="order-first min-h-11"
-                  onClick={() => { onClose(); navigate(`/parent/weekly-plan?studentId=${studentId}`) }}
+                  onClick={() => { onClose(); navigate(hasResourceRequest ? '/parent/requests' : `/parent/weekly-plan?studentId=${studentId}`) }}
                 >
                   <TrendingUp size={16} aria-hidden="true" />
-                  İlk çalışmayı planla
+                  {hasResourceRequest ? 'Talebimi takip et' : 'İlk çalışmayı planla'}
                 </Button>
               </div>
             </div>
@@ -448,9 +450,6 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
               <Button type="button" variant="secondary" size="md" onClick={() => setStep(1)} disabled={loading}>
                 Geri
               </Button>
-              <Button type="button" variant="secondary" size="md" onClick={handleSkipSchool} disabled={loading}>
-                Daha sonra ekle
-              </Button>
               <Button type="button" size="md" onClick={handleSaveSchool} disabled={loading}>
                 {loading ? 'Kaydediliyor...' : 'Kaydet ve Devam Et'}
               </Button>
@@ -463,7 +462,7 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
                 Geri
               </Button>
               <Button type="button" variant="secondary" size="md" onClick={handleGoToBookshelf} disabled={loading}>
-                Kitaplığınızı yeniden oluşturun
+                Kitaplık’tan kaynak ekle
               </Button>
               <Button type="button" size="md" onClick={handleSaveResources} disabled={loading}>
                 {loading ? 'Kaydediliyor...' : 'Kaydet ve Bitir'}
@@ -483,8 +482,6 @@ function AddStudentModal({ onCreated, onClose, onAssignResources }) {
 }
 
 function StudentCard({ student, onOpenProfile, onOpenTeachers }) {
-  const navigate = useNavigate()
-
   const gradeText = student.grade ? (/^\d+$/.test(student.grade) ? `${student.grade}. Sınıf` : student.grade) : null
   const schoolText = [student.schoolName, gradeText].filter(Boolean).join(' · ')
 
@@ -519,16 +516,6 @@ function StudentCard({ student, onOpenProfile, onOpenTeachers }) {
         >
           <UserRound size={16} className="shrink-0" aria-hidden="true" />
           Detay
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => navigate(`/parent/mistakes?studentId=${student.id}`)}
-          className="h-auto w-full justify-start gap-2.5 px-3 py-2"
-        >
-          <AlertCircle size={16} className="shrink-0" aria-hidden="true" />
-          Hata Defteri
         </Button>
         <Button
           type="button"

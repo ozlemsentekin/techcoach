@@ -7072,3 +7072,79 @@ footer {
   .role-preview .rp-process-picker select { font-size: 11px; }
   .role-preview > .rp-process { margin-bottom: 12px; }
 }
+
+/* Ana sayfa: role göre adım adım kullanım yol haritası. */
+.role-section .role-tabs { margin-bottom: 20px; border-radius: 12px; }
+.marketing-journey { min-width: 0; text-align: left; }
+.mj-phases { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.mj-phases button { display: flex; align-items: flex-start; gap: 12px; min-width: 0; padding: 16px; border: 1px solid #e2e6f5; border-radius: 18px; background: white; color: #303477; font: inherit; text-align: left; cursor: pointer; }
+.mj-phases button[aria-current="step"] { background: #c6681b; border-color: #c6681b; color: white; }
+.mj-number { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; border-radius: 11px; background: #e2e6f5; font-size: 16px; font-weight: 700; }
+.mj-phases button[aria-current="step"] .mj-number { background: #ffffff30; }
+.mj-phases strong { display: block; font-size: 15px; line-height: 1.5; }
+.mj-phases small { display: block; margin-top: 5px; font-size: 12px; line-height: 1.6; }
+.mj-steps { display: flex; flex-wrap: wrap; gap: 0 20px; margin: 14px 4px; }
+.mj-steps button { min-height: 44px; padding: 8px 0; background: transparent; border: 0; border-bottom: 2px solid transparent; font: inherit; font-size: 14px; color: #646a89; cursor: pointer; }
+.mj-steps button[aria-current="step"] { border-color: #c6681b; color: #b45812; font-weight: 700; }
+.mj-card { border: 1px solid #e2e6f5; border-radius: 22px; overflow: hidden; background: white; }
+.mj-content { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 32px; align-items: center; padding: 28px; }
+.mj-copy { min-width: 0; }
+.mj-count { color: #b45812; font-size: 13px; font-weight: 700; }
+.mj-copy h3 { margin: 12px 0 16px; font-size: clamp(23px, 2.3vw, 32px); line-height: 1.3; color: #303477; }
+.mj-copy p { font-size: 16px; line-height: 1.85; color: #646a89; margin: 0; }
+.mj-example-note { display: block; font-size: 12px; color: #646a89; margin-top: 22px; }
+.marketing-journey .role-preview { min-width: 0; width: 100%; max-width: 520px; margin: 0 auto; box-shadow: none; background: #fcfcff; }
+.marketing-journey .rp-slide-visual { min-height: 0; padding-top: 12px; }
+.mj-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #1c2b5e; padding: 12px 24px; color: white; }
+.mj-controls button { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 16px; font-weight: 700; color: white; cursor: pointer; }
+.mj-controls button:disabled { cursor: not-allowed; }
+.mj-controls button:enabled:hover { background: #ffffff18; }
+.mj-controls > span { font-size: 15px; font-weight: 600; }
+.marketing-journey button:focus-visible { outline: 3px solid #c6681b; outline-offset: 3px; }
+.mj-controls button:focus-visible { outline-color: white; }
+@media (max-width: 900px) {
+  .mj-phases { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mj-content { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+}
+@media (max-width: 480px) {
+  .mj-phases { gap: 8px; }
+  .mj-phases button { padding: 12px 10px; gap: 8px; border-radius: 14px; }
+  .mj-number { width: 28px; height: 32px; font-size: 14px; }
+  .mj-phases strong { font-size: 13px; overflow-wrap: anywhere; }
+  .mj-phases small { display: none; }
+  .mj-steps { gap: 0 14px; }
+  .mj-steps button { font-size: 13px; }
+  .mj-content { padding: 18px 12px; }
+  .marketing-journey .role-preview { padding: 14px 10px; }
+  .mj-controls { padding: 10px 12px; }
+  .mj-controls > span { display: none; }
+}
+
+/* Masaüstünde yol haritası ve gezinme, örnek panelden bağımsız görünür kalır. */
+@media (min-width: 901px) {
+  .role-section { padding-block: 32px; }
+  .role-section > .container { max-width: 1180px; }
+  .role-section .role-eyebrow { margin-bottom: 6px; }
+  .role-section .section-title { margin-bottom: 8px; font-size: 32px; line-height: 1.2; }
+  .role-section .role-intro { margin-top: 0; margin-bottom: 12px; font-size: 15px; line-height: 1.5; }
+  .role-section .role-tabs { margin-top: 12px; margin-bottom: 12px; }
+  .mj-phases button { padding: 10px 12px; gap: 10px; border-radius: 14px; }
+  .mj-phases strong { font-size: 14px; line-height: 1.35; }
+  .mj-phases small { margin-top: 3px; line-height: 1.4; }
+  .mj-number { width: 32px; height: 32px; }
+  .mj-steps { margin-block: 4px; }
+  .mj-content { padding: 16px 20px; gap: 24px; }
+  .mj-copy h3 { margin-block: 8px 12px; font-size: 25px; }
+  .mj-copy p { font-size: 15px; line-height: 1.65; }
+  .mj-example-note { margin-top: 12px; }
+  .marketing-journey .role-preview { padding: 14px; max-width: none; max-height: clamp(260px, calc(100dvh - 430px), 380px); overflow-y: auto; scrollbar-gutter: stable; }
+  .marketing-journey .role-preview-top { margin-bottom: 10px; }
+  .marketing-journey .rp-slide-visual { padding-top: 4px; }
+  .marketing-journey .rp-library-picks { margin-top: 8px; }
+  .marketing-journey .rp-library-picks > div { padding-block: 7px; }
+  .marketing-journey .rp-mini-cover { flex-direction: row; padding: 6px; gap: 4px; }
+  .marketing-journey .rp-callout, .marketing-journey .rp-assignment { margin-top: 8px; padding: 8px 10px; }
+  .marketing-journey .rp-profile-fields { gap: 6px; margin-block: 8px; }
+  .marketing-journey .rp-profile-fields > div { padding: 6px 10px; }
+  .mj-controls { padding: 4px 16px; }
+}

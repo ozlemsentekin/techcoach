@@ -53,7 +53,8 @@ async function requireStudentContext(request, { studentId: bodyStudentId } = {})
   if (!record) {
     return { error: json(401, { error: 'Oturum geçersiz.' }) }
   }
-  if (record.is_active === false) {
+  // Admin delege oturumu (actingAdminId) pasif öğrenci/veli hesabında da işlem yapabilir.
+  if (record.is_active === false && !session.actingAdminId) {
     return { error: accountDisabledResponse() }
   }
 

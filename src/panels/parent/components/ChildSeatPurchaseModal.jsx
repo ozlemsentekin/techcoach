@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { CheckCircle2, Lock, Smartphone, X } from 'lucide-react'
 import Button from '../../ui/Button'
+import IyzicoCheckoutOverlay from '../../shared/IyzicoCheckoutOverlay'
 import { initiateChildSeatCheckout } from '../../../services/paymentService'
-import { injectCheckoutFormContent } from '../../../marketing/iyzicoCheckoutForm'
 import { formatTRY, usePublicPricing } from '../../../utils/pricing'
 
 const INCLUDED_FEATURES = [
@@ -25,13 +25,6 @@ export default function ChildSeatPurchaseModal({ onClose }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [checkoutFormContent, setCheckoutFormContent] = useState(null)
-  const formContainerRef = useRef(null)
-
-  useEffect(() => {
-    if (checkoutFormContent && formContainerRef.current) {
-      injectCheckoutFormContent(formContainerRef.current, checkoutFormContent)
-    }
-  }, [checkoutFormContent])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -81,6 +74,10 @@ export default function ChildSeatPurchaseModal({ onClose }) {
   }
   const activeBilling = billingOptions[billingCycle] || billingOptions.monthly
 
+  if (checkoutFormContent) {
+    return <IyzicoCheckoutOverlay content={checkoutFormContent} onClose={onClose} />
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
       <div className="flex h-full w-full max-w-2xl flex-col overflow-hidden bg-white shadow-panel-2 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
@@ -104,14 +101,6 @@ export default function ChildSeatPurchaseModal({ onClose }) {
                 Ek çocuk paketini şimdilik yalnızca web üzerinden techcoach.com.tr adresinden satın
                 alabilirsiniz.
               </p>
-            </div>
-          ) : checkoutFormContent ? (
-            <div>
-              <h3 className="mb-1 text-base font-semibold text-panel-text">Kart Bilgilerini Girin</h3>
-              <p className="mb-3 text-sm text-panel-text-muted">
-                Ödeme adımını iyzico'nun güvenli sayfası üzerinden tamamlayın.
-              </p>
-              <div ref={formContainerRef} />
             </div>
           ) : (
             <div className="flex flex-col gap-4">
@@ -160,56 +149,66 @@ export default function ChildSeatPurchaseModal({ onClose }) {
                 <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
               ) : null}
 
-              <form id="child-seat-payment-form" className="flex flex-col gap-2.5" onSubmit={handleSubmit}>
-                <input
-                  type="email"
-                  placeholder="E-posta"
-                  aria-label="E-posta"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  className="w-full rounded-xl border border-panel-border p-2 text-base text-panel-text"
-                />
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="TC Kimlik No"
-                  aria-label="TC Kimlik No"
-                  maxLength="11"
-                  required
-                  value={identityNumber}
-                  onChange={(event) => setIdentityNumber(event.target.value.replace(/\D/g, '').slice(0, 11))}
-                  className="w-full rounded-xl border border-panel-border p-2 text-base text-panel-text"
-                />
-                <input
-                  type="text"
-                  placeholder="Adres"
-                  aria-label="Adres"
-                  required
-                  value={addressLine}
-                  onChange={(event) => setAddressLine(event.target.value)}
-                  className="w-full rounded-xl border border-panel-border p-2 text-base text-panel-text"
-                />
-                <div className="flex gap-2.5">
+              <form id="child-seat-payment-form" className="flex flex-col gap-3" onSubmit={handleSubmit}>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-panel-text-muted">E-posta</span>
+                  <input
+                    type="email"
+                    placeholder="ornek@eposta.com"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    className="w-full rounded-xl border border-panel-border p-3 text-sm text-panel-text focus:border-panel-blue focus:outline-none"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-panel-text-muted">TC Kimlik No</span>
                   <input
                     type="text"
-                    placeholder="İl"
-                    aria-label="İl"
+                    inputMode="numeric"
+                    placeholder="11 haneli kimlik numarası"
+                    maxLength="11"
                     required
-                    value={city}
-                    onChange={(event) => setCity(event.target.value)}
-                    className="w-full rounded-xl border border-panel-border p-2 text-base text-panel-text"
+                    value={identityNumber}
+                    onChange={(event) => setIdentityNumber(event.target.value.replace(/\D/g, '').slice(0, 11))}
+                    className="w-full rounded-xl border border-panel-border p-3 text-sm text-panel-text focus:border-panel-blue focus:outline-none"
                   />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium text-panel-text-muted">Adres</span>
                   <input
                     type="text"
-                    placeholder="Posta Kodu"
-                    aria-label="Posta Kodu"
+                    placeholder="Mahalle, sokak, no"
                     required
-                    value={zipCode}
-                    onChange={(event) => setZipCode(event.target.value)}
-                    className="w-full rounded-xl border border-panel-border p-2 text-base text-panel-text"
+                    value={addressLine}
+                    onChange={(event) => setAddressLine(event.target.value)}
+                    className="w-full rounded-xl border border-panel-border p-3 text-sm text-panel-text focus:border-panel-blue focus:outline-none"
                   />
+                </label>
+                <div className="flex gap-3">
+                  <label className="flex w-full flex-col gap-1.5">
+                    <span className="text-xs font-medium text-panel-text-muted">İl</span>
+                    <input
+                      type="text"
+                      placeholder="İl"
+                      required
+                      value={city}
+                      onChange={(event) => setCity(event.target.value)}
+                      className="w-full rounded-xl border border-panel-border p-3 text-sm text-panel-text focus:border-panel-blue focus:outline-none"
+                    />
+                  </label>
+                  <label className="flex w-full flex-col gap-1.5">
+                    <span className="text-xs font-medium text-panel-text-muted">Posta Kodu</span>
+                    <input
+                      type="text"
+                      placeholder="34000"
+                      required
+                      value={zipCode}
+                      onChange={(event) => setZipCode(event.target.value)}
+                      className="w-full rounded-xl border border-panel-border p-3 text-sm text-panel-text focus:border-panel-blue focus:outline-none"
+                    />
+                  </label>
                 </div>
               </form>
 
@@ -221,7 +220,7 @@ export default function ChildSeatPurchaseModal({ onClose }) {
           )}
         </div>
 
-        {!isNative && !checkoutFormContent ? (
+        {!isNative ? (
           <div className="flex justify-end gap-3 border-t border-[#edf0f1] px-4 py-3 sm:px-6">
             <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={loading}>
               Vazgeç

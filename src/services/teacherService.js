@@ -416,6 +416,37 @@ export async function getTeacherStudentWrongQuestionPhoto(studentTeacherId, wron
   return data.photoUrl
 }
 
+/* -------------------------------------------------------------------- Deneme Sınavları (salt-okuma) */
+
+/** @returns {Promise<import('./mockExamService').MockExam[]>} */
+export function makeTeacherMockExamFetchers(studentTeacherId) {
+  return {
+    fetchMockExams: async () => {
+      const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/mock-exams`, { method: 'GET' })
+      return data.mockExams || []
+    },
+    fetchMockExam: async (mockExamId) => {
+      const data = await authRequest(
+        `/api/panel-teacher/students/${studentTeacherId}/mock-exams/${mockExamId}`,
+        { method: 'GET' },
+      )
+      return data.mockExam
+    },
+    fetchPhoto: async (wrongQuestionId) => {
+      const data = await authRequest(
+        `/api/panel-teacher/students/${studentTeacherId}/mock-exams/photos/${wrongQuestionId}`,
+        { method: 'GET' },
+      )
+      return data.photoUrl
+    },
+  }
+}
+
+/** @returns {Promise<{ grade: string, students: object[] }>} */
+export function getTeacherClassMockExamAnalysis(grade) {
+  return cachedGet(`/api/panel-teacher/class-analysis/mock-exams?grade=${encodeURIComponent(grade)}`)
+}
+
 /** @returns {Promise<import('./wrongQuestionService').WrongQuestion>} */
 export async function updateTeacherStudentWrongQuestion(studentTeacherId, wrongQuestionId, updates) {
   const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/wrong-questions/${wrongQuestionId}`, {

@@ -64,7 +64,7 @@ async function requireCatalogStaff(request) {
     return { error: json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders()) }
   }
 
-  if (record.is_active === false) {
+  if (record.is_active === false && !session.actingAdminId) {
     return { error: accountDisabledResponse() }
   }
 
@@ -97,7 +97,7 @@ async function requireLibraryEditor(request) {
     return { error: json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders()) }
   }
 
-  if (record.is_active === false) {
+  if (record.is_active === false && !session.actingAdminId) {
     return { error: accountDisabledResponse() }
   }
 
@@ -443,9 +443,9 @@ async function impersonateUserHandler(request) {
     if (!record) {
       return json(404, { error: 'Kullanıcı bulunamadı.' })
     }
-    if (record.is_active === false) {
-      return json(409, { error: 'Bu üye pasife alınmış. Önce aktife alın.' })
-    }
+    // Pasife alınmış hesaba da admin girip işlem yapabilir; delege oturumun panel
+    // guard'ları (studentScope/teacherScope/meHandler) actingAdminId gördüğünde
+    // is_active kontrolünü atlar.
 
     const user = sanitizeUser(record)
     const token = createSessionToken(user, {

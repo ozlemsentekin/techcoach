@@ -1,5 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, History, Image as ImageIcon, ImageOff, ScanLine, Search, X } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { getWrongQuestions } from '../../services/wrongQuestionService'
+import { matchesMissingPhotoHistory } from '../../utils/studyHistoryPhotoFilter'
 import { getStudyHistory } from '../../services/studyHistoryService'
 import { authRequest } from '../../services/authClient'
 import { verifyMistakePhotoQuestionNumber } from '../../services/mistakePhotoService'
@@ -244,14 +247,18 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
   const [onlyMissingPhoto, setOnlyMissingPhoto] = useState(false)
   const [page, setPage] = useState(1)
 
+  const [searchParams, setSearchParams] = useSearchParams()
+  const completedOn = searchParams.get('completedOn') || ''
+  const taskIdsParam = searchParams.get('taskIds') || ''
+  const fromTodayMissing = Boolean(completedOn && searchParams.get('missingPhotos') === '1')
   const studentKey = studentId || ''
 
   useEffect(() => {
     let ignore = false
-    getStudyHistory(studentId)
-      .then((data) => {
+    Promise.all([getStudyHistory(studentId), fromTodayMissing ? getWrongQuestions(studentId) : Promise.resolve({ wrongQuestions: [] })])
+      .then(([data, { wrongQuestions }]) => {
         if (ignore) return
-        setLoaded({ id: studentKey, data })
+        setLoaded({ id: studentKey, data, photos: wrongQuestions })
         setFailed(null)
       })
       .catch((err) => {
@@ -261,7 +268,7 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
     return () => {
       ignore = true
     }
-  }, [studentId, studentKey, reloadKey])
+  }, [studentId, studentKey, reloadKey, fromTodayMissing])
 
   const refresh = () => setReloadKey((k) => k + 1)
 
@@ -288,6 +295,9 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
     if (!items) return []
     const q = lower(search).trim()
     return items.filter((it) => {
+      if (fromTodayMissing && !matchesMissingPhotoHistory(it, {
+        completedOn, taskIds: taskIdsParam.split(',').filter(Boolean),
+      }, loaded.photos)) return false
       if (subject && it.subjectName !== subject) return false
       if (missingFilterActive && it.mistakePhotoStatus !== 'missing') return false
       if (!q) return true
@@ -302,7 +312,7 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
         it.pageEnd != null ? String(it.pageEnd) : '',
       ].some((field) => lower(field).includes(q))
     })
-  }, [items, search, subject, missingFilterActive])
+  }, [items, search, subject, missingFilterActive, fromTodayMissing, completedOn, taskIdsParam, loaded])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
@@ -355,6 +365,16 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
   return (
     <>
       <div className="flex flex-col gap-4">
+        {fromTodayMissing ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-panel-border bg-panel-surface-soft px-4 py-3 text-sm text-panel-text">
+            <span>{completedOn} tarihinde tamamlanan · Hata görseli eksik çalışmalar</span>
+            <button type="button" className="text-xs font-semibold underline underline-offset-4" onClick={() => {
+              const next = new URLSearchParams(searchParams)
+              next.delete('completedOn'); next.delete('missingPhotos'); next.delete('taskIds')
+              setSearchParams(next); resetPage()
+            }}>Filtreyi kaldır</button>
+          </div>
+        ) : null}
         {/* Araç çubuğu: arama + ders filtresi */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative min-w-0 flex-1">
@@ -406,7 +426,7 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
         </div>
 
         {/* Yanlış/boş sorusu olup hiç hata görseli yüklenmemiş çalışma varsa uyarı bandı. */}
-        {missingPhotoCount > 0 ? (
+        {missingPhotoCount > 0 && !fromTodayMissing ? (
           <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-2.5">
               <ImageOff size={18} className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
@@ -523,7 +543,7 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
             photoMode={photoMode}
             studentId={studentId}
             canRegrade={canRegrade}
-            onClose={() => setActiveItem(null)}
+            onClose={() => { setActiveItem(null); refresh() }}
             onSaved={() => refresh()}
           />
         </Suspense>
@@ -533,7 +553,7 @@ export default function StudyHistoryView({ studentId, photoMode = 'edit', canReg
         <ManualAnswersModal
           item={manualItem}
           studentId={studentId}
-          onClose={() => setActiveItem(null)}
+          onClose={() => { setActiveItem(null); refresh() }}
           onSaved={() => refresh()}
         />
       ) : null}

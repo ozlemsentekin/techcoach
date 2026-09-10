@@ -27,7 +27,7 @@ import {
 } from 'lucide-react'
 import { calculateNet } from '../../../utils/netCalculator'
 import { getSortedTasks } from '../../../utils/taskSelectors'
-import { formatDateShort, parseTimeToMinutes } from '../../../utils/time'
+import { daysLate, formatDateShort, parseTimeToMinutes } from '../../../utils/time'
 import { HOMEWORK_TASK_TYPES, STATUS_LABELS, TASK_TYPES } from '../../../data/taskTypes'
 import Badge from '../../ui/Badge'
 
@@ -613,6 +613,15 @@ function formatBacklogTooltip(task) {
   return `${whenLabel} için planlanmıştı, zamanında yapılmadı.`
 }
 
+function formatBacklogWhen(task) {
+  const dateLabel = formatDateShort(task.date)
+  const late = daysLate(task.date)
+  if (task.status === 'tamamlandi') return `${dateLabel} planıydı`
+  if (late === 1) return `${dateLabel} · 1 gün gecikme`
+  if (late > 1) return `${dateLabel} · ${late} gün gecikme`
+  return `${dateLabel} planıydı`
+}
+
 function BacklogTag({ task }) {
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef(null)
@@ -629,7 +638,7 @@ function BacklogTag({ task }) {
   const completed = task.status === 'tamamlandi'
 
   return (
-    <span ref={wrapperRef} className="relative inline-flex">
+    <span ref={wrapperRef} className="relative inline-flex flex-col items-start gap-1">
       <button
         type="button"
         onClick={(event) => {
@@ -644,6 +653,7 @@ function BacklogTag({ task }) {
           Biriken Görev
         </Badge>
       </button>
+      <span className="whitespace-nowrap text-[11px] font-semibold text-panel-text-muted">{formatBacklogWhen(task)}</span>
       {open ? (
         <span
           role="tooltip"

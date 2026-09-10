@@ -53,7 +53,7 @@ export default function MobileBottomNavigation({ primaryItems, moreItems = [] })
           onClick={() => setShowMore(false)}
         >
           <div
-            className="w-full min-w-0 max-w-full rounded-t-3xl bg-panel-surface p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+            className="max-h-[calc(100dvh-1rem)] w-full min-w-0 max-w-full overflow-y-auto overscroll-contain rounded-t-3xl bg-panel-surface p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between px-2">

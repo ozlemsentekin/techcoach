@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { GraduationCap, Target, Users } from 'lucide-react'
+import { FileCheck2, GraduationCap, Target, Users } from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
 import EmptyState from '../../shared/EmptyState'
 import LoadingState from '../../shared/LoadingState'
@@ -8,7 +8,8 @@ import { buildActivityRecords, formatNumber } from '../../shared/progressAnalyti
 import { RATE_TONES } from '../../shared/rateTones'
 import { cn } from '../../ui/utils'
 import { todayISODate } from '../../../utils/time'
-import { getTeacherClassAnalysis } from '../../../services/teacherService'
+import { getTeacherClassAnalysis, getTeacherClassMockExamAnalysis } from '../../../services/teacherService'
+import ClassMockExamPanel from './ClassMockExamPanel'
 import { useTeacherClasses } from '../useTeacherClasses'
 import { AnalysisBody, SummaryMetric } from '../../shared/analysisView'
 import { SORTS, analyzeEntity, buildAnalysis, pct, toneFor } from '../../shared/analysisData'
@@ -22,6 +23,7 @@ export default function ClassAnalysisPage() {
   const [loaded, setLoaded] = useState(null)
   const [failed, setFailed] = useState(null)
   const [sortKey, setSortKey] = useState('accuracyAsc')
+  const [view, setView] = useState('genel') // 'genel' | 'deneme'
   const today = useMemo(() => todayISODate(), [])
 
   const tabs = useMemo(() => {
@@ -124,6 +126,42 @@ export default function ClassAnalysisPage() {
         </div>
       </div>
 
+      <div className="flex gap-2">
+        <button
+          type="button"
+          aria-pressed={view === 'genel'}
+          onClick={() => setView('genel')}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors',
+            view === 'genel' ? 'bg-panel-blue text-white' : 'text-panel-text-muted hover:text-panel-text',
+          )}
+        >
+          <Users size={14} aria-hidden="true" />
+          Çalışma Sonuçları
+        </button>
+        <button
+          type="button"
+          aria-pressed={view === 'deneme'}
+          onClick={() => setView('deneme')}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors',
+            view === 'deneme' ? 'bg-panel-blue text-white' : 'text-panel-text-muted hover:text-panel-text',
+          )}
+        >
+          <FileCheck2 size={14} aria-hidden="true" />
+          Deneme Sonuçları
+        </button>
+      </div>
+
+      {view === 'deneme' ? (
+        <ClassMockExamPanel
+          key={activeKey}
+          grade={activeKey}
+          fetchAnalysis={getTeacherClassMockExamAnalysis}
+          onSelectStudent={(studentTeacherId) => navigate(`/teacher/students/${studentTeacherId}?tab=mock-exams`)}
+        />
+      ) : (
+        <>
       {analysis ? (
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
           <SummaryMetric
@@ -179,6 +217,8 @@ export default function ClassAnalysisPage() {
           onSortChange={setSortKey}
           onSelect={openStudent}
         />
+      )}
+        </>
       )}
     </div>
   )
