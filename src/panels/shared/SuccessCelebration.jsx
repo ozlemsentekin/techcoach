@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ConfettiBurst from './ConfettiBurst'
+import { playCelebrationSound } from '../../utils/celebrationSound'
 
 // %100 başarı kutlaması: konfeti + ortada motivasyon mesajı kartı. Kullanıcı "Tamam"a
 // (veya arka plana) basınca kapanır. Öğrenci optik kaydı ve veli Kitaplık sonuç girişinde
@@ -18,6 +19,10 @@ function pickMessage() {
 
 export default function SuccessCelebration({ onClose, title = 'Tebrikler! 🎉' }) {
   const [message] = useState(pickMessage)
+
+  useEffect(() => {
+    playCelebrationSound()
+  }, [])
 
   return (
     <div
