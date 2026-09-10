@@ -27,9 +27,11 @@ import {
   GENEL_DENEME_TEMPLATE,
   MAX_ETUT_QUESTIONS,
   MOCK_EXAM_KINDS,
+  computeNet,
   gradeEightSubjects,
   matchSubjectId,
   mockExamKindLabel,
+  subjectTone,
 } from './mockExamConfig'
 
 const DATE_FMT = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -602,7 +604,7 @@ function SubjectLine({ subject, readOnly, onViewPhotos, onAddPhoto }) {
   )
 }
 
-function ExamCard({ exam: summary, readOnly, studentId, fetchMockExam, fetchPhoto, addPhoto, deletePhoto, onEdit, onDelete, onChanged }) {
+function ExamCard({ exam: summary, readOnly, studentId, bare = false, fetchMockExam, fetchPhoto, addPhoto, deletePhoto, onEdit, onDelete, onChanged }) {
   const [open, setOpen] = useState(false)
   const [photoSubject, setPhotoSubject] = useState(null)
   const [addFor, setAddFor] = useState(null)
@@ -632,7 +634,7 @@ function ExamCard({ exam: summary, readOnly, studentId, fetchMockExam, fetchPhot
   const KindIcon = KIND_ICONS[exam.kind] || FileCheck2
 
   return (
-    <div className="panel-card overflow-hidden">
+    <div className={cn('overflow-hidden', bare ? '' : 'panel-card')}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -643,15 +645,12 @@ function ExamCard({ exam: summary, readOnly, studentId, fetchMockExam, fetchPhot
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className="text-sm font-semibold text-panel-text">
-              {mockExamKindLabel(exam.kind)}
-              <span className="ml-1 font-normal text-panel-text-muted">
-                ({exam.kind === 'genel' ? `${exam.subjects.length} ders` : `${exam.totalQuestions} soru`})
-              </span>
+            <span className="truncate text-sm font-semibold text-panel-text">
+              {exam.title || mockExamKindLabel(exam.kind)}
             </span>
-            {exam.title ? (
-              <span className="truncate text-sm text-panel-text-muted">· {exam.title}</span>
-            ) : null}
+            <span className="shrink-0 text-xs font-normal text-panel-text-muted">
+              {exam.kind === 'genel' ? `${exam.subjects.length} ders` : `${exam.totalQuestions} soru`}
+            </span>
           </div>
           <span className="mt-0.5 inline-flex items-center gap-1 text-xs text-panel-text-muted">
             <CalendarDays size={12} aria-hidden="true" /> {formatExamDate(exam.examDate)}
@@ -779,6 +778,32 @@ export default function MockExamsView({
 
   const activeGroup = kindGroups.find((group) => group.value === activeKind) || kindGroups[0]
 
+  // Branş İzleme / Etüt (tek derslik) sekmelerinde denemeler derse göre gruplanır.
+  const subjectGroups = useMemo(() => {
+    if (!activeGroup || activeGroup.value === 'genel') return null
+    const map = new Map()
+    activeGroup.exams.forEach((exam) => {
+      const name = exam.subjects[0]?.subjectName || 'Ders belirtilmemiş'
+      let entry = map.get(name)
+      if (!entry) {
+        entry = { subject: name, exams: [], totalQuestions: 0, correct: 0, wrong: 0, blank: 0 }
+        map.set(name, entry)
+      }
+      entry.exams.push(exam)
+      entry.totalQuestions += exam.totalQuestions
+      entry.correct += exam.totalCorrect
+      entry.wrong += exam.totalWrong
+      entry.blank += exam.totalBlank
+    })
+    return [...map.values()]
+      .map((entry) => ({
+        ...entry,
+        net: computeNet(entry.correct, entry.wrong),
+        successRate: entry.totalQuestions > 0 ? Math.round((entry.correct / entry.totalQuestions) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => a.subject.localeCompare(b.subject, 'tr'))
+  }, [activeGroup])
+
   const load = useCallback(() => {
     setError('')
     fetchMockExams(studentId)
@@ -888,23 +913,68 @@ export default function MockExamsView({
         />
       )
     }
+    const errorBanner = error ? (
+      <div className="rounded-xl bg-panel-red-soft px-4 py-2 text-sm text-panel-red">{error}</div>
+    ) : null
+
+    const cardProps = (exam) => ({
+      key: exam.id,
+      exam,
+      readOnly,
+      studentId,
+      fetchMockExam,
+      fetchPhoto,
+      addPhoto,
+      deletePhoto,
+      onEdit: openEdit,
+      onDelete: setConfirmDelete,
+      onChanged: load,
+    })
+
+    // Genel Deneme: düz liste. Branş İzleme / Etüt: derse göre gruplu kartlar.
+    if (!subjectGroups) {
+      return (
+        <div className="flex flex-col gap-3">
+          {errorBanner}
+          {activeGroup.exams.map((exam) => (
+            <ExamCard {...cardProps(exam)} />
+          ))}
+        </div>
+      )
+    }
+
     return (
-      <div className="flex flex-col gap-3">
-        {error ? <div className="rounded-xl bg-panel-red-soft px-4 py-2 text-sm text-panel-red">{error}</div> : null}
-        {activeGroup.exams.map((exam) => (
-          <ExamCard
-            key={exam.id}
-            exam={exam}
-            readOnly={readOnly}
-            studentId={studentId}
-            fetchMockExam={fetchMockExam}
-            fetchPhoto={fetchPhoto}
-            addPhoto={addPhoto}
-            deletePhoto={deletePhoto}
-            onEdit={openEdit}
-            onDelete={setConfirmDelete}
-            onChanged={load}
-          />
+      <div className="flex flex-col gap-4">
+        {errorBanner}
+        {subjectGroups.map((group) => (
+          <div key={group.subject} className="panel-card overflow-hidden">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-panel-border bg-panel-surface-soft/40 px-4 py-3">
+              <span className={cn('rounded-lg px-2.5 py-1 text-sm font-bold', subjectTone(group.subject))}>
+                {group.subject}
+              </span>
+              <span className="text-xs font-medium text-panel-text-muted">
+                {group.exams.length} etüt · {group.totalQuestions} soru
+              </span>
+              <span className="flex-1" />
+              <StatPill label="D" value={group.correct} tone="bg-panel-green-soft text-panel-green" />
+              <StatPill label="Y" value={group.wrong} tone="bg-panel-red-soft text-panel-red" />
+              <StatPill label="B" value={group.blank} tone="bg-panel-surface-soft text-panel-text-muted" />
+              <StatPill label="Net" value={group.net} tone="bg-panel-blue-soft text-panel-blue" />
+              <span
+                className={cn(
+                  'rounded-lg px-2 py-0.5 text-xs font-semibold tabular-nums',
+                  successTone(group.successRate),
+                )}
+              >
+                %{group.successRate}
+              </span>
+            </div>
+            <div className="divide-y divide-panel-border/60">
+              {group.exams.map((exam) => (
+                <ExamCard {...cardProps(exam)} bare />
+              ))}
+            </div>
+          </div>
         ))}
       </div>
     )
