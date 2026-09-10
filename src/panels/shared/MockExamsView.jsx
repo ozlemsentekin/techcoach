@@ -113,10 +113,11 @@ const NUM_CLASS = cn(
 )
 
 // Doğru / yanlış / boş — tek satırda, etiketsiz (alan adları input içinde soluk placeholder).
-// name verilirse (Genel Deneme) solda ders adı görünür.
+// total null ise (Etüt) toplam = D+Y+B; sabit toplam yoktur.
 function CountsRow({ total, counts, name, onCount }) {
   const sum = counts.correct + counts.wrong + counts.blank
-  const matched = sum === total
+  const fixed = total != null
+  const matched = fixed ? sum === total : sum >= 1
   return (
     <div className="flex flex-wrap items-center gap-2">
       {name ? (
@@ -125,21 +126,21 @@ function CountsRow({ total, counts, name, onCount }) {
       <div className="grid flex-1 grid-cols-3 gap-2">
         <NumberField
           value={counts.correct}
-          max={total}
+          max={total ?? undefined}
           placeholder="Doğru"
           onChange={(next) => onCount('correct', next)}
           className={cn(NUM_CLASS, 'placeholder:text-panel-green/60')}
         />
         <NumberField
           value={counts.wrong}
-          max={total}
+          max={total ?? undefined}
           placeholder="Yanlış"
           onChange={(next) => onCount('wrong', next)}
           className={cn(NUM_CLASS, 'placeholder:text-panel-red/60')}
         />
         <NumberField
           value={counts.blank}
-          max={total}
+          max={total ?? undefined}
           placeholder="Boş"
           onChange={(next) => onCount('blank', next)}
           className={cn(NUM_CLASS, 'placeholder:text-panel-text-muted/70')}
@@ -151,7 +152,7 @@ function CountsRow({ total, counts, name, onCount }) {
           matched ? 'bg-panel-green-soft text-panel-green' : 'bg-panel-accent-soft text-panel-warm',
         )}
       >
-        {sum}/{total}
+        {fixed ? `${sum}/${total}` : `${sum} soru`}
       </span>
     </div>
   )
@@ -166,7 +167,8 @@ function buildInitialSubjects(kind, existing) {
     return existing.subjects.map((s) => ({
       subjectId: s.subjectId,
       subjectName: s.subjectName,
-      total: s.totalQuestions,
+      // Etüt'te sabit toplam yok — D/Y/B'den türer.
+      total: existing.kind === 'etut' ? null : s.totalQuestions,
       counts: { correct: s.correct, wrong: s.wrong, blank: s.blank },
       photos: [],
     }))
@@ -180,12 +182,13 @@ function buildInitialSubjects(kind, existing) {
       photos: [],
     }))
   }
+  // Etüt: sabit toplam yok (total null) — D/Y/B'yi kullanıcı girer.
   return [
     {
       subjectId: undefined,
       subjectName: '',
-      total: kind === 'brans' ? BRANS_QUESTION_COUNT : 20,
-      counts: { ...emptyCounts, blank: kind === 'brans' ? BRANS_QUESTION_COUNT : 20 },
+      total: kind === 'brans' ? BRANS_QUESTION_COUNT : null,
+      counts: kind === 'brans' ? { ...emptyCounts, blank: BRANS_QUESTION_COUNT } : { ...emptyCounts },
       photos: [],
     },
   ]
@@ -223,18 +226,6 @@ function ExamDrawer({ existing, initialKind, onClose, onSubmit, submitting }) {
     setSubjectRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)))
   }
 
-  const setEtutTotal = (index, rawTotal) => {
-    const total = Math.max(1, Math.min(MAX_ETUT_QUESTIONS, rawTotal || 1))
-    setSubjectRows((rows) =>
-      rows.map((row, i) => {
-        if (i !== index) return row
-        const correct = Math.min(row.counts.correct, total)
-        const wrong = Math.min(row.counts.wrong, total - correct)
-        return { ...row, total, counts: { correct, wrong, blank: Math.max(0, total - correct - wrong) } }
-      }),
-    )
-  }
-
   const chooseSubject = (index, subjectId) => {
     const hit = subjects.find((s) => s.id === subjectId)
     patchRow(index, { subjectId, subjectName: hit?.name || '' })
@@ -244,9 +235,10 @@ function ExamDrawer({ existing, initialKind, onClose, onSubmit, submitting }) {
     setSubjectRows((rows) =>
       rows.map((row, i) => {
         if (i !== index) return row
-        const counts = { ...row.counts, [key]: Math.min(row.total, next) }
-        // Doğru/yanlış girildikçe boş otomatik hesaplanır.
-        if (key !== 'blank') counts.blank = Math.max(0, row.total - counts.correct - counts.wrong)
+        const fixed = row.total != null
+        const counts = { ...row.counts, [key]: fixed ? Math.min(row.total, next) : next }
+        // Sabit toplamlı türlerde (Branş/Genel) doğru/yanlış girildikçe boş otomatik hesaplanır.
+        if (fixed && key !== 'blank') counts.blank = Math.max(0, row.total - counts.correct - counts.wrong)
         return { ...row, counts }
       }),
     )
@@ -264,8 +256,12 @@ function ExamDrawer({ existing, initialKind, onClose, onSubmit, submitting }) {
         return
       }
       const sum = row.counts.correct + row.counts.wrong + row.counts.blank
-      if (sum !== row.total) {
+      if (row.total != null && sum !== row.total) {
         setError(`${row.subjectName || 'Ders'}: doğru + yanlış + boş toplamı ${row.total} olmalı.`)
+        return
+      }
+      if (row.total == null && (sum < 1 || sum > MAX_ETUT_QUESTIONS)) {
+        setError(`${row.subjectName || 'Ders'}: doğru + yanlış + boş toplamı 1 ile ${MAX_ETUT_QUESTIONS} arasında olmalı.`)
         return
       }
       if (row.photos.length > row.counts.wrong + row.counts.blank) {
@@ -281,7 +277,7 @@ function ExamDrawer({ existing, initialKind, onClose, onSubmit, submitting }) {
       subjects: subjectRows.map((row) => ({
         subjectId: row.subjectId || matchSubjectId(subjects, row.subjectName),
         subjectName: row.subjectName,
-        totalQuestions: row.total,
+        totalQuestions: row.total ?? row.counts.correct + row.counts.wrong + row.counts.blank,
         correct: row.counts.correct,
         wrong: row.counts.wrong,
         blank: row.counts.blank,
@@ -397,20 +393,15 @@ function ExamDrawer({ existing, initialKind, onClose, onSubmit, submitting }) {
                     ))}
                   </select>
                 ) : null}
-                {kind === 'etut' ? (
-                  <NumberField
-                    value={subjectRows[0]?.total ?? 0}
-                    max={MAX_ETUT_QUESTIONS}
-                    placeholder="Toplam soru"
-                    onChange={(next) => setEtutTotal(0, next)}
-                    className={cn(FIELD_CLASS, 'p-2.5 text-left text-sm tabular-nums')}
-                  />
-                ) : null}
               </div>
 
               <div className="flex flex-col gap-2.5">
                 {kind === 'genel' ? (
                   <p className="text-xs font-medium text-panel-text-muted">Her ders için doğru / yanlış / boş sayısı</p>
+                ) : kind === 'etut' ? (
+                  <p className="text-xs font-medium text-panel-text-muted">
+                    Doğru / yanlış / boş — toplam soru sayısı bunların toplamıdır
+                  </p>
                 ) : null}
                 {subjectRows.map((row, index) => (
                   <div key={index} className="flex flex-col gap-2 rounded-xl border border-panel-border bg-white p-3">

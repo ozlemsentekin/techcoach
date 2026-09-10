@@ -63,21 +63,22 @@ test('Genel Deneme: 6 ders şablonu, ders başına sabit soru sayısı', () => {
   )
 })
 
-test('Etüt: tarih opsiyonel, toplam soru serbest, 20 sınırı yok', () => {
+test('Etüt: tarih opsiyonel; toplam = doğru + yanlış + boş, 20 sınırı yok', () => {
   const result = validateMockExamPayload({
     kind: 'etut',
-    subjects: [{ subjectName: 'Türkçe', totalQuestions: 45, correct: 30, wrong: 10, blank: 5 }],
+    subjects: [{ subjectName: 'Türkçe', correct: 30, wrong: 10, blank: 5 }],
   })
   assert.equal(result.error, undefined)
   assert.equal(result.value.examDate, null)
   assert.equal(result.value.subjects[0].totalQuestions, 45)
 
+  // Hiç cevap yoksa geçersiz.
   assert.match(
     validateMockExamPayload({
       kind: 'etut',
-      subjects: [{ subjectName: 'Türkçe', totalQuestions: 45, correct: 30, wrong: 10, blank: 10 }],
+      subjects: [{ subjectName: 'Türkçe', correct: 0, wrong: 0, blank: 0 }],
     }).error || '',
-    /45 olmalı/,
+    /1 ile 200/,
   )
 })
 
