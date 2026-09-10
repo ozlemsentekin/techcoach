@@ -138,17 +138,26 @@ function validateMockExamPayload(payload) {
     const subjectName = typeof row?.subjectName === 'string' ? row.subjectName.trim().slice(0, 100) : ''
     if (!subjectName) return { error: 'Ders seçilmelidir.' }
 
+    // Etüt'te ayrı "toplam soru" alanı yok — toplam, doğru + yanlış + boş sayısıdır.
     let total
+    let counts
     if (kind === 'brans') {
       total = BRANS_QUESTION_COUNT
+      counts = normalizeCounts(row, total)
     } else {
-      total = Number(row?.totalQuestions)
-      if (!Number.isInteger(total) || total < 1 || total > MAX_ETUT_QUESTIONS) {
-        return { error: `Toplam soru sayısı 1 ile ${MAX_ETUT_QUESTIONS} arasında olmalı.` }
+      const correct = nonNegInt(row?.correct)
+      const wrong = nonNegInt(row?.wrong)
+      const blank = nonNegInt(row?.blank) ?? 0
+      if (correct === null || wrong === null) {
+        counts = { error: 'Doğru/yanlış sayıları geçersiz.' }
+      } else {
+        total = correct + wrong + blank
+        if (total < 1 || total > MAX_ETUT_QUESTIONS) {
+          return { error: `Toplam soru sayısı 1 ile ${MAX_ETUT_QUESTIONS} arasında olmalı.` }
+        }
+        counts = { value: { correct, wrong, blank } }
       }
     }
-
-    const counts = normalizeCounts(row, total)
     if (counts.error) return { error: counts.error }
     const photos = normalizePhotos(row)
     if (photos.error) return { error: photos.error }

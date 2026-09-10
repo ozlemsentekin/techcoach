@@ -65,3 +65,23 @@ export function gradeEightSubjects(subjects) {
 export function computeNet(correct, wrong) {
   return Math.round((correct - wrong / 3) * 100) / 100
 }
+
+// Ders adına göre kararlı, birbirinden ayrışan etiket rengi (bg + text token çifti).
+const SUBJECT_TONES = [
+  'bg-panel-blue-soft text-panel-blue',
+  'bg-panel-sage-soft text-panel-sage',
+  'bg-panel-warm-soft text-panel-warm',
+  'bg-panel-lilac-soft text-panel-lilac',
+  'bg-panel-yellow-soft text-panel-yellow',
+  'bg-panel-red-soft text-panel-red',
+  'bg-panel-slate-soft text-panel-slate',
+  'bg-panel-green-soft text-panel-green',
+  'bg-panel-accent-soft text-panel-warm',
+]
+
+export function subjectTone(name) {
+  const key = normalizeName(name)
+  let hash = 0
+  for (let i = 0; i < key.length; i += 1) hash = (hash * 31 + key.charCodeAt(i)) >>> 0
+  return SUBJECT_TONES[hash % SUBJECT_TONES.length]
+}
