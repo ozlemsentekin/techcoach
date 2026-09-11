@@ -3371,13 +3371,16 @@ async function listTeacherStudentWrongQuestionsHandler(request) {
                COALESCE(rb.name, wq.book_name) AS book_name,
                COALESCE(pub.name, wq.publisher_name) AS publisher_name,
                t.topic_name, t.page_start, t.page_end,
-               tak.correct_label AS correct_answer
+               tak.correct_label AS correct_answer,
+               wqa.what_it_asked AS ai_what_it_asked, wqa.likely_mistake AS ai_likely_mistake,
+               wqa.ai_analysis_report_id
         FROM dbo.WrongQuestions wq
         LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
         LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
         LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
         LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
         LEFT JOIN dbo.TestAnswerKeys tak ON tak.test_id = wq.test_id AND tak.order_no = wq.question_number
+        LEFT JOIN dbo.WrongQuestionAiAnalyses wqa ON wqa.wrong_question_id = wq.id
         WHERE wq.student_id = @studentId AND wq.subject = @subject
           AND (wq.test_id IS NOT NULL OR wq.mock_exam_subject_id IS NOT NULL)
         ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''}

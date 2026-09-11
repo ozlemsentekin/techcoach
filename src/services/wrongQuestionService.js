@@ -23,6 +23,9 @@ import { authRequest, cachedGet } from './authClient'
  * @property {boolean} hasPhoto
  * @property {string} [photoUrl] Sadece foto kaydeden akışların döndürdüğü nesnelerde dolu gelir;
  * liste uçları (getWrongQuestions) performans için bunu hiç seçmez, bkz. getWrongQuestionPhoto.
+ * @property {{whatItAsked:string, likelyMistake?:string, reportId:string}} [aiAnalysis] Bir AI
+ * Raporu'nda bu soru için üretilmiş analiz (dbo.WrongQuestionAiAnalyses) — varsa Hata Defteri'nde
+ * küçük bir AI rozeti + galeri detayında "AI Analizi" bölümü olarak gösterilir.
  */
 
 /**
