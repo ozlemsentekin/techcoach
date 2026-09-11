@@ -4,7 +4,9 @@ import { authRequest, cachedGet } from './authClient'
 // analizleri. Veli oturumunda `studentId` ile hangi çocuğun verisi istendiği belirtilir;
 // öğrenci kendi oturumunda görmezden gelinir (backend sahiplik kontrolü yapar).
 
-const REPORT_CREATE_TIMEOUT_MS = 180000 // opus-5 + ~20 görsel uzun sürebilir
+// opus-5 + ~12 görsel uzun sürebilir; Azure SWA'nın managed functions API'si zaten ~230 sn'de
+// isteği kendi tarafında kesiyor, bu yüzden istemci zaman aşımını onun biraz altında tutuyoruz.
+const REPORT_CREATE_TIMEOUT_MS = 220000
 
 function withStudent(path, studentId) {
   if (!studentId) return path

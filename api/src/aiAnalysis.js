@@ -7,7 +7,11 @@ const { isSessionError } = require('./security')
 const { fetchWrongQuestionAnalyses } = require('./progress')
 
 const MODEL = 'claude-opus-5'
-const MAX_IMAGES = 20 // maliyet + Azure Functions HTTP süresi guard'ı
+// DİKKAT — bug (2026-09-11): 20 görsel + max_tokens 8000 ile 59 soruluk bir içerikte (DNA ve
+// Genetik Kod) model max_tokens'a çarpıp yanıtı JSON'ın ortasında kesiyordu → "Yapay zeka yanıtı
+// okunamadı." 12'ye düşürüp max_tokens'ı yükseltmek (aşağıda) bunu çözdü; ayrıca SWA'nın managed
+// functions API'si uzun isteklerde (~230 sn) kesiyor, 12 görsel bunun güvenli sınırında kalıyor.
+const MAX_IMAGES = 12 // maliyet + yanıt boyutu + Azure SWA managed functions süresi guard'ı
 const MAX_REPORTS_PER_DAY = 5
 const SAME_SCOPE_COOLDOWN_HOURS = 1
 
@@ -248,12 +252,16 @@ async function generateReport(questionRows) {
   content.push({ type: 'text', text: ANALYSIS_INSTRUCTION })
 
   const client = getAnthropicClient()
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 8000,
-    output_config: { format: { type: 'json_schema', schema: REPORT_SCHEMA } },
-    messages: [{ role: 'user', content }],
-  })
+  // Streaming + yüksek max_tokens: eskiden max_tokens:8000 ile (thinking + JSON aynı bütçeyi
+  // paylaşıyor) kalabalık içeriklerde yanıt JSON'ın ortasında kesiliyordu (bkz. MAX_IMAGES yorumu).
+  const response = await client.messages
+    .stream({
+      model: MODEL,
+      max_tokens: 16000,
+      output_config: { format: { type: 'json_schema', schema: REPORT_SCHEMA } },
+      messages: [{ role: 'user', content }],
+    })
+    .finalMessage()
 
   if (response.stop_reason === 'refusal') {
     throw new ReportGenerationError(422, 'Görseller işlenemedi (model isteği reddetti).')

@@ -441,7 +441,7 @@ export function makeTeacherAiReportFetchers(studentTeacherId) {
       const data = await authRequest(base, {
         method: 'POST',
         body: JSON.stringify({ topicNames }),
-        timeoutMs: 180000,
+        timeoutMs: 220000, // bkz. aiAnalysisService.js REPORT_CREATE_TIMEOUT_MS gerekçesi
       })
       return data.report
     },
