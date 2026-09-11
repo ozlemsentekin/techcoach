@@ -66,6 +66,14 @@ const {
 } = require('./progress')
 const { gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGrading')
 const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
+const {
+  ReportGenerationError,
+  fetchSubjectTopics: fetchAiSubjectTopics,
+  fetchReportList: fetchAiReportList,
+  fetchReportRecord: fetchAiReportRecord,
+  buildReportDetail: buildAiReportDetail,
+  createReportForStudent: createAiReportForStudent,
+} = require('./aiAnalysis')
 
 const TEACHER_TYPE_LABELS = {
   ozel_ogretmen: 'Özel Öğretmen',
@@ -3421,6 +3429,77 @@ async function getTeacherStudentWrongQuestionPhotoHandler(request) {
   }
 }
 
+// --- AI Raporları (öğretmen) --------------------------------------------------
+// Öğretmen tarafı tek bir dersle (paylaşılan ders bağlamı) sınırlıdır; ders adı context'ten gelir.
+
+function handleAiError(error, label) {
+  if (error instanceof ReportGenerationError) {
+    return json(error.status, { error: error.message })
+  }
+  return handleError(error, label, 'Rapor işlemi başarısız oldu.')
+}
+
+async function listTeacherStudentAiReportsHandler(request) {
+  try {
+    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
+    if (error) return error
+    const subjectName = await resolveTeacherSubjectName(subjectId)
+    const [reports, topics] = await Promise.all([
+      fetchAiReportList(studentId, { subject: subjectName }),
+      fetchAiSubjectTopics(studentId, subjectName),
+    ])
+    const availableSubjects = topics.length
+      ? [{ subject: subjectName, questionCount: topics.reduce((sum, t) => sum + t.questionCount, 0) }]
+      : []
+    return json(200, { reports, availableSubjects })
+  } catch (error) {
+    return handleAiError(error, 'listTeacherStudentAiReportsHandler')
+  }
+}
+
+async function getTeacherStudentAiReportScopeHandler(request) {
+  try {
+    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
+    if (error) return error
+    const subjectName = await resolveTeacherSubjectName(subjectId)
+    return json(200, { topics: await fetchAiSubjectTopics(studentId, subjectName) })
+  } catch (error) {
+    return handleAiError(error, 'getTeacherStudentAiReportScopeHandler')
+  }
+}
+
+async function getTeacherStudentAiReportHandler(request) {
+  try {
+    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
+    if (error) return error
+    const subjectName = await resolveTeacherSubjectName(subjectId)
+    const record = await fetchAiReportRecord(studentId, request.params.reportId, { subject: subjectName })
+    if (!record) return json(404, { error: 'Rapor bulunamadı.' })
+    return json(200, { report: await buildAiReportDetail(studentId, record) })
+  } catch (error) {
+    return handleAiError(error, 'getTeacherStudentAiReportHandler')
+  }
+}
+
+async function createTeacherStudentAiReportHandler(request) {
+  try {
+    const { error, studentId, subjectId, actorId: teacherUserId } = await requireTeacherStudentContext(request)
+    if (error) return error
+    const subjectName = await resolveTeacherSubjectName(subjectId)
+    const payload = await request.json().catch(() => null)
+    const report = await createAiReportForStudent({
+      studentId,
+      subject: subjectName,
+      topicNames: payload?.topicNames,
+      createdByUserId: teacherUserId,
+      createdByRole: 'ogretmen',
+    })
+    return json(201, { report })
+  } catch (error) {
+    return handleAiError(error, 'createTeacherStudentAiReportHandler')
+  }
+}
+
 async function getTeacherStudentWrongQuestionTopicStatsHandler(request) {
   try {
     const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
@@ -3626,6 +3705,10 @@ module.exports = {
   updateTeacherStudentWrongQuestionPhotoHandler,
   getTeacherStudentWrongQuestionTopicStatsHandler,
   updateTeacherStudentWrongQuestionHandler,
+  listTeacherStudentAiReportsHandler,
+  getTeacherStudentAiReportScopeHandler,
+  getTeacherStudentAiReportHandler,
+  createTeacherStudentAiReportHandler,
   grantParentAccessHandler,
   getTeacherEntitlementHandler,
   updateTeacherProfileHandler,

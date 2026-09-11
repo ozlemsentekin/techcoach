@@ -93,6 +93,10 @@ const {
   updateTeacherStudentWrongQuestionPhotoHandler,
   getTeacherStudentWrongQuestionTopicStatsHandler,
   updateTeacherStudentWrongQuestionHandler,
+  listTeacherStudentAiReportsHandler,
+  getTeacherStudentAiReportScopeHandler,
+  getTeacherStudentAiReportHandler,
+  createTeacherStudentAiReportHandler,
   grantParentAccessHandler,
   getTeacherEntitlementHandler,
   updateTeacherProfileHandler,
@@ -162,6 +166,12 @@ const {
   listAssignableStudentsHandler: listBookshelfStudentsHandler,
 } = require('./bookshelf')
 const { extractQuestionsFromImageHandler } = require('./questionExtraction')
+const {
+  listAiAnalysisReportsHandler,
+  getAiAnalysisScopeHandler,
+  getAiAnalysisReportHandler,
+  createAiAnalysisReportHandler,
+} = require('./aiAnalysis')
 const {
   listHomeworksHandler,
   createHomeworkHandler,
@@ -914,6 +924,34 @@ registerHttp('panel-teacher-wrong-questions-photo-update', {
   handler: updateTeacherStudentWrongQuestionPhotoHandler,
 })
 
+registerHttp('panel-teacher-ai-analysis-reports-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/ai-analysis-reports',
+  handler: listTeacherStudentAiReportsHandler,
+})
+
+registerHttp('panel-teacher-ai-analysis-reports-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/students/{studentTeacherId}/ai-analysis-reports',
+  handler: createTeacherStudentAiReportHandler,
+})
+
+registerHttp('panel-teacher-ai-analysis-report-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/ai-analysis-reports/{reportId}',
+  handler: getTeacherStudentAiReportHandler,
+})
+
+registerHttp('panel-teacher-ai-analysis-scope', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/ai-analysis-scope',
+  handler: getTeacherStudentAiReportScopeHandler,
+})
+
 registerHttp('parent-return', {
   authLevel: 'anonymous',
   methods: ['POST'],
@@ -1654,6 +1692,34 @@ registerHttp('panel-wrong-question-topic-stats', {
   methods: ['GET'],
   route: 'panel/wrong-question-topic-stats',
   handler: getWrongQuestionTopicStatsHandler,
+})
+
+registerHttp('panel-ai-analysis-reports-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/ai-analysis-reports',
+  handler: listAiAnalysisReportsHandler,
+})
+
+registerHttp('panel-ai-analysis-reports-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel/ai-analysis-reports',
+  handler: createAiAnalysisReportHandler,
+})
+
+registerHttp('panel-ai-analysis-report-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/ai-analysis-reports/{reportId}',
+  handler: getAiAnalysisReportHandler,
+})
+
+registerHttp('panel-ai-analysis-scope', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/ai-analysis-scope',
+  handler: getAiAnalysisScopeHandler,
 })
 
 registerHttp('panel-study-sessions-list', {

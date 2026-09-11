@@ -9,7 +9,7 @@ import MobileBottomNavigation from './MobileBottomNavigation'
 import { useAuth } from '../../context/useAuth'
 import { useParentStudentsGate } from '../parent/useParentStudentsGate'
 import {
-  STUDENT_NAV,
+  getStudentNav,
   getParentNav,
   getTeacherNav,
   navToMobile,
@@ -36,7 +36,7 @@ export default function PanelLayout({ role }) {
         })
       : role === 'teacher'
         ? getTeacherNav(canManageLibrary)
-        : STUDENT_NAV
+        : getStudentNav({ aiReportsEnabled: Boolean(authUser?.aiReportsEnabled) })
   const { primary, more } = navToMobile(roleNav)
   const primaryItems = isAdminSection ? [RETURN_TO_PANEL_ITEM] : primary
   const moreItems = isAdminSection ? PARENT_ADMIN_NAV.children : more
