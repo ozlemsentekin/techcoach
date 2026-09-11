@@ -4,8 +4,9 @@ import { authRequest, cachedGet } from './authClient'
 // analizleri. Veli oturumunda `studentId` ile hangi çocuğun verisi istendiği belirtilir;
 // öğrenci kendi oturumunda görmezden gelinir (backend sahiplik kontrolü yapar).
 
-// opus-5 + ~12 görsel uzun sürebilir; Azure SWA'nın managed functions API'si zaten ~230 sn'de
-// isteği kendi tarafında kesiyor, bu yüzden istemci zaman aşımını onun biraz altında tutuyoruz.
+// Azure SWA'nın managed functions API'si dokümante edilmemiş ama gerçek bir ~100 sn'lik sert HTTP
+// zaman aşımına sahip (bkz. api/src/aiAnalysis.js MAX_IMAGES yorumu) — bu istemci zaman aşımı
+// normalde ondan önce hiç tetiklenmez, sadece platform beklenenden farklı davranırsa son çare.
 const REPORT_CREATE_TIMEOUT_MS = 220000
 
 function withStudent(path, studentId) {

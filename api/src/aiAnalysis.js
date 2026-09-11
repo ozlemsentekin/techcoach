@@ -7,12 +7,24 @@ const { isSessionError } = require('./security')
 const { fetchWrongQuestionAnalyses } = require('./progress')
 
 const MODEL = 'claude-opus-5'
-// DİKKAT — bug (2026-09-11): 20 görsel + max_tokens 8000 ile 59 soruluk bir içerikte (DNA ve
-// Genetik Kod) model max_tokens'a çarpıp yanıtı JSON'ın ortasında kesiyordu → "Yapay zeka yanıtı
-// okunamadı." 12'ye düşürüp max_tokens'ı yükseltmek (aşağıda) bunu çözdü; ayrıca SWA'nın managed
-// functions API'si uzun isteklerde (~230 sn) kesiyor, 12 görsel bunun güvenli sınırında kalıyor.
-const MAX_IMAGES = 12 // maliyet + yanıt boyutu + Azure SWA managed functions süresi guard'ı
-const MAX_REPORTS_PER_DAY = 5
+// DİKKAT — bug 1 (2026-09-11, çözüldü): 20 görsel + max_tokens 8000 ile kalabalık bir içerikte
+// model max_tokens'a çarpıp yanıtı JSON'ın ortasında kesiyordu ("Yapay zeka yanıtı okunamadı").
+// max_tokens 16000'e çıkarılıp streaming'e geçilerek çözüldü (aşağıda).
+//
+// DİKKAT — bug 2 (2026-09-11, hâlâ ampirik): yukarıdaki düzeltmeye rağmen 12 görsellik gerçek bir
+// istek (prod'dan, tarayıcı üzerinden) "Kimlik doğrulama servisine ulaşılamadı" hatası verdi —
+// bu authClient.js'nin durum kodu 500+ VE gövde JSON DEĞİLKEN döndürdüğü mesaj; yani istek bizim
+// JSON hata yönetimimize hiç ulaşmadan platform tarafından kesildi. Azure SWA'nın managed
+// functions API'si dokümante edilmemiş ama bilinen ~100 sn'lik sert bir HTTP zaman aşımına sahip
+// (ayrı bir Azure Functions App yok, bkz. `az functionapp list` boş — sadece SWA'nın gömülü API'si;
+// bu yüzden host.json functionTimeout'u da etkisiz, Durable/Queue trigger da yok). Script üzerinden
+// (HTTP katmanını atlayarak) yapılan ölçümler bu yüzden yanıltıcıydı — gerçek sınır script'lerin
+// gördüğünden daha düşük. Çözüm: Anthropic'in "fast mode"unu aç (aynı model, ~2.5x'e kadar daha
+// hızlı çıktı, bkz. client.beta.messages.stream + speed:'fast') VE görsel sayısını düşür — ikisi
+// birlikte 100 sn sınırının altında kalma ihtimalini artırıyor. Kalıcı çözüm SWA managed functions
+// yerine gerçek bir Azure Functions App'e (Timer/Queue trigger ile asenkron üretim) geçmek olurdu.
+const MAX_IMAGES = 8 // maliyet + yanıt boyutu + Azure SWA managed functions süresi guard'ı
+const MAX_REPORTS_PER_DAY = 10 // 2026-09-11: 5'ten yükseltildi — ilk hafta test/kullanım daha sık
 const SAME_SCOPE_COOLDOWN_HOURS = 1
 
 // Claude'un döndüreceği yapılandırılmış rapor. Ekranda "yol gösterici" düzende render edilir.
@@ -273,10 +285,15 @@ async function generateReport(questionRows) {
   const client = getAnthropicClient()
   // Streaming + yüksek max_tokens: eskiden max_tokens:8000 ile (thinking + JSON aynı bütçeyi
   // paylaşıyor) kalabalık içeriklerde yanıt JSON'ın ortasında kesiliyordu (bkz. MAX_IMAGES yorumu).
-  const response = await client.messages
+  // Fast mode (client.beta.messages + betas + speed:'fast'): aynı modeli daha yüksek çıktı
+  // hızıyla çalıştırır — Azure SWA managed functions'ın ~100 sn'lik sert HTTP zaman aşımının
+  // altında kalma ihtimalini artırmak için (bkz. MAX_IMAGES üstündeki "bug 2" yorumu).
+  const response = await client.beta.messages
     .stream({
       model: MODEL,
       max_tokens: 16000,
+      betas: ['fast-mode-2026-02-01'],
+      speed: 'fast',
       output_config: { format: { type: 'json_schema', schema: REPORT_SCHEMA } },
       messages: [{ role: 'user', content }],
     })
@@ -319,7 +336,10 @@ async function checkQuota(studentId, sortedWrongQuestionIdsJson) {
     throw new ReportGenerationError(429, 'Bu sorular için az önce bir rapor oluşturuldu. Lütfen biraz sonra tekrar deneyin.')
   }
   if (row.day_count >= MAX_REPORTS_PER_DAY) {
-    throw new ReportGenerationError(429, `Günlük rapor limitine ulaşıldı (${MAX_REPORTS_PER_DAY}). Yarın tekrar deneyebilirsiniz.`)
+    throw new ReportGenerationError(
+      429,
+      `Günlük rapor limitine ulaşıldı (${MAX_REPORTS_PER_DAY}). En eski raporunuzun üzerinden 24 saat geçince tekrar deneyebilirsiniz.`,
+    )
   }
 }
 

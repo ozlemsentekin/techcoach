@@ -19,7 +19,7 @@ const DATE_FMT = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'shor
 const TIME_FMT = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit' })
 
 // Backend'deki aiAnalysis.js MAX_IMAGES ile aynı — sadece kullanıcıya bilgi vermek için.
-const MAX_QUESTIONS_PER_REPORT = 12
+const MAX_QUESTIONS_PER_REPORT = 8
 
 const ROLE_LABEL = { ogrenci: 'Öğrenci', ebeveyn: 'Veli', ogretmen: 'Öğretmen' }
 const PRIORITY = {
