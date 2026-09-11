@@ -147,7 +147,22 @@ function PendingAnalysisChip({ count, className }) {
   )
 }
 
-function SubjectShelfCard({ subject, count, stats, tone, pendingCount, onClick }) {
+function AiAnalyzedChip({ count, className }) {
+  if (!count) return null
+  return (
+    <span
+      className={cn(
+        'inline-flex w-fit items-center gap-1 rounded-full bg-panel-blue-soft/50 px-2 py-0.5 text-[11px] font-semibold text-panel-blue',
+        className,
+      )}
+    >
+      <Sparkles size={11} aria-hidden="true" />
+      {count} AI analizi yapıldı
+    </span>
+  )
+}
+
+function SubjectShelfCard({ subject, count, stats, tone, pendingCount, aiAnalyzedCount, onClick }) {
   const solvedCount = stats?.totalAnswered ?? null
   const successPercent = stats?.successRate != null ? Math.round(stats.successRate * 100) : null
   const colors = RATE_TONES[successRateTone(stats?.successRate)]
@@ -178,6 +193,7 @@ function SubjectShelfCard({ subject, count, stats, tone, pendingCount, onClick }
             </span>
           ) : null}
           <PendingAnalysisChip count={pendingCount} />
+          <AiAnalyzedChip count={aiAnalyzedCount} />
         </div>
       </div>
       <ChevronRight

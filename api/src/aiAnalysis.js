@@ -285,15 +285,16 @@ async function generateReport(questionRows) {
   const client = getAnthropicClient()
   // Streaming + yüksek max_tokens: eskiden max_tokens:8000 ile (thinking + JSON aynı bütçeyi
   // paylaşıyor) kalabalık içeriklerde yanıt JSON'ın ortasında kesiliyordu (bkz. MAX_IMAGES yorumu).
-  // Fast mode (client.beta.messages + betas + speed:'fast'): aynı modeli daha yüksek çıktı
-  // hızıyla çalıştırır — Azure SWA managed functions'ın ~100 sn'lik sert HTTP zaman aşımının
-  // altında kalma ihtimalini artırmak için (bkz. MAX_IMAGES üstündeki "bug 2" yorumu).
-  const response = await client.beta.messages
+  //
+  // DİKKAT — bug 3 (2026-09-11, çözüldü): "fast mode" (client.beta.messages + speed:'fast')
+  // denendi ama bu hesabın organizasyonunda fast mode kotası 0 — HER istek anında
+  // "rate limit of 0 fast mode input tokens per minute" (429) ile patlıyordu, yani PR #96'dan
+  // sonra rapor oluşturma TAMAMEN kırıktı (script testlerim günlük kotaya takılıp bunu gerçek
+  // API'ye hiç ulaşmadan kaçırmıştı). Standart moda geri dönüldü; MAX_IMAGES=8 tek başına kalıyor.
+  const response = await client.messages
     .stream({
       model: MODEL,
       max_tokens: 16000,
-      betas: ['fast-mode-2026-02-01'],
-      speed: 'fast',
       output_config: { format: { type: 'json_schema', schema: REPORT_SCHEMA } },
       messages: [{ role: 'user', content }],
     })
