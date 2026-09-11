@@ -1,5 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk')
-const { sql, withRequest } = require('./db')
+const { sql, withRequest, withTransaction } = require('./db')
 const { getAnthropicConfig, isConfigError } = require('./config')
 const { json } = require('./http')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
@@ -362,6 +362,42 @@ async function markQuestionsAnalyzed(ids) {
   `)
 }
 
+// report.analyzedQuestions[i] hangi questionRows[idx] sorusuna ait? imageIndex alanı (Claude'a
+// verilen "Soru N" etiketinin N'i) varsa onunla eşler, yoksa (uç durum) sırayla eşler — PDF'teki
+// aynı eşleme mantığı (bkz. src/utils/aiReportPdf.js buildImageAnalysisMap), Hata Defteri'nde
+// soru bazlı AI rozeti/analizi göstermek için burada da kullanılıyor.
+function matchAnalysisToRows(report, rows) {
+  const analyzed = report?.analyzedQuestions || []
+  const hasIndex = analyzed.length > 0 && analyzed.every((q) => Number.isInteger(q.imageIndex))
+  const byIndex = new Map()
+  analyzed.forEach((q, i) => {
+    const idx = hasIndex ? q.imageIndex - 1 : i
+    if (idx >= 0 && idx < rows.length && !byIndex.has(idx)) byIndex.set(idx, q)
+  })
+  return rows.map((row, idx) => ({ row, analysis: byIndex.get(idx) || null }))
+}
+
+// Soru bazlı analiz metnini (ne sordu / olası hata) Hata Defteri'nin sorgulayabileceği ayrı bir
+// tabloya yazar — rapor bütünüyle silinse/değişse bile bu satır o soruya kalıcı kalır.
+async function insertWrongQuestionAiAnalyses(reportId, pairs) {
+  const usable = pairs.filter((p) => p.analysis)
+  if (!usable.length) return
+  await withTransaction(async (requestInTransaction) => {
+    for (const { row, analysis } of usable) {
+      const request = requestInTransaction({
+        wrongQuestionId: { type: sql.UniqueIdentifier, value: row.id },
+        reportId: { type: sql.UniqueIdentifier, value: reportId },
+        whatItAsked: { type: sql.NVarChar(sql.MAX), value: analysis.whatItAsked },
+        likelyMistake: { type: sql.NVarChar(sql.MAX), value: analysis.likelyMistake },
+      })
+      await request.query(`
+        INSERT INTO dbo.WrongQuestionAiAnalyses (wrong_question_id, ai_analysis_report_id, what_it_asked, likely_mistake)
+        VALUES (@wrongQuestionId, @reportId, @whatItAsked, @likelyMistake);
+      `)
+    }
+  })
+}
+
 function safeParseArray(value) {
   try {
     const parsed = JSON.parse(value)
@@ -465,6 +501,7 @@ async function createReportForStudent({ studentId, subject, wrongQuestionIds, cr
     createdByUserId,
     createdByRole,
   })
+  await insertWrongQuestionAiAnalyses(record.id, matchAnalysisToRows(report, usedQuestionRows))
   await markQuestionsAnalyzed(usedQuestionRows.map((row) => row.id))
   return buildReportDetail(studentId, record)
 }

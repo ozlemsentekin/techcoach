@@ -10,6 +10,7 @@ import {
   Layers,
   Loader2,
   Search,
+  Sparkles,
   Tag,
 } from 'lucide-react'
 import PageHeader from '../layout/PageHeader'
@@ -462,7 +463,17 @@ function WrongQuestionThumbnail({ item, fetchPhoto, onClick, viewerRole }) {
         <p className="line-clamp-2 text-[11px] font-medium leading-snug text-panel-text" title={caption}>
           {caption}
         </p>
-        <MistakeAnalysisBadges analyses={item.analyses} viewerRole={viewerRole} className="shrink-0" />
+        <span className="flex shrink-0 items-center gap-1">
+          {item.aiAnalysis ? (
+            <span
+              title="AI analizi mevcut — açmak için tıkla"
+              className="flex h-5 w-5 items-center justify-center rounded-full border border-panel-blue bg-panel-blue-soft/60 text-panel-blue"
+            >
+              <Sparkles size={11} aria-hidden="true" />
+            </span>
+          ) : null}
+          <MistakeAnalysisBadges analyses={item.analyses} viewerRole={viewerRole} />
+        </span>
       </div>
       <div className="flex aspect-square w-full items-center justify-center overflow-hidden bg-panel-surface-soft">
         {photoUrl ? (

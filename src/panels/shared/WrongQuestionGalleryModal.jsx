@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BookOpen, Camera, Check, ChevronLeft, ChevronRight, FileText, Hash, HelpCircle, Loader2, X } from 'lucide-react'
+import { BookOpen, Camera, Check, ChevronLeft, ChevronRight, FileText, Hash, HelpCircle, Loader2, Sparkles, X } from 'lucide-react'
 import { cn } from '../ui/utils'
 import { ANALYSIS_LANES, MISTAKE_REASON_LABELS, laneLabel } from './mistakeAnalysis'
 
@@ -288,6 +288,25 @@ export default function WrongQuestionGalleryModal({
                   <span className="text-[11px] text-panel-red">Kaydedilemedi, tekrar dene.</span>
                 ) : null}
               </div>
+            </div>
+          ) : null}
+
+          {item.aiAnalysis ? (
+            <div className="mt-3 flex flex-col gap-1.5 rounded-lg border border-panel-blue-soft bg-panel-blue-soft/30 px-3 py-2.5">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-panel-blue">
+                <Sparkles size={12} aria-hidden="true" />
+                AI Analizi
+              </span>
+              <p className="text-sm text-panel-text">
+                <span className="font-semibold">Ne soruyor: </span>
+                {item.aiAnalysis.whatItAsked}
+              </p>
+              {item.aiAnalysis.likelyMistake ? (
+                <p className="text-sm text-panel-text">
+                  <span className="font-semibold">Olası hata: </span>
+                  {item.aiAnalysis.likelyMistake}
+                </p>
+              ) : null}
             </div>
           ) : null}
 
