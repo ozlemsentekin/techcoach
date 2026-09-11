@@ -21,6 +21,10 @@ const REPORT_SCHEMA = {
       items: {
         type: 'object',
         properties: {
+          imageIndex: {
+            type: 'integer',
+            description: 'Bu sorunun görseline verilen "Soru N" etiketindeki N değeri (görselle metni eşlemek için)',
+          },
           testName: { type: 'string', description: 'Kaynak · Test adı' },
           questionNumber: { type: 'integer' },
           topic: { type: 'string' },
@@ -28,7 +32,7 @@ const REPORT_SCHEMA = {
           whatItAsked: { type: 'string', description: 'Sorunun ne sorduğu, kısa' },
           likelyMistake: { type: 'string', description: 'Öğrencinin nerede/neden hata yapmış olabileceği' },
         },
-        required: ['testName', 'questionNumber', 'topic', 'correctAnswer', 'whatItAsked', 'likelyMistake'],
+        required: ['imageIndex', 'testName', 'questionNumber', 'topic', 'correctAnswer', 'whatItAsked', 'likelyMistake'],
         additionalProperties: false,
       },
     },
@@ -64,7 +68,7 @@ const REPORT_SCHEMA = {
 const ANALYSIS_INSTRUCTION = `Yukarıdaki görseller bir 8. sınıf öğrencisinin bir soru bankasında ÇÖZÜP YANLIŞ YAPTIĞI sorulardır. Görsellerde el yazısıyla yapılmış işaretlemeler öğrencinin işaretlediği (çoğunlukla yanlış) cevap olabilir; her sorunun gerçek doğru cevabı görselden ön­ceki metinde verildi.
 
 Görevin:
-1. Her soru için "ne sorulduğunu" ve öğrencinin "nerede/neden hata yapmış olabileceğini" kısa ve somut biçimde çıkar (analyzedQuestions).
+1. HER görsel için bir analyzedQuestions girdisi üret (görsel sayısı kadar, hiçbirini atlama) ve imageIndex alanına o görsele verilen "Soru N" etiketindeki N'yi yaz — bu, metni doğru görselle eşlemek için kullanılacak. Her biri için "ne sorulduğunu" ve öğrencinin "nerede/neden hata yapmış olabileceğini" kısa ve somut biçimde çıkar.
 2. Sorular arasında TEKRAR EDEN kavram eksiklerini bul, önem sırasına koy (gaps). Tek soruda görünen bir şeyi düşük, birden çok soruda görüneni yüksek öncelikli işaretle.
 3. Öğrenciye/veliye yol gösterecek, uygulanabilir çalışma önerileri yaz (studyRecommendations).
 4. Tekrar edilmesi gereken kazanım/konu başlıklarını listele (reinforcementTopics).
@@ -85,7 +89,9 @@ function parseDataUrl(dataUrl) {
 
 // --- Sorgular -------------------------------------------------------------------
 
-// Analiz edilebilir (hata görseli olan) derslerin ders başına soru sayısı.
+// Analiz edilebilir (hata görseli olan VE henüz bir AI raporuna dahil edilmemiş) derslerin
+// ders başına soru sayısı. Bir kez analiz edilen görsel bir daha seçim listesine düşmesin diye
+// (ai_analyzed_at) her üç sorgu da aynı filtreyi kullanır — bkz. markQuestionsAnalyzed.
 async function fetchAvailableSubjects(studentId) {
   const requestDb = await withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
@@ -94,13 +100,14 @@ async function fetchAvailableSubjects(studentId) {
     SELECT wq.subject AS subject, COUNT(*) AS question_count
     FROM dbo.WrongQuestions wq
     WHERE wq.student_id = @studentId AND wq.photo_url IS NOT NULL AND wq.subject IS NOT NULL
+      AND wq.ai_analyzed_at IS NULL
     GROUP BY wq.subject
     ORDER BY wq.subject;
   `)
   return result.recordset.map((row) => ({ subject: row.subject, questionCount: row.question_count }))
 }
 
-// Bir derste hata görseli olan içerik (konu) adları, içerik başına soru sayısı.
+// Bir derste hata görseli olan, henüz analiz edilmemiş içerik (konu) adları, içerik başına soru sayısı.
 async function fetchSubjectTopics(studentId, subject) {
   const requestDb = await withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
@@ -112,6 +119,7 @@ async function fetchSubjectTopics(studentId, subject) {
     LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
     LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
     WHERE wq.student_id = @studentId AND wq.subject = @subject AND wq.photo_url IS NOT NULL
+      AND wq.ai_analyzed_at IS NULL
       AND COALESCE(tp.name, wq.topic) IS NOT NULL
     GROUP BY COALESCE(tp.name, wq.topic)
     ORDER BY question_count DESC, topic_name;
@@ -150,6 +158,7 @@ async function fetchAnalyzableQuestions(studentId, subject, topicNames) {
     LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
     LEFT JOIN dbo.TestAnswerKeys tak ON tak.test_id = wq.test_id AND tak.order_no = wq.question_number
     WHERE wq.student_id = @studentId AND wq.subject = @subject AND wq.photo_url IS NOT NULL
+      AND wq.ai_analyzed_at IS NULL
       AND COALESCE(tp.name, wq.topic) IN (${inClause})
     ORDER BY wq.created_at DESC;
   `)
@@ -313,6 +322,21 @@ async function insertReport({ studentId, subject, sortedTopicNames, questionRows
   return result.recordset[0]
 }
 
+// Bir rapora dahil edilen sorular bir daha "Yeni Rapor Oluştur" seçim listesine düşmesin
+// (bkz. fetchAvailableSubjects/fetchSubjectTopics/fetchAnalyzableQuestions'daki ai_analyzed_at filtresi).
+async function markQuestionsAnalyzed(ids) {
+  if (!ids.length) return
+  const params = {}
+  const placeholders = ids.map((id, index) => {
+    params[`id${index}`] = { type: sql.UniqueIdentifier, value: id }
+    return `@id${index}`
+  })
+  const requestDb = await withRequest(params)
+  await requestDb.query(`
+    UPDATE dbo.WrongQuestions SET ai_analyzed_at = SYSUTCDATETIME() WHERE id IN (${placeholders.join(', ')});
+  `)
+}
+
 function safeParseArray(value) {
   try {
     const parsed = JSON.parse(value)
@@ -406,6 +430,7 @@ async function createReportForStudent({ studentId, subject, topicNames, createdB
     createdByUserId,
     createdByRole,
   })
+  await markQuestionsAnalyzed(usedQuestionRows.map((row) => row.id))
   return buildReportDetail(studentId, record)
 }
 
