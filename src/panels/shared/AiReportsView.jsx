@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   AlertTriangle,
@@ -55,13 +55,41 @@ function isWithinDateFilter(createdAt, key) {
   return date >= cutoff
 }
 
+// Ekrana girene kadar fetchPhoto çağırmaz — bir içerik grubunu açtığında onlarca soru birden
+// aynı anda indirilmeye çalışılıp hem tarayıcıyı hem API'yi tıkamasın diye (bkz. kullanıcı geri
+// bildirimi: "bu tasarım olmamış" — 119 sorunun hepsi aynı anda çekilince ızgara bozuk görünüyordu).
+function useInView(ref) {
+  const [inView, setInView] = useState(() => typeof IntersectionObserver === 'undefined')
+  useEffect(() => {
+    if (inView) return undefined
+    const el = ref.current
+    if (!el) return undefined
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setInView(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [ref, inView])
+  return inView
+}
+
 // Hata Defteri'ndeki WrongQuestionThumbnail'a benzer (bkz. WrongQuestionsView.jsx) ama tıklama
-// galeri açmak yerine seçimi açar/kapatır; sağ üstte küçük bir onay rozeti gösterir.
+// galeri açmak yerine seçimi açar/kapatır; sağ üstte küçük bir onay rozeti gösterir. Fotoğraf
+// karesi sabit yükseklikte (aspect-ratio değil) — kart boyutu görsel gelmeden önce de net kalsın diye.
 function SelectableThumbnail({ item, fetchPhoto, selected, disabled, onToggle }) {
+  const ref = useRef(null)
+  const inView = useInView(ref)
   const [photoUrl, setPhotoUrl] = useState(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
+    if (!inView) return undefined
     let ignore = false
     fetchPhoto(item.id)
       .then((url) => {
@@ -73,39 +101,88 @@ function SelectableThumbnail({ item, fetchPhoto, selected, disabled, onToggle })
     return () => {
       ignore = true
     }
-  }, [item.id, fetchPhoto])
+  }, [inView, item.id, fetchPhoto])
 
   const caption = `${item.testName || 'Test'} · Soru ${item.questionNumber ?? '-'}`
 
   return (
     <button
+      ref={ref}
       type="button"
       onClick={() => onToggle(item.id)}
       disabled={disabled}
       aria-pressed={selected}
       title={caption}
-      className={`group relative flex flex-col overflow-hidden rounded-xl border-2 text-left shadow-sm transition-colors ${
+      className={`relative flex flex-col overflow-hidden rounded-xl border-2 bg-panel-surface text-left shadow-sm transition-colors ${
         selected ? 'border-panel-blue' : 'border-panel-border hover:border-panel-blue/40'
       } ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
     >
       <span
-        className={`absolute right-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full border ${
-          selected ? 'border-panel-blue bg-panel-blue text-white' : 'border-panel-border bg-white/90 text-white/0'
+        className={`absolute right-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full border shadow-sm ${
+          selected ? 'border-panel-blue bg-panel-blue text-white' : 'border-panel-border bg-white text-white/0'
         }`}
       >
         <Check size={12} aria-hidden="true" />
       </span>
-      <p className="line-clamp-1 px-2 py-1.5 text-[11px] font-medium text-panel-text">{caption}</p>
-      <div className="flex aspect-square w-full items-center justify-center bg-panel-surface-soft">
+      <div className="flex h-24 w-full items-center justify-center bg-panel-surface-soft sm:h-28">
         {photoUrl ? (
           <img loading="lazy" decoding="async" src={photoUrl} alt={caption} className="h-full w-full object-cover" />
         ) : error ? (
           <AlertCircle size={18} className="text-panel-text-muted" aria-hidden="true" />
-        ) : (
+        ) : inView ? (
           <Loader2 size={18} className="animate-spin text-panel-text-muted" aria-hidden="true" />
-        )}
+        ) : null}
       </div>
+      <p className="line-clamp-1 px-2 py-1.5 text-[11px] font-medium text-panel-text">{caption}</p>
     </button>
+  )
+}
+
+// Bir içerik grubunun katlanır başlığı: kapalıyken hiçbir soru render/fetch edilmez — büyük
+// gruplarda (ör. 40+ soruluk bir ünite) ızgaranın tamamı bir anda değil, açıldıkça yüklenir.
+function TopicGroup({ topic, items, fetchPhoto, selected, atCap, onToggle, onSelectAll, open, onToggleOpen }) {
+  const selectedCount = items.reduce((n, q) => (selected.has(q.id) ? n + 1 : n), 0)
+  return (
+    <div className="border-b border-panel-border last:border-0">
+      <div className="flex items-center gap-2 px-5 py-2 sm:px-6">
+        <button
+          type="button"
+          onClick={onToggleOpen}
+          className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
+        >
+          <ChevronDown
+            size={15}
+            className={`shrink-0 text-panel-text-muted transition-transform ${open ? 'rotate-180' : ''}`}
+            aria-hidden="true"
+          />
+          <span className="truncate text-sm font-medium text-panel-text">{topic}</span>
+          <span className="shrink-0 text-xs text-panel-text-muted">
+            {items.length} soru{selectedCount ? ` · ${selectedCount} seçili` : ''}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onSelectAll(items)}
+          className="shrink-0 text-xs font-semibold text-panel-blue hover:underline"
+        >
+          Tümünü seç
+        </button>
+      </div>
+      {open ? (
+        <div className="grid grid-cols-3 gap-2 px-5 pb-3 min-[480px]:grid-cols-4 sm:grid-cols-5 sm:px-6 lg:grid-cols-6">
+          {items.map((q) => (
+            <SelectableThumbnail
+              key={q.id}
+              item={q}
+              fetchPhoto={fetchPhoto}
+              selected={selected.has(q.id)}
+              disabled={atCap && !selected.has(q.id)}
+              onToggle={onToggle}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -114,7 +191,7 @@ function CreateReportModal({ subject, fetchScope, createReport, fetchPhoto, onCl
   const [loadError, setLoadError] = useState('')
   const [selected, setSelected] = useState(() => new Set())
   const [dateFilter, setDateFilter] = useState('all')
-  const [topicFilter, setTopicFilter] = useState('')
+  const [expandedTopics, setExpandedTopics] = useState(() => new Set())
   const [busy, setBusy] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
@@ -132,23 +209,21 @@ function CreateReportModal({ subject, fetchScope, createReport, fetchPhoto, onCl
     }
   }, [subject, fetchScope])
 
-  // Tarih filtresi soru listesini daraltır; içerik (konu) filtresi onun üzerine uygulanır —
-  // içerik dropdown'undaki sayılar da bu yüzden seçili tarih penceresine göre güncellenir.
   const dateFiltered = useMemo(
     () => (questions || []).filter((q) => isWithinDateFilter(q.createdAt, dateFilter)),
     [questions, dateFilter],
   )
 
-  const topics = useMemo(() => {
-    const counts = new Map()
-    dateFiltered.forEach((q) => counts.set(q.topic, (counts.get(q.topic) || 0) + 1))
-    return [...counts.entries()].sort((a, b) => b[1] - a[1])
+  // İçerik gruplarına ayrılır (en çok soru içeren en üstte); tarih filtresi değiştiğinde
+  // gruplar yeniden hesaplanır ama açık/kapalı durumu (expandedTopics) korunur.
+  const groups = useMemo(() => {
+    const byTopic = new Map()
+    dateFiltered.forEach((q) => {
+      if (!byTopic.has(q.topic)) byTopic.set(q.topic, [])
+      byTopic.get(q.topic).push(q)
+    })
+    return [...byTopic.entries()].sort((a, b) => b[1].length - a[1].length)
   }, [dateFiltered])
-
-  const filtered = useMemo(
-    () => (topicFilter ? dateFiltered.filter((q) => q.topic === topicFilter) : dateFiltered),
-    [dateFiltered, topicFilter],
-  )
 
   const atCap = selected.size >= MAX_QUESTIONS_PER_REPORT
 
@@ -164,13 +239,22 @@ function CreateReportModal({ subject, fetchScope, createReport, fetchPhoto, onCl
     })
   }
 
-  const selectVisible = () => {
+  const selectAllFrom = (items) => {
     setSelected((prev) => {
       const next = new Set(prev)
-      for (const q of filtered) {
+      for (const q of items) {
         if (next.size >= MAX_QUESTIONS_PER_REPORT) break
         next.add(q.id)
       }
+      return next
+    })
+  }
+
+  const toggleTopicOpen = (topic) => {
+    setExpandedTopics((prev) => {
+      const next = new Set(prev)
+      if (next.has(topic)) next.delete(topic)
+      else next.add(topic)
       return next
     })
   }
@@ -233,66 +317,50 @@ function CreateReportModal({ subject, fetchScope, createReport, fetchPhoto, onCl
           </p>
         ) : (
           <>
-            <div className="flex flex-col gap-2.5 border-b border-panel-border px-5 py-3 sm:px-6">
-              <div className="flex flex-wrap gap-1.5">
-                {DATE_FILTERS.map((f) => (
-                  <button
-                    key={f.key}
-                    type="button"
-                    onClick={() => setDateFilter(f.key)}
-                    className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                      dateFilter === f.key
-                        ? 'bg-panel-blue text-white'
-                        : 'bg-panel-surface-soft text-panel-text-muted hover:text-panel-text'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <select
-                  value={topicFilter}
-                  onChange={(event) => setTopicFilter(event.target.value)}
-                  aria-label="İçeriğe göre filtrele"
-                  className="h-9 rounded-lg border border-panel-border bg-panel-surface px-2.5 text-xs font-medium text-panel-text"
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-panel-border px-5 py-3 sm:px-6">
+              {DATE_FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => setDateFilter(f.key)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                    dateFilter === f.key
+                      ? 'bg-panel-blue text-white'
+                      : 'bg-panel-surface-soft text-panel-text-muted hover:text-panel-text'
+                  }`}
                 >
-                  <option value="">Tüm içerikler ({dateFiltered.length})</option>
-                  {topics.map(([name, count]) => (
-                    <option key={name} value={name}>
-                      {name} ({count})
-                    </option>
-                  ))}
-                </select>
-                <button type="button" onClick={selectVisible} className="text-xs font-semibold text-panel-blue hover:underline">
-                  Görünenlerden seç
+                  {f.label}
                 </button>
-                {selected.size > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => setSelected(new Set())}
-                    className="text-xs font-semibold text-panel-text-muted hover:underline"
-                  >
-                    Seçimi temizle
-                  </button>
-                ) : null}
-              </div>
+              ))}
+              {selected.size > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setSelected(new Set())}
+                  className="ml-auto text-xs font-semibold text-panel-text-muted hover:underline"
+                >
+                  Seçimi temizle
+                </button>
+              ) : null}
             </div>
 
-            {filtered.length === 0 ? (
+            {groups.length === 0 ? (
               <p className="m-5 rounded-xl border border-dashed border-panel-border px-4 py-6 text-center text-sm text-panel-text-muted sm:m-6">
                 Bu filtreyle eşleşen soru yok.
               </p>
             ) : (
-              <div className="grid flex-1 grid-cols-3 gap-2 overflow-y-auto px-5 py-3 min-[480px]:grid-cols-4 sm:grid-cols-5 sm:px-6 lg:grid-cols-6">
-                {filtered.map((q) => (
-                  <SelectableThumbnail
-                    key={q.id}
-                    item={q}
+              <div className="flex-1 overflow-y-auto">
+                {groups.map(([topic, items]) => (
+                  <TopicGroup
+                    key={topic}
+                    topic={topic}
+                    items={items}
                     fetchPhoto={fetchPhoto}
-                    selected={selected.has(q.id)}
-                    disabled={atCap && !selected.has(q.id)}
+                    selected={selected}
+                    atCap={atCap}
                     onToggle={toggle}
+                    onSelectAll={selectAllFrom}
+                    open={expandedTopics.has(topic) || groups.length === 1}
+                    onToggleOpen={() => toggleTopicOpen(topic)}
                   />
                 ))}
               </div>
