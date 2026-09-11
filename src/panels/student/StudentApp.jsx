@@ -12,6 +12,7 @@ const CoursesPage = lazy(() => import('./pages/CoursesPage'))
 const MistakesPage = lazy(() => import('./pages/MistakesPage'))
 const ProgressPage = lazy(() => import('./pages/ProgressPage'))
 const StudyHistoryPage = lazy(() => import('./pages/StudyHistoryPage'))
+const AiReportsPage = lazy(() => import('./pages/AiReportsPage'))
 const MockExamsPage = lazy(() => import('./pages/MockExamsPage'))
 const TeachersPage = lazy(() => import('./pages/TeachersPage'))
 const GuidePage = lazy(() => import('../shared/GuidePage'))
@@ -47,6 +48,11 @@ export default function StudentApp() {
           <Route path="bookshelf" element={<Navigate to="today" replace />} />
           <Route path="mistakes" element={pageElement(MistakesPage)} />
           <Route path="study-history" element={pageElement(StudyHistoryPage)} />
+          {/* AI Raporları şimdilik yalnızca admin'e bağlı öğrenci profilinde. */}
+          <Route
+            path="ai-reports"
+            element={authUser?.aiReportsEnabled ? pageElement(AiReportsPage) : <Navigate to="today" replace />}
+          />
           <Route path="mock-exams" element={pageElement(MockExamsPage)} />
           <Route path="progress" element={pageElement(ProgressPage)} />
           <Route path="*" element={<Navigate to="today" replace />} />

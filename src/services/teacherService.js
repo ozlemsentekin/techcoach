@@ -416,6 +416,39 @@ export async function getTeacherStudentWrongQuestionPhoto(studentTeacherId, wron
   return data.photoUrl
 }
 
+/* -------------------------------------------------------------------- AI Raporları (öğretmen) */
+
+// Öğretmen tarafında AiReportsView'e verilecek servis demeti. Bağlam (studentTeacherId) tek
+// bir dersle sınırlı olduğu için ders parametresi backend'de context'ten çözülür.
+export function makeTeacherAiReportFetchers(studentTeacherId) {
+  const base = `/api/panel-teacher/students/${studentTeacherId}/ai-analysis-reports`
+  return {
+    fetchReports: async () => {
+      const data = await authRequest(base, { method: 'GET' })
+      return { reports: data.reports || [], availableSubjects: data.availableSubjects || [] }
+    },
+    fetchScope: async () => {
+      const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/ai-analysis-scope`, {
+        method: 'GET',
+      })
+      return { topics: data.topics || [] }
+    },
+    fetchReportDetail: async (reportId) => {
+      const data = await authRequest(`${base}/${reportId}`, { method: 'GET' })
+      return data.report
+    },
+    createReport: async ({ topicNames }) => {
+      const data = await authRequest(base, {
+        method: 'POST',
+        body: JSON.stringify({ topicNames }),
+        timeoutMs: 180000,
+      })
+      return data.report
+    },
+    fetchPhoto: (wrongQuestionId) => getTeacherStudentWrongQuestionPhoto(studentTeacherId, wrongQuestionId),
+  }
+}
+
 /* -------------------------------------------------------------------- Deneme Sınavları (salt-okuma) */
 
 /** @returns {Promise<import('./mockExamService').MockExam[]>} */

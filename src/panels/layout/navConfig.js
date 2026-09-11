@@ -9,32 +9,39 @@ const KITAPLIK_TEACHER_ITEM = { to: '/teacher/bookshelf', label: 'Kitaplık', ic
 
 // Öğrenci menüsü iki ana başlık altında gruplanır ("Çalışma Planım", "Çalışma
 // Sonuçlarım"); "Öğretmenlerim" ve "Taleplerim" tekil öğe olarak kalır.
-export const STUDENT_NAV = [
-  {
-    key: 'calisma-planim',
-    label: 'Çalışma Planım',
-    icon: 'CalendarRange',
-    children: [
-      { to: '/student/today', label: 'Bugün', icon: 'Home' },
-      { to: '/student/weekly-plan', label: 'Bu Hafta', icon: 'CalendarRange' },
-    ],
-  },
-  {
-    key: 'calisma-sonuclarim',
-    label: 'Çalışma Sonuçlarım',
-    icon: 'BarChart3',
-    children: [
-      { to: '/student/study-history', label: 'Çalışma Geçmişim', icon: 'History' },
-      { to: '/student/mistakes', label: 'Hata Defterim', icon: 'AlertCircle' },
-      { to: '/student/mock-exams', label: 'Deneme Sınavları', icon: 'FileCheck2' },
-      { to: '/student/progress', label: 'Gelişimim', icon: 'TrendingUp' },
-      { to: '/student/courses', label: 'Ders Başarım', icon: 'BookOpen' },
-    ],
-  },
-  { to: '/student/teachers', label: 'Öğretmenlerim', icon: 'GraduationCap' },
-  { to: '/student/requests', label: 'Taleplerim', icon: 'ClipboardList' },
-  { to: '/student/guide', label: 'Rehber', icon: 'BookOpen' },
-]
+// "AI Raporları" şimdilik yalnızca admin ve admin'e bağlı öğrenci profilinde görünür
+// (authUser.aiReportsEnabled, backend'de hesaplanır).
+export function getStudentNav({ aiReportsEnabled = false } = {}) {
+  return [
+    {
+      key: 'calisma-planim',
+      label: 'Çalışma Planım',
+      icon: 'CalendarRange',
+      children: [
+        { to: '/student/today', label: 'Bugün', icon: 'Home' },
+        { to: '/student/weekly-plan', label: 'Bu Hafta', icon: 'CalendarRange' },
+      ],
+    },
+    {
+      key: 'calisma-sonuclarim',
+      label: 'Çalışma Sonuçlarım',
+      icon: 'BarChart3',
+      children: [
+        { to: '/student/study-history', label: 'Çalışma Geçmişim', icon: 'History' },
+        { to: '/student/mistakes', label: 'Hata Defterim', icon: 'AlertCircle' },
+        ...(aiReportsEnabled ? [{ to: '/student/ai-reports', label: 'AI Raporları', icon: 'Sparkles' }] : []),
+        { to: '/student/mock-exams', label: 'Deneme Sınavları', icon: 'FileCheck2' },
+        { to: '/student/progress', label: 'Gelişimim', icon: 'TrendingUp' },
+        { to: '/student/courses', label: 'Ders Başarım', icon: 'BookOpen' },
+      ],
+    },
+    { to: '/student/teachers', label: 'Öğretmenlerim', icon: 'GraduationCap' },
+    { to: '/student/requests', label: 'Taleplerim', icon: 'ClipboardList' },
+    { to: '/student/guide', label: 'Rehber', icon: 'BookOpen' },
+  ]
+}
+
+export const STUDENT_NAV = getStudentNav()
 
 export const PARENT_STUDENTS_NAV_ITEM = { to: '/parent/students', label: 'Çocuklarım', icon: 'Users' }
 export const PARENT_GUIDE_NAV_ITEM = { to: '/parent/guide', label: 'Rehber', icon: 'BookOpen' }
@@ -91,6 +98,8 @@ export function getParentNav({ hasStudents = true, canManageLibrary = false, isA
       children: [
         { to: '/parent/study-history', label: 'Çalışma Geçmişi', icon: 'History' },
         { to: '/parent/mistakes', label: 'Hata Defteri', icon: 'AlertCircle' },
+        // "AI Raporları" şimdilik yalnızca admin veli hesabında.
+        ...(isAdmin ? [{ to: '/parent/ai-reports', label: 'AI Raporları', icon: 'Sparkles' }] : []),
         { to: '/parent/mock-exams', label: 'Deneme Sınavları', icon: 'FileCheck2' },
         { to: '/parent/progress', label: 'Gelişim Analizi', icon: 'TrendingUp' },
         ...(showKitaplik ? [KITAPLIK_PARENT_ITEM] : []),
