@@ -19,11 +19,16 @@ export async function getAiReports(studentId) {
   return { reports: data.reports || [], availableSubjects: data.availableSubjects || [] }
 }
 
-/** @returns {Promise<{ topics: {topicName:string, questionCount:number}[] }>} */
+/**
+ * Bir derste hata görseli olan, henüz analiz edilmemiş TÜM sorular (tarih/içerik filtreleri
+ * istemci tarafında uygulanır — bkz. AiReportsView.jsx CreateReportModal).
+ * @returns {Promise<{ questions: {id:string, questionNumber?:string, topic:string, bookName?:string,
+ *   publisherName?:string, testName?:string, correctAnswer?:string, createdAt:string}[] }>}
+ */
 export async function getAiReportScope(subject, studentId) {
   const path = withStudent(`/api/panel/ai-analysis-scope?subject=${encodeURIComponent(subject)}`, studentId)
   const data = await cachedGet(path)
-  return { topics: data.topics || [] }
+  return { questions: data.questions || [] }
 }
 
 /** @returns {Promise<object>} rapor detayı (report + wrongQuestions) */
@@ -35,8 +40,8 @@ export async function getAiReport(reportId, studentId) {
 }
 
 /** @returns {Promise<object>} oluşturulan rapor detayı */
-export async function createAiReport({ subject, topicNames }, studentId) {
-  const body = studentId ? { subject, topicNames, studentId } : { subject, topicNames }
+export async function createAiReport({ subject, wrongQuestionIds }, studentId) {
+  const body = studentId ? { subject, wrongQuestionIds, studentId } : { subject, wrongQuestionIds }
   const data = await authRequest('/api/panel/ai-analysis-reports', {
     method: 'POST',
     body: JSON.stringify(body),

@@ -68,7 +68,7 @@ const { gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGradin
 const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
 const {
   ReportGenerationError,
-  fetchSubjectTopics: fetchAiSubjectTopics,
+  fetchScopeQuestions: fetchAiScopeQuestions,
   fetchReportList: fetchAiReportList,
   fetchReportRecord: fetchAiReportRecord,
   buildReportDetail: buildAiReportDetail,
@@ -3444,13 +3444,11 @@ async function listTeacherStudentAiReportsHandler(request) {
     const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
     if (error) return error
     const subjectName = await resolveTeacherSubjectName(subjectId)
-    const [reports, topics] = await Promise.all([
+    const [reports, questions] = await Promise.all([
       fetchAiReportList(studentId, { subject: subjectName }),
-      fetchAiSubjectTopics(studentId, subjectName),
+      fetchAiScopeQuestions(studentId, subjectName),
     ])
-    const availableSubjects = topics.length
-      ? [{ subject: subjectName, questionCount: topics.reduce((sum, t) => sum + t.questionCount, 0) }]
-      : []
+    const availableSubjects = questions.length ? [{ subject: subjectName, questionCount: questions.length }] : []
     return json(200, { reports, availableSubjects })
   } catch (error) {
     return handleAiError(error, 'listTeacherStudentAiReportsHandler')
@@ -3462,7 +3460,7 @@ async function getTeacherStudentAiReportScopeHandler(request) {
     const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
     if (error) return error
     const subjectName = await resolveTeacherSubjectName(subjectId)
-    return json(200, { topics: await fetchAiSubjectTopics(studentId, subjectName) })
+    return json(200, { questions: await fetchAiScopeQuestions(studentId, subjectName) })
   } catch (error) {
     return handleAiError(error, 'getTeacherStudentAiReportScopeHandler')
   }
@@ -3490,7 +3488,7 @@ async function createTeacherStudentAiReportHandler(request) {
     const report = await createAiReportForStudent({
       studentId,
       subject: subjectName,
-      topicNames: payload?.topicNames,
+      wrongQuestionIds: payload?.wrongQuestionIds,
       createdByUserId: teacherUserId,
       createdByRole: 'ogretmen',
     })
