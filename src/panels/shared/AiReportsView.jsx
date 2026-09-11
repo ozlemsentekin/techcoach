@@ -16,6 +16,9 @@ import WrongQuestionGalleryModal from './WrongQuestionGalleryModal'
 const DATE_FMT = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })
 const TIME_FMT = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit' })
 
+// Backend'deki aiAnalysis.js MAX_IMAGES ile aynı — sadece kullanıcıya bilgi vermek için.
+const MAX_QUESTIONS_PER_REPORT = 12
+
 const ROLE_LABEL = { ogrenci: 'Öğrenci', ebeveyn: 'Veli', ogretmen: 'Öğretmen' }
 const PRIORITY = {
   yuksek: { label: 'Yüksek öncelik', className: 'bg-panel-red-soft text-panel-red' },
@@ -110,7 +113,9 @@ function CreateReportModal({ subject, fetchScope, createReport, onClose, onCreat
             <Loader2 size={28} className="animate-spin text-panel-blue" aria-hidden="true" />
             <p className="text-sm font-medium text-panel-text">Hata görselleri analiz ediliyor…</p>
             <p className="max-w-xs text-xs text-panel-text-muted">
-              Bu işlem görsel sayısına göre bir dakikaya kadar sürebilir. Lütfen sayfadan ayrılmayın.
+              Bu işlem birkaç dakika sürebilir, lütfen sayfadan ayrılmayın. Seçilen içeriklerde çok
+              soru varsa bir seferde en fazla {MAX_QUESTIONS_PER_REPORT} tanesi analiz edilir; kalanlar
+              için bu ekrandan tekrar "Yeni Rapor Oluştur" diyebilirsiniz.
             </p>
           </div>
         ) : loadError ? (
