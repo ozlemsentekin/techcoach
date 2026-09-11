@@ -121,7 +121,8 @@ function CreateReportModal({ subject, fetchScope, createReport, onClose, onCreat
           </div>
         ) : topics.length === 0 ? (
           <p className="mt-4 rounded-xl border border-dashed border-panel-border px-4 py-6 text-center text-sm text-panel-text-muted">
-            Bu derste analiz edilecek hata görseli bulunamadı. Önce Hata Defteri'nden yanlış sorulara fotoğraf ekleyin.
+            Bu derste analiz <em>edilmemiş</em> hata görseli kalmadı — daha önce raporlanmış görseller tekrar
+            seçilmez. Yeni yanlışlar için Hata Defteri'nden fotoğraf ekledikçe burada tekrar görünecek.
           </p>
         ) : (
           <>
