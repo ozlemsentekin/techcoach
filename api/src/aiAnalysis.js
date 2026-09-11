@@ -111,38 +111,57 @@ async function fetchAvailableSubjects(studentId) {
   return result.recordset.map((row) => ({ subject: row.subject, questionCount: row.question_count }))
 }
 
-// Bir derste hata görseli olan, henüz analiz edilmemiş içerik (konu) adları, içerik başına soru sayısı.
-async function fetchSubjectTopics(studentId, subject) {
+// Bir derste hata görseli olan, henüz analiz edilmemiş TÜM sorular — "Yeni Rapor Oluştur"
+// ekranının soru bazlı seçim ızgarası bunu kullanır (tarih/içerik filtreleri istemci tarafında
+// uygulanır, veri seti öğrenci başına küçük olduğu için tekrar tekrar sorgu atmaya gerek yok).
+// Görsel burada dönmez (liste ağırlaşmasın diye) — küçük resimler galerideki gibi tembel çekilir.
+async function fetchScopeQuestions(studentId, subject) {
   const requestDb = await withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
     subject: { type: sql.NVarChar(100), value: subject },
   })
   const result = await requestDb.query(`
-    SELECT COALESCE(tp.name, wq.topic) AS topic_name, COUNT(*) AS question_count
+    SELECT wq.id, wq.question_number, wq.created_at,
+           COALESCE(tp.name, wq.topic) AS topic,
+           COALESCE(rb.name, wq.book_name) AS book_name,
+           COALESCE(pub.name, wq.publisher_name) AS publisher_name,
+           wq.test_name,
+           tak.correct_label AS correct_answer
     FROM dbo.WrongQuestions wq
     LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
     LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
+    LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
+    LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
+    LEFT JOIN dbo.TestAnswerKeys tak ON tak.test_id = wq.test_id AND tak.order_no = wq.question_number
     WHERE wq.student_id = @studentId AND wq.subject = @subject AND wq.photo_url IS NOT NULL
       AND wq.ai_analyzed_at IS NULL
-      AND COALESCE(tp.name, wq.topic) IS NOT NULL
-    GROUP BY COALESCE(tp.name, wq.topic)
-    ORDER BY question_count DESC, topic_name;
+    ORDER BY wq.created_at DESC;
   `)
-  return result.recordset.map((row) => ({ topicName: row.topic_name, questionCount: row.question_count }))
+  return result.recordset.map((row) => ({
+    id: row.id,
+    questionNumber: row.question_number || undefined,
+    topic: row.topic || 'Genel',
+    bookName: row.book_name || undefined,
+    publisherName: row.publisher_name || undefined,
+    testName: row.test_name || undefined,
+    correctAnswer: row.correct_answer ? String(row.correct_answer).trim() : undefined,
+    createdAt: row.created_at,
+  }))
 }
 
-function bindTopicList(topicNames) {
+function bindIdList(ids, prefix = 'id') {
   const params = {}
-  const placeholders = topicNames.map((name, index) => {
-    params[`topic${index}`] = { type: sql.NVarChar(200), value: name }
-    return `@topic${index}`
+  const placeholders = ids.map((id, index) => {
+    params[`${prefix}${index}`] = { type: sql.UniqueIdentifier, value: id }
+    return `@${prefix}${index}`
   })
   return { params, inClause: placeholders.join(', ') }
 }
 
-// Seçili içeriklerdeki, hata görseli olan yanlış sorular — görselleriyle birlikte (en yeni MAX_IMAGES).
-async function fetchAnalyzableQuestions(studentId, subject, topicNames) {
-  const { params, inClause } = bindTopicList(topicNames)
+// Kullanıcının tek tek seçtiği sorular — görselleriyle birlikte (rapor üretimi için).
+async function fetchQuestionsByIds(studentId, subject, ids) {
+  if (!ids.length) return []
+  const { params, inClause } = bindIdList(ids)
   const requestDb = await withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
     subject: { type: sql.NVarChar(100), value: subject },
@@ -163,7 +182,7 @@ async function fetchAnalyzableQuestions(studentId, subject, topicNames) {
     LEFT JOIN dbo.TestAnswerKeys tak ON tak.test_id = wq.test_id AND tak.order_no = wq.question_number
     WHERE wq.student_id = @studentId AND wq.subject = @subject AND wq.photo_url IS NOT NULL
       AND wq.ai_analyzed_at IS NULL
-      AND COALESCE(tp.name, wq.topic) IN (${inClause})
+      AND wq.id IN (${inClause})
     ORDER BY wq.created_at DESC;
   `)
   return result.recordset
@@ -282,24 +301,22 @@ async function generateReport(questionRows) {
   return { report, usedQuestionRows: usable.map((entry) => entry.row) }
 }
 
-async function checkQuota(studentId, subject, sortedTopicNamesJson) {
+async function checkQuota(studentId, sortedWrongQuestionIdsJson) {
   const requestDb = await withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
-    subject: { type: sql.NVarChar(100), value: subject },
-    topicNamesJson: { type: sql.NVarChar(sql.MAX), value: sortedTopicNamesJson },
+    idsJson: { type: sql.NVarChar(sql.MAX), value: sortedWrongQuestionIdsJson },
   })
   const result = await requestDb.query(`
     SELECT
       (SELECT COUNT(*) FROM dbo.AiAnalysisReports
         WHERE student_id = @studentId AND created_at > DATEADD(DAY, -1, SYSUTCDATETIME())) AS day_count,
       (SELECT COUNT(*) FROM dbo.AiAnalysisReports
-        WHERE student_id = @studentId AND subject = @subject
-          AND topic_names_json = @topicNamesJson
+        WHERE student_id = @studentId AND wrong_question_ids_json = @idsJson
           AND created_at > DATEADD(HOUR, -${SAME_SCOPE_COOLDOWN_HOURS}, SYSUTCDATETIME())) AS recent_same_scope;
   `)
   const row = result.recordset[0]
   if (row.recent_same_scope > 0) {
-    throw new ReportGenerationError(429, 'Bu içerikler için az önce bir rapor oluşturuldu. Lütfen biraz sonra tekrar deneyin.')
+    throw new ReportGenerationError(429, 'Bu sorular için az önce bir rapor oluşturuldu. Lütfen biraz sonra tekrar deneyin.')
   }
   if (row.day_count >= MAX_REPORTS_PER_DAY) {
     throw new ReportGenerationError(429, `Günlük rapor limitine ulaşıldı (${MAX_REPORTS_PER_DAY}). Yarın tekrar deneyebilirsiniz.`)
@@ -307,7 +324,7 @@ async function checkQuota(studentId, subject, sortedTopicNamesJson) {
 }
 
 async function insertReport({ studentId, subject, sortedTopicNames, questionRows, report, createdByUserId, createdByRole }) {
-  const wrongQuestionIds = questionRows.map((row) => String(row.id))
+  const wrongQuestionIds = questionRows.map((row) => String(row.id).toUpperCase())
   const requestDb = await withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
     subject: { type: sql.NVarChar(100), value: subject },
@@ -331,7 +348,7 @@ async function insertReport({ studentId, subject, sortedTopicNames, questionRows
 }
 
 // Bir rapora dahil edilen sorular bir daha "Yeni Rapor Oluştur" seçim listesine düşmesin
-// (bkz. fetchAvailableSubjects/fetchSubjectTopics/fetchAnalyzableQuestions'daki ai_analyzed_at filtresi).
+// (bkz. fetchAvailableSubjects/fetchScopeQuestions/fetchQuestionsByIds'daki ai_analyzed_at filtresi).
 async function markQuestionsAnalyzed(ids) {
   if (!ids.length) return
   const params = {}
@@ -412,23 +429,33 @@ async function fetchReportList(studentId, { subject } = {}) {
   return result.recordset.map(sanitizeReportRow)
 }
 
-// Ortak "yeni rapor oluştur" akışı — panel ve öğretmen uçları bunu çağırır.
-async function createReportForStudent({ studentId, subject, topicNames, createdByUserId, createdByRole }) {
-  const cleanTopicNames = [...new Set((topicNames || []).map((name) => String(name || '').trim()).filter(Boolean))]
-  if (!subject || !cleanTopicNames.length) {
-    throw new ReportGenerationError(400, 'Ders ve en az bir içerik seçmelisiniz.')
+// Ortak "yeni rapor oluştur" akışı — panel ve öğretmen uçları bunu çağırır. Kapsam artık içerik
+// (konu) değil, kullanıcının ızgaradan tek tek işaretlediği soru id'leri — bkz. AiReportsView.jsx
+// CreateReportModal (tarih/içerik filtreli soru seçim ekranı).
+async function createReportForStudent({ studentId, subject, wrongQuestionIds, createdByUserId, createdByRole }) {
+  const cleanIds = [...new Set((wrongQuestionIds || []).map((id) => String(id || '').trim().toUpperCase()).filter(Boolean))]
+  if (!subject || !cleanIds.length) {
+    throw new ReportGenerationError(400, 'Ders ve en az bir soru seçmelisiniz.')
   }
-  const sortedTopicNames = [...cleanTopicNames].sort((a, b) => a.localeCompare(b, 'tr'))
-  const sortedTopicNamesJson = JSON.stringify(sortedTopicNames)
+  if (cleanIds.length > MAX_IMAGES) {
+    throw new ReportGenerationError(400, `Bir seferde en fazla ${MAX_IMAGES} soru seçebilirsiniz.`)
+  }
+  const sortedIdsJson = JSON.stringify([...cleanIds].sort())
 
-  await checkQuota(studentId, subject, sortedTopicNamesJson)
+  await checkQuota(studentId, sortedIdsJson)
 
-  const questionRows = await fetchAnalyzableQuestions(studentId, subject, cleanTopicNames)
+  const questionRows = await fetchQuestionsByIds(studentId, subject, cleanIds)
   if (!questionRows.length) {
-    throw new ReportGenerationError(400, 'Seçilen içeriklerde hata görseli bulunamadı.')
+    throw new ReportGenerationError(
+      400,
+      'Seçilen sorular artık kullanılamıyor (örn. başka bir raporda analiz edilmiş olabilir). Lütfen listeyi yenileyip tekrar seçin.',
+    )
   }
 
   const { report, usedQuestionRows } = await generateReport(questionRows)
+  const sortedTopicNames = [...new Set(usedQuestionRows.map((row) => row.topic).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, 'tr'),
+  )
   const record = await insertReport({
     studentId,
     subject,
@@ -480,7 +507,7 @@ async function getAiAnalysisScopeHandler(request) {
     if (!subject) {
       return json(200, { availableSubjects: await fetchAvailableSubjects(studentId) })
     }
-    return json(200, { topics: await fetchSubjectTopics(studentId, subject) })
+    return json(200, { questions: await fetchScopeQuestions(studentId, subject) })
   } catch (error) {
     return handlePanelError(error, 'getAiAnalysisScopeHandler', 'İçerikler yüklenemedi.')
   }
@@ -506,7 +533,7 @@ async function createAiAnalysisReportHandler(request) {
     const report = await createReportForStudent({
       studentId,
       subject: payload?.subject,
-      topicNames: payload?.topicNames,
+      wrongQuestionIds: payload?.wrongQuestionIds,
       createdByUserId: actorId,
       createdByRole: actorRole === 'ebeveyn' ? 'ebeveyn' : 'ogrenci',
     })
@@ -525,7 +552,7 @@ module.exports = {
   // öğretmen ucu için yeniden kullanılan parçalar
   ReportGenerationError,
   fetchAvailableSubjects,
-  fetchSubjectTopics,
+  fetchScopeQuestions,
   fetchReportList,
   fetchReportRecord,
   buildReportDetail,

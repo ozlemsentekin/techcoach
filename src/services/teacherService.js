@@ -431,16 +431,16 @@ export function makeTeacherAiReportFetchers(studentTeacherId) {
       const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/ai-analysis-scope`, {
         method: 'GET',
       })
-      return { topics: data.topics || [] }
+      return { questions: data.questions || [] }
     },
     fetchReportDetail: async (reportId) => {
       const data = await authRequest(`${base}/${reportId}`, { method: 'GET' })
       return data.report
     },
-    createReport: async ({ topicNames }) => {
+    createReport: async ({ wrongQuestionIds }) => {
       const data = await authRequest(base, {
         method: 'POST',
-        body: JSON.stringify({ topicNames }),
+        body: JSON.stringify({ wrongQuestionIds }),
         timeoutMs: 220000, // bkz. aiAnalysisService.js REPORT_CREATE_TIMEOUT_MS gerekçesi
       })
       return data.report

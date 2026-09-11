@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AlertCircle,
   AlertTriangle,
+  Check,
   ChevronDown,
   Download,
   Images,
@@ -34,49 +36,151 @@ function formatDateTime(value) {
 
 /* ------------------------------------------------------------------ Yeni rapor modalı */
 
-function CreateReportModal({ subject, fetchScope, createReport, onClose, onCreated }) {
-  const [topics, setTopics] = useState(null)
+const DATE_FILTERS = [
+  { key: 'today', label: 'Bugün', days: 0 },
+  { key: '3d', label: 'Son 3 Gün', days: 3 },
+  { key: '7d', label: 'Son 1 Hafta', days: 7 },
+  { key: '30d', label: 'Son 1 Ay', days: 30 },
+  { key: 'all', label: 'Tümü', days: null },
+]
+
+function isWithinDateFilter(createdAt, key) {
+  const filter = DATE_FILTERS.find((f) => f.key === key)
+  if (!filter || filter.days == null) return true
+  const date = createdAt ? new Date(createdAt) : null
+  if (!date || Number.isNaN(date.getTime())) return false
+  const cutoff = new Date()
+  if (filter.days === 0) cutoff.setHours(0, 0, 0, 0)
+  else cutoff.setDate(cutoff.getDate() - filter.days)
+  return date >= cutoff
+}
+
+// Hata Defteri'ndeki WrongQuestionThumbnail'a benzer (bkz. WrongQuestionsView.jsx) ama tıklama
+// galeri açmak yerine seçimi açar/kapatır; sağ üstte küçük bir onay rozeti gösterir.
+function SelectableThumbnail({ item, fetchPhoto, selected, disabled, onToggle }) {
+  const [photoUrl, setPhotoUrl] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let ignore = false
+    fetchPhoto(item.id)
+      .then((url) => {
+        if (!ignore) setPhotoUrl(url)
+      })
+      .catch((err) => {
+        if (!ignore) setError(err.message || 'Fotoğraf yüklenemedi.')
+      })
+    return () => {
+      ignore = true
+    }
+  }, [item.id, fetchPhoto])
+
+  const caption = `${item.testName || 'Test'} · Soru ${item.questionNumber ?? '-'}`
+
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(item.id)}
+      disabled={disabled}
+      aria-pressed={selected}
+      title={caption}
+      className={`group relative flex flex-col overflow-hidden rounded-xl border-2 text-left shadow-sm transition-colors ${
+        selected ? 'border-panel-blue' : 'border-panel-border hover:border-panel-blue/40'
+      } ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
+    >
+      <span
+        className={`absolute right-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full border ${
+          selected ? 'border-panel-blue bg-panel-blue text-white' : 'border-panel-border bg-white/90 text-white/0'
+        }`}
+      >
+        <Check size={12} aria-hidden="true" />
+      </span>
+      <p className="line-clamp-1 px-2 py-1.5 text-[11px] font-medium text-panel-text">{caption}</p>
+      <div className="flex aspect-square w-full items-center justify-center bg-panel-surface-soft">
+        {photoUrl ? (
+          <img loading="lazy" decoding="async" src={photoUrl} alt={caption} className="h-full w-full object-cover" />
+        ) : error ? (
+          <AlertCircle size={18} className="text-panel-text-muted" aria-hidden="true" />
+        ) : (
+          <Loader2 size={18} className="animate-spin text-panel-text-muted" aria-hidden="true" />
+        )}
+      </div>
+    </button>
+  )
+}
+
+function CreateReportModal({ subject, fetchScope, createReport, fetchPhoto, onClose, onCreated }) {
+  const [questions, setQuestions] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [selected, setSelected] = useState(() => new Set())
+  const [dateFilter, setDateFilter] = useState('all')
+  const [topicFilter, setTopicFilter] = useState('')
   const [busy, setBusy] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
   useEffect(() => {
     let ignore = false
     fetchScope(subject)
-      .then(({ topics: list }) => {
-        if (ignore) return
-        setTopics(list)
-        setSelected(new Set(list.map((topic) => topic.topicName)))
+      .then(({ questions: list }) => {
+        if (!ignore) setQuestions(list)
       })
       .catch((err) => {
-        if (!ignore) setLoadError(err.message || 'İçerikler yüklenemedi.')
+        if (!ignore) setLoadError(err.message || 'Sorular yüklenemedi.')
       })
     return () => {
       ignore = true
     }
   }, [subject, fetchScope])
 
-  const toggle = (name) => {
+  // Tarih filtresi soru listesini daraltır; içerik (konu) filtresi onun üzerine uygulanır —
+  // içerik dropdown'undaki sayılar da bu yüzden seçili tarih penceresine göre güncellenir.
+  const dateFiltered = useMemo(
+    () => (questions || []).filter((q) => isWithinDateFilter(q.createdAt, dateFilter)),
+    [questions, dateFilter],
+  )
+
+  const topics = useMemo(() => {
+    const counts = new Map()
+    dateFiltered.forEach((q) => counts.set(q.topic, (counts.get(q.topic) || 0) + 1))
+    return [...counts.entries()].sort((a, b) => b[1] - a[1])
+  }, [dateFiltered])
+
+  const filtered = useMemo(
+    () => (topicFilter ? dateFiltered.filter((q) => q.topic === topicFilter) : dateFiltered),
+    [dateFiltered, topicFilter],
+  )
+
+  const atCap = selected.size >= MAX_QUESTIONS_PER_REPORT
+
+  const toggle = (id) => {
     setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
-      return next
+      if (prev.has(id)) {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      }
+      if (prev.size >= MAX_QUESTIONS_PER_REPORT) return prev
+      return new Set(prev).add(id)
     })
   }
 
-  const totalQuestions = useMemo(
-    () => (topics || []).filter((t) => selected.has(t.topicName)).reduce((sum, t) => sum + t.questionCount, 0),
-    [topics, selected],
-  )
+  const selectVisible = () => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      for (const q of filtered) {
+        if (next.size >= MAX_QUESTIONS_PER_REPORT) break
+        next.add(q.id)
+      }
+      return next
+    })
+  }
 
   const submit = async () => {
     if (busy || selected.size === 0) return
     setBusy(true)
     setSubmitError('')
     try {
-      const report = await createReport({ subject, topicNames: [...selected] })
+      const report = await createReport({ subject, wrongQuestionIds: [...selected] })
       onCreated(report)
     } catch (err) {
       setSubmitError(err.message || 'Rapor oluşturulamadı.')
@@ -91,8 +195,8 @@ function CreateReportModal({ subject, fetchScope, createReport, onClose, onCreat
       aria-modal="true"
       aria-label="Yeni AI raporu"
     >
-      <div className="w-full max-w-lg rounded-t-3xl border border-panel-border bg-panel-surface p-5 shadow-lg sm:rounded-2xl sm:p-6">
-        <div className="flex items-start justify-between gap-3">
+      <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-panel-border bg-panel-surface shadow-lg sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-panel-border px-5 py-4 sm:px-6">
           <div>
             <h2 className="text-lg font-semibold text-panel-text">Yeni AI Raporu</h2>
             <p className="mt-0.5 text-sm text-panel-text-muted">{subject}</p>
@@ -102,63 +206,107 @@ function CreateReportModal({ subject, fetchScope, createReport, onClose, onCreat
             aria-label="Kapat"
             onClick={onClose}
             disabled={busy}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-panel-text-muted hover:bg-panel-surface-soft disabled:opacity-40"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-panel-text-muted hover:bg-panel-surface-soft disabled:opacity-40"
           >
             <X size={18} aria-hidden="true" />
           </button>
         </div>
 
         {busy ? (
-          <div className="flex flex-col items-center gap-3 py-10 text-center">
+          <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
             <Loader2 size={28} className="animate-spin text-panel-blue" aria-hidden="true" />
             <p className="text-sm font-medium text-panel-text">Hata görselleri analiz ediliyor…</p>
             <p className="max-w-xs text-xs text-panel-text-muted">
-              Bu işlem birkaç dakika sürebilir, lütfen sayfadan ayrılmayın. Seçilen içeriklerde çok
-              soru varsa bir seferde en fazla {MAX_QUESTIONS_PER_REPORT} tanesi analiz edilir; kalanlar
-              için bu ekrandan tekrar "Yeni Rapor Oluştur" diyebilirsiniz.
+              Bu işlem birkaç dakika sürebilir, lütfen sayfadan ayrılmayın.
             </p>
           </div>
         ) : loadError ? (
-          <p className="mt-4 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{loadError}</p>
-        ) : topics === null ? (
-          <div className="py-8">
-            <LoadingState label="İçerikler yükleniyor…" />
+          <p className="m-5 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm sm:m-6">{loadError}</p>
+        ) : questions === null ? (
+          <div className="py-10">
+            <LoadingState label="Sorular yükleniyor…" />
           </div>
-        ) : topics.length === 0 ? (
-          <p className="mt-4 rounded-xl border border-dashed border-panel-border px-4 py-6 text-center text-sm text-panel-text-muted">
+        ) : questions.length === 0 ? (
+          <p className="m-5 rounded-xl border border-dashed border-panel-border px-4 py-6 text-center text-sm text-panel-text-muted sm:m-6">
             Bu derste analiz <em>edilmemiş</em> hata görseli kalmadı — daha önce raporlanmış görseller tekrar
             seçilmez. Yeni yanlışlar için Hata Defteri'nden fotoğraf ekledikçe burada tekrar görünecek.
           </p>
         ) : (
           <>
-            <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-panel-text-muted">
-              Analiz edilecek içerikler
-            </p>
-            <div className="mt-2 flex max-h-[46vh] flex-col gap-1 overflow-y-auto">
-              {topics.map((topic) => (
-                <label
-                  key={topic.topicName}
-                  className="flex cursor-pointer items-center gap-3 rounded-xl border border-panel-border px-3 py-2.5 text-sm hover:bg-panel-surface-soft"
+            <div className="flex flex-col gap-2.5 border-b border-panel-border px-5 py-3 sm:px-6">
+              <div className="flex flex-wrap gap-1.5">
+                {DATE_FILTERS.map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setDateFilter(f.key)}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                      dateFilter === f.key
+                        ? 'bg-panel-blue text-white'
+                        : 'bg-panel-surface-soft text-panel-text-muted hover:text-panel-text'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <select
+                  value={topicFilter}
+                  onChange={(event) => setTopicFilter(event.target.value)}
+                  aria-label="İçeriğe göre filtrele"
+                  className="h-9 rounded-lg border border-panel-border bg-panel-surface px-2.5 text-xs font-medium text-panel-text"
                 >
-                  <input
-                    type="checkbox"
-                    checked={selected.has(topic.topicName)}
-                    onChange={() => toggle(topic.topicName)}
-                    className="h-4 w-4 shrink-0 accent-panel-blue"
-                  />
-                  <span className="min-w-0 flex-1 text-panel-text">{topic.topicName}</span>
-                  <span className="shrink-0 text-xs tabular-nums text-panel-text-muted">{topic.questionCount} soru</span>
-                </label>
-              ))}
+                  <option value="">Tüm içerikler ({dateFiltered.length})</option>
+                  {topics.map(([name, count]) => (
+                    <option key={name} value={name}>
+                      {name} ({count})
+                    </option>
+                  ))}
+                </select>
+                <button type="button" onClick={selectVisible} className="text-xs font-semibold text-panel-blue hover:underline">
+                  Görünenlerden seç
+                </button>
+                {selected.size > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setSelected(new Set())}
+                    className="text-xs font-semibold text-panel-text-muted hover:underline"
+                  >
+                    Seçimi temizle
+                  </button>
+                ) : null}
+              </div>
             </div>
 
+            {filtered.length === 0 ? (
+              <p className="m-5 rounded-xl border border-dashed border-panel-border px-4 py-6 text-center text-sm text-panel-text-muted sm:m-6">
+                Bu filtreyle eşleşen soru yok.
+              </p>
+            ) : (
+              <div className="grid flex-1 grid-cols-3 gap-2 overflow-y-auto px-5 py-3 min-[480px]:grid-cols-4 sm:grid-cols-5 sm:px-6 lg:grid-cols-6">
+                {filtered.map((q) => (
+                  <SelectableThumbnail
+                    key={q.id}
+                    item={q}
+                    fetchPhoto={fetchPhoto}
+                    selected={selected.has(q.id)}
+                    disabled={atCap && !selected.has(q.id)}
+                    onToggle={toggle}
+                  />
+                ))}
+              </div>
+            )}
+
             {submitError ? (
-              <p className="mt-3 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{submitError}</p>
+              <p className="mx-5 mt-3 rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm sm:mx-6">
+                {submitError}
+              </p>
             ) : null}
 
-            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-xs text-panel-text-muted">
-                {selected.size} içerik · yaklaşık {totalQuestions} soru
+            <div className="flex flex-col gap-2 border-t border-panel-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <span className="text-xs font-medium text-panel-text-muted">
+                {selected.size} / {MAX_QUESTIONS_PER_REPORT} soru seçildi
               </span>
               <div className="flex gap-2">
                 <Button variant="secondary" onClick={onClose}>
@@ -446,9 +594,9 @@ function ReportDetailModal({
 /**
  * AI Raporları — ders sekmeleri + rapor tablosu + yeni rapor / rapor detayı akışı.
  * Öğrenci, veli ve öğretmen panellerinde ortak.
- * @param {(subject:string)=>Promise<{topics:{topicName:string,questionCount:number}[]}>} fetchScope
+ * @param {(subject:string)=>Promise<{questions:object[]}>} fetchScope
  * @param {(reportId:string)=>Promise<object>} fetchReportDetail
- * @param {({subject:string,topicNames:string[]})=>Promise<object>} createReport
+ * @param {({subject:string,wrongQuestionIds:string[]})=>Promise<object>} createReport
  * @param {(wrongQuestionId:string)=>Promise<string>} fetchPhoto
  * @param {(id:string, patch:object)=>Promise<any>} [updateMistakeAnalysis]
  * @param {'ogrenci'|'ebeveyn'|'ogretmen'} [viewerRole]
@@ -654,6 +802,7 @@ export default function AiReportsView({
           subject={activeSubject}
           fetchScope={fetchScope}
           createReport={createReport}
+          fetchPhoto={fetchPhoto}
           onClose={() => setCreateOpen(false)}
           onCreated={(report) => {
             setCreateOpen(false)
