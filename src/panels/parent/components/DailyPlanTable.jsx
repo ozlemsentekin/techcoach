@@ -47,67 +47,59 @@ const BREAK_TASK_TYPES = new Set(['mola', 'dinlenme', 'yemek', 'yemek-dinlenme']
 const DAILY_HOMEWORK_TASK_TYPES = new Set([...HOMEWORK_TASK_TYPES, 'odev-kontrolu'])
 const ACTIVITY_TASK_TYPES = new Set(['serbest-zaman', 'sosyal-aktivite', 'spor', 'sanat-hobi', 'uyku-hazirligi', 'gunluk-rutin'])
 
-const TASK_KIND_STYLES = {
-  homework: {
-    label: 'Ödev',
-    icon: NotebookPen,
-    rowBorder: 'border-l-panel-warm',
-    rowBackground: 'bg-white hover:bg-panel-surface-soft/50',
-    typeBadge: 'border-panel-warm/35 bg-panel-warm-soft text-panel-warm',
-    typeIcon: 'bg-white text-panel-warm',
-    timeBlock: 'bg-panel-warm-soft/45',
-    durationChip: 'bg-white text-panel-warm',
+// Görev tipinin rengini (bkz. data/taskTypes.js `color` alanı) rozet/satır stiline çevirir.
+const COLOR_VISUALS = {
+  blue: {
+    rowBorder: 'border-l-panel-blue',
+    typeBadge: 'border-panel-blue/30 bg-panel-blue-soft text-panel-blue',
+    typeIcon: 'bg-white text-panel-blue',
+    timeBlock: 'bg-panel-blue-soft/45',
+    durationChip: 'bg-white text-panel-blue',
     questionChip: 'bg-panel-blue-soft text-panel-blue',
-    dot: 'border-panel-warm text-panel-warm',
+    dot: 'border-panel-blue text-panel-blue',
   },
-  break: {
-    label: 'Mola',
-    icon: Coffee,
+  lilac: {
     rowBorder: 'border-l-panel-lilac',
-    rowBackground: 'bg-white hover:bg-panel-surface-soft/50',
-    typeBadge: 'border-panel-lilac/35 bg-panel-lilac-soft text-panel-lilac',
+    typeBadge: 'border-panel-lilac/30 bg-panel-lilac-soft text-panel-lilac',
     typeIcon: 'bg-white text-panel-lilac',
-    timeBlock: 'bg-panel-lilac-soft/60',
+    timeBlock: 'bg-panel-lilac-soft/50',
     durationChip: 'bg-white text-panel-lilac',
     questionChip: 'bg-panel-lilac-soft text-panel-lilac',
     dot: 'border-panel-lilac text-panel-lilac',
   },
-  activity: {
-    label: 'Aktivite',
-    icon: Sun,
+  sage: {
+    rowBorder: 'border-l-panel-sage',
+    typeBadge: 'border-panel-sage/30 bg-panel-sage-soft text-panel-sage',
+    typeIcon: 'bg-white text-panel-sage',
+    timeBlock: 'bg-panel-sage-soft/55',
+    durationChip: 'bg-white text-panel-sage',
+    questionChip: 'bg-panel-sage-soft text-panel-sage',
+    dot: 'border-panel-sage text-panel-sage',
+  },
+  accent: {
     rowBorder: 'border-l-panel-accent',
-    rowBackground: 'bg-white hover:bg-panel-surface-soft/50',
-    typeBadge: 'border-panel-accent/35 bg-panel-accent-soft text-panel-warm',
+    typeBadge: 'border-panel-accent/30 bg-panel-accent-soft text-panel-warm',
     typeIcon: 'bg-white text-panel-accent',
-    timeBlock: 'bg-panel-accent-soft/55',
+    timeBlock: 'bg-panel-accent-soft/50',
     durationChip: 'bg-white text-panel-warm',
     questionChip: 'bg-panel-accent-soft text-panel-warm',
     dot: 'border-panel-accent text-panel-accent',
   },
-  study: {
-    label: 'Ders',
-    icon: BookOpen,
-    rowBorder: 'border-l-panel-blue',
-    rowBackground: 'bg-white hover:bg-panel-surface-soft/50',
-    typeBadge: 'border-panel-blue/25 bg-panel-blue-soft text-panel-blue',
-    typeIcon: 'bg-white text-panel-blue',
-    timeBlock: 'bg-panel-surface-soft',
-    durationChip: 'bg-white text-panel-text-muted',
-    questionChip: 'bg-panel-blue-soft text-panel-blue',
-    dot: 'border-panel-blue-soft text-panel-blue',
-  },
-  lesson: {
-    label: 'Planlı Ders',
-    icon: GraduationCap,
-    rowBorder: 'border-l-panel-accent',
-    rowBackground: 'bg-panel-accent-soft/35 hover:bg-panel-accent-soft/50',
-    typeBadge: 'border-panel-accent/35 bg-panel-accent-soft text-panel-warm',
-    typeIcon: 'bg-white text-panel-accent',
-    timeBlock: 'bg-panel-accent-soft/45',
-    durationChip: 'bg-white text-panel-warm',
-    questionChip: 'bg-panel-accent-soft text-panel-warm',
-    dot: 'border-panel-accent text-panel-accent',
-  },
+}
+
+// Görev tipi TASK_TYPES'ta tanımlı değilse (örn. öğretmenin ders programı slotu) kullanılacak
+// genel "kind" bazlı etiket/ikon/satır arkaplanı.
+const KIND_FALLBACK = {
+  homework: { label: 'Ödev', icon: NotebookPen, colorKey: 'blue' },
+  break: { label: 'Mola', icon: Coffee, colorKey: 'sage' },
+  activity: { label: 'Aktivite', icon: Sun, colorKey: 'accent' },
+  study: { label: 'Ders', icon: BookOpen, colorKey: 'blue' },
+  lesson: { label: 'Planlı Ders', icon: GraduationCap, colorKey: 'accent' },
+}
+
+const DEFAULT_ROW_BACKGROUND = 'bg-white hover:bg-panel-surface-soft/50'
+const KIND_ROW_BACKGROUND = {
+  lesson: 'bg-panel-accent-soft/35 hover:bg-panel-accent-soft/50',
 }
 
 const TASK_TYPE_ICONS = {
@@ -164,8 +156,22 @@ function getTaskKind(task) {
   return 'study'
 }
 
-function getTaskKindStyle(task) {
-  return TASK_KIND_STYLES[getTaskKind(task)]
+// Rozet metni ve rengi, mümkün olduğunda genel "kind" yerine görevin gerçek tipine
+// (data/taskTypes.js) göre belirlenir; öğretmen ders slotu gibi taskType taşımayan
+// girişlerde kind bazlı varsayılana düşer.
+function getTaskVisual(task) {
+  const kind = getTaskKind(task)
+  const fallback = KIND_FALLBACK[kind]
+  const typeMeta = TASK_TYPES[task.taskType]
+  const colorKey = (kind === 'lesson' ? fallback.colorKey : typeMeta?.color) || fallback.colorKey
+  const palette = COLOR_VISUALS[colorKey] || COLOR_VISUALS.blue
+
+  return {
+    ...palette,
+    rowBackground: KIND_ROW_BACKGROUND[kind] || DEFAULT_ROW_BACKGROUND,
+    label: (kind !== 'lesson' && typeMeta?.label) || fallback.label,
+    icon: TASK_TYPE_ICONS[task.taskType] || fallback.icon,
+  }
 }
 
 function getSubjectLabel(task) {
@@ -259,6 +265,7 @@ function getDailyFlowSummary(filter, counts) {
 
 function TimeBlock({ task, visual }) {
   const questionCount = getQuestionBankHomeworkCount(task)
+  if (!task.isBacklog && !task.startTime && questionCount === 0) return null
 
   return (
     <div className={`flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 sm:block sm:bg-transparent sm:p-0 ${visual.timeBlock}`}>
@@ -270,9 +277,7 @@ function TimeBlock({ task, visual }) {
             <p className="whitespace-nowrap text-sm font-bold text-panel-text">{task.startTime}</p>
             <p className="whitespace-nowrap text-xs font-medium text-panel-text-muted">{task.endTime}</p>
           </>
-        ) : (
-          <p className="whitespace-nowrap text-xs font-semibold text-panel-text-muted">Saat eklenmedi</p>
-        )}
+        ) : null}
       </div>
       {questionCount > 0 ? (
         <div className="flex flex-nowrap items-center gap-1.5 sm:mt-2">
@@ -350,20 +355,15 @@ function TimelineDot({ status, isFirst, isLast, visual }) {
   )
 }
 
-function TaskKindBadge({ task, visual }) {
-  const kind = getTaskKind(task)
-  const Icon = TASK_TYPE_ICONS[task.taskType] || visual.icon
-  const label =
-    kind === 'study' || task.taskType === 'okul-odevi'
-      ? TASK_TYPES[task.taskType]?.label || visual.label
-      : visual.label
+function TaskKindBadge({ visual }) {
+  const Icon = visual.icon
 
   return (
     <span className={`inline-flex max-w-full items-center overflow-hidden rounded-lg border text-xs font-extrabold ${visual.typeBadge}`}>
       <span className={`flex h-7 w-7 shrink-0 items-center justify-center ${visual.typeIcon}`}>
         <Icon size={14} className="shrink-0" aria-hidden="true" />
       </span>
-      <span className="truncate px-2.5 tracking-wide">{label}</span>
+      <span className="truncate px-2.5 tracking-wide">{visual.label}</span>
     </span>
   )
 }
@@ -678,7 +678,7 @@ function TaskAgendaItem({
   onOpenAnswerSheet,
   onCompleteTask,
 }) {
-  const visual = getTaskKindStyle(task)
+  const visual = getTaskVisual(task)
   const taskKind = getTaskKind(task)
   const isLessonSlot = taskKind === 'lesson'
   const showStatus = taskKind !== 'break' && taskKind !== 'activity' && !isLessonSlot
@@ -701,7 +701,7 @@ function TaskAgendaItem({
 
       <div className="col-span-2 col-start-1 row-start-2 min-w-0 sm:col-span-1 sm:col-start-3 sm:row-start-1">
         <div className="flex flex-wrap items-center gap-2">
-          <TaskKindBadge task={task} visual={visual} />
+          <TaskKindBadge visual={visual} />
           {task.isBacklog ? null : <DurationBadge task={task} visual={visual} />}
           <SubjectChip task={task} />
           {showStatus ? <StatusPill status={task.status} /> : null}

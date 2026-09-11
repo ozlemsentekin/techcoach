@@ -1100,18 +1100,22 @@ export default function WeeklyPlannerGrid({
   const weekKey = weekDates.join('|')
   const [pastDayExpansion, setPastDayExpansion] = useState({ weekKey: '', expandedDates: new Set() })
   const expandedPastDates = pastDayExpansion.weekKey === weekKey ? pastDayExpansion.expandedDates : new Set()
+  // Geçmiş bir günde tamamlanmamış (biriken) ödev varsa o gün elle kapatılana kadar varsayılan
+  // olarak açık sayılır (bkz. renderDayColumn aynı kural). `expandedPastDates` burada "kullanıcı
+  // varsayılanı tersine çevirdi" anlamına gelir; backlog günde toggle açmak değil kapatmak demektir.
+  const dayHasBacklogTask = (date) => (tasksByDate?.[date] || []).some((task) => isBacklogTask(task))
+  const isPastDayExpandedForDate = (date) => {
+    const backlog = dayHasBacklogTask(date)
+    return expandedPastDates.has(date) ? !backlog : backlog
+  }
   const collapsedPastDates = isCurrentWeekView
-    ? weekDates.filter((date) => date < currentDate && !expandedPastDates.has(date))
+    ? weekDates.filter((date) => date < currentDate && !isPastDayExpandedForDate(date))
     : []
   const hasCollapsedPastDay = collapsedPastDates.length > 0
   const compactPastGridStyle = hasCollapsedPastDay
     ? {
         '--weekly-plan-columns': weekDates
-          .map((date) =>
-            isCurrentWeekView && date < currentDate && !expandedPastDates.has(date)
-              ? '2.5rem'
-              : 'minmax(18rem, 22rem)',
-          )
+          .map((date) => (isCurrentWeekView && date < currentDate && !isPastDayExpandedForDate(date) ? '2.5rem' : 'minmax(18rem, 22rem)'))
           .join(' '),
       }
     : undefined
@@ -1128,7 +1132,9 @@ export default function WeeklyPlannerGrid({
   const expandAllPastDays = () => {
     setPastDayExpansion({
       weekKey,
-      expandedDates: new Set(weekDates.filter((date) => date < currentDate)),
+      // Backlog'lu günler zaten varsayılan olarak açık; onları da sete eklemek toggle
+      // mantığı gereği kapatır, o yüzden yalnızca backlog'suz kapalı günler eklenir.
+      expandedDates: new Set(weekDates.filter((date) => date < currentDate && !dayHasBacklogTask(date))),
     })
   }
 
@@ -1226,7 +1232,7 @@ export default function WeeklyPlannerGrid({
     const soruBankasiQuestionTotal = getSoruBankasiQuestionTotal(tasks)
     const isPastDay = date < currentDate
     const isToday = date === currentDate
-    const isPastDayExpanded = expandedPastDates.has(date)
+    const isPastDayExpanded = isPastDayExpandedForDate(date)
     const isCollapsed = isPastDay && isCurrentWeekView && !isPastDayExpanded
     const shellTone = isPastDay
       ? 'border-slate-200 bg-slate-50/80 shadow-none'

@@ -1,3 +1,4 @@
+import { TASK_TYPES } from '../data/taskTypes'
 import { parseTimeToMinutes, taskTimeState } from './time'
 
 const PENDING_STATUSES = new Set(['bekliyor', 'devam-ediyor', 'yardim-bekliyor'])
@@ -9,8 +10,18 @@ function compareByCreatedAt(a, b) {
   return createdA < createdB ? -1 : 1
 }
 
-// Saati belirtilmemiş görevler, aynı gün içinde saati olan görevlerden önce gelir
-// (eklenme tarihine göre kendi aralarında sıralanır) — bkz. AddTaskDrawer "saat isteğe bağlı".
+function getTaskTypeSortLabel(task) {
+  return TASK_TYPES[task.taskType]?.label || task.taskType || ''
+}
+
+// Aynı saat diliminde (veya ikisi de saatsizse) görev tipine göre gruplu görünmesi için.
+function compareByTaskType(a, b) {
+  return getTaskTypeSortLabel(a).localeCompare(getTaskTypeSortLabel(b), 'tr-TR')
+}
+
+// Saati belirtilmemiş görevler, aynı gün içinde saati olan görevlerden önce gelir; kendi
+// aralarında ve aynı saate sahip görevler arasında görev tipine göre gruplanır — bkz.
+// AddTaskDrawer "saat isteğe bağlı".
 export function compareTasksBySchedule(a, b) {
   const dateA = a.date || ''
   const dateB = b.date || ''
@@ -19,9 +30,13 @@ export function compareTasksBySchedule(a, b) {
   const hasTimeA = Boolean(a.startTime)
   const hasTimeB = Boolean(b.startTime)
   if (hasTimeA !== hasTimeB) return hasTimeA ? 1 : -1
-  if (!hasTimeA) return compareByCreatedAt(a, b)
+  if (!hasTimeA) {
+    const typeCompare = compareByTaskType(a, b)
+    return typeCompare !== 0 ? typeCompare : compareByCreatedAt(a, b)
+  }
 
-  return parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime)
+  const timeDiff = parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime)
+  return timeDiff !== 0 ? timeDiff : compareByTaskType(a, b)
 }
 
 export function isPendingTask(task) {

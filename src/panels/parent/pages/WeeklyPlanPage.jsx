@@ -1,8 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../../context/useAuth'
-import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Info, Users } from 'lucide-react'
+import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Filter, Info, Search, Users, X } from 'lucide-react'
 import { cachedGet, invalidateCache } from '../../../services/authClient'
+import { TASK_TYPES } from '../../../data/taskTypes'
 import {
   getWeekDates,
   getWeekPlans,
@@ -42,6 +43,8 @@ export default function WeeklyPlanPage() {
   const hasMultipleStudents = (students?.length || 0) > 1
 
   const [tasksByDate, setTasksByDate] = useState({})
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedTaskTypes, setSelectedTaskTypes] = useState(() => new Set())
   const [unscheduledTasks, setUnscheduledTasks] = useState([])
   const [lessonSchedule, setLessonSchedule] = useState([])
   const [privateTeachers, setPrivateTeachers] = useState([])
@@ -238,6 +241,65 @@ export default function WeeklyPlanPage() {
     [tasksByDate],
   )
 
+  // Bu haftada fiilen görülen görev türleri (filtre çiplerini yalnızca dolu olanlarla göster).
+  const availableTaskTypes = useMemo(() => {
+    const seen = new Set()
+    Object.values(tasksByDate).forEach((tasks) => {
+      (tasks || []).forEach((task) => {
+        if (task.taskType) seen.add(task.taskType)
+      })
+    })
+    return Object.keys(TASK_TYPES).filter((type) => seen.has(type))
+  }, [tasksByDate])
+
+  const toggleTaskType = (type) => {
+    setSelectedTaskTypes((current) => {
+      const next = new Set(current)
+      if (next.has(type)) next.delete(type)
+      else next.add(type)
+      return next
+    })
+  }
+
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase('tr-TR')
+  const isFiltering = Boolean(normalizedQuery) || selectedTaskTypes.size > 0
+
+  // Kart üstünde görünen tüm alanlarda (başlık, ders, konu, açıklama, kaynak/yayınevi,
+  // ekleyen kişi, özel ders öğretmeni) serbest metin araması + görev türü filtresi.
+  const filteredTasksByDate = useMemo(() => {
+    if (!isFiltering) return tasksByDate
+
+    const matchesTask = (task) => {
+      if (selectedTaskTypes.size > 0 && !selectedTaskTypes.has(task.taskType)) return false
+      if (!normalizedQuery) return true
+      const haystack = [
+        task.title,
+        task.subject,
+        task.topic,
+        task.description,
+        task.resourceBookName,
+        task.publisherName,
+        task.schoolResourceName,
+        task.createdByName,
+        task.teacherFullName,
+        TASK_TYPES[task.taskType]?.label,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLocaleLowerCase('tr-TR')
+      return haystack.includes(normalizedQuery)
+    }
+
+    return Object.fromEntries(
+      Object.entries(tasksByDate).map(([date, tasks]) => [date, (tasks || []).filter(matchesTask)]),
+    )
+  }, [tasksByDate, isFiltering, normalizedQuery, selectedTaskTypes])
+
+  const filteredTaskCount = useMemo(
+    () => Object.values(filteredTasksByDate).reduce((sum, tasks) => sum + (tasks?.length || 0), 0),
+    [filteredTasksByDate],
+  )
+
   const weekNavBase = 'h-11 w-full px-3 text-sm font-semibold shadow-sm sm:w-auto sm:px-4'
   const weekNavActive = `${weekNavBase} border-transparent bg-panel-blue text-white hover:bg-panel-blue`
   const weekNavIdle = `${weekNavBase} border-panel-blue-soft text-panel-text hover:bg-panel-blue-soft/50`
@@ -316,6 +378,79 @@ export default function WeeklyPlanPage() {
         </Button>
       </div>
 
+      <div className="flex flex-col gap-2.5">
+        <div className="relative min-w-0">
+          <Search
+            size={16}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-panel-text-muted"
+            aria-hidden="true"
+          />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Başlık, ders, konu, kaynak veya ekleyen kişi ara..."
+            aria-label="Bu haftadaki görevlerde ara"
+            className="h-10 w-full rounded-xl border border-panel-border bg-panel-surface pl-9 pr-9 text-sm text-panel-text outline-none focus:border-panel-blue focus:ring-2 focus:ring-panel-blue/10"
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              aria-label="Aramayı temizle"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-text"
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+
+        {availableTaskTypes.length ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="flex items-center gap-1 text-xs font-semibold text-panel-text-muted">
+              <Filter size={13} aria-hidden="true" />
+              Görev türü:
+            </span>
+            {availableTaskTypes.map((type) => {
+              const meta = TASK_TYPES[type]
+              const active = selectedTaskTypes.has(type)
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => toggleTaskType(type)}
+                  aria-pressed={active}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors duration-150 ${
+                    active
+                      ? 'border-panel-blue bg-panel-blue text-white'
+                      : 'border-panel-border bg-panel-surface text-panel-text hover:bg-panel-surface-soft'
+                  }`}
+                >
+                  {meta?.label || type}
+                </button>
+              )
+            })}
+            {selectedTaskTypes.size ? (
+              <button
+                type="button"
+                onClick={() => setSelectedTaskTypes(new Set())}
+                className="text-xs font-semibold text-panel-blue underline underline-offset-2"
+              >
+                Temizle
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {isFiltering ? (
+          <p className="text-xs font-semibold text-panel-text-muted">
+            {filteredTaskCount > 0
+              ? `${filteredTaskCount} görev bulundu.`
+              : 'Bu hafta için aramayla eşleşen görev bulunamadı.'}
+          </p>
+        ) : null}
+      </div>
+
       {loadError ? (
         <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{loadError}</div>
       ) : null}
@@ -326,7 +461,7 @@ export default function WeeklyPlanPage() {
         <>
           <WeeklyPlannerGrid
             weekDates={weekDates}
-            tasksByDate={tasksByDate}
+            tasksByDate={filteredTasksByDate}
             lessonSchedule={lessonSchedule}
             schoolSchedule={schoolSchedule}
             schoolHolidays={schoolHolidays}
