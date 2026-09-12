@@ -97,6 +97,41 @@ export async function deleteMockExamPhoto(wrongQuestionId, studentId) {
   invalidateCache('/api/panel/mock-exams')
 }
 
+/** Soru bazlı modda: belirli bir soruya fotoğraf ekler. @returns {Promise<MockExam>} */
+export async function addMockExamQuestionPhoto(mockExamId, subjectRowId, questionRowId, photoDataUrl, studentId) {
+  const body = studentId ? { photo: photoDataUrl, studentId } : { photo: photoDataUrl }
+  const data = await authRequest(
+    `/api/panel/mock-exams/${mockExamId}/subjects/${subjectRowId}/questions/${questionRowId}/photo`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+  invalidateCache('/api/panel/mock-exams')
+  return data.mockExam
+}
+
+/** Ders için önceden girilmiş konu adlarını (autocomplete) döner. @returns {Promise<string[]>} */
+export async function getMockExamTopicSuggestions(subjectName, studentId) {
+  const params = new URLSearchParams({ subjectName })
+  if (studentId) params.set('studentId', studentId)
+  const data = await cachedGet(`/api/panel/mock-exams/topics?${params.toString()}`)
+  return data.topics || []
+}
+
+/**
+ * @typedef {Object} MockExamTopicStat
+ * @property {string} topic
+ * @property {number} total
+ * @property {number} correct
+ * @property {number} wrong
+ * @property {number} blank
+ * @property {number} successRate
+ */
+
+/** Öğrencinin tüm denemelerindeki soruları ders altında konu bazında toplar. */
+export async function getMockExamTopicStats(studentId) {
+  const data = await cachedGet(withStudent('/api/panel/mock-exams/topic-stats', studentId))
+  return data.subjects || []
+}
+
 /** Deneme hata görselini tembel çeker (WrongQuestions satırı öğrencinin kendisine ait). */
 export async function getMockExamPhoto(wrongQuestionId, studentId) {
   const data = await authRequest(

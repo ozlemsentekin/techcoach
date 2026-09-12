@@ -95,3 +95,102 @@ test('computeNet: LGS neti (3 yanlış = 1 doğru)', () => {
   assert.equal(computeNet(10, 0), 10)
   assert.equal(computeNet(10, 3), 9)
 })
+
+test('Soru bazlı giriş: durumlardan doğru/yanlış/boş türetilir', () => {
+  const result = validateMockExamPayload({
+    kind: 'brans',
+    examDate: '2026-09-10',
+    subjects: [
+      {
+        subjectName: 'Matematik',
+        questions: Array.from({ length: 20 }, (_, i) => ({
+          orderNo: i + 1,
+          status: i < 15 ? 'dogru' : i < 18 ? 'yanlis' : 'bos',
+          topicName: i < 15 ? 'Çarpanlar' : undefined,
+        })),
+      },
+    ],
+  })
+  assert.equal(result.error, undefined)
+  const subject = result.value.subjects[0]
+  assert.equal(subject.correct, 15)
+  assert.equal(subject.wrong, 3)
+  assert.equal(subject.blank, 2)
+  assert.equal(subject.questions.length, 20)
+  assert.equal(subject.questions[0].topicName, 'Çarpanlar')
+  assert.equal(subject.questions[19].topicName, null)
+})
+
+test('Soru bazlı giriş: satır sayısı toplamdan farklıysa reddedilir', () => {
+  const result = validateMockExamPayload({
+    kind: 'brans',
+    examDate: '2026-09-10',
+    subjects: [
+      {
+        subjectName: 'Matematik',
+        questions: Array.from({ length: 19 }, (_, i) => ({ orderNo: i + 1, status: 'dogru' })),
+      },
+    ],
+  })
+  assert.match(result.error || '', /20 olmalı/)
+})
+
+test('Soru bazlı giriş: geçersiz durum reddedilir', () => {
+  const result = validateMockExamPayload({
+    kind: 'brans',
+    examDate: '2026-09-10',
+    subjects: [
+      {
+        subjectName: 'Matematik',
+        questions: Array.from({ length: 20 }, (_, i) => ({ orderNo: i + 1, status: i === 0 ? 'yanlis-mi' : 'dogru' })),
+      },
+    ],
+  })
+  assert.match(result.error || '', /durum geçersiz/)
+})
+
+test('Soru bazlı giriş: tekrar eden soru numarası reddedilir', () => {
+  const result = validateMockExamPayload({
+    kind: 'brans',
+    examDate: '2026-09-10',
+    subjects: [
+      {
+        subjectName: 'Matematik',
+        questions: Array.from({ length: 20 }, (_, i) => ({ orderNo: i === 1 ? 1 : i + 1, status: 'dogru' })),
+      },
+    ],
+  })
+  assert.match(result.error || '', /tekrar edemez/)
+})
+
+test('Soru bazlı giriş: Genel Deneme her ders için ayrı ayrı çalışır', () => {
+  const result = validateMockExamPayload({
+    kind: 'genel',
+    examDate: '2026-09-10',
+    subjects: GENEL_DENEME_TEMPLATE.map((tpl) => ({
+      subjectName: tpl.name,
+      questions: Array.from({ length: tpl.total }, (_, i) => ({ orderNo: i + 1, status: 'dogru' })),
+    })),
+  })
+  assert.equal(result.error, undefined)
+  result.value.subjects.forEach((s, idx) => {
+    assert.equal(s.correct, GENEL_DENEME_TEMPLATE[idx].total)
+    assert.equal(s.questions.length, GENEL_DENEME_TEMPLATE[idx].total)
+  })
+})
+
+test('Soru bazlı giriş: Etüt soru sayısını kendi belirler', () => {
+  const result = validateMockExamPayload({
+    kind: 'etut',
+    subjects: [
+      {
+        subjectName: 'Türkçe',
+        questions: Array.from({ length: 7 }, (_, i) => ({ orderNo: i + 1, status: i < 5 ? 'dogru' : 'yanlis' })),
+      },
+    ],
+  })
+  assert.equal(result.error, undefined)
+  assert.equal(result.value.subjects[0].totalQuestions, 7)
+  assert.equal(result.value.subjects[0].correct, 5)
+  assert.equal(result.value.subjects[0].wrong, 2)
+})

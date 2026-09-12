@@ -110,10 +110,14 @@ const {
   updateMockExamHandler,
   deleteMockExamHandler,
   addMockExamPhotoHandler,
+  addMockExamQuestionPhotoHandler,
   deleteMockExamPhotoHandler,
+  getMockExamTopicSuggestionsHandler,
+  getMockExamTopicStatsHandler,
   listTeacherMockExamsHandler,
   getTeacherMockExamHandler,
   getTeacherMockExamPhotoHandler,
+  getTeacherMockExamTopicStatsHandler,
   getTeacherClassMockExamAnalysisHandler,
 } = require('./mockExams')
 const { listProvincesHandler, listDistrictsHandler, listSchoolsHandler } = require('./geo')
@@ -635,6 +639,13 @@ registerHttp('panel-teacher-student-mock-exam-photo', {
   methods: ['GET'],
   route: 'panel-teacher/students/{studentTeacherId}/mock-exams/photos/{wrongQuestionId}',
   handler: getTeacherMockExamPhotoHandler,
+})
+
+registerHttp('panel-teacher-student-mock-exam-topic-stats', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/mock-exams/topic-stats',
+  handler: getTeacherMockExamTopicStatsHandler,
 })
 
 registerHttp('panel-teacher-profile-update', {
@@ -1757,6 +1768,20 @@ registerHttp('panel-mock-exams-list', {
   handler: listMockExamsHandler,
 })
 
+registerHttp('panel-mock-exams-topics', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/mock-exams/topics',
+  handler: getMockExamTopicSuggestionsHandler,
+})
+
+registerHttp('panel-mock-exams-topic-stats', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/mock-exams/topic-stats',
+  handler: getMockExamTopicStatsHandler,
+})
+
 registerHttp('panel-mock-exams-create', {
   authLevel: 'anonymous',
   methods: ['POST'],
@@ -1790,6 +1815,13 @@ registerHttp('panel-mock-exam-subject-photo-add', {
   methods: ['POST'],
   route: 'panel/mock-exams/{mockExamId}/subjects/{subjectRowId}/photos',
   handler: addMockExamPhotoHandler,
+})
+
+registerHttp('panel-mock-exam-question-photo-add', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel/mock-exams/{mockExamId}/subjects/{subjectRowId}/questions/{questionRowId}/photo',
+  handler: addMockExamQuestionPhotoHandler,
 })
 
 registerHttp('panel-mock-exam-photo-delete', {
