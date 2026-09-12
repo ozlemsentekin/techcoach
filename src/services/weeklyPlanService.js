@@ -149,7 +149,15 @@ export async function getSchoolSchedule({ studentId } = {}) {
 /** Verilen tarih, okulun tatil takvimindeki bir aralığa (start/end dahil) denk geliyor mu? */
 export function isSchoolHoliday(dateISO, holidays) {
   if (!dateISO || !holidays?.length) return false
-  return holidays.some((entry) => dateISO >= entry.startDate && dateISO <= entry.endDate)
+  return holidays.some(
+    (entry) => (!entry.entryType || entry.entryType === 'tatil') && dateISO >= entry.startDate && dateISO <= entry.endDate,
+  )
+}
+
+/** Verilen tarihte okulun takvimine düşen sınav/etkinlik kayıtlarını döner (bkz. entry_type='sinav'). */
+export function getSchoolExams(dateISO, holidays) {
+  if (!dateISO || !holidays?.length) return []
+  return holidays.filter((entry) => entry.entryType === 'sinav' && dateISO >= entry.startDate && dateISO <= entry.endDate)
 }
 
 /** Öğrencinin özel öğretmenlerden gelen düzenli ders saatlerini döner (bkz. StudentTeachers.schedule_json). */

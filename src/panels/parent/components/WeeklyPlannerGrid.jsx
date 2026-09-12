@@ -10,6 +10,7 @@ import {
   Clock,
   Coffee,
   Dumbbell,
+  FileCheck2,
   FlaskConical,
   GraduationCap,
   Library,
@@ -32,7 +33,7 @@ import { isBacklogTask } from '../../../utils/backlogTasks'
 import { getSubjectBarClass, getSubjectStyle } from '../../../utils/subjectStyles'
 import { isEndedPrivateLessonForToday } from '../../../utils/lessonTasks'
 import Badge from '../../ui/Badge'
-import { isSchoolHoliday } from '../../../services/weeklyPlanService'
+import { isSchoolHoliday, getSchoolExams } from '../../../services/weeklyPlanService'
 import { useBillingGate } from '../../../context/useBillingGate'
 
 const BREAK_DURATION_OPTIONS = [15, 30, 45, 60]
@@ -533,6 +534,22 @@ function SchoolSlotCard({ task, muted = false }) {
       >
         <School size={12} aria-hidden="true" />
         <span className="truncate">{task.lessonName || 'Resmi Tatil'} · okul yok</span>
+      </div>
+    )
+  }
+
+  if (task.isExam) {
+    return (
+      <div
+        className={`flex flex-col gap-1 rounded-xl border px-3 py-2.5 ${
+          muted ? 'border-amber-200 bg-white/75 text-amber-600' : 'border-amber-300 bg-amber-50 text-amber-700'
+        }`}
+      >
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold">
+          <FileCheck2 size={12} aria-hidden="true" />
+          {task.startTime}-{task.endTime}
+        </span>
+        <span className="truncate text-sm font-bold">{task.lessonName}</span>
       </div>
     )
   }
@@ -1215,7 +1232,24 @@ export default function WeeklyPlannerGrid({
             },
           ]
         : []
-    const tasks = [...(tasksByDate?.[date] || []), ...scheduleSlots, ...otherScheduleSlots, ...schoolSlots, ...holidaySlots]
+    // Okulun sınav/etkinlik takvimindeki (SchoolCalendarEntries, entry_type='sinav') o güne
+    // denk gelen kayıtlar — görev değil, salt okunur bilgilendirme kartı.
+    const examSlots = getSchoolExams(date, schoolHolidays).map((entry, entryIndex) => ({
+      id: `exam-${date}-${entryIndex}`,
+      isSchoolSlot: true,
+      isExam: true,
+      startTime: entry.startTime,
+      endTime: entry.endTime,
+      lessonName: entry.name,
+    }))
+    const tasks = [
+      ...(tasksByDate?.[date] || []),
+      ...scheduleSlots,
+      ...otherScheduleSlots,
+      ...schoolSlots,
+      ...holidaySlots,
+      ...examSlots,
+    ]
       // Bugün planlanmış bir özel ders bitiş saatini geçtiyse akıştan otomatik düşer.
       .filter((task) => date !== currentDate || !isEndedPrivateLessonForToday(task, date))
       // Önce saati olanlar (saate göre), sonra saatsiz görevler eklenme tarihine göre.

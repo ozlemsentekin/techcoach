@@ -217,18 +217,20 @@ function sanitizeCalendarEntry(record) {
     entryType: record.entry_type,
     startDate: typeof record.start_date === 'string' ? record.start_date : record.start_date?.toISOString().slice(0, 10),
     endDate: typeof record.end_date === 'string' ? record.end_date : record.end_date?.toISOString().slice(0, 10),
+    startTime: record.start_time || null,
+    endTime: record.end_time || null,
     name: record.name || null,
   }
 }
 
-/** Bir okulun tatil/kapalı gün takvimi girdilerini döner (bkz. dbo.SchoolCalendarEntries). */
+/** Bir okulun tatil/kapalı gün + sınav/etkinlik takvimi girdilerini döner (bkz. dbo.SchoolCalendarEntries). */
 async function getSchoolCalendarEntries(schoolId) {
   if (!isGuid(schoolId)) return []
   const requestDb = await withRequest({
     schoolId: { type: sql.UniqueIdentifier, value: schoolId },
   })
   const result = await requestDb.query(`
-    SELECT id, entry_type, start_date, end_date, name
+    SELECT id, entry_type, start_date, end_date, start_time, end_time, name
     FROM dbo.SchoolCalendarEntries
     WHERE school_id = @schoolId
     ORDER BY start_date ASC;
