@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Search, X, ChevronRight, BookOpen, ArrowUpRight, Sparkles } from 'lucide-react'
+import { Search, X, ChevronRight, BookOpen, ArrowUpRight, Sparkles, Printer } from 'lucide-react'
 import { authRequest } from '../../services/authClient'
+import { printLessonNote } from '../../utils/printLessonNote'
 import { useAuth } from '../../context/useAuth'
 
 const field = 'w-full rounded-xl border border-panel-border bg-panel-surface p-3 text-panel-text'
@@ -15,8 +16,16 @@ export default function LessonNotesPage({ admin = false }) {
 
 function NoteViewer({ note, onClose }) {
   const ref = useRef(null)
+  const [printing, setPrinting] = useState(false)
+  const [printError, setPrintError] = useState('')
+  async function print() {
+    setPrinting(true); setPrintError('')
+    try { await printLessonNote(note) }
+    catch (error) { setPrintError(error.message) }
+    finally { setPrinting(false) }
+  }
   useEffect(() => { ref.current?.showModal() }, [])
-  return <dialog ref={ref} onClose={onClose} aria-label={note.title} className="fixed inset-0 z-50 m-auto h-[95dvh] w-[95vw] max-w-5xl overflow-auto rounded-2xl border border-panel-border bg-panel-surface p-4 text-panel-text backdrop:bg-black/60"><div className="sticky top-0 flex items-center justify-between gap-3 bg-panel-surface p-3"><h2 className="font-bold">{note.title}</h2><button autoFocus className={button} onClick={() => ref.current.close()}>Kapat</button></div>{note.images.map((img, i) => <figure key={i} className="mb-6"><figcaption className="p-2 text-center">Sayfa {i + 1} / {note.images.length}</figcaption><img src={img} alt={`${note.title} — sayfa ${i + 1}`} className="mx-auto h-auto w-full" /></figure>)}</dialog>
+  return <dialog ref={ref} onClose={onClose} aria-label={note.title} className="fixed inset-0 z-50 m-auto h-[95dvh] w-[95vw] max-w-5xl overflow-auto rounded-2xl border border-panel-border bg-panel-surface p-4 text-panel-text backdrop:bg-black/60"><div className="sticky top-0 flex items-center justify-between gap-3 bg-panel-surface p-3"><h2 className="font-bold">{note.title}</h2><button disabled={printing} className={`${button} flex shrink-0 items-center gap-2`} onClick={print}><Printer size={16} />{printing ? 'Hazırlanıyor…' : 'Yazdır'}</button><button autoFocus className={button} onClick={() => ref.current.close()}>Kapat</button></div>{printError && <p role="alert" className="p-3 text-sm text-red-600">{printError}</p>}{note.images.map((img, i) => <figure key={i} className="mb-6"><figcaption className="p-2 text-center">Sayfa {i + 1} / {note.images.length}</figcaption><img src={img} alt={`${note.title} — sayfa ${i + 1}`} className="mx-auto h-auto w-full" /></figure>)}</dialog>
 }
 
 function LessonNotesContent({ admin }) {
