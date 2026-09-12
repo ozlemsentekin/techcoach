@@ -15,6 +15,14 @@ test('initial password requires change; chosen passwords do not; reset is detect
   assert.equal(await requiresPasswordChange({}), false)
 })
 
+test('exempt users keep the initial password without being gated', async () => {
+  const id = 'EE525E48-E866-4D02-B9DC-EB4C2EC758D8' // Hakan Şafak Selvi
+  const initial = { id, phone_number: '+905559937098', password_hash: await hashPassword('937098') }
+  assert.equal(await requiresPasswordChange(initial), false)
+  // Non-exempt user with the same setup is still gated.
+  assert.equal(await requiresPasswordChange({ ...initial, id: 'ffffffff-0000-0000-0000-000000000000' }), true)
+})
+
 test('session token carries mustChangePassword for own sessions, omits it for delegated ones', () => {
   process.env.AUTH_JWT_SECRET = process.env.AUTH_JWT_SECRET || 'test-secret-please-ignore'
   const { createSessionToken, verifySessionToken } = require('../api/src/security.js')
