@@ -11,6 +11,7 @@ const BRANS_QUESTION_COUNT = 20
 const MAX_ETUT_QUESTIONS = 200
 const MOCK_EXAM_WRONG_BOOK_NAME = 'Deneme Sınavları'
 const MOCK_EXAM_ERROR_TYPE = 'deneme'
+const QUESTION_STATUSES = ['dogru', 'yanlis', 'bos']
 
 // Genel Deneme (LGS) sabit ders şablonu — sıralama ve soru sayıları sunucu tarafında
 // zorunludur; istemcinin gönderdiği total değerlerine güvenilmez. subject_id, panel
@@ -51,6 +52,40 @@ function computeNet(correct, wrong) {
 function nonNegInt(value) {
   const n = Number(value)
   return Number.isInteger(n) && n >= 0 ? n : null
+}
+
+// Soru bazlı giriş: [{ orderNo?, status, topicName? }] × total. Dizi boş/yoksa null döner
+// (o subject eski basit modda kalır). Dolu ama uzunluk/durum hatalıysa error döner.
+function normalizeQuestions(rawQuestions, total) {
+  if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) return { value: null }
+  if (rawQuestions.length !== total) {
+    return { error: `Soru bazlı girişte satır sayısı ${total} olmalı.` }
+  }
+  const seenOrder = new Set()
+  const questions = []
+  for (let i = 0; i < rawQuestions.length; i += 1) {
+    const raw = rawQuestions[i] || {}
+    const status = typeof raw.status === 'string' ? raw.status.trim() : ''
+    if (!QUESTION_STATUSES.includes(status)) {
+      return { error: `${i + 1}. soru için durum geçersiz.` }
+    }
+    let orderNo = nonNegInt(raw.orderNo)
+    if (orderNo === null || orderNo < 1 || orderNo > total) orderNo = i + 1
+    if (seenOrder.has(orderNo)) {
+      return { error: 'Soru numaraları tekrar edemez.' }
+    }
+    seenOrder.add(orderNo)
+    const topicName = typeof raw.topicName === 'string' ? raw.topicName.trim().slice(0, 200) : ''
+    questions.push({ orderNo, status, topicName: topicName || null })
+  }
+  questions.sort((a, b) => a.orderNo - b.orderNo)
+  const counts = { correct: 0, wrong: 0, blank: 0 }
+  for (const q of questions) {
+    if (q.status === 'dogru') counts.correct += 1
+    else if (q.status === 'yanlis') counts.wrong += 1
+    else counts.blank += 1
+  }
+  return { value: { questions, counts } }
 }
 
 function handleError(error, label, fallback) {
@@ -115,12 +150,23 @@ function validateMockExamPayload(payload) {
     subjects = []
     for (const tpl of GENEL_DENEME_TEMPLATE) {
       const row = byName.get(tpl.name) || {}
-      const counts = normalizeCounts(row, tpl.total)
-      if (counts.error) return { error: `${tpl.name}: ${counts.error}` }
-      const photos = normalizePhotos(row)
-      if (photos.error) return { error: `${tpl.name}: ${photos.error}` }
-      if (photos.value.length > counts.value.wrong + counts.value.blank) {
-        return { error: `${tpl.name}: fotoğraf sayısı yanlış + boş sayısını aşamaz.` }
+      const qCheck = normalizeQuestions(row.questions, tpl.total)
+      if (qCheck.error) return { error: `${tpl.name}: ${qCheck.error}` }
+
+      let counts
+      let questions = null
+      let photos = { value: [] }
+      if (qCheck.value) {
+        questions = qCheck.value.questions
+        counts = { value: qCheck.value.counts }
+      } else {
+        counts = normalizeCounts(row, tpl.total)
+        if (counts.error) return { error: `${tpl.name}: ${counts.error}` }
+        photos = normalizePhotos(row)
+        if (photos.error) return { error: `${tpl.name}: ${photos.error}` }
+        if (photos.value.length > counts.value.wrong + counts.value.blank) {
+          return { error: `${tpl.name}: fotoğraf sayısı yanlış + boş sayısını aşamaz.` }
+        }
       }
       subjects.push({
         subjectId: isGuid(row.subjectId) ? row.subjectId.trim().toLowerCase() : null,
@@ -128,6 +174,7 @@ function validateMockExamPayload(payload) {
         totalQuestions: tpl.total,
         ...counts.value,
         photos: photos.value,
+        questions,
       })
     }
   } else {
@@ -138,12 +185,30 @@ function validateMockExamPayload(payload) {
     const subjectName = typeof row?.subjectName === 'string' ? row.subjectName.trim().slice(0, 100) : ''
     if (!subjectName) return { error: 'Ders seçilmelidir.' }
 
-    // Etüt'te ayrı "toplam soru" alanı yok — toplam, doğru + yanlış + boş sayısıdır.
+    // Etüt'te ayrı "toplam soru" alanı yok — toplam, doğru + yanlış + boş sayısıdır (ya da
+    // soru bazlı modda girilen soru sayısıdır).
     let total
     let counts
+    let questions = null
     if (kind === 'brans') {
       total = BRANS_QUESTION_COUNT
-      counts = normalizeCounts(row, total)
+      const qCheck = normalizeQuestions(row?.questions, total)
+      if (qCheck.error) return { error: qCheck.error }
+      if (qCheck.value) {
+        questions = qCheck.value.questions
+        counts = { value: qCheck.value.counts }
+      } else {
+        counts = normalizeCounts(row, total)
+      }
+    } else if (Array.isArray(row?.questions) && row.questions.length > 0) {
+      total = row.questions.length
+      if (total < 1 || total > MAX_ETUT_QUESTIONS) {
+        return { error: `Toplam soru sayısı 1 ile ${MAX_ETUT_QUESTIONS} arasında olmalı.` }
+      }
+      const qCheck = normalizeQuestions(row.questions, total)
+      if (qCheck.error) return { error: qCheck.error }
+      questions = qCheck.value.questions
+      counts = { value: qCheck.value.counts }
     } else {
       const correct = nonNegInt(row?.correct)
       const wrong = nonNegInt(row?.wrong)
@@ -159,10 +224,14 @@ function validateMockExamPayload(payload) {
       }
     }
     if (counts.error) return { error: counts.error }
-    const photos = normalizePhotos(row)
-    if (photos.error) return { error: photos.error }
-    if (photos.value.length > counts.value.wrong + counts.value.blank) {
-      return { error: 'Fotoğraf sayısı yanlış + boş sayısını aşamaz.' }
+
+    let photos = { value: [] }
+    if (!questions) {
+      photos = normalizePhotos(row)
+      if (photos.error) return { error: photos.error }
+      if (photos.value.length > counts.value.wrong + counts.value.blank) {
+        return { error: 'Fotoğraf sayısı yanlış + boş sayısını aşamaz.' }
+      }
     }
 
     subjects = [
@@ -172,6 +241,7 @@ function validateMockExamPayload(payload) {
         totalQuestions: total,
         ...counts.value,
         photos: photos.value,
+        questions,
       },
     ]
   }
@@ -195,6 +265,7 @@ function sanitizeSubjectRow(record) {
     net: computeNet(correct, wrong),
     successRate: total > 0 ? Math.round((correct / total) * 1000) / 10 : 0,
     photoCount: record.photo_count ?? 0,
+    hasTopicBreakdown: (record.question_row_count ?? 0) > 0,
   }
 }
 
@@ -239,7 +310,9 @@ async function listMockExamsForStudent(studentId) {
       SELECT s.id, s.mock_exam_id, s.subject_id, s.subject_name, s.total_questions,
              s.correct_count, s.wrong_count, s.blank_count,
              (SELECT COUNT(*) FROM dbo.WrongQuestions wq
-              WHERE wq.mock_exam_subject_id = s.id AND wq.photo_url IS NOT NULL) AS photo_count
+              WHERE wq.mock_exam_subject_id = s.id AND wq.photo_url IS NOT NULL) AS photo_count,
+             (SELECT COUNT(*) FROM dbo.MockExamQuestions mq
+              WHERE mq.mock_exam_subject_id = s.id) AS question_row_count
       FROM dbo.MockExamSubjects s
       INNER JOIN dbo.MockExams e ON e.id = s.mock_exam_id
       WHERE e.student_id = @studentId;
@@ -270,32 +343,62 @@ async function getMockExamDetailForStudent(studentId, mockExamId) {
   const examRecord = examResult.recordset[0]
   if (!examRecord) return null
 
-  const [subjectsDb, questionsDb] = await Promise.all([
+  const [subjectsDb, mockQuestionsDb, legacyQuestionsDb] = await Promise.all([
+    withRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }),
     withRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }),
     withRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }),
   ])
-  const [subjectsResult, questionsResult] = await Promise.all([
+  const [subjectsResult, mockQuestionsResult, legacyQuestionsResult] = await Promise.all([
     subjectsDb.query(`
       SELECT s.id, s.mock_exam_id, s.subject_id, s.subject_name, s.total_questions,
              s.correct_count, s.wrong_count, s.blank_count,
              (SELECT COUNT(*) FROM dbo.WrongQuestions wq
-              WHERE wq.mock_exam_subject_id = s.id AND wq.photo_url IS NOT NULL) AS photo_count
+              WHERE wq.mock_exam_subject_id = s.id AND wq.photo_url IS NOT NULL) AS photo_count,
+             (SELECT COUNT(*) FROM dbo.MockExamQuestions mq
+              WHERE mq.mock_exam_subject_id = s.id) AS question_row_count
       FROM dbo.MockExamSubjects s
       WHERE s.mock_exam_id = @mockExamId;
     `),
-    questionsDb.query(`
+    // Soru bazlı girilen subject'ler: gerçek soru listesi (durum + konu) burada.
+    mockQuestionsDb.query(`
+      SELECT mq.id, mq.mock_exam_subject_id, mq.order_no, mq.status, mq.topic_name, mq.wrong_question_id,
+             CASE WHEN wq.photo_url IS NOT NULL THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS has_photo
+      FROM dbo.MockExamQuestions mq
+      INNER JOIN dbo.MockExamSubjects s ON s.id = mq.mock_exam_subject_id
+      LEFT JOIN dbo.WrongQuestions wq ON wq.id = mq.wrong_question_id
+      WHERE s.mock_exam_id = @mockExamId
+      ORDER BY mq.mock_exam_subject_id, mq.order_no ASC;
+    `),
+    // Eski basit mod: soru listesi yalnızca sırayla eklenen hata görsellerinden türer.
+    legacyQuestionsDb.query(`
       SELECT wq.id, wq.mock_exam_subject_id, wq.question_number,
              CASE WHEN wq.photo_url IS NOT NULL THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS has_photo,
              wq.created_at
       FROM dbo.WrongQuestions wq
       INNER JOIN dbo.MockExamSubjects s ON s.id = wq.mock_exam_subject_id
-      WHERE s.mock_exam_id = @mockExamId
+      WHERE s.mock_exam_id = @mockExamId AND wq.mock_exam_subject_id NOT IN (
+        SELECT DISTINCT mq2.mock_exam_subject_id FROM dbo.MockExamQuestions mq2
+        INNER JOIN dbo.MockExamSubjects s2 ON s2.id = mq2.mock_exam_subject_id
+        WHERE s2.mock_exam_id = @mockExamId
+      )
       ORDER BY wq.created_at ASC;
     `),
   ])
 
   const questionsBySubject = new Map()
-  questionsResult.recordset.forEach((row) => {
+  mockQuestionsResult.recordset.forEach((row) => {
+    const list = questionsBySubject.get(row.mock_exam_subject_id) || []
+    list.push({
+      id: row.wrong_question_id || undefined,
+      questionRowId: row.id,
+      orderNo: row.order_no,
+      status: row.status,
+      topicName: row.topic_name || undefined,
+      hasPhoto: Boolean(row.has_photo),
+    })
+    questionsBySubject.set(row.mock_exam_subject_id, list)
+  })
+  legacyQuestionsResult.recordset.forEach((row) => {
     const list = questionsBySubject.get(row.mock_exam_subject_id) || []
     list.push({
       id: row.id,
@@ -317,6 +420,14 @@ async function getMockExamDetailForStudent(studentId, mockExamId) {
 const MOCK_EXAM_WQ_INSERT_SQL = `
   INSERT INTO dbo.WrongQuestions
     (student_id, mock_exam_subject_id, subject, topic, book_name, question_number, error_type, photo_url)
+  VALUES
+    (@studentId, @subjectRowId, @subject, @topic, @bookName, @questionNumber, @errorType, @photoUrl);
+`
+
+const MOCK_EXAM_WQ_INSERT_RETURNING_ID_SQL = `
+  INSERT INTO dbo.WrongQuestions
+    (student_id, mock_exam_subject_id, subject, topic, book_name, question_number, error_type, photo_url)
+  OUTPUT inserted.id
   VALUES
     (@studentId, @subjectRowId, @subject, @topic, @bookName, @questionNumber, @errorType, @photoUrl);
 `
@@ -402,18 +513,32 @@ async function createMockExamHandler(request) {
           VALUES (@mockExamId, @subjectId, @subjectName, @total, @correct, @wrong, @blank);
         `)
         const subjectRowId = subjectResult.recordset[0].id
-        const topic = subjectTopicLabel(subject.subjectName, examDate)
-        for (let i = 0; i < subject.photos.length; i += 1) {
-          await makeRequest(
-            mockExamWqBindings({
-              studentId,
-              subjectRowId,
-              subjectName: subject.subjectName,
-              topic,
-              questionNumber: i + 1,
-              photoUrl: subject.photos[i],
-            }),
-          ).query(MOCK_EXAM_WQ_INSERT_SQL)
+        if (subject.questions) {
+          for (const q of subject.questions) {
+            await makeRequest({
+              subjectRowId: { type: sql.UniqueIdentifier, value: subjectRowId },
+              orderNo: { type: sql.Int, value: q.orderNo },
+              status: { type: sql.NVarChar(10), value: q.status },
+              topicName: { type: sql.NVarChar(200), value: q.topicName },
+            }).query(`
+              INSERT INTO dbo.MockExamQuestions (mock_exam_subject_id, order_no, status, topic_name)
+              VALUES (@subjectRowId, @orderNo, @status, @topicName);
+            `)
+          }
+        } else {
+          const topic = subjectTopicLabel(subject.subjectName, examDate)
+          for (let i = 0; i < subject.photos.length; i += 1) {
+            await makeRequest(
+              mockExamWqBindings({
+                studentId,
+                subjectRowId,
+                subjectName: subject.subjectName,
+                topic,
+                questionNumber: i + 1,
+                photoUrl: subject.photos[i],
+              }),
+            ).query(MOCK_EXAM_WQ_INSERT_SQL)
+          }
         }
       }
 
@@ -461,7 +586,7 @@ async function updateMockExamHandler(request) {
       `)
 
       for (const subject of subjects) {
-        await makeRequest({
+        const updateResult = await makeRequest({
           mockExamId: { type: sql.UniqueIdentifier, value: mockExamId },
           subjectName: { type: sql.NVarChar(100), value: subject.subjectName },
           total: { type: sql.Int, value: subject.totalQuestions },
@@ -471,8 +596,42 @@ async function updateMockExamHandler(request) {
         }).query(`
           UPDATE dbo.MockExamSubjects
           SET total_questions = @total, correct_count = @correct, wrong_count = @wrong, blank_count = @blank
+          OUTPUT inserted.id
           WHERE mock_exam_id = @mockExamId AND subject_name = @subjectName;
         `)
+        const subjectRowId = updateResult.recordset[0]?.id
+        if (!subjectRowId) continue
+
+        // Var olan soru satırlarını (varsa) sırayla eşleştirip fotoğraf bağlantısını koru,
+        // sonra hepsini silip yeni seti (varsa) yeniden ekle. Soru bazlı moddan basit moda
+        // geçilirse (subject.questions boş) satırlar silinir; ilişkili WrongQuestions/fotoğraf
+        // kayıtları mock_exam_subject_id üzerinden Hata Defteri'nde görünmeye devam eder.
+        const prevDb = await makeRequest({ subjectRowId: { type: sql.UniqueIdentifier, value: subjectRowId } }).query(`
+          SELECT order_no, status, wrong_question_id FROM dbo.MockExamQuestions WHERE mock_exam_subject_id = @subjectRowId;
+        `)
+        const prevByOrder = new Map(prevDb.recordset.map((row) => [row.order_no, row]))
+
+        await makeRequest({ subjectRowId: { type: sql.UniqueIdentifier, value: subjectRowId } }).query(`
+          DELETE FROM dbo.MockExamQuestions WHERE mock_exam_subject_id = @subjectRowId;
+        `)
+
+        if (subject.questions) {
+          for (const q of subject.questions) {
+            const prev = prevByOrder.get(q.orderNo)
+            const carryWrongId =
+              prev && prev.status === q.status && q.status !== 'dogru' ? prev.wrong_question_id : null
+            await makeRequest({
+              subjectRowId: { type: sql.UniqueIdentifier, value: subjectRowId },
+              orderNo: { type: sql.Int, value: q.orderNo },
+              status: { type: sql.NVarChar(10), value: q.status },
+              topicName: { type: sql.NVarChar(200), value: q.topicName },
+              wrongQuestionId: { type: sql.UniqueIdentifier, value: carryWrongId || null },
+            }).query(`
+              INSERT INTO dbo.MockExamQuestions (mock_exam_subject_id, order_no, status, topic_name, wrong_question_id)
+              VALUES (@subjectRowId, @orderNo, @status, @topicName, @wrongQuestionId);
+            `)
+          }
+        }
       }
     })
 
@@ -560,6 +719,67 @@ async function addMockExamPhotoHandler(request) {
   }
 }
 
+// Soru bazlı modda fotoğraf, belirli bir soru satırına (MockExamQuestions) bağlanır —
+// eski moddaki gibi sıradaki bir sonraki foto değil, o sorunun kendi görseli.
+async function addMockExamQuestionPhotoHandler(request) {
+  try {
+    const payload = await request.json().catch(() => null)
+    const { error, studentId } = await requireStudentWriteContext(request, { studentId: payload?.studentId })
+    if (error) return error
+
+    const photoCheck = sanitizeMistakePhoto(payload?.photo)
+    if (photoCheck.error) return json(400, { error: photoCheck.error })
+
+    const { mockExamId, subjectRowId, questionRowId } = request.params
+    const scopeDb = await withRequest({
+      questionRowId: { type: sql.UniqueIdentifier, value: questionRowId },
+      subjectRowId: { type: sql.UniqueIdentifier, value: subjectRowId },
+      mockExamId: { type: sql.UniqueIdentifier, value: mockExamId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const scopeResult = await scopeDb.query(`
+      SELECT mq.id, mq.order_no, mq.status, mq.topic_name, mq.wrong_question_id,
+             s.id AS subject_row_id, s.subject_name
+      FROM dbo.MockExamQuestions mq
+      INNER JOIN dbo.MockExamSubjects s ON s.id = mq.mock_exam_subject_id
+      INNER JOIN dbo.MockExams e ON e.id = s.mock_exam_id
+      WHERE mq.id = @questionRowId AND s.id = @subjectRowId AND s.mock_exam_id = @mockExamId
+        AND e.student_id = @studentId;
+    `)
+    const scope = scopeResult.recordset[0]
+    if (!scope) return json(404, { error: 'Soru bulunamadı.' })
+    if (scope.status === 'dogru') return json(400, { error: 'Sadece yanlış/boş sorulara fotoğraf eklenebilir.' })
+    if (scope.wrong_question_id) return json(400, { error: 'Bu soru için zaten fotoğraf var, önce kaldırın.' })
+
+    const wrongQuestionId = await withTransaction(async (makeRequest) => {
+      const insertResult = await makeRequest(
+        mockExamWqBindings({
+          studentId,
+          subjectRowId: scope.subject_row_id,
+          subjectName: scope.subject_name,
+          topic: scope.topic_name || subjectTopicLabel(scope.subject_name, null),
+          questionNumber: scope.order_no,
+          photoUrl: photoCheck.value,
+        }),
+      ).query(MOCK_EXAM_WQ_INSERT_RETURNING_ID_SQL)
+      const newWrongQuestionId = insertResult.recordset[0]?.id
+      await makeRequest({
+        questionRowId: { type: sql.UniqueIdentifier, value: scope.id },
+        wrongQuestionId: { type: sql.UniqueIdentifier, value: newWrongQuestionId },
+      }).query(`
+        UPDATE dbo.MockExamQuestions SET wrong_question_id = @wrongQuestionId WHERE id = @questionRowId;
+      `)
+      return newWrongQuestionId
+    })
+    if (!wrongQuestionId) throw new Error('Fotoğraf kaydı oluşturulamadı.')
+
+    const exam = await getMockExamDetailForStudent(studentId, mockExamId)
+    return json(201, { mockExam: exam })
+  } catch (error) {
+    return handleError(error, 'addMockExamQuestionPhotoHandler', 'Fotoğraf eklenemedi.')
+  }
+}
+
 async function deleteMockExamPhotoHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
@@ -580,6 +800,98 @@ async function deleteMockExamPhotoHandler(request) {
     return json(200, { ok: true })
   } catch (error) {
     return handleError(error, 'deleteMockExamPhotoHandler', 'Fotoğraf silinemedi.')
+  }
+}
+
+// Soru bazlı giriş formunda konu alanı için autocomplete önerisi: bu öğrencinin o ders için
+// daha önce yazdığı konu adları, en sık kullanılan önce.
+async function getMockExamTopicSuggestionsHandler(request) {
+  try {
+    const { error, studentId } = await requireStudentContext(request)
+    if (error) return error
+
+    const subjectName = (request.query.get('subjectName') || '').trim().slice(0, 100)
+    if (!subjectName) return json(200, { topics: [] })
+
+    const db = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      subjectName: { type: sql.NVarChar(100), value: subjectName },
+    })
+    const result = await db.query(`
+      SELECT mq.topic_name, COUNT(*) AS usage_count
+      FROM dbo.MockExamQuestions mq
+      INNER JOIN dbo.MockExamSubjects s ON s.id = mq.mock_exam_subject_id
+      INNER JOIN dbo.MockExams e ON e.id = s.mock_exam_id
+      WHERE e.student_id = @studentId AND s.subject_name = @subjectName AND mq.topic_name IS NOT NULL
+      GROUP BY mq.topic_name
+      ORDER BY usage_count DESC, mq.topic_name ASC;
+    `)
+    return json(200, { topics: result.recordset.map((row) => row.topic_name) })
+  } catch (error) {
+    return handleError(error, 'getMockExamTopicSuggestionsHandler', 'Konu önerileri yüklenemedi.')
+  }
+}
+
+// Öğrencinin tüm denemelerindeki soru bazlı girişleri (subject_name, topic_name) bazında
+// toplar. restrictSubjectId/restrictSubjectName verilirse, 'genel' dışındaki (branş/etüt)
+// denemeler yalnızca eşleşen derste sayılır — öğretmen yalnızca takip ettiği dersi görsün diye.
+async function computeMockExamTopicStats(studentId, { restrictSubjectId, restrictSubjectName } = {}) {
+  const db = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
+  const result = await db.query(`
+    SELECT s.subject_name, s.subject_id, mq.topic_name, mq.status, e.kind
+    FROM dbo.MockExamQuestions mq
+    INNER JOIN dbo.MockExamSubjects s ON s.id = mq.mock_exam_subject_id
+    INNER JOIN dbo.MockExams e ON e.id = s.mock_exam_id
+    WHERE e.student_id = @studentId;
+  `)
+
+  const normalizedRestrictName = restrictSubjectName ? normalizeSubjectName(restrictSubjectName) : null
+  const restricted = Boolean(restrictSubjectId || normalizedRestrictName)
+  const rows = result.recordset.filter((row) => {
+    if (row.kind === 'genel' || !restricted) return true
+    if (restrictSubjectId && row.subject_id && String(row.subject_id).toLowerCase() === String(restrictSubjectId).toLowerCase()) {
+      return true
+    }
+    return normalizedRestrictName ? normalizeSubjectName(row.subject_name) === normalizedRestrictName : false
+  })
+
+  const bySubject = new Map()
+  for (const row of rows) {
+    const topicKey = row.topic_name || 'Konu belirtilmedi'
+    let topicsMap = bySubject.get(row.subject_name)
+    if (!topicsMap) {
+      topicsMap = new Map()
+      bySubject.set(row.subject_name, topicsMap)
+    }
+    const entry = topicsMap.get(topicKey) || { total: 0, correct: 0, wrong: 0, blank: 0 }
+    entry.total += 1
+    if (row.status === 'dogru') entry.correct += 1
+    else if (row.status === 'yanlis') entry.wrong += 1
+    else entry.blank += 1
+    topicsMap.set(topicKey, entry)
+  }
+
+  const subjects = [...bySubject.entries()].map(([subjectName, topicsMap]) => ({
+    subjectName,
+    topics: [...topicsMap.entries()]
+      .map(([topic, stats]) => ({
+        topic,
+        ...stats,
+        successRate: stats.total > 0 ? Math.round((stats.correct / stats.total) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => a.successRate - b.successRate),
+  }))
+
+  return { subjects }
+}
+
+async function getMockExamTopicStatsHandler(request) {
+  try {
+    const { error, studentId } = await requireStudentContext(request)
+    if (error) return error
+    return json(200, await computeMockExamTopicStats(studentId))
+  } catch (error) {
+    return handleError(error, 'getMockExamTopicStatsHandler', 'Konu analizi yüklenemedi.')
   }
 }
 
@@ -625,6 +937,28 @@ async function getTeacherMockExamPhotoHandler(request) {
     return json(200, { photoUrl })
   } catch (error) {
     return handleError(error, 'getTeacherMockExamPhotoHandler', 'Fotoğraf yüklenemedi.')
+  }
+}
+
+async function getTeacherMockExamTopicStatsHandler(request) {
+  try {
+    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    let subjectName = null
+    if (subjectId) {
+      const subjectDb = await withRequest({ subjectId: { type: sql.UniqueIdentifier, value: subjectId } })
+      const subjectResult = await subjectDb.query(`SELECT name FROM dbo.Subjects WHERE id = @subjectId;`)
+      subjectName = subjectResult.recordset[0]?.name || null
+    }
+
+    const stats = await computeMockExamTopicStats(studentId, {
+      restrictSubjectId: subjectId,
+      restrictSubjectName: subjectName,
+    })
+    return json(200, stats)
+  } catch (error) {
+    return handleError(error, 'getTeacherMockExamTopicStatsHandler', 'Konu analizi yüklenemedi.')
   }
 }
 
@@ -734,9 +1068,13 @@ module.exports = {
   updateMockExamHandler,
   deleteMockExamHandler,
   addMockExamPhotoHandler,
+  addMockExamQuestionPhotoHandler,
   deleteMockExamPhotoHandler,
+  getMockExamTopicSuggestionsHandler,
+  getMockExamTopicStatsHandler,
   listTeacherMockExamsHandler,
   getTeacherMockExamHandler,
   getTeacherMockExamPhotoHandler,
+  getTeacherMockExamTopicStatsHandler,
   getTeacherClassMockExamAnalysisHandler,
 }

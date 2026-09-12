@@ -22,6 +22,7 @@ import { cn } from '../ui/utils'
 import { cachedGet } from '../../services/authClient'
 import { todayISODate } from '../../utils/time'
 import MistakePhotoCaptureModal from '../student/components/MistakePhotoCaptureModal'
+import MockExamTopicAnalysis from './MockExamTopicAnalysis'
 import {
   BRANS_QUESTION_COUNT,
   GENEL_DENEME_TEMPLATE,
@@ -116,7 +117,7 @@ const NUM_CLASS = cn(
 
 // Doğru / yanlış / boş — tek satırda, etiketsiz (alan adları input içinde soluk placeholder).
 // total null ise (Etüt) toplam = D+Y+B; sabit toplam yoktur.
-function CountsRow({ total, counts, name, onCount }) {
+function CountsRow({ total, counts, name, onCount, readOnly = false }) {
   const sum = counts.correct + counts.wrong + counts.blank
   const fixed = total != null
   const matched = fixed ? sum === total : sum >= 1
@@ -130,22 +131,25 @@ function CountsRow({ total, counts, name, onCount }) {
           value={counts.correct}
           max={total ?? undefined}
           placeholder="Doğru"
+          disabled={readOnly}
           onChange={(next) => onCount('correct', next)}
-          className={cn(NUM_CLASS, 'placeholder:text-panel-green/60')}
+          className={cn(NUM_CLASS, 'placeholder:text-panel-green/60', readOnly && 'opacity-70')}
         />
         <NumberField
           value={counts.wrong}
           max={total ?? undefined}
           placeholder="Yanlış"
+          disabled={readOnly}
           onChange={(next) => onCount('wrong', next)}
-          className={cn(NUM_CLASS, 'placeholder:text-panel-red/60')}
+          className={cn(NUM_CLASS, 'placeholder:text-panel-red/60', readOnly && 'opacity-70')}
         />
         <NumberField
           value={counts.blank}
           max={total ?? undefined}
           placeholder="Boş"
+          disabled={readOnly}
           onChange={(next) => onCount('blank', next)}
-          className={cn(NUM_CLASS, 'placeholder:text-panel-text-muted/70')}
+          className={cn(NUM_CLASS, 'placeholder:text-panel-text-muted/70', readOnly && 'opacity-70')}
         />
       </div>
       <span
@@ -160,20 +164,114 @@ function CountsRow({ total, counts, name, onCount }) {
   )
 }
 
+/* ------------------------------------------------------------------ soru bazlı giriş */
+
+const QUESTION_STATUS_META = {
+  dogru: { label: 'D', tone: 'bg-panel-green-soft text-panel-green', activeTone: 'bg-panel-green text-white' },
+  yanlis: { label: 'Y', tone: 'bg-panel-red-soft text-panel-red', activeTone: 'bg-panel-red text-white' },
+  bos: { label: 'B', tone: 'bg-panel-surface-soft text-panel-text-muted', activeTone: 'bg-panel-text-muted text-white' },
+}
+
+function defaultQuestionRow(orderNo) {
+  return { orderNo, status: 'bos', topicName: '' }
+}
+
+function QuestionStatusToggle({ value, onChange }) {
+  return (
+    <div className="flex shrink-0 gap-1">
+      {Object.entries(QUESTION_STATUS_META).map(([key, meta]) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={value === key}
+          onClick={() => onChange(key)}
+          className={cn(
+            'flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold transition-colors',
+            value === key ? meta.activeTone : meta.tone,
+          )}
+        >
+          {meta.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Soru bazlı giriş: her soru için durum (D/Y/B) + konu adı. editableTotal true ise (Etüt)
+// soru sayısı sonradan +/- ile değiştirilebilir; sabit toplamlı türlerde (Genel/Branş) satır
+// sayısı total'a kilitlidir.
+function QuestionRows({ idPrefix, questions, editableTotal, suggestions, onPatch, onAdd, onRemove }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <datalist id={idPrefix}>
+        {suggestions.map((topic) => (
+          <option key={topic} value={topic} />
+        ))}
+      </datalist>
+      {questions.map((q, qi) => (
+        <div key={qi} className="flex items-center gap-1.5">
+          <span className="w-6 shrink-0 text-right text-xs font-semibold tabular-nums text-panel-text-muted">
+            {q.orderNo}
+          </span>
+          <QuestionStatusToggle value={q.status} onChange={(status) => onPatch(qi, { status })} />
+          <input
+            type="text"
+            list={idPrefix}
+            value={q.topicName}
+            onChange={(event) => onPatch(qi, { topicName: event.target.value })}
+            placeholder="Konu (isteğe bağlı)"
+            maxLength={200}
+            className="h-8 min-w-0 flex-1 rounded-lg border border-panel-border bg-white px-2 text-xs text-panel-text placeholder:text-panel-text-muted/70"
+          />
+        </div>
+      ))}
+      {editableTotal ? (
+        <div className="flex gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onAdd}
+            className="rounded-lg border border-dashed border-panel-blue/50 px-2 py-1 text-xs font-semibold text-panel-blue hover:bg-panel-blue-soft"
+          >
+            + Soru ekle
+          </button>
+          {questions.length > 1 ? (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="rounded-lg border border-dashed border-panel-red/40 px-2 py-1 text-xs font-semibold text-panel-red hover:bg-panel-red-soft"
+            >
+              Son soruyu sil
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------ Yeni / düzenle çekmecesi */
 
 const emptyCounts = { correct: 0, wrong: 0, blank: 0 }
 
 function buildInitialSubjects(kind, existing) {
   if (existing) {
-    return existing.subjects.map((s) => ({
-      subjectId: s.subjectId,
-      subjectName: s.subjectName,
-      // Etüt'te sabit toplam yok — D/Y/B'den türer.
-      total: existing.kind === 'etut' ? null : s.totalQuestions,
-      counts: { correct: s.correct, wrong: s.wrong, blank: s.blank },
-      photos: [],
-    }))
+    return existing.subjects.map((s) => {
+      const hasQuestionRows = Array.isArray(s.questions) && s.questions.some((q) => q.status)
+      return {
+        subjectId: s.subjectId,
+        subjectName: s.subjectName,
+        // Etüt'te sabit toplam yok — D/Y/B'den türer.
+        total: existing.kind === 'etut' ? null : s.totalQuestions,
+        counts: { correct: s.correct, wrong: s.wrong, blank: s.blank },
+        photos: [],
+        questionsMode: hasQuestionRows,
+        questions: hasQuestionRows
+          ? [...s.questions]
+              .sort((a, b) => a.orderNo - b.orderNo)
+              .map((q) => ({ orderNo: q.orderNo, status: q.status, topicName: q.topicName || '' }))
+          : [],
+      }
+    })
   }
   if (kind === 'genel') {
     return GENEL_DENEME_TEMPLATE.map((tpl) => ({
@@ -182,6 +280,8 @@ function buildInitialSubjects(kind, existing) {
       total: tpl.total,
       counts: { ...emptyCounts, blank: tpl.total },
       photos: [],
+      questionsMode: false,
+      questions: [],
     }))
   }
   // Etüt: sabit toplam yok (total null) — D/Y/B'yi kullanıcı girer.
@@ -192,11 +292,13 @@ function buildInitialSubjects(kind, existing) {
       total: kind === 'brans' ? BRANS_QUESTION_COUNT : null,
       counts: kind === 'brans' ? { ...emptyCounts, blank: BRANS_QUESTION_COUNT } : { ...emptyCounts },
       photos: [],
+      questionsMode: false,
+      questions: [],
     },
   ]
 }
 
-function ExamDrawer({ existing, initialKind, onClose, onSubmit, submitting }) {
+function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, onClose, onSubmit, submitting }) {
   const [step, setStep] = useState(existing || initialKind ? 'form' : 'kind')
   const [kind, setKind] = useState(existing?.kind || initialKind || 'brans')
   const [examDate, setExamDate] = useState(existing?.examDate || todayISODate())
@@ -207,6 +309,7 @@ function ExamDrawer({ existing, initialKind, onClose, onSubmit, submitting }) {
   const [subjects, setSubjects] = useState([])
   const [error, setError] = useState('')
   const [captureFor, setCaptureFor] = useState(null) // index of subjectRows
+  const [topicSuggestions, setTopicSuggestions] = useState({}) // subjectName -> string[]
 
   useEffect(() => {
     cachedGet('/api/panel/subjects')
@@ -233,6 +336,59 @@ function ExamDrawer({ existing, initialKind, onClose, onSubmit, submitting }) {
     patchRow(index, { subjectId, subjectName: hit?.name || '' })
   }
 
+  const loadTopicSuggestions = useCallback(
+    (subjectName) => {
+      if (!fetchTopicSuggestions || !subjectName || topicSuggestions[subjectName]) return
+      setTopicSuggestions((prev) => ({ ...prev, [subjectName]: [] }))
+      fetchTopicSuggestions(subjectName, studentId)
+        .then((topics) => setTopicSuggestions((prev) => ({ ...prev, [subjectName]: topics || [] })))
+        .catch(() => {})
+    },
+    [fetchTopicSuggestions, studentId, topicSuggestions],
+  )
+
+  const setQuestionsMode = (index, enabled) => {
+    setSubjectRows((rows) =>
+      rows.map((row, i) => {
+        if (i !== index) return row
+        if (!enabled) return { ...row, questionsMode: false }
+        const total = row.total ?? row.counts.correct + row.counts.wrong + row.counts.blank
+        const size = Math.max(1, total || 1)
+        const questions =
+          row.questions.length === size
+            ? row.questions
+            : Array.from({ length: size }, (_, qi) => row.questions[qi] || defaultQuestionRow(qi + 1))
+        return { ...row, questionsMode: true, questions }
+      }),
+    )
+    const subjectName = subjectRows[index]?.subjectName
+    if (enabled && subjectName) loadTopicSuggestions(subjectName)
+  }
+
+  const patchQuestion = (index, qIndex, patch) => {
+    setSubjectRows((rows) =>
+      rows.map((row, i) => {
+        if (i !== index) return row
+        return { ...row, questions: row.questions.map((q, qi) => (qi === qIndex ? { ...q, ...patch } : q)) }
+      }),
+    )
+  }
+
+  const addQuestionRow = (index) => {
+    setSubjectRows((rows) =>
+      rows.map((row, i) => {
+        if (i !== index || row.questions.length >= MAX_ETUT_QUESTIONS) return row
+        return { ...row, questions: [...row.questions, defaultQuestionRow(row.questions.length + 1)] }
+      }),
+    )
+  }
+
+  const removeQuestionRow = (index) => {
+    setSubjectRows((rows) =>
+      rows.map((row, i) => (i !== index || row.questions.length <= 1 ? row : { ...row, questions: row.questions.slice(0, -1) })),
+    )
+  }
+
   const setCount = (index, key, next) => {
     setSubjectRows((rows) =>
       rows.map((row, i) => {
@@ -257,6 +413,13 @@ function ExamDrawer({ existing, initialKind, onClose, onSubmit, submitting }) {
         setError('Ders seçilmelidir.')
         return
       }
+      if (row.questionsMode) {
+        if (!row.questions.length) {
+          setError(`${row.subjectName}: en az 1 soru olmalı.`)
+          return
+        }
+        continue
+      }
       const sum = row.counts.correct + row.counts.wrong + row.counts.blank
       if (row.total != null && sum !== row.total) {
         setError(`${row.subjectName || 'Ders'}: doğru + yanlış + boş toplamı ${row.total} olmalı.`)
@@ -276,21 +439,40 @@ function ExamDrawer({ existing, initialKind, onClose, onSubmit, submitting }) {
       kind,
       examDate: kind === 'etut' && !examDate ? null : examDate,
       title: title.trim() || undefined,
-      subjects: subjectRows.map((row) => ({
-        subjectId: row.subjectId || matchSubjectId(subjects, row.subjectName),
-        subjectName: row.subjectName,
-        totalQuestions: row.total ?? row.counts.correct + row.counts.wrong + row.counts.blank,
-        correct: row.counts.correct,
-        wrong: row.counts.wrong,
-        blank: row.counts.blank,
-        photos: row.photos,
-      })),
+      subjects: subjectRows.map((row) => {
+        const subjectId = row.subjectId || matchSubjectId(subjects, row.subjectName)
+        if (row.questionsMode) {
+          return {
+            subjectId,
+            subjectName: row.subjectName,
+            totalQuestions: row.questions.length,
+            questions: row.questions.map((q) => ({
+              orderNo: q.orderNo,
+              status: q.status,
+              topicName: q.topicName?.trim() || undefined,
+            })),
+          }
+        }
+        return {
+          subjectId,
+          subjectName: row.subjectName,
+          totalQuestions: row.total ?? row.counts.correct + row.counts.wrong + row.counts.blank,
+          correct: row.counts.correct,
+          wrong: row.counts.wrong,
+          blank: row.counts.blank,
+          photos: row.photos,
+        }
+      }),
     }
     onSubmit(payload)
   }
 
-  const totalPhotos = subjectRows.reduce((sum, row) => sum + row.photos.length, 0)
-  const encouragedPhotos = subjectRows.reduce((sum, row) => sum + row.counts.wrong + row.counts.blank, 0)
+  const totalPhotos = subjectRows.reduce((sum, row) => sum + (row.questionsMode ? 0 : row.photos.length), 0)
+  const encouragedPhotos = subjectRows.reduce(
+    (sum, row) => sum + (row.questionsMode ? 0 : row.counts.wrong + row.counts.blank),
+    0,
+  )
+  const anyQuestionsMode = subjectRows.some((row) => row.questionsMode)
   const KindIcon = KIND_ICONS[kind] || FileCheck2
 
   return (
@@ -405,50 +587,86 @@ function ExamDrawer({ existing, initialKind, onClose, onSubmit, submitting }) {
                     Doğru / yanlış / boş — toplam soru sayısı bunların toplamıdır
                   </p>
                 ) : null}
-                {subjectRows.map((row, index) => (
-                  <div key={index} className="flex flex-col gap-2 rounded-xl border border-panel-border bg-white p-3">
-                    <CountsRow
-                      total={row.total}
-                      counts={row.counts}
-                      name={kind === 'genel' ? row.subjectName : null}
-                      onCount={(key, next) => setCount(index, key, next)}
-                    />
+                {subjectRows.map((row, index) => {
+                  const questionCounts = row.questionsMode
+                    ? {
+                        correct: row.questions.filter((q) => q.status === 'dogru').length,
+                        wrong: row.questions.filter((q) => q.status === 'yanlis').length,
+                        blank: row.questions.filter((q) => q.status === 'bos').length,
+                      }
+                    : row.counts
+                  return (
+                    <div key={index} className="flex flex-col gap-2 rounded-xl border border-panel-border bg-white p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        {kind === 'genel' ? <span className="flex-1" /> : null}
+                        <button
+                          type="button"
+                          onClick={() => setQuestionsMode(index, !row.questionsMode)}
+                          className={cn(
+                            'shrink-0 rounded-lg px-2 py-1 text-xs font-semibold transition-colors',
+                            row.questionsMode
+                              ? 'bg-panel-blue-soft text-panel-blue'
+                              : 'text-panel-blue hover:bg-panel-blue-soft',
+                          )}
+                        >
+                          {row.questionsMode ? 'Basit moda dön' : 'Soru bazlı gir'}
+                        </button>
+                      </div>
 
-                    {!existing ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        {row.photos.map((photo, photoIndex) => (
-                          <div
-                            key={photoIndex}
-                            className="relative h-14 w-14 overflow-hidden rounded-lg border border-panel-border"
-                          >
-                            <img src={photo} alt="" className="h-full w-full object-cover" />
+                      <CountsRow
+                        total={row.total}
+                        counts={questionCounts}
+                        name={kind === 'genel' ? row.subjectName : null}
+                        readOnly={row.questionsMode}
+                        onCount={(key, next) => setCount(index, key, next)}
+                      />
+
+                      {row.questionsMode ? (
+                        <QuestionRows
+                          idPrefix={`mock-exam-topics-${index}`}
+                          questions={row.questions}
+                          editableTotal={row.total == null}
+                          suggestions={topicSuggestions[row.subjectName] || []}
+                          onPatch={(qi, patch) => patchQuestion(index, qi, patch)}
+                          onAdd={() => addQuestionRow(index)}
+                          onRemove={() => removeQuestionRow(index)}
+                        />
+                      ) : !existing ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {row.photos.map((photo, photoIndex) => (
+                            <div
+                              key={photoIndex}
+                              className="relative h-14 w-14 overflow-hidden rounded-lg border border-panel-border"
+                            >
+                              <img src={photo} alt="" className="h-full w-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => patchRow(index, { photos: row.photos.filter((_, i) => i !== photoIndex) })}
+                                className="absolute right-0 top-0 rounded-bl-lg bg-black/60 p-0.5 text-white transition-colors hover:bg-black/80"
+                                aria-label="Görseli kaldır"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ))}
+                          {row.photos.length < row.counts.wrong + row.counts.blank ? (
                             <button
                               type="button"
-                              onClick={() => patchRow(index, { photos: row.photos.filter((_, i) => i !== photoIndex) })}
-                              className="absolute right-0 top-0 rounded-bl-lg bg-black/60 p-0.5 text-white transition-colors hover:bg-black/80"
-                              aria-label="Görseli kaldır"
+                              onClick={() => setCaptureFor(index)}
+                              className="flex h-14 items-center gap-1.5 rounded-lg border border-dashed border-panel-blue/50 bg-panel-blue-soft/40 px-3 text-xs font-semibold text-panel-blue transition-colors hover:bg-panel-blue-soft"
                             >
-                              <X size={12} />
+                              <ImagePlus size={16} aria-hidden="true" />
+                              Hata görseli ekle
                             </button>
-                          </div>
-                        ))}
-                        {row.photos.length < row.counts.wrong + row.counts.blank ? (
-                          <button
-                            type="button"
-                            onClick={() => setCaptureFor(index)}
-                            className="flex h-14 items-center gap-1.5 rounded-lg border border-dashed border-panel-blue/50 bg-panel-blue-soft/40 px-3 text-xs font-semibold text-panel-blue transition-colors hover:bg-panel-blue-soft"
-                          >
-                            <ImagePlus size={16} aria-hidden="true" />
-                            Hata görseli ekle
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
               </div>
 
-              {existing ? (
+              {existing || anyQuestionsMode ? (
                 <p className="rounded-xl bg-panel-surface-soft px-4 py-3 text-xs text-panel-text-muted">
                   Hata görselleri denemeyi kaydettikten sonra karttan eklenip çıkarılabilir.
                 </p>
@@ -570,7 +788,8 @@ function PhotoModal({ questions, fetchPhoto, onClose, onDelete }) {
 
 /* ------------------------------------------------------------------ deneme kartı */
 
-function SubjectLine({ subject, readOnly, onViewPhotos, onAddPhoto }) {
+function SubjectLine({ subject, readOnly, onViewPhotos, onAddPhoto, onManageQuestions }) {
+  const isQuestionMode = Array.isArray(subject.questions) && subject.questions.some((q) => q.status)
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-panel-border/60 py-2.5 first:border-t-0">
       <span className="min-w-28 flex-1 text-sm font-semibold text-panel-text">{subject.subjectName}</span>
@@ -591,7 +810,15 @@ function SubjectLine({ subject, readOnly, onViewPhotos, onAddPhoto }) {
           {subject.photoCount} görsel
         </button>
       ) : null}
-      {!readOnly && onAddPhoto ? (
+      {!readOnly && isQuestionMode && onManageQuestions ? (
+        <button
+          type="button"
+          onClick={onManageQuestions}
+          className="inline-flex items-center gap-1 rounded-lg border border-dashed border-panel-blue/50 px-2 py-1 text-xs font-semibold text-panel-blue hover:bg-panel-blue-soft"
+        >
+          <ImagePlus size={13} aria-hidden="true" /> Soruları yönet
+        </button>
+      ) : !readOnly && onAddPhoto ? (
         <button
           type="button"
           onClick={onAddPhoto}
@@ -604,12 +831,124 @@ function SubjectLine({ subject, readOnly, onViewPhotos, onAddPhoto }) {
   )
 }
 
-function ExamCard({ exam: summary, readOnly, studentId, bare = false, fetchMockExam, fetchPhoto, addPhoto, deletePhoto, onEdit, onDelete, onChanged }) {
+// Soru bazlı bir dersin yanlış/boş sorularını listeler; her birine ayrı ayrı fotoğraf
+// eklenebilir/görüntülenebilir (eski moddaki tek "Görsel ekle" sıralı akışının yerine).
+function QuestionPhotoManagerModal({ subject, fetchPhoto, onAddPhoto, onDeletePhoto, onClose }) {
+  const [captureFor, setCaptureFor] = useState(null) // questionRowId
+  const [viewingId, setViewingId] = useState(null) // questionRowId
+  const wrongOrBlank = (subject.questions || []).filter((q) => q.status === 'yanlis' || q.status === 'bos')
+  const viewingQuestion = viewingId ? wrongOrBlank.find((q) => q.questionRowId === viewingId) : null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-panel-surface shadow-2xl sm:rounded-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-panel-border px-4 py-3">
+          <h3 className="min-w-0 truncate text-sm font-semibold text-panel-text">
+            {subject.subjectName} — yanlış/boş sorular
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Kapat"
+            className="shrink-0 rounded-full p-1.5 text-panel-text-muted hover:bg-panel-surface-soft"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto divide-y divide-panel-border/60 px-4">
+          {wrongOrBlank.length === 0 ? (
+            <p className="py-6 text-center text-sm text-panel-text-muted">Bu derste yanlış/boş soru yok.</p>
+          ) : (
+            wrongOrBlank.map((q) => (
+              <div key={q.questionRowId} className="flex items-center gap-2 py-2.5">
+                <span className="w-6 shrink-0 text-right text-xs font-semibold tabular-nums text-panel-text-muted">
+                  {q.orderNo}
+                </span>
+                <span
+                  className={cn(
+                    'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold',
+                    q.status === 'yanlis' ? 'bg-panel-red-soft text-panel-red' : 'bg-panel-surface-soft text-panel-text-muted',
+                  )}
+                >
+                  {q.status === 'yanlis' ? 'Y' : 'B'}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-xs text-panel-text-muted">{q.topicName || 'Konu yok'}</span>
+                {q.hasPhoto ? (
+                  <button
+                    type="button"
+                    onClick={() => setViewingId(q.questionRowId)}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-panel-blue-soft px-2 py-1 text-xs font-semibold text-panel-blue hover:brightness-95"
+                  >
+                    Görüntüle
+                  </button>
+                ) : onAddPhoto ? (
+                  <button
+                    type="button"
+                    onClick={() => setCaptureFor(q.questionRowId)}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-dashed border-panel-blue/50 px-2 py-1 text-xs font-semibold text-panel-blue hover:bg-panel-blue-soft"
+                  >
+                    <ImagePlus size={13} aria-hidden="true" /> Ekle
+                  </button>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {captureFor ? (
+        <MistakePhotoCaptureModal
+          onClose={() => setCaptureFor(null)}
+          onSave={async (dataUrl) => {
+            await onAddPhoto(captureFor, dataUrl)
+          }}
+        />
+      ) : null}
+
+      {viewingQuestion ? (
+        <PhotoModal
+          questions={[viewingQuestion]}
+          fetchPhoto={fetchPhoto}
+          onClose={() => setViewingId(null)}
+          onDelete={
+            onDeletePhoto
+              ? async (wrongQuestionId) => {
+                  await onDeletePhoto(wrongQuestionId)
+                  setViewingId(null)
+                }
+              : undefined
+          }
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function ExamCard({
+  exam: summary,
+  readOnly,
+  studentId,
+  bare = false,
+  fetchMockExam,
+  fetchPhoto,
+  addPhoto,
+  addQuestionPhoto,
+  deletePhoto,
+  onEdit,
+  onDelete,
+  onChanged,
+}) {
   const [open, setOpen] = useState(false)
   const [photoSubject, setPhotoSubject] = useState(null)
   const [addFor, setAddFor] = useState(null)
+  const [manageSubjectId, setManageSubjectId] = useState(null)
   const [detail, setDetail] = useState(summary.subjects?.[0]?.questions ? summary : null)
   const exam = detail || summary
+  const manageSubject = manageSubjectId ? exam.subjects.find((s) => s.id === manageSubjectId) : null
 
   const loadDetail = useCallback(() => {
     if (!fetchMockExam) return
@@ -679,6 +1018,7 @@ function ExamCard({ exam: summary, readOnly, studentId, bare = false, fetchMockE
                 readOnly={readOnly}
                 onViewPhotos={() => setPhotoSubject(subject)}
                 onAddPhoto={addPhoto ? () => setAddFor(subject) : undefined}
+                onManageQuestions={addQuestionPhoto ? () => setManageSubjectId(subject.id) : undefined}
               />
             ))}
           </div>
@@ -738,6 +1078,28 @@ function ExamCard({ exam: summary, readOnly, studentId, bare = false, fetchMockE
           }}
         />
       ) : null}
+
+      {manageSubject ? (
+        <QuestionPhotoManagerModal
+          subject={manageSubject}
+          fetchPhoto={(id) => fetchPhoto(id, studentId)}
+          onAddPhoto={async (questionRowId, dataUrl) => {
+            await addQuestionPhoto(summary.id, manageSubject.id, questionRowId, dataUrl, studentId)
+            loadDetail()
+            onChanged?.()
+          }}
+          onDeletePhoto={
+            deletePhoto
+              ? async (wrongQuestionId) => {
+                  await deletePhoto(wrongQuestionId, studentId)
+                  loadDetail()
+                  onChanged?.()
+                }
+              : undefined
+          }
+          onClose={() => setManageSubjectId(null)}
+        />
+      ) : null}
     </div>
   )
 }
@@ -755,7 +1117,10 @@ export default function MockExamsView({
   updateMockExam,
   deleteMockExam,
   addPhoto,
+  addQuestionPhoto,
   deletePhoto,
+  fetchTopicSuggestions,
+  fetchTopicStats,
 }) {
   const [exams, setExams] = useState(null)
   const [error, setError] = useState('')
@@ -763,6 +1128,7 @@ export default function MockExamsView({
   const [submitting, setSubmitting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [activeKind, setActiveKind] = useState(MOCK_EXAM_KINDS[0].value)
+  const [view, setView] = useState('list') // 'list' | 'topics'
 
   // Sekme başına: o türdeki denemeler + adet + (Genel Deneme'de) ortalama başarı %.
   const kindGroups = useMemo(() => {
@@ -810,6 +1176,8 @@ export default function MockExamsView({
       .then(setExams)
       .catch((err) => setError(err.message))
   }, [fetchMockExams, studentId])
+
+  const loadTopicStats = useCallback(() => fetchTopicStats(studentId), [fetchTopicStats, studentId])
 
   useEffect(() => {
     load()
@@ -925,6 +1293,7 @@ export default function MockExamsView({
       fetchMockExam,
       fetchPhoto,
       addPhoto,
+      addQuestionPhoto,
       deletePhoto,
       onEdit: openEdit,
       onDelete: setConfirmDelete,
@@ -980,25 +1349,64 @@ export default function MockExamsView({
     )
   })()
 
+  const viewToggle = fetchTopicStats ? (
+    <div className="flex gap-1.5 rounded-xl bg-panel-surface-soft p-1">
+      {[
+        { value: 'list', label: 'Denemeler' },
+        { value: 'topics', label: 'Konu Analizi' },
+      ].map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          aria-pressed={view === opt.value}
+          onClick={() => setView(opt.value)}
+          className={cn(
+            'rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors',
+            view === opt.value ? 'bg-panel-surface text-panel-text shadow-sm' : 'text-panel-text-muted hover:text-panel-text',
+          )}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  ) : null
+
   return (
     <div className="flex flex-col gap-4">
       {embedded ? (
-        addButton && activeGroup.exams.length ? <div className="flex justify-end">{addButton}</div> : null
+        addButton && activeGroup.exams.length && view === 'list' ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {viewToggle}
+            {addButton}
+          </div>
+        ) : viewToggle ? (
+          <div className="flex justify-start">{viewToggle}</div>
+        ) : null
       ) : (
         <PageHeader
           title="Deneme Sınavları"
           subtitle="Branş İzleme, Genel Deneme ve Etüt sonuçları."
-          actions={activeGroup.exams.length ? addButton : null}
+          actions={view === 'list' && activeGroup.exams.length ? addButton : null}
         />
       )}
 
-      {tabs}
-      {body}
+      {!embedded && viewToggle ? viewToggle : null}
+
+      {view === 'topics' ? (
+        <MockExamTopicAnalysis fetchTopicStats={loadTopicStats} />
+      ) : (
+        <>
+          {tabs}
+          {body}
+        </>
+      )}
 
       {drawer ? (
         <ExamDrawer
           existing={drawer.existing}
           initialKind={drawer.initialKind}
+          studentId={studentId}
+          fetchTopicSuggestions={fetchTopicSuggestions}
           submitting={submitting}
           onClose={() => setDrawer(null)}
           onSubmit={handleSubmit}

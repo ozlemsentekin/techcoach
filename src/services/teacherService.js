@@ -472,6 +472,13 @@ export function makeTeacherMockExamFetchers(studentTeacherId) {
       )
       return data.photoUrl
     },
+    fetchTopicStats: async () => {
+      const data = await authRequest(
+        `/api/panel-teacher/students/${studentTeacherId}/mock-exams/topic-stats`,
+        { method: 'GET' },
+      )
+      return data.subjects || []
+    },
   }
 }
 

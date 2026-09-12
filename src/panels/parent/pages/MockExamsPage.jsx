@@ -14,7 +14,10 @@ import {
   updateMockExam,
   deleteMockExam,
   addMockExamPhoto,
+  addMockExamQuestionPhoto,
   deleteMockExamPhoto,
+  getMockExamTopicSuggestions,
+  getMockExamTopicStats,
 } from '../../../services/mockExamService'
 
 export default function MockExamsPage() {
@@ -93,7 +96,10 @@ export default function MockExamsPage() {
         updateMockExam={updateMockExam}
         deleteMockExam={deleteMockExam}
         addPhoto={addMockExamPhoto}
+        addQuestionPhoto={addMockExamQuestionPhoto}
         deletePhoto={deleteMockExamPhoto}
+        fetchTopicSuggestions={getMockExamTopicSuggestions}
+        fetchTopicStats={getMockExamTopicStats}
       />
     </div>
   )
