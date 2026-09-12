@@ -1,3 +1,4 @@
+import { useLessonNotesAccess } from '../../hooks/useLessonNotesAccess'
 import { Outlet, useLocation } from 'react-router-dom'
 import { BillingGateProvider } from '../../context/BillingGateContext'
 import BillingBanner from './BillingBanner'
@@ -22,21 +23,22 @@ const RETURN_TO_PANEL_ITEM = { to: '/parent/dashboard', label: 'Panele Dön', ic
 export default function PanelLayout({ role }) {
   const location = useLocation()
   const { authUser } = useAuth()
+  const lessonNotesEnabled = useLessonNotesAccess()
   const { hasStudents, studentCount } = useParentStudentsGate()
   const Sidebar = SIDEBAR_BY_ROLE[role] || StudentSidebar
   const isAdminSection = role === 'parent' && location.pathname.startsWith('/parent/admin')
   const canManageLibrary = Boolean(authUser?.isAdmin || authUser?.canManageLibrary)
   const roleNav =
     role === 'parent'
-      ? getParentNav({
+      ? getParentNav({ lessonNotesEnabled,
           hasStudents,
           canManageLibrary: Boolean(authUser?.canManageLibrary),
           isAdmin: Boolean(authUser?.isAdmin),
           studentCount,
         })
       : role === 'teacher'
-        ? getTeacherNav(canManageLibrary)
-        : getStudentNav({ aiReportsEnabled: Boolean(authUser?.aiReportsEnabled) })
+        ? getTeacherNav(canManageLibrary, lessonNotesEnabled)
+        : getStudentNav({ lessonNotesEnabled, aiReportsEnabled: Boolean(authUser?.aiReportsEnabled) })
   const { primary, more } = navToMobile(roleNav)
   const primaryItems = isAdminSection ? [RETURN_TO_PANEL_ITEM] : primary
   const moreItems = isAdminSection ? PARENT_ADMIN_NAV.children : more

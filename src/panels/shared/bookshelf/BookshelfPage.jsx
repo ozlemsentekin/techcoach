@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Archive, BookMarked, FilePlus2, Plus, Search, Users } from 'lucide-react'
+import { Archive, BookMarked, Eye, FilePlus2, Plus, Search, Users } from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../LoadingState'
 import EmptyState from '../EmptyState'
@@ -13,6 +13,7 @@ import { BOOKSHELF_RESOURCE_TYPE_LABELS } from './bookshelfConstants'
 const BookFormModal = lazy(() => import('./BookFormModal'))
 const BookshelfDetailModal = lazy(() => import('./BookshelfDetailModal'))
 const BookAdditionRequestModal = lazy(() => import('../requests/BookAdditionRequestModal'))
+const ResourceBookContentViewerModal = lazy(() => import('../library/ResourceBookContentViewerModal'))
 
 function groupBySubject(books) {
   const groups = new Map()
@@ -26,40 +27,50 @@ function groupBySubject(books) {
   return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, 'tr', { sensitivity: 'base' }))
 }
 
-function BookCard({ book, showAssignees, showCreator, onClick }) {
+function BookCard({ book, showAssignees, showCreator, canViewContent, onClick, onViewContent }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group grid grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-3 rounded-xl border border-panel-border bg-white p-3 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-panel-blue hover:shadow-md"
-    >
-      <ResourceBookAvatar book={book} size="row" />
-      <div className="min-w-0">
-        {book.publisherName ? (
-          <Badge tone="lilac" className="mb-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
-            {book.publisherName}
-          </Badge>
-        ) : null}
-        <p className="line-clamp-2 text-sm font-semibold leading-snug text-panel-text group-hover:text-panel-blue">
-          {book.name}
-        </p>
-        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-panel-text-muted">
-          {book.scope === 'catalog' ? (
-            <Badge tone="slate" className="text-[10px]">Katalog</Badge>
-          ) : (
-            <Badge tone="sage" className="text-[10px]">Özel kaynak</Badge>
-          )}
-          <span>{BOOKSHELF_RESOURCE_TYPE_LABELS[book.type] || book.type}</span>
-          {book.grade ? <span>· {book.grade}. sınıf</span> : null}
-          {showAssignees && book.assignedCount ? (
-            <span className="inline-flex items-center gap-1">
-              · <Users size={11} aria-hidden="true" /> {book.assignedCount}
-            </span>
+    <div className="group grid grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-3 rounded-xl border border-panel-border bg-white p-3 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-panel-blue hover:shadow-md">
+      <button type="button" onClick={onClick} className="contents text-left">
+        <ResourceBookAvatar book={book} size="row" />
+        <div className="min-w-0">
+          {book.publisherName ? (
+            <Badge tone="lilac" className="mb-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+              {book.publisherName}
+            </Badge>
           ) : null}
-          {showCreator && book.createdByName ? <span>· ekleyen: {book.createdByName}</span> : null}
+          <p className="line-clamp-2 text-sm font-semibold leading-snug text-panel-text group-hover:text-panel-blue">
+            {book.name}
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-panel-text-muted">
+            {book.scope === 'catalog' ? (
+              <Badge tone="slate" className="text-[10px]">Katalog</Badge>
+            ) : (
+              <Badge tone="sage" className="text-[10px]">Özel kaynak</Badge>
+            )}
+            <span>{BOOKSHELF_RESOURCE_TYPE_LABELS[book.type] || book.type}</span>
+            {book.grade ? <span>· {book.grade}. sınıf</span> : null}
+            {showAssignees && book.assignedCount ? (
+              <span className="inline-flex items-center gap-1">
+                · <Users size={11} aria-hidden="true" /> {book.assignedCount}
+              </span>
+            ) : null}
+            {showCreator && book.createdByName ? <span>· ekleyen: {book.createdByName}</span> : null}
+          </div>
         </div>
-      </div>
-    </button>
+      </button>
+      {canViewContent ? (
+        <div className="col-span-2 flex justify-end">
+          <button
+            type="button"
+            onClick={onViewContent}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-panel-border px-2.5 py-1 text-[11px] font-semibold text-panel-text transition-colors hover:border-panel-blue hover:text-panel-blue"
+          >
+            <Eye size={12} aria-hidden="true" />
+            İçeriği Görüntüle
+          </button>
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -70,6 +81,9 @@ export default function BookshelfPage({ showAssignees = true }) {
   // Admin Kitaplık'ta tam yetkilidir (her kaynağı görür, ekler, düzenler, atar, siler) ve
   // ayrıca ekleyen kişi / arama gibi denetim kolaylıklarını görür.
   const adminView = Boolean(authUser?.isAdmin)
+  // "İçeriği Görüntüle" yalnızca öğretmen rolünde: admin zaten kart tıklayınca içerik
+  // sekmesini düzenleme yetkisiyle görüyor, ayrı bir salt-görüntüleme butonuna ihtiyacı yok.
+  const canViewContent = authUser?.role === 'ogretmen' && !adminView
 
   const [books, setBooks] = useState(null)
   const [error, setError] = useState('')
@@ -80,6 +94,7 @@ export default function BookshelfPage({ showAssignees = true }) {
   const [requesting, setRequesting] = useState(false)
   const [editingBook, setEditingBook] = useState(null)
   const [detailBookId, setDetailBookId] = useState(null)
+  const [viewingContentBookId, setViewingContentBookId] = useState(null)
 
   const load = () => {
     getBookshelfBooks()
@@ -208,7 +223,9 @@ export default function BookshelfPage({ showAssignees = true }) {
                     book={book}
                     showAssignees={showAssignees}
                     showCreator={adminView}
+                    canViewContent={canViewContent}
                     onClick={() => setDetailBookId(book.id)}
+                    onViewContent={() => setViewingContentBookId(book.id)}
                   />
                 ))}
               </div>
@@ -286,6 +303,13 @@ export default function BookshelfPage({ showAssignees = true }) {
               setEditingBook(book)
             }}
             onClose={() => setDetailBookId(null)}
+          />
+        ) : null}
+
+        {viewingContentBookId ? (
+          <ResourceBookContentViewerModal
+            resourceBookId={viewingContentBookId}
+            onClose={() => setViewingContentBookId(null)}
           />
         ) : null}
       </Suspense>

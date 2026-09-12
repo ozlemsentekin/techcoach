@@ -1,3 +1,5 @@
+const workspaceNav = role => ({ key: 'calisma-alani', label: 'Çalışma Alanı', icon: 'BookOpen', children: [{ to: `/${role}/lesson-notes`, label: 'Ders Notları', icon: 'BookOpen' }] })
+
 // "Kütüphane" (sistem kataloğu) menüsü yalnızca kütüphaneye işlem yapabilenlerde görünür
 // (admin veya can_manage_library). Yetkisi olmayan veli/öğretmen/öğrenci bunun yerine
 // "Kitaplık" (yalnızca kendi üçgenlerine görünen özel kaynak rafı) görür. Admin ikisini de
@@ -11,7 +13,7 @@ const KITAPLIK_TEACHER_ITEM = { to: '/teacher/bookshelf', label: 'Kitaplık', ic
 // Sonuçlarım"); "Öğretmenlerim" ve "Taleplerim" tekil öğe olarak kalır.
 // "AI Raporları" şimdilik yalnızca admin ve admin'e bağlı öğrenci profilinde görünür
 // (authUser.aiReportsEnabled, backend'de hesaplanır).
-export function getStudentNav({ aiReportsEnabled = false } = {}) {
+export function getStudentNav({ aiReportsEnabled = false, lessonNotesEnabled = false } = {}) {
   return [
     {
       key: 'calisma-planim',
@@ -35,6 +37,7 @@ export function getStudentNav({ aiReportsEnabled = false } = {}) {
         { to: '/student/courses', label: 'Ders Başarım', icon: 'BookOpen' },
       ],
     },
+    ...(lessonNotesEnabled ? [workspaceNav('student')] : []),
     { to: '/student/teachers', label: 'Öğretmenlerim', icon: 'GraduationCap' },
     { to: '/student/requests', label: 'Taleplerim', icon: 'ClipboardList' },
     { to: '/student/guide', label: 'Rehber', icon: 'BookOpen' },
@@ -71,7 +74,7 @@ export function navToMobile(nav) {
 // Veli menüsü öğrenci paneliyle aynı stilde gruplanır. Henüz hiç çocuk profili
 // eklenmemiş bir veli için Bugün/Haftalık Plan sayfaları boş görünür (öğrenci bağlamı
 // gerektirir); o yüzden ilk kayıtta yalnızca Çocuklarım + Taleplerim gösterilir.
-export function getParentNav({ hasStudents = true, canManageLibrary = false, isAdmin = false, studentCount = null } = {}) {
+export function getParentNav({ hasStudents = true, canManageLibrary = false, isAdmin = false, studentCount = null, lessonNotesEnabled = false } = {}) {
   const studentsItem = getParentStudentsNavItem(studentCount)
   if (!hasStudents) return [studentsItem, PARENT_REQUESTS_NAV_ITEM, PARENT_GUIDE_NAV_ITEM]
 
@@ -105,6 +108,7 @@ export function getParentNav({ hasStudents = true, canManageLibrary = false, isA
         ...(showKitaplik ? [KITAPLIK_PARENT_ITEM] : []),
       ],
     },
+    ...(lessonNotesEnabled ? [workspaceNav('parent')] : []),
     ...kutuphaneItems,
     studentsItem,
     PARENT_REQUESTS_NAV_ITEM,
@@ -121,7 +125,7 @@ export function isNavItemActive(to, location) {
 // Öğretmen menüsü de öğrenci/veli paneliyle aynı stilde gruplanır.
 // "Sınıf Analizi" tüm öğretmenlerde görünür; sayfa, öğrencilerin sınıf bilgisinden
 // sekmeleri kendisi oluşturur (sınıf bilgisi yoksa yönlendirici bir boş durum gösterir).
-export function getTeacherNav(canManageLibrary = false) {
+export function getTeacherNav(canManageLibrary = false, lessonNotesEnabled = false) {
   return [
     {
       key: 'kisilerim',
@@ -141,6 +145,7 @@ export function getTeacherNav(canManageLibrary = false) {
         { to: '/teacher/class-analysis', label: 'Sınıf Analizi', icon: 'BarChart3' },
       ],
     },
+    ...(lessonNotesEnabled ? [workspaceNav('teacher')] : []),
     canManageLibrary ? KUTUPHANE_TEACHER_ITEM : KITAPLIK_TEACHER_ITEM,
     { to: '/teacher/requests', label: 'Taleplerim', icon: 'ClipboardList' },
     { to: '/teacher/guide', label: 'Rehber', icon: 'BookOpen' },
@@ -152,6 +157,7 @@ export const PARENT_ADMIN_NAV = {
   icon: 'ShieldCheck',
   children: [
     { to: '/parent/admin/users', label: 'Üyeler', icon: 'Users' },
+    { to: '/parent/admin/lesson-notes', label: 'Ders Notları', icon: 'BookOpen' },
     { to: '/parent/admin/subjects', label: 'Dersler', icon: 'BookOpen' },
     { to: '/parent/admin/publishers', label: 'Yayın Evleri', icon: 'Building2' },
     { to: '/parent/admin/book-requests', label: 'Talepler', icon: 'ClipboardList' },

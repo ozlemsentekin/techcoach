@@ -1,3 +1,4 @@
+import LessonNotesPage from '../shared/LessonNotesPage'
 import { createElement, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
@@ -110,6 +111,8 @@ export default function ParentApp() {
         <ParentTourProvider>
         <Routes>
           <Route element={<PanelLayout role="parent" />}>
+            <Route path="admin/lesson-notes" element={<RequireAdmin><LessonNotesPage admin /></RequireAdmin>} />
+            <Route path="lesson-notes" element={<LessonNotesPage />} />
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route
               path="dashboard"

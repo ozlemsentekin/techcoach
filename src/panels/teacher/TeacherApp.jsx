@@ -1,3 +1,4 @@
+import LessonNotesPage from '../shared/LessonNotesPage'
 import { createElement, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import ThemeProvider from '../../theme/ThemeProvider'
@@ -74,6 +75,7 @@ export default function TeacherApp() {
       <TeacherClassesProvider>
         <Routes>
           <Route element={<PanelLayout role="teacher" />}>
+            <Route path="lesson-notes" element={<LessonNotesPage />} />
             <Route index element={<Navigate to="students" replace />} />
             <Route path="students" element={pageElement(StudentsPage)} />
             <Route path="students/:studentTeacherId" element={pageElement(StudentDetailPage)} />

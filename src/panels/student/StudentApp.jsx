@@ -1,3 +1,4 @@
+import LessonNotesPage from '../shared/LessonNotesPage'
 import { createElement, lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import PanelLayout from '../layout/PanelLayout'
@@ -34,7 +35,8 @@ export default function StudentApp() {
     <ThemeProvider defaultTheme={defaultTheme}>
       <Routes>
         <Route element={<PanelLayout role="student" />}>
-          <Route index element={<Navigate to="today" replace />} />
+          <Route path="lesson-notes" element={<LessonNotesPage />} />
+            <Route index element={<Navigate to="today" replace />} />
           <Route path="today" element={pageElement(TodayPage)} />
           <Route path="weekly-plan" element={pageElement(WeeklyPlanPage)} />
           <Route path="courses" element={pageElement(CoursesPage)} />

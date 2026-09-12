@@ -783,11 +783,9 @@ async function enterStudentHandler(request) {
       id: { type: sql.UniqueIdentifier, value: parentId },
     })
     const parentResult = await parentDb.query(`
-      SELECT TOP 1 full_name, is_admin FROM dbo.Users WHERE id = @id;
+      SELECT TOP 1 full_name FROM dbo.Users WHERE id = @id;
     `)
     const parentFullName = parentResult.recordset[0]?.full_name
-    // "AI Raporları" şimdilik yalnızca admin ve admin'e bağlı öğrenci profilinde (bkz. auth.js sanitizeUser).
-    const parentIsAdmin = Boolean(parentResult.recordset[0]?.is_admin)
 
     const student = sanitizeStudent(record)
     const token = createSessionToken(student, {
@@ -798,7 +796,8 @@ async function enterStudentHandler(request) {
 
     const user = {
       ...student,
-      aiReportsEnabled: parentIsAdmin,
+      // "AI Raporları" menüsü yalnızca admin hesabında görünür (bkz. auth.js sanitizeUser).
+      aiReportsEnabled: false,
       actingParent: { id: parentId, fullName: parentFullName },
       ...(actingAdminId ? { actingAdmin: { id: actingAdminId, fullName: actingAdminName } } : {}),
       entitlement: await resolveEffectiveEntitlement({

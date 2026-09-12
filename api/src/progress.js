@@ -857,6 +857,12 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
       topic: row.topic_name || null,
       bookName: row.book_name || null,
       totalAnswered,
+      // Cevap kağıdından hesaplanan gerçek yanlış sayısı — Hata Defteri kartlarındaki "X yanlış"
+      // rozeti artık bunu kullanır, dbo.WrongQuestions'daki FOTOĞRAFLANMIŞ satır sayısını değil
+      // (bkz. WrongQuestionsView.jsx). İkisi aynı şey gibi görünse de bağımsız kaynaklardır: bir
+      // soru fotoğraflanmadan da yanlış sayılabilir, ya da düzeltilip artık doğru olan bir sorunun
+      // eski fotoğraf kaydı silinmemiş olabilir. Test sonucu her zaman otoriter kaynaktır.
+      wrongCount: wrong,
       successRate: totalAnswered > 0 ? correct / totalAnswered : null,
     }
   })
@@ -868,6 +874,7 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
       subject,
       topic,
       totalAnswered,
+      wrongCount: entry ? entry.wrong : 0,
       successRate: entry && totalAnswered > 0 ? entry.correct / totalAnswered : null,
     }
   })
