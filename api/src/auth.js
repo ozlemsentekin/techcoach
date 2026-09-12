@@ -39,8 +39,8 @@ function sanitizeUser(record) {
     role: record.role,
     isAdmin: Boolean(record.is_admin),
     canManageLibrary: Boolean(record.can_manage_library),
-    // "AI Raporları" menüsü şimdilik yalnızca admin ve admin'e bağlı öğrenci profilinde.
-    aiReportsEnabled: Boolean(record.is_admin || record.parent_is_admin),
+    // "AI Raporları" menüsü yalnızca admin hesabında görünür (admin'e bağlı öğrenci profilinde de değil).
+    aiReportsEnabled: Boolean(record.is_admin),
     isActive: record.is_active === undefined ? true : Boolean(record.is_active),
     lastLoginAt: record.last_login_at,
     createdAt: record.created_at,
@@ -318,12 +318,10 @@ async function loginHandler(request) {
         u.teacher_subject_ids_json,
         sp.theme_id,
         sp.grade,
-        pa.is_admin AS parent_is_admin,
         e.status AS entitlement_status, e.source AS entitlement_source,
         e.current_period_end AS entitlement_current_period_end
       FROM dbo.Users u
       LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
-      LEFT JOIN dbo.Users pa ON pa.id = u.parent_id
       LEFT JOIN dbo.Entitlements e ON e.parent_id = COALESCE(u.parent_id, u.id)
       WHERE u.phone_number = @phone;
     `)
@@ -422,12 +420,10 @@ async function meHandler(request) {
         u.aydinlatma_accepted_at, u.kvkk_accepted_at, u.funded_by_teacher_id, u.teacher_subject_ids_json,
         sp.theme_id,
         sp.grade,
-        pa.is_admin AS parent_is_admin,
         e.status AS entitlement_status, e.source AS entitlement_source,
         e.current_period_end AS entitlement_current_period_end
       FROM dbo.Users u
       LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
-      LEFT JOIN dbo.Users pa ON pa.id = u.parent_id
       LEFT JOIN dbo.Entitlements e ON e.parent_id = COALESCE(u.parent_id, u.id)
       WHERE u.id = @id;
     `)
