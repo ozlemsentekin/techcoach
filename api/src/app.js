@@ -1935,3 +1935,9 @@ registerHttp('panel-admin-requests-update', {
   route: 'panel-admin/requests/{requestId}',
   handler: updateAdminPanelRequestHandler,
 })
+
+const lessonNotes = require('./lessonNotes')
+registerHttp('panel-lesson-notes', { methods: ['GET'], authLevel: 'anonymous', route: 'panel/lesson-notes', handler: lessonNotes.panelLessonNotes })
+registerHttp('admin-lesson-notes-list', { methods: ['GET'], authLevel: 'anonymous', route: 'panel/admin/lesson-notes', handler: lessonNotes.adminLessonNotes })
+registerHttp('admin-lesson-notes-save', { methods: ['POST'], authLevel: 'anonymous', route: 'panel/admin/lesson-notes', handler: lessonNotes.saveLessonNote })
+registerHttp('admin-lesson-notes-delete', { methods: ['DELETE'], authLevel: 'anonymous', route: 'panel/admin/lesson-notes/{id}', handler: lessonNotes.deleteLessonNote })
