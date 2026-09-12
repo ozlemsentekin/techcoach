@@ -168,6 +168,7 @@ const {
   setBookStudentsHandler: setBookshelfBookStudentsHandler,
   createPublisherForPanelHandler: createBookshelfPublisherHandler,
   listAssignableStudentsHandler: listBookshelfStudentsHandler,
+  getTestAnswerKeyHandler: getBookshelfTestAnswerKeyHandler,
 } = require('./bookshelf')
 const { extractQuestionsFromImageHandler } = require('./questionExtraction')
 const {
@@ -1472,6 +1473,13 @@ registerHttp('panel-bookshelf-students-list', {
   methods: ['GET'],
   route: 'panel/bookshelf/students',
   handler: listBookshelfStudentsHandler,
+})
+
+registerHttp('panel-bookshelf-resource-book-topic-test-answer-key-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/bookshelf/resource-book-topic-tests/{testId}/answer-key',
+  handler: getBookshelfTestAnswerKeyHandler,
 })
 
 registerHttp('panel-homeworks-list', {

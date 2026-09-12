@@ -164,6 +164,9 @@ function AiAnalyzedChip({ count, className }) {
 
 function SubjectShelfCard({ subject, count, stats, tone, pendingCount, aiAnalyzedCount, onClick }) {
   const solvedCount = stats?.totalAnswered ?? null
+  // Sınav sonucundan hesaplanan gerçek yanlış sayısı varsa onu kullan (bkz. progress.js'deki
+  // wrongCount yorumu); yoksa (stats eşleşmediyse) fotoğraflanmış satır sayısına düş.
+  const wrongCount = stats?.wrongCount ?? count
   const successPercent = stats?.successRate != null ? Math.round(stats.successRate * 100) : null
   const colors = RATE_TONES[successRateTone(stats?.successRate)]
   return (
@@ -178,7 +181,7 @@ function SubjectShelfCard({ subject, count, stats, tone, pendingCount, aiAnalyze
       <div className="min-w-0 flex-1">
         <h3 className="truncate text-base font-bold text-panel-text">{subject}</h3>
         <p className="mt-0.5 text-sm text-panel-text-muted">
-          {count} yanlış
+          {wrongCount} yanlış
           {solvedCount != null && solvedCount > 0 ? ` · ${solvedCount} soru çözüldü` : ''}
         </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -215,6 +218,7 @@ function ContentTopicCard({
   selectMode = false,
   selected = false,
 }) {
+  const effectiveWrongCount = stats?.wrongCount ?? wrongCount
   const successPercent = stats?.successRate != null ? Math.round(stats.successRate * 100) : null
   const colors = RATE_TONES[successRateTone(stats?.successRate)]
   return (
@@ -250,7 +254,7 @@ function ContentTopicCard({
           </h3>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <Badge tone="warm">{wrongCount} yanlış</Badge>
+          <Badge tone="warm">{effectiveWrongCount} yanlış</Badge>
           <PendingAnalysisChip count={pendingCount} />
         </div>
       </div>
@@ -369,6 +373,7 @@ function SourceProfileCard({
   onClick,
 }) {
   const solvedCount = stats?.totalAnswered ?? null
+  const effectiveWrongCount = stats?.wrongCount ?? wrongCount
   const successPercent = stats?.successRate != null ? Math.round(stats.successRate * 100) : null
   const colors = RATE_TONES[successRateTone(stats?.successRate)]
   return (
@@ -392,7 +397,7 @@ function SourceProfileCard({
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge tone="warm" className="w-fit">
-          {solvedCount != null ? `${solvedCount} / ${wrongCount}` : wrongCount} yanlış
+          {solvedCount != null ? `${solvedCount} / ${effectiveWrongCount}` : effectiveWrongCount} yanlış
         </Badge>
         {successPercent != null ? (
           <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', colors.chip)}>
@@ -406,6 +411,7 @@ function SourceProfileCard({
 }
 
 function TopicAccordionHeader({ topic, wrongCount, stats, isOpen, onToggle }) {
+  const effectiveWrongCount = stats?.wrongCount ?? wrongCount
   const successPercent = stats?.successRate != null ? Math.round(stats.successRate * 100) : null
   return (
     <button
@@ -426,7 +432,7 @@ function TopicAccordionHeader({ topic, wrongCount, stats, isOpen, onToggle }) {
         ) : null}
       </div>
       <Badge tone="warm" className="shrink-0">
-        {wrongCount} yanlış
+        {effectiveWrongCount} yanlış
       </Badge>
       <ChevronDown
         size={18}
@@ -859,9 +865,10 @@ export default function WrongQuestionsView({
     const map = new Map()
     sourceTopicStats.forEach((stat) => {
       const key = sourceBookKey(stat.subject, stat.bookName)
-      if (!map.has(key)) map.set(key, { totalAnswered: 0, correct: 0 })
+      if (!map.has(key)) map.set(key, { totalAnswered: 0, correct: 0, wrongCount: 0 })
       const entry = map.get(key)
       entry.totalAnswered += stat.totalAnswered || 0
+      entry.wrongCount += stat.wrongCount || 0
       if (stat.successRate != null && stat.totalAnswered) {
         entry.correct += stat.successRate * stat.totalAnswered
       }
@@ -871,6 +878,7 @@ export default function WrongQuestionsView({
         key,
         {
           totalAnswered: entry.totalAnswered,
+          wrongCount: entry.wrongCount,
           successRate: entry.totalAnswered > 0 ? entry.correct / entry.totalAnswered : null,
         },
       ]),
@@ -894,9 +902,10 @@ export default function WrongQuestionsView({
     const map = new Map()
     topicStats.forEach((stat) => {
       const key = (stat.subject || '').trim()
-      if (!map.has(key)) map.set(key, { totalAnswered: 0, correct: 0 })
+      if (!map.has(key)) map.set(key, { totalAnswered: 0, correct: 0, wrongCount: 0 })
       const entry = map.get(key)
       entry.totalAnswered += stat.totalAnswered || 0
+      entry.wrongCount += stat.wrongCount || 0
       if (stat.successRate != null && stat.totalAnswered) {
         entry.correct += stat.successRate * stat.totalAnswered
       }
@@ -906,6 +915,7 @@ export default function WrongQuestionsView({
         key,
         {
           totalAnswered: entry.totalAnswered,
+          wrongCount: entry.wrongCount,
           successRate: entry.totalAnswered > 0 ? entry.correct / entry.totalAnswered : null,
         },
       ]),
@@ -1026,7 +1036,10 @@ export default function WrongQuestionsView({
       {activeSource ? (
         <PageHeader
           title={activeSource.bookName || 'Kaynak belirtilmemiş'}
-          subtitle={`${activeSource.publisherName || 'Yayın evi belirtilmemiş'} · ${activeSource.items.length} yanlış soru`}
+          subtitle={`${activeSource.publisherName || 'Yayın evi belirtilmemiş'} · ${
+            sourceBookStatsMap.get(sourceBookKey(effectiveSelectedSubject, activeSource.bookName))?.wrongCount ??
+            activeSource.items.length
+          } yanlış soru`}
           actions={
             <div className="flex items-center gap-2">
               {headerActions}
@@ -1042,8 +1055,8 @@ export default function WrongQuestionsView({
         <PageHeader
           title={effectiveSelectedSubject}
           subtitle={(() => {
-            const wrongCount = selectedContentGroup?.items.length ?? 0
             const subjectStats = subjectStatsMap.get(effectiveSelectedSubject)
+            const wrongCount = subjectStats?.wrongCount ?? selectedContentGroup?.items.length ?? 0
             if (subjectStats && subjectStats.totalAnswered > 0) {
               const percent =
                 subjectStats.successRate != null ? Math.round(subjectStats.successRate * 100) : 0

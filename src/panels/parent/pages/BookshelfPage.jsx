@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, BookMarked, BookOpen, ClipboardList, FilePlus2, Plus, Users } from 'lucide-react'
+import { ArrowLeft, BookMarked, BookOpen, ClipboardList, Eye, FilePlus2, Plus, Users } from 'lucide-react'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
@@ -14,6 +14,7 @@ const StudentResourceAssignModal = lazy(() => import('../components/StudentResou
 const BookFormModal = lazy(() => import('../../shared/bookshelf/BookFormModal'))
 const BookshelfDetailModal = lazy(() => import('../../shared/bookshelf/BookshelfDetailModal'))
 const BookAdditionRequestModal = lazy(() => import('../../shared/requests/BookAdditionRequestModal'))
+const ResourceBookContentViewerModal = lazy(() => import('../../shared/library/ResourceBookContentViewerModal'))
 
 function groupBySubject(books) {
   const groups = new Map()
@@ -202,7 +203,7 @@ function SubjectShelfCard({ group, onOpen }) {
   )
 }
 
-function BookCard({ book, onPreviewImage, onOpen }) {
+function BookCard({ book, onPreviewImage, onOpen, onViewContent }) {
   const manageable = book.scope === 'private'
 
   return (
@@ -234,14 +235,24 @@ function BookCard({ book, onPreviewImage, onOpen }) {
           ) : null}
         </div>
         <BookDonuts completionRate={book.completionRate} successRate={book.successRate} className="mt-3" />
-        <button
-          type="button"
-          onClick={() => onOpen(book)}
-          className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-lg bg-panel-blue px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-panel-blue/90"
-        >
-          <ClipboardList size={14} aria-hidden="true" />
-          Test sonuçlarını gir
-        </button>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onOpen(book)}
+            className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-panel-blue px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-panel-blue/90"
+          >
+            <ClipboardList size={14} aria-hidden="true" />
+            Test sonuçlarını gir
+          </button>
+          <button
+            type="button"
+            onClick={() => onViewContent(book)}
+            className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-panel-border px-3 py-1.5 text-xs font-semibold text-panel-text transition-colors hover:border-panel-blue hover:text-panel-blue"
+          >
+            <Eye size={14} aria-hidden="true" />
+            İçeriği Görüntüle
+          </button>
+        </div>
       </div>
     </article>
   )
@@ -261,6 +272,7 @@ export default function ParentBookshelfPage() {
   const [requesting, setRequesting] = useState(false)
   const [editingBook, setEditingBook] = useState(null)
   const [detailBookId, setDetailBookId] = useState(null)
+  const [viewingContentBookId, setViewingContentBookId] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -419,6 +431,7 @@ export default function ParentBookshelfPage() {
               book={book}
               onPreviewImage={setPreviewImage}
               onOpen={(target) => setDetailBookId(target.id)}
+              onViewContent={(target) => setViewingContentBookId(target.id)}
             />
           ))}
         </div>
@@ -483,6 +496,13 @@ export default function ParentBookshelfPage() {
               setEditingBook(book)
             }}
             onClose={() => setDetailBookId(null)}
+          />
+        ) : null}
+
+        {viewingContentBookId ? (
+          <ResourceBookContentViewerModal
+            resourceBookId={viewingContentBookId}
+            onClose={() => setViewingContentBookId(null)}
           />
         ) : null}
       </Suspense>
