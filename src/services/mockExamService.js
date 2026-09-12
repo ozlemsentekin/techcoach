@@ -13,6 +13,13 @@ import { authRequest, cachedGet, invalidateCache } from './authClient'
  * @property {number} successRate
  * @property {number} photoCount
  * @property {{ id: string, questionNumber?: string, hasPhoto: boolean }[]} [questions] Sadece detay yanıtında.
+ * @property {number} [score] Sınav kurumu puanı (isteğe bağlı "Detay" girişi).
+ * @property {number} [branchRank] Şube sırası.
+ * @property {number} [schoolRank] Okul sırası.
+ * @property {number} [overallRank] Genel sıra.
+ * @property {number} [classAvgScore] Sınıf ortalaması.
+ * @property {number} [schoolAvgScore] Okul ortalaması.
+ * @property {number} [turkeyAvgScore] Türkiye ortalaması.
  */
 
 /**
@@ -21,6 +28,8 @@ import { authRequest, cachedGet, invalidateCache } from './authClient'
  * @property {'brans' | 'genel' | 'etut'} kind
  * @property {string | null} examDate
  * @property {string} [title]
+ * @property {string} [classLabel] Sınıf etiketi (ör. "8D").
+ * @property {string} [schoolLabel] Okul adı.
  * @property {string} [createdByName]
  * @property {string} createdAt
  * @property {MockExamSubject[]} subjects

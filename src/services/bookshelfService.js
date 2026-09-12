@@ -48,6 +48,13 @@ export async function setBookshelfBookStudents(resourceBookId, studentIds) {
   return data.resourceBook
 }
 
+export async function getBookshelfTestAnswerKey(testId) {
+  const data = await authRequest(`/api/panel/bookshelf/resource-book-topic-tests/${testId}/answer-key`, {
+    method: 'GET',
+  })
+  return data.entries
+}
+
 export async function createBookshelfPublisher(name) {
   const data = await authRequest('/api/panel/bookshelf/publishers', {
     method: 'POST',

@@ -54,6 +54,52 @@ function nonNegInt(value) {
   return Number.isInteger(n) && n >= 0 ? n : null
 }
 
+// Karşılaştırma alanları (puan, sıra, ortalamalar) hepsi isteğe bağlıdır — boş/undefined
+// bırakılırsa satır eski basit moddaki gibi kalır, yalnızca dolu değerler doğrulanır.
+function optionalDecimal(value) {
+  if (value === undefined || value === null || value === '') return { value: null }
+  const n = Number(value)
+  if (!Number.isFinite(n)) return { error: true }
+  return { value: Math.round(n * 100) / 100 }
+}
+
+function optionalPositiveInt(value) {
+  if (value === undefined || value === null || value === '') return { value: null }
+  const n = Number(value)
+  if (!Number.isInteger(n) || n < 1) return { error: true }
+  return { value: n }
+}
+
+// Sınav kurumu raporlarındaki (PDF/portal) ders bazlı puan + şube/okul/genel sıra + sınıf/okul/
+// Türkiye ortalaması — "Detay" bölümünden isteğe bağlı girilir.
+function normalizeComparisonStats(row) {
+  const score = optionalDecimal(row?.score)
+  if (score.error) return { error: 'Puan geçersiz.' }
+  const branchRank = optionalPositiveInt(row?.branchRank)
+  if (branchRank.error) return { error: 'Şube sırası geçersiz.' }
+  const schoolRank = optionalPositiveInt(row?.schoolRank)
+  if (schoolRank.error) return { error: 'Okul sırası geçersiz.' }
+  const overallRank = optionalPositiveInt(row?.overallRank)
+  if (overallRank.error) return { error: 'Genel sıra geçersiz.' }
+  const classAvgScore = optionalDecimal(row?.classAvgScore)
+  if (classAvgScore.error) return { error: 'Sınıf ortalaması geçersiz.' }
+  const schoolAvgScore = optionalDecimal(row?.schoolAvgScore)
+  if (schoolAvgScore.error) return { error: 'Okul ortalaması geçersiz.' }
+  const turkeyAvgScore = optionalDecimal(row?.turkeyAvgScore)
+  if (turkeyAvgScore.error) return { error: 'Türkiye ortalaması geçersiz.' }
+  return {
+    value: {
+      score: score.value,
+      branchRank: branchRank.value,
+      schoolRank: schoolRank.value,
+      overallRank: overallRank.value,
+      classAvgScore: classAvgScore.value,
+      schoolAvgScore: schoolAvgScore.value,
+      turkeyAvgScore: turkeyAvgScore.value,
+    },
+  }
+}
+
 // Soru bazlı giriş: [{ orderNo?, status, topicName? }] × total. Dizi boş/yoksa null döner
 // (o subject eski basit modda kalır). Dolu ama uzunluk/durum hatalıysa error döner.
 function normalizeQuestions(rawQuestions, total) {
@@ -116,6 +162,8 @@ function validateMockExamPayload(payload) {
   }
 
   const title = typeof payload?.title === 'string' ? payload.title.trim().slice(0, 200) : null
+  const classLabel = typeof payload?.classLabel === 'string' ? payload.classLabel.trim().slice(0, 50) || null : null
+  const schoolLabel = typeof payload?.schoolLabel === 'string' ? payload.schoolLabel.trim().slice(0, 200) || null : null
   const rawSubjects = Array.isArray(payload?.subjects) ? payload.subjects : []
 
   const normalizeCounts = (row, total) => {
@@ -168,6 +216,8 @@ function validateMockExamPayload(payload) {
           return { error: `${tpl.name}: fotoğraf sayısı yanlış + boş sayısını aşamaz.` }
         }
       }
+      const comparisonStats = normalizeComparisonStats(row)
+      if (comparisonStats.error) return { error: `${tpl.name}: ${comparisonStats.error}` }
       subjects.push({
         subjectId: isGuid(row.subjectId) ? row.subjectId.trim().toLowerCase() : null,
         subjectName: tpl.name,
@@ -175,6 +225,7 @@ function validateMockExamPayload(payload) {
         ...counts.value,
         photos: photos.value,
         questions,
+        ...comparisonStats.value,
       })
     }
   } else {
@@ -234,6 +285,9 @@ function validateMockExamPayload(payload) {
       }
     }
 
+    const comparisonStats = normalizeComparisonStats(row)
+    if (comparisonStats.error) return { error: comparisonStats.error }
+
     subjects = [
       {
         subjectId: isGuid(row.subjectId) ? row.subjectId.trim().toLowerCase() : null,
@@ -242,11 +296,12 @@ function validateMockExamPayload(payload) {
         ...counts.value,
         photos: photos.value,
         questions,
+        ...comparisonStats.value,
       },
     ]
   }
 
-  return { value: { kind, examDate, title, subjects } }
+  return { value: { kind, examDate, title, classLabel, schoolLabel, subjects } }
 }
 
 function sanitizeSubjectRow(record) {
@@ -266,6 +321,13 @@ function sanitizeSubjectRow(record) {
     successRate: total > 0 ? Math.round((correct / total) * 1000) / 10 : 0,
     photoCount: record.photo_count ?? 0,
     hasTopicBreakdown: (record.question_row_count ?? 0) > 0,
+    score: record.score == null ? undefined : Number(record.score),
+    branchRank: record.branch_rank ?? undefined,
+    schoolRank: record.school_rank ?? undefined,
+    overallRank: record.overall_rank ?? undefined,
+    classAvgScore: record.class_avg_score == null ? undefined : Number(record.class_avg_score),
+    schoolAvgScore: record.school_avg_score == null ? undefined : Number(record.school_avg_score),
+    turkeyAvgScore: record.turkey_avg_score == null ? undefined : Number(record.turkey_avg_score),
   }
 }
 
@@ -280,6 +342,8 @@ function buildExam(examRecord, subjectRows) {
     kind: examRecord.kind,
     examDate: toISODate(examRecord.exam_date),
     title: examRecord.title || undefined,
+    classLabel: examRecord.class_label || undefined,
+    schoolLabel: examRecord.school_label || undefined,
     createdByName: examRecord.created_by_name || undefined,
     createdAt: examRecord.created_at,
     subjects,
@@ -300,7 +364,8 @@ async function listMockExamsForStudent(studentId) {
   ])
   const [examsResult, subjectsResult] = await Promise.all([
     examsDb.query(`
-      SELECT e.id, e.kind, e.exam_date, e.title, e.created_at, u.full_name AS created_by_name
+      SELECT e.id, e.kind, e.exam_date, e.title, e.class_label, e.school_label, e.created_at,
+             u.full_name AS created_by_name
       FROM dbo.MockExams e
       LEFT JOIN dbo.Users u ON u.id = e.created_by_user_id
       WHERE e.student_id = @studentId
@@ -309,6 +374,8 @@ async function listMockExamsForStudent(studentId) {
     subjectsDb.query(`
       SELECT s.id, s.mock_exam_id, s.subject_id, s.subject_name, s.total_questions,
              s.correct_count, s.wrong_count, s.blank_count,
+             s.score, s.branch_rank, s.school_rank, s.overall_rank,
+             s.class_avg_score, s.school_avg_score, s.turkey_avg_score,
              (SELECT COUNT(*) FROM dbo.WrongQuestions wq
               WHERE wq.mock_exam_subject_id = s.id AND wq.photo_url IS NOT NULL) AS photo_count,
              (SELECT COUNT(*) FROM dbo.MockExamQuestions mq
@@ -335,7 +402,8 @@ async function getMockExamDetailForStudent(studentId, mockExamId) {
     mockExamId: { type: sql.UniqueIdentifier, value: mockExamId },
   })
   const examResult = await requestDb.query(`
-    SELECT e.id, e.kind, e.exam_date, e.title, e.created_at, u.full_name AS created_by_name
+    SELECT e.id, e.kind, e.exam_date, e.title, e.class_label, e.school_label, e.created_at,
+           u.full_name AS created_by_name
     FROM dbo.MockExams e
     LEFT JOIN dbo.Users u ON u.id = e.created_by_user_id
     WHERE e.id = @mockExamId AND e.student_id = @studentId;
@@ -352,6 +420,8 @@ async function getMockExamDetailForStudent(studentId, mockExamId) {
     subjectsDb.query(`
       SELECT s.id, s.mock_exam_id, s.subject_id, s.subject_name, s.total_questions,
              s.correct_count, s.wrong_count, s.blank_count,
+             s.score, s.branch_rank, s.school_rank, s.overall_rank,
+             s.class_avg_score, s.school_avg_score, s.turkey_avg_score,
              (SELECT COUNT(*) FROM dbo.WrongQuestions wq
               WHERE wq.mock_exam_subject_id = s.id AND wq.photo_url IS NOT NULL) AS photo_count,
              (SELECT COUNT(*) FROM dbo.MockExamQuestions mq
@@ -481,7 +551,7 @@ async function createMockExamHandler(request) {
 
     const check = validateMockExamPayload(payload)
     if (check.error) return json(400, { error: check.error })
-    const { kind, examDate, title, subjects } = check.value
+    const { kind, examDate, title, classLabel, schoolLabel, subjects } = check.value
 
     const mockExamId = await withTransaction(async (makeRequest) => {
       const examResult = await makeRequest({
@@ -489,11 +559,13 @@ async function createMockExamHandler(request) {
         kind: { type: sql.NVarChar(20), value: kind },
         examDate: { type: sql.Date, value: examDate },
         title: { type: sql.NVarChar(200), value: title },
+        classLabel: { type: sql.NVarChar(50), value: classLabel },
+        schoolLabel: { type: sql.NVarChar(200), value: schoolLabel },
         createdBy: { type: sql.UniqueIdentifier, value: actorId || null },
       }).query(`
-        INSERT INTO dbo.MockExams (student_id, kind, exam_date, title, created_by_user_id)
+        INSERT INTO dbo.MockExams (student_id, kind, exam_date, title, class_label, school_label, created_by_user_id)
         OUTPUT inserted.id
-        VALUES (@studentId, @kind, @examDate, @title, @createdBy);
+        VALUES (@studentId, @kind, @examDate, @title, @classLabel, @schoolLabel, @createdBy);
       `)
       const newExamId = examResult.recordset[0].id
 
@@ -506,11 +578,20 @@ async function createMockExamHandler(request) {
           correct: { type: sql.Int, value: subject.correct },
           wrong: { type: sql.Int, value: subject.wrong },
           blank: { type: sql.Int, value: subject.blank },
+          score: { type: sql.Decimal(6, 2), value: subject.score },
+          branchRank: { type: sql.Int, value: subject.branchRank },
+          schoolRank: { type: sql.Int, value: subject.schoolRank },
+          overallRank: { type: sql.Int, value: subject.overallRank },
+          classAvgScore: { type: sql.Decimal(6, 2), value: subject.classAvgScore },
+          schoolAvgScore: { type: sql.Decimal(6, 2), value: subject.schoolAvgScore },
+          turkeyAvgScore: { type: sql.Decimal(6, 2), value: subject.turkeyAvgScore },
         }).query(`
           INSERT INTO dbo.MockExamSubjects
-            (mock_exam_id, subject_id, subject_name, total_questions, correct_count, wrong_count, blank_count)
+            (mock_exam_id, subject_id, subject_name, total_questions, correct_count, wrong_count, blank_count,
+             score, branch_rank, school_rank, overall_rank, class_avg_score, school_avg_score, turkey_avg_score)
           OUTPUT inserted.id
-          VALUES (@mockExamId, @subjectId, @subjectName, @total, @correct, @wrong, @blank);
+          VALUES (@mockExamId, @subjectId, @subjectName, @total, @correct, @wrong, @blank,
+                  @score, @branchRank, @schoolRank, @overallRank, @classAvgScore, @schoolAvgScore, @turkeyAvgScore);
         `)
         const subjectRowId = subjectResult.recordset[0].id
         if (subject.questions) {
@@ -573,15 +654,19 @@ async function updateMockExamHandler(request) {
     // ders sayıları güncellenir.
     const rebuilt = validateMockExamPayload({ ...payload, kind: existing.kind })
     if (rebuilt.error) return json(400, { error: rebuilt.error })
-    const { examDate, title, subjects } = rebuilt.value
+    const { examDate, title, classLabel, schoolLabel, subjects } = rebuilt.value
 
     await withTransaction(async (makeRequest) => {
       await makeRequest({
         mockExamId: { type: sql.UniqueIdentifier, value: mockExamId },
         examDate: { type: sql.Date, value: examDate },
         title: { type: sql.NVarChar(200), value: title },
+        classLabel: { type: sql.NVarChar(50), value: classLabel },
+        schoolLabel: { type: sql.NVarChar(200), value: schoolLabel },
       }).query(`
-        UPDATE dbo.MockExams SET exam_date = @examDate, title = @title, updated_at = SYSUTCDATETIME()
+        UPDATE dbo.MockExams
+        SET exam_date = @examDate, title = @title, class_label = @classLabel, school_label = @schoolLabel,
+            updated_at = SYSUTCDATETIME()
         WHERE id = @mockExamId;
       `)
 
@@ -593,9 +678,18 @@ async function updateMockExamHandler(request) {
           correct: { type: sql.Int, value: subject.correct },
           wrong: { type: sql.Int, value: subject.wrong },
           blank: { type: sql.Int, value: subject.blank },
+          score: { type: sql.Decimal(6, 2), value: subject.score },
+          branchRank: { type: sql.Int, value: subject.branchRank },
+          schoolRank: { type: sql.Int, value: subject.schoolRank },
+          overallRank: { type: sql.Int, value: subject.overallRank },
+          classAvgScore: { type: sql.Decimal(6, 2), value: subject.classAvgScore },
+          schoolAvgScore: { type: sql.Decimal(6, 2), value: subject.schoolAvgScore },
+          turkeyAvgScore: { type: sql.Decimal(6, 2), value: subject.turkeyAvgScore },
         }).query(`
           UPDATE dbo.MockExamSubjects
-          SET total_questions = @total, correct_count = @correct, wrong_count = @wrong, blank_count = @blank
+          SET total_questions = @total, correct_count = @correct, wrong_count = @wrong, blank_count = @blank,
+              score = @score, branch_rank = @branchRank, school_rank = @schoolRank, overall_rank = @overallRank,
+              class_avg_score = @classAvgScore, school_avg_score = @schoolAvgScore, turkey_avg_score = @turkeyAvgScore
           OUTPUT inserted.id
           WHERE mock_exam_id = @mockExamId AND subject_name = @subjectName;
         `)

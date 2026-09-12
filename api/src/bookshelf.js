@@ -393,6 +393,50 @@ async function getBookHandler(request) {
   }
 }
 
+// Veli/öğretmenin "İçeriği Görüntüle" akışında cevap anahtarını salt-okunur görebilmesi için:
+// panel-admin'deki editör-only endpoint'in aksine, kaynağı görebilen (actorCanSeeBook) her
+// veli/öğretmene açık — katalog kaynakları da dahil, sahiplik/editörlük şartı aranmaz. Öğrenci
+// (ve öğrenci görünümündeki veli) hariç tutulur: aksi halde kendisine atanmış bir testin
+// cevap anahtarını doğrudan bu uçtan çekebilir, sınav/soru bankası bütünlüğünü bozar.
+async function getTestAnswerKeyHandler(request) {
+  try {
+    const ctx = await requireBookshelfActor(request)
+    if (ctx.error) return ctx.error
+    if (ctx.role === 'ogrenci' || ctx.isActingAsStudent) {
+      return json(403, { error: 'Bu alana erişim yetkiniz yok.' })
+    }
+
+    const testId = request.params.testId
+    const testDb = await withRequest({ testId: { type: sql.UniqueIdentifier, value: testId } })
+    const testResult = await testDb.query(`
+      SELECT t.resource_book_id
+      FROM dbo.ResourceBookTopicTests tt
+      INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
+      WHERE tt.id = @testId;
+    `)
+    const testRow = testResult.recordset[0]
+    if (!testRow) {
+      return json(404, { error: 'Test bulunamadı.' })
+    }
+
+    const book = await loadBookRow(testRow.resource_book_id)
+    if (!book || !(await actorCanSeeBook(book, ctx))) {
+      return json(404, { error: 'Kaynak bulunamadı.' })
+    }
+
+    const answerDb = await withRequest({ testId: { type: sql.UniqueIdentifier, value: testId } })
+    const answerResult = await answerDb.query(`
+      SELECT order_no, correct_label FROM dbo.TestAnswerKeys WHERE test_id = @testId ORDER BY order_no ASC;
+    `)
+
+    return json(200, {
+      entries: answerResult.recordset.map((r) => ({ orderNo: r.order_no, correctLabel: r.correct_label })),
+    })
+  } catch (error) {
+    return handleError(error, 'getTestAnswerKeyHandler', 'Cevap anahtarı yüklenemedi.')
+  }
+}
+
 function validateBookPayload(payload) {
   const name = payload?.name?.trim()
   const subjectId = payload?.subjectId || null
@@ -765,4 +809,5 @@ module.exports = {
   setBookStudentsHandler,
   createPublisherForPanelHandler,
   listAssignableStudentsHandler,
+  getTestAnswerKeyHandler,
 }

@@ -13,6 +13,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import PageHeader from '../layout/PageHeader'
 import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
@@ -41,6 +42,14 @@ function formatExamDate(value) {
   if (!value) return 'Tarihsiz'
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : DATE_FMT.format(date)
+}
+
+// Puan/sıra/ortalama alanı boş string veya sayı-olmayan bir şey ise gönderilmez (undefined) —
+// sunucu tarafı bunu "alan girilmedi" olarak yorumlar, mevcut değeri sıfırlamaz.
+function toNumOrUndef(text) {
+  if (text === '' || text == null) return undefined
+  const n = Number(text)
+  return Number.isFinite(n) ? n : undefined
 }
 
 function successTone(percent) {
@@ -105,6 +114,24 @@ function DateField({ value, onChange, placeholder }) {
       onChange={(event) => onChange(event.target.value)}
       className={cn(FIELD_CLASS, 'p-2.5 text-sm', !value && 'text-panel-text-muted')}
     />
+  )
+}
+
+// Puan/sıra/ortalama girişi: serbest metin olarak tutulur (yazarken virgülü noktaya çevirir),
+// sayıya çevirme yalnızca gönderim anında yapılır — yazarken "86." gibi ara durumlar bozulmaz.
+function DetailField({ label, value, onChange }) {
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-panel-text-muted">{label}</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        value={value}
+        onChange={(event) => onChange(event.target.value.replace(',', '.').replace(/[^0-9.]/g, ''))}
+        className={cn(FIELD_CLASS, 'p-1.5 text-center text-xs tabular-nums')}
+      />
+    </label>
   )
 }
 
@@ -253,6 +280,30 @@ function QuestionRows({ idPrefix, questions, editableTotal, suggestions, onPatch
 
 const emptyCounts = { correct: 0, wrong: 0, blank: 0 }
 
+// Puan/sıra/ortalama alanları isteğe bağlıdır — boş string girilmemiş demektir.
+const emptyDetail = {
+  score: '',
+  branchRank: '',
+  schoolRank: '',
+  overallRank: '',
+  classAvgScore: '',
+  schoolAvgScore: '',
+  turkeyAvgScore: '',
+}
+
+function detailFromSubject(s) {
+  const asText = (n) => (n == null ? '' : String(n))
+  return {
+    score: asText(s.score),
+    branchRank: asText(s.branchRank),
+    schoolRank: asText(s.schoolRank),
+    overallRank: asText(s.overallRank),
+    classAvgScore: asText(s.classAvgScore),
+    schoolAvgScore: asText(s.schoolAvgScore),
+    turkeyAvgScore: asText(s.turkeyAvgScore),
+  }
+}
+
 function buildInitialSubjects(kind, existing) {
   if (existing) {
     return existing.subjects.map((s) => {
@@ -270,6 +321,7 @@ function buildInitialSubjects(kind, existing) {
               .sort((a, b) => a.orderNo - b.orderNo)
               .map((q) => ({ orderNo: q.orderNo, status: q.status, topicName: q.topicName || '' }))
           : [],
+        detail: detailFromSubject(s),
       }
     })
   }
@@ -282,6 +334,7 @@ function buildInitialSubjects(kind, existing) {
       photos: [],
       questionsMode: false,
       questions: [],
+      detail: { ...emptyDetail },
     }))
   }
   // Etüt: sabit toplam yok (total null) — D/Y/B'yi kullanıcı girer.
@@ -294,6 +347,7 @@ function buildInitialSubjects(kind, existing) {
       photos: [],
       questionsMode: false,
       questions: [],
+      detail: { ...emptyDetail },
     },
   ]
 }
@@ -310,6 +364,16 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
   const [error, setError] = useState('')
   const [captureFor, setCaptureFor] = useState(null) // index of subjectRows
   const [topicSuggestions, setTopicSuggestions] = useState({}) // subjectName -> string[]
+  const [classLabel, setClassLabel] = useState(existing?.classLabel || '')
+  const [schoolLabel, setSchoolLabel] = useState(existing?.schoolLabel || '')
+  // Puan/sıra/ortalama: sınav kurumu raporundan (PDF/portal) elle girilen isteğe bağlı detay —
+  // düzenlemede bu alanlardan biri doluysa varsayılan olarak açık gelir.
+  const [showDetail, setShowDetail] = useState(
+    () =>
+      Boolean(existing?.classLabel) ||
+      Boolean(existing?.schoolLabel) ||
+      Boolean(existing?.subjects?.some((s) => s.score != null)),
+  )
 
   useEffect(() => {
     cachedGet('/api/panel/subjects')
@@ -329,6 +393,12 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
 
   const patchRow = (index, patch) => {
     setSubjectRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)))
+  }
+
+  const patchDetail = (index, key, value) => {
+    setSubjectRows((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, detail: { ...row.detail, [key]: value } } : row)),
+    )
   }
 
   const chooseSubject = (index, subjectId) => {
@@ -435,10 +505,25 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
       }
     }
 
+    const detailFields = (row) =>
+      showDetail
+        ? {
+            score: toNumOrUndef(row.detail.score),
+            branchRank: toNumOrUndef(row.detail.branchRank),
+            schoolRank: toNumOrUndef(row.detail.schoolRank),
+            overallRank: toNumOrUndef(row.detail.overallRank),
+            classAvgScore: toNumOrUndef(row.detail.classAvgScore),
+            schoolAvgScore: toNumOrUndef(row.detail.schoolAvgScore),
+            turkeyAvgScore: toNumOrUndef(row.detail.turkeyAvgScore),
+          }
+        : {}
+
     const payload = {
       kind,
       examDate: kind === 'etut' && !examDate ? null : examDate,
       title: title.trim() || undefined,
+      classLabel: showDetail ? classLabel.trim() || undefined : undefined,
+      schoolLabel: showDetail ? schoolLabel.trim() || undefined : undefined,
       subjects: subjectRows.map((row) => {
         const subjectId = row.subjectId || matchSubjectId(subjects, row.subjectName)
         if (row.questionsMode) {
@@ -451,6 +536,7 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
               status: q.status,
               topicName: q.topicName?.trim() || undefined,
             })),
+            ...detailFields(row),
           }
         }
         return {
@@ -461,6 +547,7 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
           wrong: row.counts.wrong,
           blank: row.counts.blank,
           photos: row.photos,
+          ...detailFields(row),
         }
       }),
     }
@@ -577,6 +664,33 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
                     ))}
                   </select>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={() => setShowDetail((v) => !v)}
+                  className="self-start rounded-lg px-2 py-1 text-xs font-semibold text-panel-blue hover:bg-panel-blue-soft"
+                >
+                  {showDetail ? 'Puan / sıra detayını gizle' : '+ Puan / sıra detayı ekle (isteğe bağlı)'}
+                </button>
+                {showDetail ? (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <input
+                      type="text"
+                      value={classLabel}
+                      maxLength={50}
+                      placeholder="Sınıf (ör. 8D, isteğe bağlı)"
+                      onChange={(event) => setClassLabel(event.target.value)}
+                      className={cn(FIELD_CLASS, 'p-2.5 text-sm')}
+                    />
+                    <input
+                      type="text"
+                      value={schoolLabel}
+                      maxLength={200}
+                      placeholder="Okul adı (isteğe bağlı)"
+                      onChange={(event) => setSchoolLabel(event.target.value)}
+                      className={cn(FIELD_CLASS, 'p-2.5 text-sm')}
+                    />
+                  </div>
+                ) : null}
               </div>
 
               <div className="flex flex-col gap-2.5">
@@ -620,6 +734,46 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
                         readOnly={row.questionsMode}
                         onCount={(key, next) => setCount(index, key, next)}
                       />
+
+                      {showDetail ? (
+                        <div className="grid grid-cols-2 gap-2 rounded-lg bg-panel-surface-soft/60 p-2 sm:grid-cols-4">
+                          <DetailField
+                            label="Puan"
+                            value={row.detail.score}
+                            onChange={(v) => patchDetail(index, 'score', v)}
+                          />
+                          <DetailField
+                            label="Şube Sıra"
+                            value={row.detail.branchRank}
+                            onChange={(v) => patchDetail(index, 'branchRank', v)}
+                          />
+                          <DetailField
+                            label="Okul Sıra"
+                            value={row.detail.schoolRank}
+                            onChange={(v) => patchDetail(index, 'schoolRank', v)}
+                          />
+                          <DetailField
+                            label="Genel Sıra"
+                            value={row.detail.overallRank}
+                            onChange={(v) => patchDetail(index, 'overallRank', v)}
+                          />
+                          <DetailField
+                            label="Sınıf Ort."
+                            value={row.detail.classAvgScore}
+                            onChange={(v) => patchDetail(index, 'classAvgScore', v)}
+                          />
+                          <DetailField
+                            label="Okul Ort."
+                            value={row.detail.schoolAvgScore}
+                            onChange={(v) => patchDetail(index, 'schoolAvgScore', v)}
+                          />
+                          <DetailField
+                            label="Türkiye Ort."
+                            value={row.detail.turkeyAvgScore}
+                            onChange={(v) => patchDetail(index, 'turkeyAvgScore', v)}
+                          />
+                        </div>
+                      ) : null}
 
                       {row.questionsMode ? (
                         <QuestionRows
@@ -790,6 +944,10 @@ function PhotoModal({ questions, fetchPhoto, onClose, onDelete }) {
 
 function SubjectLine({ subject, readOnly, onViewPhotos, onAddPhoto, onManageQuestions }) {
   const isQuestionMode = Array.isArray(subject.questions) && subject.questions.some((q) => q.status)
+  const rankParts = []
+  if (subject.branchRank != null) rankParts.push(`Şube ${subject.branchRank}`)
+  if (subject.schoolRank != null) rankParts.push(`Okul ${subject.schoolRank}`)
+  if (subject.overallRank != null) rankParts.push(`Genel ${subject.overallRank}`)
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-panel-border/60 py-2.5 first:border-t-0">
       <span className="min-w-28 flex-1 text-sm font-semibold text-panel-text">{subject.subjectName}</span>
@@ -800,6 +958,12 @@ function SubjectLine({ subject, readOnly, onViewPhotos, onAddPhoto, onManageQues
       <span className={cn('rounded-lg px-2 py-0.5 text-xs font-semibold tabular-nums', successTone(subject.successRate))}>
         %{subject.successRate}
       </span>
+      {subject.score != null ? (
+        <StatPill label="Puan" value={subject.score} tone="bg-panel-lilac-soft text-panel-lilac" />
+      ) : null}
+      {rankParts.length > 0 ? (
+        <span className="w-full text-[11px] font-medium text-panel-text-muted sm:w-auto">{rankParts.join(' · ')}</span>
+      ) : null}
       {subject.photoCount > 0 ? (
         <button
           type="button"
@@ -928,6 +1092,87 @@ function QuestionPhotoManagerModal({ subject, fetchPhoto, onAddPhoto, onDeletePh
   )
 }
 
+// Sabit sırada, CVD-güvenli 4 renk (bkz. dataviz kılavuzu referans paleti, slot 1-4):
+// öğrenci / sınıf / okul / Türkiye ortalaması hep aynı renkte kalır.
+const COMPARISON_COLORS = { student: '#2a78d6', classAvg: '#eb6834', schoolAvg: '#1baf7a', turkeyAvg: '#eda100' }
+
+function shortenSubjectName(name) {
+  return name.length > 14 ? `${name.slice(0, 13)}…` : name
+}
+
+function ComparisonChartTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const fullName = payload[0]?.payload?.fullName
+  return (
+    <div className="rounded-xl border border-panel-border bg-panel-surface px-3 py-2 text-xs shadow-lg">
+      {fullName ? <p className="mb-1 font-bold text-panel-text">{fullName}</p> : null}
+      {payload
+        .filter((entry) => entry.value != null)
+        .map((entry) => (
+          <p key={entry.dataKey} className="flex items-center gap-2 text-panel-text-muted">
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: entry.color }} />
+            <span className="font-semibold text-panel-text">{entry.name}</span>
+            <span className="ml-auto pl-3 font-bold tabular-nums text-panel-text">{entry.value}</span>
+          </p>
+        ))}
+    </div>
+  )
+}
+
+// Puan girilmiş dersleri; öğrenci/sınıf/okul/Türkiye ortalaması karşılaştırma grafiği.
+// classLabel/schoolLabel girilmemişse jenerik "Sınıf/Okul Ortalaması" etiketi kullanılır.
+function ExamComparisonChart({ exam }) {
+  const rows = (exam.subjects || [])
+    .filter((s) => s.score != null)
+    .map((s) => ({
+      name: shortenSubjectName(s.subjectName),
+      fullName: s.subjectName,
+      student: s.score,
+      classAvg: s.classAvgScore ?? undefined,
+      schoolAvg: s.schoolAvgScore ?? undefined,
+      turkeyAvg: s.turkeyAvgScore ?? undefined,
+    }))
+  if (rows.length === 0) return null
+
+  const axisTick = { fontSize: 10, fill: 'var(--color-panel-text-muted)' }
+
+  return (
+    <div className="mt-3 rounded-xl border border-panel-border bg-white p-3">
+      <p className="mb-2 text-xs font-semibold text-panel-text-muted">Puan karşılaştırması</p>
+      <div className="h-64 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: -16 }} barCategoryGap="20%">
+            <CartesianGrid vertical={false} stroke="var(--color-panel-border)" strokeDasharray="3 3" />
+            <XAxis dataKey="name" tick={axisTick} axisLine={false} tickLine={false} interval={0} />
+            <YAxis domain={[0, 100]} tick={axisTick} axisLine={false} tickLine={false} width={30} />
+            <Tooltip cursor={{ fill: 'var(--color-panel-surface-soft)' }} content={<ComparisonChartTooltip />} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Bar dataKey="student" name="Öğrenci" fill={COMPARISON_COLORS.student} radius={[4, 4, 0, 0]} />
+            <Bar
+              dataKey="classAvg"
+              name={exam.classLabel || 'Sınıf Ortalaması'}
+              fill={COMPARISON_COLORS.classAvg}
+              radius={[4, 4, 0, 0]}
+            />
+            <Bar
+              dataKey="schoolAvg"
+              name={exam.schoolLabel || 'Okul Ortalaması'}
+              fill={COMPARISON_COLORS.schoolAvg}
+              radius={[4, 4, 0, 0]}
+            />
+            <Bar
+              dataKey="turkeyAvg"
+              name="Türkiye Ortalaması"
+              fill={COMPARISON_COLORS.turkeyAvg}
+              radius={[4, 4, 0, 0]}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
 function ExamCard({
   exam: summary,
   readOnly,
@@ -1022,6 +1267,7 @@ function ExamCard({
               />
             ))}
           </div>
+          <ExamComparisonChart exam={exam} />
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-panel-border/60 pt-3 text-xs text-panel-text-muted">
             <span>
               Toplam {exam.totalCorrect}D · {exam.totalWrong}Y · {exam.totalBlank}B
