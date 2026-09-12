@@ -143,6 +143,8 @@ async function createSchoolResourceHandler(request) {
       WHERE scr.id = @id;
     `)
 
+    await replicateResourceToSiblingSchools({ schoolId, grade, subjectId, name, imageUrl: imageResult.value })
+
     return json(201, { resource: sanitizeResource(withSubject.recordset[0] || created) })
   } catch (error) {
     if (isConfigError(error)) {
@@ -150,6 +152,36 @@ async function createSchoolResourceHandler(request) {
     }
     console.error('createSchoolResourceHandler failed', error)
     return json(500, { error: 'Okul kaynağı eklenemedi.' })
+  }
+}
+
+// Bilfen zincirinde bir okula eklenen kaynak, aynı sınıf+ders+ad için otomatik
+// olarak diğer tüm Bilfen okullarına da eklenir (zaten varsa atlanır). Zincir
+// tespiti okul adındaki "Bilfen" ibaresine dayanır; ayrı bir chain kolonu yok.
+async function replicateResourceToSiblingSchools({ schoolId, grade, subjectId, name, imageUrl }) {
+  try {
+    const requestDb = await withRequest({
+      schoolId: { type: sql.UniqueIdentifier, value: schoolId },
+      grade: { type: sql.NVarChar(20), value: grade },
+      subjectId: { type: sql.UniqueIdentifier, value: subjectId },
+      name: { type: sql.NVarChar(MAX_RESOURCE_NAME_LENGTH), value: name },
+      imageUrl: { type: sql.NVarChar(sql.MAX), value: imageUrl },
+    })
+    await requestDb.query(`
+      IF EXISTS (SELECT 1 FROM dbo.Schools WHERE id = @schoolId AND name LIKE N'%Bilfen%')
+      BEGIN
+        INSERT INTO dbo.SchoolClassResources (school_id, grade, subject_id, name, image_url)
+        SELECT s.id, @grade, @subjectId, @name, @imageUrl
+        FROM dbo.Schools s
+        WHERE s.name LIKE N'%Bilfen%' AND s.is_active = 1 AND s.id <> @schoolId
+          AND NOT EXISTS (
+            SELECT 1 FROM dbo.SchoolClassResources scr
+            WHERE scr.school_id = s.id AND scr.grade = @grade AND scr.subject_id = @subjectId AND scr.name = @name
+          );
+      END
+    `)
+  } catch (error) {
+    console.error('replicateResourceToSiblingSchools failed', error)
   }
 }
 
