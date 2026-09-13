@@ -1187,8 +1187,10 @@ function ComparisonChartTooltip({ active, payload }) {
   )
 }
 
-// Puan girilmiş dersleri; öğrenci/sınıf/okul/Türkiye ortalaması karşılaştırma grafiği.
-// classLabel/schoolLabel girilmemişse jenerik "Sınıf/Okul Ortalaması" etiketi kullanılır.
+// Puan girilmiş dersleri; öğrenci/sınıf/okul/genel ortalaması karşılaştırma grafiği. Legend
+// kasıtlı olarak jenerik ("Sınıf" / "Okul" / "Genel") — sınav kaydındaki gerçek sınıf/okul adı
+// (classLabel/schoolLabel) burada gösterilmez, sadece formda ve ileride başka bir yerde
+// kullanılmak üzere saklanır.
 function ExamComparisonChart({ exam }) {
   const rows = (exam.subjects || [])
     .filter((s) => s.score != null)
@@ -1216,24 +1218,9 @@ function ExamComparisonChart({ exam }) {
             <Tooltip cursor={{ fill: 'var(--color-panel-surface-soft)' }} content={<ComparisonChartTooltip />} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar dataKey="student" name="Öğrenci" fill={COMPARISON_COLORS.student} radius={[4, 4, 0, 0]} />
-            <Bar
-              dataKey="classAvg"
-              name={exam.classLabel || 'Sınıf Ortalaması'}
-              fill={COMPARISON_COLORS.classAvg}
-              radius={[4, 4, 0, 0]}
-            />
-            <Bar
-              dataKey="schoolAvg"
-              name={exam.schoolLabel || 'Okul Ortalaması'}
-              fill={COMPARISON_COLORS.schoolAvg}
-              radius={[4, 4, 0, 0]}
-            />
-            <Bar
-              dataKey="turkeyAvg"
-              name="Türkiye Ortalaması"
-              fill={COMPARISON_COLORS.turkeyAvg}
-              radius={[4, 4, 0, 0]}
-            />
+            <Bar dataKey="classAvg" name="Sınıf" fill={COMPARISON_COLORS.classAvg} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="schoolAvg" name="Okul" fill={COMPARISON_COLORS.schoolAvg} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="turkeyAvg" name="Genel" fill={COMPARISON_COLORS.turkeyAvg} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
