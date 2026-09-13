@@ -59,11 +59,17 @@ const list = admin => protect(async request => {
   const subjectId = request.query.get('subjectId')
   if (!grade || !subjectId) return json(200, { courses: unique, notes: [] })
   if (!unique.some(c => c.grade === grade && c.subjectId === subjectId)) return json(403, { error: 'Bu sınıf ve derse erişiminiz yok.' })
-  const noteDb = await withRequest({ grade: { type: sql.NVarChar(20), value: grade }, subjectId: { type: sql.UniqueIdentifier, value: subjectId } })
+  const noteId = request.query.get('noteId')
+  if (noteId && !guid.test(noteId)) return json(400, { error: 'Geçersiz ders notu.' })
+  const noteDb = await withRequest({ grade: { type: sql.NVarChar(20), value: grade }, subjectId: { type: sql.UniqueIdentifier, value: subjectId }, noteId: { type: sql.UniqueIdentifier, value: noteId || null } })
   const rows = await noteDb.query(`SELECT id, title, CONVERT(varchar(10), week_start, 23) AS weekStart,
-    CONVERT(varchar(10), week_end, 23) AS weekEnd, topics_json, images_json FROM dbo.LessonNotes
-    WHERE grade = @grade AND subject_id = @subjectId ORDER BY week_start DESC, title`)
-  return json(200, { courses: unique, notes: rows.recordset.map(r => ({ id: r.id, title: r.title, weekStart: r.weekStart, weekEnd: r.weekEnd, topics: JSON.parse(r.topics_json), images: JSON.parse(r.images_json) })) })
+    CONVERT(varchar(10), week_end, 23) AS weekEnd, topics_json,
+    ${noteId ? 'images_json' : '(SELECT COUNT(*) FROM OPENJSON(images_json)) AS imageCount'}
+    FROM dbo.LessonNotes
+    WHERE grade = @grade AND subject_id = @subjectId ${noteId ? 'AND id = @noteId' : ''}
+    ORDER BY week_start DESC, title`)
+  if (noteId && !rows.recordset.length) return json(404, { error: 'Ders notu bulunamadı.' })
+  return json(200, { courses: unique, notes: rows.recordset.map(r => ({ id: r.id, title: r.title, weekStart: r.weekStart, weekEnd: r.weekEnd, topics: JSON.parse(r.topics_json), ...(noteId ? { images: JSON.parse(r.images_json) } : { imageCount: r.imageCount }) })) })
 })
 const save = protect(async request => {
   const auth = await requireAdmin(request)

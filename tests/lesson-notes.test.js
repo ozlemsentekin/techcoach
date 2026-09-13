@@ -24,9 +24,10 @@ test('API denies other grades/branches and requires admin for writes', async () 
   let contexts = [{ grade: '8', subjectId: valid.subjectId }]
   let role = 'ogretmen'
   let noteReads = 0
+  let noteQuery = ''
   const inject = (index, exports) => { require.cache[paths[index]] = { id: paths[index], filename: paths[index], loaded: true, exports } }
   inject(0, { sql: { UniqueIdentifier: 'id', NVarChar: () => 'text' }, withRequest: async () => ({ query: async query => {
-    if (query.includes('FROM dbo.LessonNotes')) { noteReads++; return { recordset: [] } }
+    if (query.includes('FROM dbo.LessonNotes')) { noteReads++; noteQuery = query; return { recordset: [{ id: valid.subjectId, title: valid.title, topics_json: JSON.stringify(valid.topics), images_json: JSON.stringify(valid.images), imageCount: 1 }] } }
     if (query.includes('FROM dbo.Subjects')) return { recordset: [{ id: valid.subjectId, name: 'Türkçe', grades_json: '[7,8]' }, { id: 'other', name: 'Matematik', grades_json: '[8]' }] }
     return { recordset: contexts }
   } }) })
@@ -41,8 +42,16 @@ test('API denies other grades/branches and requires admin for writes', async () 
     assert.equal((await api.panelLessonNotes(request(`grade=7&subjectId=${valid.subjectId}`))).status, 403)
     assert.equal((await api.panelLessonNotes(request('grade=8&subjectId=other'))).status, 403)
     assert.equal(noteReads, 0)
-    assert.equal((await api.panelLessonNotes(request(`grade=8&subjectId=${valid.subjectId}`))).status, 200)
+    const listing = await api.panelLessonNotes(request(`grade=8&subjectId=${valid.subjectId}`))
+    assert.equal(listing.status, 200)
+    const listed = listing.jsonBody.notes[0]
+    assert.equal(listed.imageCount, 1)
+    assert.equal('images' in listed, false)
     assert.equal(noteReads, 1)
+    const detail = await api.panelLessonNotes(request(`grade=8&subjectId=${valid.subjectId}&noteId=${valid.subjectId}`))
+    assert.deepEqual(detail.jsonBody.notes[0].images, valid.images)
+    assert.match(noteQuery, /AND id = @noteId/)
+    noteReads = 1
     contexts = []; role = 'ogrenci'
     assert.equal((await api.panelLessonNotes(request(`grade=8&subjectId=${valid.subjectId}`))).status, 403)
     assert.equal(noteReads, 1)
