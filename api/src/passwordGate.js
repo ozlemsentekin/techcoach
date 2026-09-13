@@ -41,7 +41,7 @@ function withPasswordGate(route, handler) {
           let mustChange = session.mustChangePassword
           if (mustChange === undefined) {
             const db = await withRequest({ id: { type: sql.UniqueIdentifier, value: session.sub } })
-            const result = await db.query('SELECT TOP 1 phone_number, password_hash FROM dbo.Users WHERE id = @id;')
+            const result = await db.query('SELECT TOP 1 id, phone_number, password_hash FROM dbo.Users WHERE id = @id;')
             mustChange = await requiresPasswordChange(result.recordset[0])
           }
           if (mustChange) {
