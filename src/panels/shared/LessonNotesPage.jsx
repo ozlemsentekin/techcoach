@@ -116,7 +116,7 @@ function LessonNotesContent({ admin }) {
     catch (e) { setError(e.message) } finally { setBusy(false) }
   }
   const search = query.trim().toLocaleLowerCase('tr-TR')
-  const searchableNotes = useMemo(() => notes.map(note => ({ note, text: [note.title, ...note.topics, dateLabel(note.weekStart), dateLabel(note.weekEnd)].join(' ').toLocaleLowerCase('tr-TR') })), [notes])
+  const searchableNotes = useMemo(() => notes.map((note, index) => ({ note: { ...note, displayNumber: notes.length - index }, text: [note.title, ...note.topics, dateLabel(note.weekStart), dateLabel(note.weekEnd)].join(' ').toLocaleLowerCase('tr-TR') })), [notes])
   const visibleNotes = useMemo(() => searchableNotes.filter(item => item.text.includes(search)).map(item => item.note), [searchableNotes, search])
   return <section className="space-y-3 text-panel-text">
     <label className="flex items-center gap-3 rounded-xl border border-panel-border bg-panel-surface px-3 py-2 focus-within:ring-2 focus-within:ring-panel-border">
@@ -147,12 +147,12 @@ function LessonNotesContent({ admin }) {
       {notesError && <div role="alert" className="rounded-xl border border-red-300 p-3 text-sm"><p>{notesError}</p><button className={button} onClick={() => setRevision(r => r + 1)}>Tekrar dene</button></div>}
       {opening && <p role="status" className="text-sm text-panel-text-muted">Seçilen notun görselleri yükleniyor…</p>}
       <div className="overflow-hidden rounded-xl border border-panel-border bg-panel-surface">
-      {visibleNotes.map((note, index) => {
+      {visibleNotes.map(note => {
         const open = expanded[note.id] ?? Boolean(search)
         return <article key={note.id} className="border-b border-panel-border last:border-b-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 transition-colors hover:bg-panel-surface-soft sm:flex-nowrap">
             <button type="button" aria-expanded={open} aria-controls={`topics-${note.id}`} onClick={() => setExpanded(previous => ({ ...previous, [note.id]: !open }))} className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-panel-accent-soft text-xs font-semibold text-panel-warm">{String(index + 1).padStart(2, '0')}</span>
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-panel-accent-soft text-xs font-semibold text-panel-warm">{String(note.displayNumber).padStart(2, '0')}</span>
               <ChevronRight size={15} className={`shrink-0 text-panel-text-muted transition-transform ${open ? 'rotate-90' : ''}`} />
               <span className="min-w-0"><span className="block text-sm font-semibold leading-snug">{note.title}</span><span className="text-[11px] text-panel-text-muted">{note.topics.length} alt başlık · {note.imageCount} sayfa</span></span>
             </button>
