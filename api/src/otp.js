@@ -431,7 +431,8 @@ async function confirmPasswordResetHandler(request) {
     const result = await requestDb.query(`
       SELECT TOP 1
         u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active,
-        u.last_login_at, u.created_at, u.teacher_subject_ids_json,
+        u.last_login_at, u.created_at, u.teacher_subject_ids_json, u.parent_type,
+        u.aydinlatma_accepted_at, u.kvkk_accepted_at,
         sp.theme_id, sp.grade,
         e.status AS entitlement_status, e.source AS entitlement_source,
         e.current_period_end AS entitlement_current_period_end

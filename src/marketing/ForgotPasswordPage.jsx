@@ -199,7 +199,7 @@ export default function ForgotPasswordPage() {
               <>
                 <h3>Doğrulama Kodu</h3>
                 <p>{phone} numarasına gönderilen 6 haneli kodu gir.</p>
-                <div className="auth-hint">Marka tescil sürecimiz henüz tamamlanmadığı için kod, şu an "Ugur Sisman" gönderici adıyla gelecek — TechCoach değil, endişelenmeyin, güvendesiniz.</div>
+                <div className="auth-notice">Marka tescil sürecimiz henüz tamamlanmadığı için kod, şu an "Ugur Sisman" gönderici adıyla gelecek — TechCoach değil, endişelenmeyin, güvendesiniz.</div>
 
                 {authMessage ? <div className="auth-feedback auth-feedback-success">{authMessage}</div> : null}
                 {authError ? <div className="auth-feedback auth-feedback-error">{authError}</div> : null}
