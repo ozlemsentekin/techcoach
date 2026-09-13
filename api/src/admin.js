@@ -12,6 +12,7 @@ const {
   verifySessionToken,
 } = require('./security')
 const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
+const { sanitizeUser: sanitizeSessionUser } = require('./auth')
 
 async function requireAdmin(request) {
   const token = readSessionToken(request)
@@ -430,7 +431,8 @@ async function impersonateUserHandler(request) {
     const result = await requestDb.query(`
       SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active, u.parent_id,
              p.full_name AS parent_full_name, u.last_login_at, u.last_seen_at, u.created_at, u.teacher_subject_ids_json,
-             sp.theme_id,
+             u.aydinlatma_accepted_at, u.kvkk_accepted_at,
+             sp.theme_id, sp.grade,
              e.status AS entitlement_status, e.source AS entitlement_source,
              e.current_period_end AS entitlement_current_period_end
       FROM dbo.Users u
@@ -447,7 +449,10 @@ async function impersonateUserHandler(request) {
     // guard'ları (studentScope/teacherScope/meHandler) actingAdminId gördüğünde
     // is_active kontrolünü atlar.
 
-    const user = sanitizeUser(record)
+    // Frontend'in beklediği authUser şekli /api/auth/me ile birebir aynı olmalı (needsConsent,
+    // aiReportsEnabled, themeId, grade dahil) — aksi halde panel geçişinde bu alanları okuyan
+    // kod eksik veri bulup hataya düşebilir.
+    const user = sanitizeSessionUser(record)
     const token = createSessionToken(user, {
       actingAdminId: session.sub,
       actingAdminName: session.fullName,
@@ -558,8 +563,9 @@ async function returnToAdminHandler(request) {
 
     const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: session.actingAdminId } })
     const result = await requestDb.query(`
-      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.parent_id,
-             p.full_name AS parent_full_name, u.last_login_at, u.last_seen_at, u.created_at,
+      SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active, u.parent_id,
+             p.full_name AS parent_full_name, u.last_login_at, u.last_seen_at, u.created_at, u.teacher_subject_ids_json,
+             u.aydinlatma_accepted_at, u.kvkk_accepted_at,
              e.status AS entitlement_status, e.source AS entitlement_source,
              e.current_period_end AS entitlement_current_period_end
       FROM dbo.Users u
@@ -572,7 +578,8 @@ async function returnToAdminHandler(request) {
       return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
     }
 
-    const user = sanitizeUser(record)
+    // impersonateUserHandler'daki gibi: /api/auth/me ile aynı şekli üret.
+    const user = sanitizeSessionUser(record)
     user.entitlement = {
       status: record.entitlement_status || 'none',
       source: record.entitlement_source || null,
