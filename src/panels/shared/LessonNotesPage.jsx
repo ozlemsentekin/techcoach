@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, X, ChevronRight, BookOpen, ArrowUpRight, Sparkles, Printer } from 'lucide-react'
 import { authRequest, cachedGet } from '../../services/authClient'
+import { createLessonNoteCache } from '../../utils/lessonNoteCache'
 import { printLessonNote } from '../../utils/printLessonNote'
 import { useAuth } from '../../context/useAuth'
 
 const field = 'w-full rounded-xl border border-panel-border bg-panel-surface p-3 text-panel-text'
 const button = 'rounded-xl border border-panel-border px-4 py-2 text-sm font-medium hover:bg-panel-surface-soft disabled:opacity-50'
 const emptyForm = { title: '', weekStart: '', weekEnd: '', topics: [], images: [] }
+const EMPTY_NOTES = []
 const dateLabel = value => new Date(`${value}T12:00:00`).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })
 
 export default function LessonNotesPage({ admin = false }) {
@@ -25,7 +27,7 @@ function NoteViewer({ note, onClose }) {
     finally { setPrinting(false) }
   }
   useEffect(() => { ref.current?.showModal() }, [])
-  return <dialog ref={ref} onClose={onClose} aria-label={note.title} className="fixed inset-0 z-50 m-auto h-[95dvh] w-[95vw] max-w-5xl overflow-auto rounded-2xl border border-panel-border bg-panel-surface p-4 text-panel-text backdrop:bg-black/60"><div className="sticky top-0 flex items-center justify-between gap-3 bg-panel-surface p-3"><h2 className="font-bold">{note.title}</h2><button disabled={printing} className={`${button} flex shrink-0 items-center gap-2`} onClick={print}><Printer size={16} />{printing ? 'Hazırlanıyor…' : 'Yazdır'}</button><button autoFocus className={button} onClick={() => ref.current.close()}>Kapat</button></div>{printError && <p role="alert" className="p-3 text-sm text-red-600">{printError}</p>}{note.images.map((img, i) => <figure key={i} className="mb-6"><figcaption className="p-2 text-center">Sayfa {i + 1} / {note.images.length}</figcaption><img src={img} alt={`${note.title} — sayfa ${i + 1}`} className="mx-auto h-auto w-full" /></figure>)}</dialog>
+  return <dialog ref={ref} onClose={onClose} aria-label={note.title} className="fixed inset-0 z-50 m-auto h-[95dvh] w-[95vw] max-w-5xl overflow-auto rounded-2xl border border-panel-border bg-panel-surface p-4 text-panel-text backdrop:bg-black/60"><div className="sticky top-0 flex items-center justify-between gap-3 bg-panel-surface p-3"><h2 className="font-bold">{note.title}</h2><button disabled={printing} className={`${button} flex shrink-0 items-center gap-2`} onClick={print}><Printer size={16} />{printing ? 'Hazırlanıyor…' : 'Yazdır'}</button><button autoFocus className={button} onClick={() => ref.current.close()}>Kapat</button></div>{printError && <p role="alert" className="p-3 text-sm text-red-600">{printError}</p>}{note.images.map((img, i) => <figure key={i} className="mb-6"><figcaption className="p-2 text-center">Sayfa {i + 1} / {note.images.length}</figcaption><img decoding="async" loading={i === 0 ? 'eager' : 'lazy'} src={img} alt={`${note.title} — sayfa ${i + 1}`} className="mx-auto h-auto w-full" /></figure>)}</dialog>
 }
 
 function LessonNotesContent({ admin }) {
@@ -35,6 +37,7 @@ function LessonNotesContent({ admin }) {
   const [noteResult, setNoteResult] = useState(null)
   const [opening, setOpening] = useState(false)
   const detailRequest = useRef(0)
+  const [imageCache] = useState(() => createLessonNoteCache())
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState({})
   const [error, setError] = useState('')
@@ -45,36 +48,41 @@ function LessonNotesContent({ admin }) {
   const [view, setView] = useState(null)
   const endpoint = admin ? '/api/panel/admin/lesson-notes' : '/api/panel/lesson-notes'
   const notesLoading = Boolean(selection) && (noteResult?.selection !== selection || noteResult?.revision !== revision)
-  const notes = notesLoading ? [] : (noteResult?.notes || [])
+  const notes = notesLoading ? EMPTY_NOTES : (noteResult?.notes || EMPTY_NOTES)
   const notesError = !notesLoading && noteResult?.error
   const course = courses.find(c => `${c.grade}:${c.subjectId}` === selection)
   useEffect(() => {
     let ignore = false
-    authRequest(endpoint).then(data => {
+    cachedGet(`${endpoint}?initial=1&user=${encodeURIComponent(authUser?.id || '')}`).then(data => {
       if (ignore) return
       setCourses(data.courses)
-      setSelection(data.courses[0] ? `${data.courses[0].grade}:${data.courses[0].subjectId}` : '')
+      setSelection(data.selection || '')
+      if (data.selection) setNoteResult({ selection: data.selection, revision: 0, notes: data.notes })
       setLoading(false)
     }).catch(e => { if (!ignore) { setError(e.message); setLoading(false) } })
     return () => { ignore = true }
   }, [endpoint, authUser?.id])
   useEffect(() => {
-    if (!selection) return
+    if (!selection || (noteResult?.selection === selection && noteResult?.revision === revision)) return
     let ignore = false
     const [grade, subjectId] = selection.split(':')
     cachedGet(`${endpoint}?grade=${grade}&subjectId=${subjectId}`).then(data => {
       if (!ignore) { setNoteResult({ selection, revision, notes: data.notes }); setError('') }
     }).catch(e => { if (!ignore) setNoteResult({ selection, revision, notes: [], error: e.message }) })
     return () => { ignore = true }
-  }, [endpoint, selection, revision])
+  }, [endpoint, selection, revision, noteResult])
   const choose = c => { setSelection(`${c.grade}:${c.subjectId}`); detailRequest.current++; setOpening(false); setForm(null); setView(null) }
   async function openNote(note, edit = false) {
     const requestId = ++detailRequest.current
+    const cacheKey = `${selection}:${note.id}`
+    const cached = !edit && imageCache.get(cacheKey)
+    if (cached) { setError(''); setView(cached); return }
     setOpening(true); setError('')
     try {
       const [grade, subjectId] = selection.split(':')
       const data = await authRequest(`${endpoint}?grade=${grade}&subjectId=${subjectId}&noteId=${note.id}`, { timeoutMs: 90000 })
       if (requestId !== detailRequest.current) return
+      imageCache.set(cacheKey, data.notes[0])
       if (edit) setForm(data.notes[0])
       else setView(data.notes[0])
     } catch (e) { if (requestId === detailRequest.current) setError(e.message) }
@@ -98,17 +106,18 @@ function LessonNotesContent({ admin }) {
     event.preventDefault(); setBusy(true); setError('')
     try {
       await authRequest(endpoint, { method: 'POST', body: JSON.stringify({ ...form, topics: form.topics.map(t => t.trim()).filter(Boolean), grade: course.grade, subjectId: course.subjectId }) })
-      setForm(null); setRevision(r => r + 1)
+      imageCache.clear(); setForm(null); setRevision(r => r + 1)
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
   async function remove(note) {
     if (!window.confirm(`“${note.title}” ders notları silinsin mi?`)) return
     setBusy(true)
-    try { await authRequest(`${endpoint}/${note.id}`, { method: 'DELETE' }); setRevision(r => r + 1) }
+    try { await authRequest(`${endpoint}/${note.id}`, { method: 'DELETE' }); imageCache.clear(); setRevision(r => r + 1) }
     catch (e) { setError(e.message) } finally { setBusy(false) }
   }
   const search = query.trim().toLocaleLowerCase('tr-TR')
-  const visibleNotes = notes.filter(note => [note.title, ...note.topics, dateLabel(note.weekStart), dateLabel(note.weekEnd)].join(' ').toLocaleLowerCase('tr-TR').includes(search))
+  const searchableNotes = useMemo(() => notes.map(note => ({ note, text: [note.title, ...note.topics, dateLabel(note.weekStart), dateLabel(note.weekEnd)].join(' ').toLocaleLowerCase('tr-TR') })), [notes])
+  const visibleNotes = useMemo(() => searchableNotes.filter(item => item.text.includes(search)).map(item => item.note), [searchableNotes, search])
   return <section className="space-y-3 text-panel-text">
     <label className="flex items-center gap-3 rounded-xl border border-panel-border bg-panel-surface px-3 py-2 focus-within:ring-2 focus-within:ring-panel-border">
       <Search size={18} className="shrink-0 text-panel-text-muted" /><span className="sr-only">Seçili derste konu veya alt başlık ara</span>

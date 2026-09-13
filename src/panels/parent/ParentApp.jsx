@@ -1,4 +1,3 @@
-import LessonNotesPage from '../shared/LessonNotesPage'
 import { createElement, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
@@ -10,6 +9,7 @@ import ParentTourProvider from './onboarding/ParentTourProvider'
 import ParentStudentsGateContext from './parentStudentsGateContextObject'
 import { useParentStudentsGate } from './useParentStudentsGate'
 
+const LessonNotesPage = lazy(() => import('../shared/LessonNotesPage'))
 const GettingStartedPage = lazy(() => import('./pages/GettingStartedPage'))
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const WeeklyPlanPage = lazy(() => import('./pages/WeeklyPlanPage'))
@@ -111,8 +111,8 @@ export default function ParentApp() {
         <ParentTourProvider>
         <Routes>
           <Route element={<PanelLayout role="parent" />}>
-            <Route path="admin/lesson-notes" element={<RequireAdmin><LessonNotesPage admin /></RequireAdmin>} />
-            <Route path="lesson-notes" element={<LessonNotesPage />} />
+            <Route path="admin/lesson-notes" element={<RequireAdmin><Suspense fallback={<LoadingState label="Ders notları yükleniyor…" />}><LessonNotesPage admin /></Suspense></RequireAdmin>} />
+            <Route path="lesson-notes" element={pageElement(LessonNotesPage)} />
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route
               path="dashboard"

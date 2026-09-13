@@ -1,4 +1,3 @@
-import LessonNotesPage from '../shared/LessonNotesPage'
 import { createElement, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import ThemeProvider from '../../theme/ThemeProvider'
@@ -8,6 +7,7 @@ import { useAuth } from '../../context/useAuth'
 import { getTeacherStudents } from '../../services/teacherService'
 import TeacherClassesContext from './teacherClassesContextObject'
 
+const LessonNotesPage = lazy(() => import('../shared/LessonNotesPage'))
 const StudentsPage = lazy(() => import('./pages/StudentsPage'))
 const StudentDetailPage = lazy(() => import('./pages/StudentDetailPage'))
 const ParentsPage = lazy(() => import('./pages/ParentsPage'))
@@ -75,7 +75,7 @@ export default function TeacherApp() {
       <TeacherClassesProvider>
         <Routes>
           <Route element={<PanelLayout role="teacher" />}>
-            <Route path="lesson-notes" element={<LessonNotesPage />} />
+            <Route path="lesson-notes" element={pageElement(LessonNotesPage)} />
             <Route index element={<Navigate to="students" replace />} />
             <Route path="students" element={pageElement(StudentsPage)} />
             <Route path="students/:studentTeacherId" element={pageElement(StudentDetailPage)} />

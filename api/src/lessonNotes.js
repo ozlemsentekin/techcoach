@@ -49,14 +49,15 @@ const protect = handler => async request => {
 const list = admin => protect(async request => {
   const access = admin ? await requireAdmin(request) : await scope(request)
   if (access.error) return access.error
+  if (request.query.get('access') === '1') return json(200, { enabled: admin || access.contexts.length > 0 })
   const db = await withRequest()
   const subjects = (await db.query('SELECT id, name, grades_json FROM dbo.Subjects WHERE is_active = 1 ORDER BY name')).recordset
   const contexts = admin ? Array.from({ length: 12 }, (_, i) => ({ grade: String(i + 1) })) : access.contexts
   const courses = contexts.flatMap(c => subjects.filter(s => (!c.subjectId || s.id === c.subjectId) && (!s.grades_json || JSON.parse(s.grades_json).map(String).includes(String(c.grade)))).map(s => ({ grade: String(c.grade), subjectId: s.id, subjectName: s.name })))
   const unique = [...new Map(courses.map(c => [`${c.grade}:${c.subjectId}`, c])).values()]
-  if (request.query.get('access') === '1') return json(200, { enabled: contexts.length > 0 })
-  const grade = request.query.get('grade')
-  const subjectId = request.query.get('subjectId')
+  const initial = request.query.get('initial') === '1'
+  const grade = request.query.get('grade') || (initial ? unique[0]?.grade : null)
+  const subjectId = request.query.get('subjectId') || (initial ? unique[0]?.subjectId : null)
   if (!grade || !subjectId) return json(200, { courses: unique, notes: [] })
   if (!unique.some(c => c.grade === grade && c.subjectId === subjectId)) return json(403, { error: 'Bu sınıf ve derse erişiminiz yok.' })
   const noteId = request.query.get('noteId')
@@ -69,7 +70,7 @@ const list = admin => protect(async request => {
     WHERE grade = @grade AND subject_id = @subjectId ${noteId ? 'AND id = @noteId' : ''}
     ORDER BY week_start DESC, title`)
   if (noteId && !rows.recordset.length) return json(404, { error: 'Ders notu bulunamadı.' })
-  return json(200, { courses: unique, notes: rows.recordset.map(r => ({ id: r.id, title: r.title, weekStart: r.weekStart, weekEnd: r.weekEnd, topics: JSON.parse(r.topics_json), ...(noteId ? { images: JSON.parse(r.images_json) } : { imageCount: r.imageCount }) })) })
+  return json(200, { courses: unique, selection: `${grade}:${subjectId}`, notes: rows.recordset.map(r => ({ id: r.id, title: r.title, weekStart: r.weekStart, weekEnd: r.weekEnd, topics: JSON.parse(r.topics_json), ...(noteId ? { images: JSON.parse(r.images_json) } : { imageCount: r.imageCount }) })) })
 })
 const save = protect(async request => {
   const auth = await requireAdmin(request)
