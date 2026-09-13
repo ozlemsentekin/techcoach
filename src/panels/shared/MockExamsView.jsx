@@ -58,12 +58,13 @@ function successTone(percent) {
   return 'bg-panel-red-soft text-panel-red'
 }
 
-function StatPill({ label, value, tone }) {
+function StatPill({ label, value, tone, className }) {
   return (
     <span
       className={cn(
         'inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-semibold tabular-nums',
         tone || 'bg-panel-surface-soft text-panel-text-muted',
+        className,
       )}
     >
       <span className="font-medium opacity-70">{label}</span>
@@ -942,54 +943,121 @@ function PhotoModal({ questions, fetchPhoto, onClose, onDelete }) {
 
 /* ------------------------------------------------------------------ deneme kartı */
 
-function SubjectLine({ subject, readOnly, onViewPhotos, onAddPhoto, onManageQuestions }) {
+// D/Y/B/Net/%/Puan/Şube/Okul/Genel sütunları sm+ genişlikte sabit kolonlu bir grid'e oturur —
+// ders adı uzunluğu ne olursa olsun tüm satırlarda aynı hizada durur (bkz. mobilde eski
+// flex-wrap davranışı korunur, dar ekranda 10 sabit sütun sığmaz). showComparisonColumns
+// denemedeki HERHANGİ bir dersin puan/sıra verisi olup olmadığına göre (ExamCard'da hesaplanır)
+// Puan/Şube/Okul/Genel sütunlarını tamamen gösterir/gizler — tek tek dersler eksikse "—" basılır,
+// böylece bu veriyi hiç kullanmayan denemelerde (branş/etüt) sütunlar boşuna açılmaz.
+const SUBJECT_ROW_GRID_COLS =
+  'sm:grid-cols-[minmax(8rem,1fr)_2.75rem_2.75rem_2.75rem_4.25rem_3rem_4.5rem_4rem_4rem_4.75rem]'
+const SUBJECT_ROW_GRID_COLS_COMPACT = 'sm:grid-cols-[minmax(8rem,1fr)_2.75rem_2.75rem_2.75rem_4.25rem_3rem]'
+
+function SubjectLine({ subject, readOnly, showComparisonColumns, onViewPhotos, onAddPhoto, onManageQuestions }) {
   const isQuestionMode = Array.isArray(subject.questions) && subject.questions.some((q) => q.status)
-  const rankParts = []
-  if (subject.branchRank != null) rankParts.push(`Şube ${subject.branchRank}`)
-  if (subject.schoolRank != null) rankParts.push(`Okul ${subject.schoolRank}`)
-  if (subject.overallRank != null) rankParts.push(`Genel ${subject.overallRank}`)
+  const hasActions =
+    subject.photoCount > 0 ||
+    (!readOnly && isQuestionMode && onManageQuestions) ||
+    (!readOnly && !isQuestionMode && onAddPhoto)
+
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-panel-border/60 py-2.5 first:border-t-0">
-      <span className="min-w-28 flex-1 text-sm font-semibold text-panel-text">{subject.subjectName}</span>
-      <StatPill label="D" value={subject.correct} tone="bg-panel-green-soft text-panel-green" />
-      <StatPill label="Y" value={subject.wrong} tone="bg-panel-red-soft text-panel-red" />
-      <StatPill label="B" value={subject.blank} tone="bg-panel-surface-soft text-panel-text-muted" />
-      <StatPill label="Net" value={subject.net} tone="bg-panel-blue-soft text-panel-blue" />
-      <span className={cn('rounded-lg px-2 py-0.5 text-xs font-semibold tabular-nums', successTone(subject.successRate))}>
-        %{subject.successRate}
-      </span>
-      {subject.score != null ? (
-        <StatPill label="Puan" value={subject.score} tone="bg-panel-lilac-soft text-panel-lilac" />
-      ) : null}
-      {rankParts.length > 0 ? (
-        <span className="w-full text-[11px] font-medium text-panel-text-muted sm:w-auto">{rankParts.join(' · ')}</span>
-      ) : null}
-      {subject.photoCount > 0 ? (
-        <button
-          type="button"
-          onClick={onViewPhotos}
-          className="inline-flex items-center gap-1 rounded-lg bg-panel-blue-soft px-2 py-1 text-xs font-semibold text-panel-blue hover:brightness-95"
+    <div className="border-t border-panel-border/60 py-2.5 first:border-t-0">
+      <div
+        className={cn(
+          'flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:grid sm:items-center sm:gap-y-0',
+          showComparisonColumns ? SUBJECT_ROW_GRID_COLS : SUBJECT_ROW_GRID_COLS_COMPACT,
+        )}
+      >
+        <span className="min-w-28 flex-1 text-sm font-semibold text-panel-text sm:min-w-0 sm:flex-none">
+          {subject.subjectName}
+        </span>
+        <StatPill
+          label="D"
+          value={subject.correct}
+          tone="bg-panel-green-soft text-panel-green"
+          className="sm:justify-self-center"
+        />
+        <StatPill
+          label="Y"
+          value={subject.wrong}
+          tone="bg-panel-red-soft text-panel-red"
+          className="sm:justify-self-center"
+        />
+        <StatPill
+          label="B"
+          value={subject.blank}
+          tone="bg-panel-surface-soft text-panel-text-muted"
+          className="sm:justify-self-center"
+        />
+        <StatPill
+          label="Net"
+          value={subject.net}
+          tone="bg-panel-blue-soft text-panel-blue"
+          className="sm:justify-self-center"
+        />
+        <span
+          className={cn(
+            'rounded-lg px-2 py-0.5 text-xs font-semibold tabular-nums sm:justify-self-center',
+            successTone(subject.successRate),
+          )}
         >
-          <ImagePlus size={13} aria-hidden="true" />
-          {subject.photoCount} görsel
-        </button>
-      ) : null}
-      {!readOnly && isQuestionMode && onManageQuestions ? (
-        <button
-          type="button"
-          onClick={onManageQuestions}
-          className="inline-flex items-center gap-1 rounded-lg border border-dashed border-panel-blue/50 px-2 py-1 text-xs font-semibold text-panel-blue hover:bg-panel-blue-soft"
-        >
-          <ImagePlus size={13} aria-hidden="true" /> Soruları yönet
-        </button>
-      ) : !readOnly && onAddPhoto ? (
-        <button
-          type="button"
-          onClick={onAddPhoto}
-          className="inline-flex items-center gap-1 rounded-lg border border-dashed border-panel-blue/50 px-2 py-1 text-xs font-semibold text-panel-blue hover:bg-panel-blue-soft"
-        >
-          <Plus size={13} aria-hidden="true" /> Görsel ekle
-        </button>
+          %{subject.successRate}
+        </span>
+        {showComparisonColumns ? (
+          <>
+            {subject.score != null ? (
+              <StatPill
+                label="Puan"
+                value={subject.score}
+                tone="bg-panel-lilac-soft text-panel-lilac"
+                className="sm:justify-self-center"
+              />
+            ) : (
+              <span className="text-xs text-panel-text-muted sm:justify-self-center">—</span>
+            )}
+            <span className="text-[11px] font-medium text-panel-text-muted sm:justify-self-center">
+              {subject.branchRank != null ? `Şube ${subject.branchRank}` : '—'}
+            </span>
+            <span className="text-[11px] font-medium text-panel-text-muted sm:justify-self-center">
+              {subject.schoolRank != null ? `Okul ${subject.schoolRank}` : '—'}
+            </span>
+            <span className="text-[11px] font-medium text-panel-text-muted sm:justify-self-center">
+              {subject.overallRank != null ? `Genel ${subject.overallRank}` : '—'}
+            </span>
+          </>
+        ) : null}
+      </div>
+
+      {hasActions ? (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          {subject.photoCount > 0 ? (
+            <button
+              type="button"
+              onClick={onViewPhotos}
+              className="inline-flex items-center gap-1 rounded-lg bg-panel-blue-soft px-2 py-1 text-xs font-semibold text-panel-blue hover:brightness-95"
+            >
+              <ImagePlus size={13} aria-hidden="true" />
+              {subject.photoCount} görsel
+            </button>
+          ) : null}
+          {!readOnly && isQuestionMode && onManageQuestions ? (
+            <button
+              type="button"
+              onClick={onManageQuestions}
+              className="inline-flex items-center gap-1 rounded-lg border border-dashed border-panel-blue/50 px-2 py-1 text-xs font-semibold text-panel-blue hover:bg-panel-blue-soft"
+            >
+              <ImagePlus size={13} aria-hidden="true" /> Soruları yönet
+            </button>
+          ) : !readOnly && !isQuestionMode && onAddPhoto ? (
+            <button
+              type="button"
+              onClick={onAddPhoto}
+              className="inline-flex items-center gap-1 rounded-lg border border-dashed border-panel-blue/50 px-2 py-1 text-xs font-semibold text-panel-blue hover:bg-panel-blue-soft"
+            >
+              <Plus size={13} aria-hidden="true" /> Görsel ekle
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   )
@@ -1141,7 +1209,7 @@ function ExamComparisonChart({ exam }) {
       <p className="mb-2 text-xs font-semibold text-panel-text-muted">Puan karşılaştırması</p>
       <div className="h-64 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: -16 }} barCategoryGap="20%">
+          <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap="20%">
             <CartesianGrid vertical={false} stroke="var(--color-panel-border)" strokeDasharray="3 3" />
             <XAxis dataKey="name" tick={axisTick} axisLine={false} tickLine={false} interval={0} />
             <YAxis domain={[0, 100]} tick={axisTick} axisLine={false} tickLine={false} width={30} />
@@ -1216,6 +1284,9 @@ function ExamCard({
   }, [open, detail, fetchMockExam, summary.id, studentId])
 
   const KindIcon = KIND_ICONS[exam.kind] || FileCheck2
+  // Denemedeki dersLERden herhangi biri puan/sıra detayı girilmişse tüm satırlarda o sütunlar
+  // açılır (eksik olanlar "—" gösterir) — hiçbiri girilmemişse sütunlar hiç açılmaz.
+  const showComparisonColumns = exam.subjects.some((s) => s.score != null)
 
   return (
     <div className={cn('overflow-hidden', bare ? '' : 'panel-card')}>
@@ -1261,6 +1332,7 @@ function ExamCard({
                 key={subject.id}
                 subject={subject}
                 readOnly={readOnly}
+                showComparisonColumns={showComparisonColumns}
                 onViewPhotos={() => setPhotoSubject(subject)}
                 onAddPhoto={addPhoto ? () => setAddFor(subject) : undefined}
                 onManageQuestions={addQuestionPhoto ? () => setManageSubjectId(subject.id) : undefined}
