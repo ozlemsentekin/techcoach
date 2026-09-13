@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, BookOpen, Check, ClipboardList, Info, Plus, ScanLine, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeft, ArrowRight, BookOpen, Check, ClipboardList, Plus, ScanLine, X } from 'lucide-react'
 import Button from '../../ui/Button'
 import LoadingState from '../LoadingState'
 import ResourceImageField from '../../parent/components/ResourceImageField'
@@ -18,6 +18,25 @@ import StudentPicker from './StudentPicker'
 // çocuk/öğrencilere atanacağı adımı. Kaydedince oluşan/güncellenen kaynağı döndürür.
 export default function BookFormModal({ book, onSaved, onClose }) {
   const isEdit = Boolean(book)
+  const [step, setStep] = useState(0)
+  const headingRef = useRef(null)
+  const bodyRef = useRef(null)
+  const formRef = useRef(null)
+
+  useEffect(() => {
+    const previousFocus = document.activeElement
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+      previousFocus?.focus()
+    }
+  }, [])
+  useEffect(() => {
+    headingRef.current?.focus()
+    if (bodyRef.current) bodyRef.current.scrollTop = 0
+  }, [step])
+
   const [subjects, setSubjects] = useState(null)
   const [publishers, setPublishers] = useState(null)
   const [students, setStudents] = useState(null)
@@ -29,6 +48,7 @@ export default function BookFormModal({ book, onSaved, onClose }) {
   const [type, setType] = useState(book?.type || '')
   const [publisherId, setPublisherId] = useState(book?.publisherId || '')
   const [newPublisherName, setNewPublisherName] = useState('')
+  const [showNewPublisher, setShowNewPublisher] = useState(false)
   const [addingPublisher, setAddingPublisher] = useState(false)
   const [hasAnswerKey, setHasAnswerKey] = useState(book ? book.hasAnswerKey : true)
   const [imageUrl, setImageUrl] = useState(book?.imageUrl || '')
@@ -99,6 +119,7 @@ export default function BookFormModal({ book, onSaved, onClose }) {
       })
       setPublisherId(publisher.id)
       setNewPublisherName('')
+      setShowNewPublisher(false)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -108,14 +129,27 @@ export default function BookFormModal({ book, onSaved, onClose }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    if (name.trim().length < 2) return setError('Kaynak adı en az 2 karakter olmalı.')
-    if (!subjectId) return setError('Ders seçilmeli.')
-    if (!grade) return setError('Sınıf seçilmeli.')
-    if (!isSimpleContentMode && !type) return setError('Kaynak tipi seçilmeli.')
-    if (!publisherId && newPublisherName.trim().length < 2) return setError('Yayın evi seçilmeli.')
-    if (!isEdit && selectedStudentIds.size === 0) {
-      return setError('En az bir çocuk/öğrenci seçilmeli.')
+    if (saving || addingPublisher || loading) return
+    if (step === 0) {
+      setError('')
+      setStep(1)
+      return
     }
+    const basicError = name.trim().length < 2 ? 'Kitap adı en az 2 karakter olmalı.'
+      : !subjectId ? 'Ders seçin.' : !grade ? 'Sınıf seçin.'
+        : !isEdit && selectedStudentIds.size === 0 ? 'En az bir öğrenci seçin.' : ''
+    if (basicError) {
+      setStep(1)
+      setError(basicError)
+      return
+    }
+    if (step === 1) {
+      setError('')
+      setStep(2)
+      return
+    }
+    if (!publisherId && newPublisherName.trim().length < 2) return setError('Yayın evi seçin veya adını yazın.')
+    if (!isSimpleContentMode && !type) return setError('Kaynak tipi seçin.')
 
     setError('')
     setSaving(true)
@@ -141,78 +175,68 @@ export default function BookFormModal({ book, onSaved, onClose }) {
     }
   }
 
+  const loading = subjects === null || publishers === null || students === null
+  const stepLabels = ['Kullanım', 'Kitap bilgileri', 'Tamamla']
+  const handleDialogKeyDown = (event) => {
+    if (event.key === 'Escape' && !saving) onClose()
+    if (event.key !== 'Tab') return
+    const focusable = [...formRef.current.querySelectorAll('button, input, select, [tabindex="0"]')]
+      .filter((element) => !element.disabled && element.getClientRects().length)
+    const first = focusable[0]
+    const last = focusable.at(-1)
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === headingRef.current)) {
+      event.preventDefault()
+      last?.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first?.focus()
+    }
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-950/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
-      <form
-        onSubmit={handleSubmit}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="book-form-title"
-        className="h-full w-full overflow-y-auto border border-panel-border bg-panel-surface p-5 shadow-panel-1 sm:h-auto sm:max-h-[92vh] sm:max-w-3xl sm:rounded-3xl sm:p-7"
-      >
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 id="book-form-title" className="text-2xl font-bold text-panel-text">{isEdit ? 'Kitabı Düzenle' : 'Yeni Kitap Ekle'}</h2>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-panel-text-muted">
-              Bu kaynak yalnızca seçtiğiniz çocuk/öğrencilerin kitaplığında görünür; sistem kütüphanesine eklenmez.
-            </p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm sm:p-4">
+      <form ref={formRef} onSubmit={handleSubmit} onKeyDown={handleDialogKeyDown} role="dialog" aria-modal="true" aria-labelledby="book-form-title"
+        className="flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden bg-panel-surface shadow-panel-1 sm:h-[640px] sm:max-h-[92dvh] sm:max-w-2xl sm:rounded-3xl">
+        <header className="shrink-0 border-b border-panel-border px-4 py-3 sm:px-6 sm:py-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="book-form-title" className="text-xl font-bold text-panel-text">{isEdit ? 'Kitabı Düzenle' : 'Yeni Kitap Ekle'}</h2>
+            <button type="button" disabled={saving} aria-label="Kapat" onClick={onClose} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-panel-text-muted hover:bg-panel-surface-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-panel-accent"><X size={20} /></button>
           </div>
-          <button type="button" aria-label="Kapat" onClick={onClose} className="rounded-full p-2 text-panel-text-muted transition hover:bg-panel-accent-soft hover:text-panel-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-panel-accent">
-            <X size={20} />
-          </button>
-        </div>
+          <ol aria-label="Kitap ekleme adımları" className="mt-2 flex items-center gap-2">
+            {stepLabels.map((label, index) => (
+              <li key={label} aria-current={index === step ? 'step' : undefined} className={`flex min-w-0 flex-1 items-center gap-2 text-xs sm:text-sm ${index <= step ? 'font-semibold text-panel-text' : 'text-panel-text-muted'}`}>
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs ${index <= step ? 'bg-panel-accent text-white' : 'bg-panel-surface-soft'}`}>{index < step ? <Check size={14} aria-hidden="true" /> : index + 1}</span>
+                {label}
+                {index < 2 && <span aria-hidden="true" className="hidden h-px flex-1 bg-panel-border sm:block" />}
+              </li>
+            ))}
+          </ol>
+        </header>
 
-        {error ? (
-          <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{error}</div>
-        ) : null}
-        {loadError ? (
-          <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{loadError}</div>
-        ) : null}
-
-        {subjects === null || publishers === null || students === null ? (
-          <LoadingState label="Form yükleniyor..." />
-        ) : (
-          <div className="space-y-6">
-            <fieldset>
-              <legend className="text-base font-semibold text-panel-text">Kitabı nasıl kullanacaksınız?</legend>
-              <p className="mt-1 text-sm text-panel-text-muted">İçerik ve cevap anahtarı eklemek, sonuçları nasıl takip edeceğinizi belirler.</p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {[
-                  { value: 'structured', icon: <ScanLine size={22} aria-hidden="true" />, title: 'İçerik ve cevap anahtarıyla', subtitle: 'Konu ve test bazında takip', features: ['Konu ve testleri siz eklersiniz', 'Cevap anahtarıyla optik okuma yapılır', 'Sonuçlar cevap anahtarıyla değerlendirilir'] },
-                  { value: 'simple', icon: <ClipboardList size={22} aria-hidden="true" />, title: 'İçerik ve cevap anahtarı olmadan', subtitle: 'Görev ve sonuç takibi', features: ['Konu, test ve cevap anahtarı girmezsiniz', 'Kitap üzerinden görev verebilirsiniz', 'Sonuçları elle girersiniz'] },
-                ].map(({ value, icon, title, subtitle, features }) => {
-                  const selected = contentMode === value
-                  return (
-                    <label key={value} className={`relative flex cursor-pointer flex-col rounded-2xl border-2 p-4 transition-colors focus-within:ring-2 focus-within:ring-panel-accent focus-within:ring-offset-2 ${selected ? 'border-panel-accent bg-panel-accent-soft' : 'border-panel-border bg-panel-surface hover:border-panel-accent/50'}`}>
-                      <input type="radio" name="book-content-mode" value={value} checked={selected} onChange={() => setContentMode(value)} className="sr-only" />
-                      <div className="mb-3 flex items-center justify-between">
-                        <span className={`rounded-xl p-2 ${selected ? 'bg-panel-accent text-white' : 'bg-panel-border/30 text-panel-text'}`}>{icon}</span>
-                        <span className={`flex h-6 w-6 items-center justify-center rounded-full border-2 ${selected ? 'border-panel-accent bg-panel-accent text-white' : 'border-panel-text-muted'}`}>{selected && <Check size={16} aria-hidden="true" />}</span>
-                      </div>
-                      <span className="text-base font-bold leading-snug text-panel-text">{title}</span>
-                      <span className="mt-1 text-sm text-panel-text-muted">{subtitle}</span>
-                      <ul className="mt-4 space-y-2 border-t border-panel-text/10 pt-3">
-                        {features.map((feature) => <li key={feature} className="flex gap-2 text-sm leading-relaxed text-panel-text"><Check size={16} className="mt-0.5 shrink-0 text-panel-warm" aria-hidden="true" />{feature}</li>)}
-                      </ul>
+        <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
+          <h3 ref={headingRef} tabIndex={-1} className="mb-3 text-lg font-bold text-panel-text outline-none">{['Nasıl takip etmek istersiniz?', 'Hangi kitabı ekleyelim?', 'Son birkaç bilgi…'][step]}</h3>
+          {error || loadError ? <p role="alert" className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{error || loadError}</p> : null}
+          {loading ? (loadError ? null : <LoadingState label="Form yükleniyor..." />) : <>
+            {step === 0 && (
+              <fieldset>
+                <legend className="sr-only">Kitabı kullanma biçimi</legend>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {[
+                    { value: 'structured', icon: <ScanLine size={20} />, title: 'İçerik ve cevap anahtarıyla', subtitle: 'Testleri ekle, optikle değerlendir' },
+                    { value: 'simple', icon: <ClipboardList size={20} />, title: 'İçerik ve cevap anahtarı olmadan', subtitle: 'Görev ver, sonucu elle gir' },
+                  ].map(({ value, icon, title, subtitle }) => (
+                    <label key={value} className={`flex cursor-pointer items-center gap-3 rounded-2xl border-2 p-3 [@media(max-height:650px)]:p-2 transition-colors focus-within:ring-2 focus-within:ring-panel-accent focus-within:ring-offset-2 ${contentMode === value ? 'border-panel-accent bg-panel-accent-soft' : 'border-panel-border hover:bg-panel-surface-soft'}`}>
+                      <input type="radio" name="book-content-mode" value={value} checked={contentMode === value} onChange={() => setContentMode(value)} className="sr-only" />
+                      <span aria-hidden="true" className="shrink-0 text-panel-warm">{icon}</span>
+                      <span className="min-w-0 flex-1"><span className="block text-sm font-bold leading-snug text-panel-text">{title}</span><span className="mt-1 block text-xs text-panel-text-muted">{subtitle}</span></span>
+                      <span aria-hidden="true" className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${contentMode === value ? 'border-panel-accent bg-panel-accent text-white' : 'border-panel-text-muted'}`}>{contentMode === value && <Check size={13} />}</span>
                     </label>
-                  )
-                })}
-              </div>
-              <div aria-live="polite" className="mt-3 flex items-start gap-2 rounded-xl bg-panel-border/20 px-4 py-3 text-sm leading-relaxed text-panel-text">
-                <Info size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
-                <p><span className="font-semibold">Ekledikten sonra: </span>{isSimpleContentMode ? 'Kitaba görev verebilir, çalışma sonuçlarını elle kaydedebilirsiniz. İçerik veya cevap anahtarı hazırlamanız gerekmez.' : 'Kitabın detayından konu, test ve cevap anahtarlarını ekleyebilirsiniz. Optik okuma için cevap anahtarlarını tamamlamanız gerekir.'}</p>
-              </div>
-            </fieldset>
-
-            <div className="border-t border-panel-border pt-5">
-              <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-panel-text"><BookOpen size={18} aria-hidden="true" />Kitap bilgileri</h3>
-              <div className="grid gap-5 sm:grid-cols-[144px_1fr]">
-                <div className="flex flex-col items-center gap-2 sm:items-start">
-                  <ResourceImageField value={imageUrl} onChange={setImageUrl} compact size={144} showUrlToggle fit="contain" />
-                  <span className="text-sm font-medium text-panel-text">Kitap kapağı</span>
-                  <span className="text-xs text-panel-text-muted">İsteğe bağlı</span>
+                  ))}
                 </div>
-            <div className="flex flex-col gap-3">
+                <UsagePreview simple={isSimpleContentMode} />
+              </fieldset>
+            )}
+            {step === 1 && <div className="space-y-4">
               {!isEdit && students.length > 1 ? (
                 <div className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium text-panel-text-muted">Kime eklensin?</span>
@@ -224,6 +248,11 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                 </div>
               ) : null}
 
+              <div className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-3">
+                <div className="flex flex-col items-center gap-1">
+                  <ResourceImageField value={imageUrl} onChange={setImageUrl} compact size={56} showUrlToggle fit="contain" />
+                  <span className="text-[10px] text-panel-text-muted">Kapak · İsteğe bağlı</span>
+                </div>
               <label className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-panel-text-muted">Kitap Adı</span>
                 <input
@@ -234,6 +263,47 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                 />
               </label>
 
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-panel-text-muted">Ders</span>
+                  <select
+                    aria-label="Ders"
+                    value={subjectId}
+                    onChange={(event) => setSubjectId(event.target.value)}
+                    className="min-w-0 rounded-xl border border-panel-border bg-panel-surface p-2.5 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20"
+                  >
+                    <option value="">Ders seçin</option>
+                    {subjects.map((subject) => (
+                      <option key={subject.id} value={subject.id}>
+                        {subject.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-panel-text-muted">Sınıf</span>
+                  <select
+                    aria-label="Sınıf"
+                    value={grade}
+                    onChange={(event) => setGrade(event.target.value)}
+                    className="min-w-0 rounded-xl border border-panel-border bg-panel-surface p-2.5 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20"
+                  >
+                    <option value="">Sınıf seçin</option>
+                    {BOOKSHELF_GRADE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}. Sınıf
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+
+              <p className="text-xs text-panel-text-muted">Bu kitap yalnızca seçilen öğrencilerin kitaplığında görünür.</p>
+            </div>}
+            {step === 2 && <div className="space-y-3">
               <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-panel-text-muted">Yayın Evi</span>
                 <select
@@ -249,7 +319,8 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                     </option>
                   ))}
                 </select>
-                {!publisherId ? (
+                {!publisherId && !showNewPublisher && <button type="button" onClick={() => setShowNewPublisher(true)} className="self-start py-1 text-xs font-medium text-panel-warm underline underline-offset-2">Listede yok mu? Yeni yayın evi ekle</button>}
+                {!publisherId && showNewPublisher ? (
                   <div className="flex items-center gap-2">
                     <input
                       value={newPublisherName}
@@ -273,44 +344,11 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                 ) : null}
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-panel-text-muted">Ders</span>
-                  <select
-                    value={subjectId}
-                    onChange={(event) => setSubjectId(event.target.value)}
-                    className="min-w-0 rounded-xl border border-panel-border bg-panel-surface p-2.5 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20"
-                  >
-                    <option value="">Ders seçin</option>
-                    {subjects.map((subject) => (
-                      <option key={subject.id} value={subject.id}>
-                        {subject.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-panel-text-muted">Sınıf</span>
-                  <select
-                    value={grade}
-                    onChange={(event) => setGrade(event.target.value)}
-                    className="min-w-0 rounded-xl border border-panel-border bg-panel-surface p-2.5 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20"
-                  >
-                    <option value="">Sınıf seçin</option>
-                    {BOOKSHELF_GRADE_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}. Sınıf
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
               {!isSimpleContentMode ? (
                 <label className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium text-panel-text-muted">Kaynak Tipi</span>
                   <select
+                    aria-label="Kaynak Tipi"
                     value={type}
                     onChange={(event) => setType(event.target.value)}
                     className="min-w-0 rounded-xl border border-panel-border bg-panel-surface p-2.5 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20"
@@ -336,25 +374,57 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                   <span className="text-sm font-medium text-panel-text">Cevap Anahtarı Var</span>
                 </label>
               ) : null}
-            </div>
-              </div>
-            </div>
-          </div>
-        )}
 
-        <div className="sticky -bottom-5 mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-panel-border bg-panel-surface py-4 sm:-bottom-7">
-        <button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-medium text-panel-text hover:bg-panel-border/20">Vazgeç</button>
-        <Button
-          type="submit"
-          disabled={saving || subjects === null || publishers === null || students === null}
-          size="md"
-          className="gap-2"
-        >
-          {saving ? 'Kaydediliyor...' : isEdit ? 'Kaydet' : 'Kitabı Ekle'}
-          {!saving && <ArrowRight size={16} aria-hidden="true" />}
-        </Button>
+              <p className="rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-text">{isSimpleContentMode ? 'Hazır! Ekledikten sonra kitap üzerinden görev verebilirsiniz.' : 'Sonraki adım: Konu, test ve cevap anahtarı ekleme.'}</p>
+            </div>}
+          </>}
+        </div>
+
+        <div data-book-form-footer className="flex shrink-0 items-center justify-between gap-3 border-t border-panel-border bg-panel-surface px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
+          <Button variant="ghost" disabled={saving || addingPublisher} className="h-11" onClick={() => { if (step === 0) onClose(); else { setError(''); setStep(step - 1) } }}>
+            {step > 0 && <ArrowLeft size={16} aria-hidden="true" />}{step === 0 ? 'Vazgeç' : 'Geri'}
+          </Button>
+          <span className="text-xs text-panel-text-muted">{step + 1} / 3</span>
+          <Button type="submit" disabled={saving || addingPublisher || loading} className="h-11 min-w-28">
+            {saving ? 'Kaydediliyor…' : step < 2 ? 'Devam' : isEdit ? 'Kaydet' : 'Kitabı Ekle'}
+            {!saving && <ArrowRight size={16} aria-hidden="true" />}
+          </Button>
         </div>
       </form>
+    </div>
+  )
+}
+
+function UsagePreview({ simple }) {
+  return (
+    <div aria-live="polite" className="mt-4 [@media(max-height:650px)]:mt-2 rounded-2xl bg-panel-surface-soft p-3 sm:mt-5 sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-2"><p className="text-sm font-semibold text-panel-text">Kullanım akışı</p><span className="rounded-full bg-panel-surface px-2 py-1 text-[10px] text-panel-text-muted">Örnek akış</span></div>
+      <ol className="grid grid-cols-3 gap-2 sm:gap-3">
+        <li className="min-w-0">
+          <div aria-hidden="true" className="flex h-20 flex-col justify-center gap-1 rounded-xl border border-panel-border bg-panel-surface p-2 sm:h-24 [@media(max-height:650px)]:h-14">
+            <div className="flex items-center gap-1 text-[10px] font-semibold text-panel-text"><BookOpen size={12} />{simple ? 'Matematik' : 'Konu / Test'}</div>
+            <div className="rounded bg-panel-surface-soft p-1 text-[10px] text-panel-text">{simple ? 'Sayfa 20–25' : 'Kesirler · Test 1'}</div>
+            {!simple && <div className="flex gap-1">{['1 A', '2 C', '3 B'].map(answer => <span key={answer} className="rounded bg-panel-accent-soft px-1 text-[9px] text-panel-warm">{answer}</span>)}</div>}
+          </div>
+          <p className="mt-2 text-xs font-semibold text-panel-text">1. {simple ? 'Görev ver' : 'İçeriği hazırla'}</p>
+          <p className="mt-1 text-[11px] leading-snug text-panel-text-muted [@media(max-height:650px)]:hidden">{simple ? 'Çalışılacak sayfaları seç' : 'Konu, test ve cevapları ekle'}</p>
+        </li>
+        <li className="min-w-0">
+          <div aria-hidden="true" className="flex h-20 flex-col items-center justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface p-2 sm:h-24 [@media(max-height:650px)]:h-14">
+            {simple ? <><ClipboardList size={23} className="text-panel-warm" /><span className="text-[10px] text-panel-text">Çalışma tamamlandı ✓</span></> : <><ScanLine size={28} className="text-panel-warm" /><span className="text-[10px] text-panel-text">A ● C D</span></>}
+          </div>
+          <p className="mt-2 text-xs font-semibold text-panel-text">2. {simple ? 'Öğrenci çözsün' : 'Optikle oku'}</p>
+          <p className="mt-1 text-[11px] leading-snug text-panel-text-muted [@media(max-height:650px)]:hidden">{simple ? 'Öğrenci kitaptan çalışır' : 'Çözülen testin cevaplarını okut'}</p>
+        </li>
+        <li className="min-w-0">
+          <div aria-hidden="true" className="flex h-20 flex-col justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface p-2 sm:h-24 [@media(max-height:650px)]:h-14">
+            <div className="flex justify-center gap-1 text-[10px] font-semibold"><span className="rounded bg-emerald-50 px-1 py-1 text-emerald-700">8 D</span><span className="rounded bg-rose-50 px-1 py-1 text-rose-700">2 Y</span></div>
+            {simple ? <div className="rounded border border-dashed border-panel-text-muted p-1 text-center text-[10px] text-panel-text">Elle giriş</div> : <div className="h-2 overflow-hidden rounded-full bg-rose-100"><div className="h-full w-4/5 rounded-full bg-emerald-500" /></div>}
+          </div>
+          <p className="mt-2 text-xs font-semibold text-panel-text">3. {simple ? 'Sonucu gir' : 'Sonucu gör'}</p>
+          <p className="mt-1 text-[11px] leading-snug text-panel-text-muted [@media(max-height:650px)]:hidden">{simple ? 'Doğru ve yanlışı sen kaydet' : 'Sistem cevap anahtarıyla hesaplar'}</p>
+        </li>
+      </ol>
     </div>
   )
 }
