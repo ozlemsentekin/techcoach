@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { CheckCircle2, Lock } from 'lucide-react'
+import { CheckCircle2, Loader2, Lock, XCircle } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { panelPathForRole } from '../utils/panelPath'
+import { authRequest } from '../services/authClient'
 import { initiateIyzicoCheckout, initiateIyzicoCheckoutForNewParent } from '../services/paymentService'
 import { injectCheckoutFormContent } from './iyzicoCheckoutForm'
 import { formatTRY, usePublicPricing } from '../utils/pricing'
@@ -24,6 +25,9 @@ export default function PaymentPage() {
   const [addressLine, setAddressLine] = useState('')
   const [city, setCity] = useState('')
   const [zipCode, setZipCode] = useState('')
+  const [couponCode, setCouponCode] = useState('')
+  // Kupon kodu canlı doğrulama: 'idle' | 'checking' | 'valid' | 'invalid'
+  const [couponCheck, setCouponCheck] = useState({ status: 'idle', code: '', message: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [checkoutFormContent, setCheckoutFormContent] = useState(null)
@@ -36,6 +40,50 @@ export default function PaymentPage() {
       injectCheckoutFormContent(formContainerRef.current, checkoutFormContent)
     }
   }, [checkoutFormContent])
+
+  useEffect(() => {
+    const code = couponCode.trim()
+    if (!code) return
+
+    let ignore = false
+    const timer = setTimeout(() => {
+      authRequest('/api/auth/validate-coupon', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      })
+        .then((data) => {
+          if (ignore) return
+          if (data?.valid) {
+            setCouponCheck({
+              status: 'valid',
+              code: data.code || code,
+              message: data.description || 'Kupon kodu uygulandı.',
+            })
+          } else {
+            setCouponCheck({ status: 'invalid', code: '', message: data?.error || 'Kupon kodu geçersiz.' })
+          }
+        })
+        .catch((error) => {
+          if (ignore) return
+          setCouponCheck({
+            status: 'invalid',
+            code: '',
+            message: error?.message || 'Kupon kodu doğrulanamadı. Lütfen tekrar deneyin.',
+          })
+        })
+    }, 500)
+
+    return () => {
+      ignore = true
+      clearTimeout(timer)
+    }
+  }, [couponCode])
+
+  const handleCouponChange = (event) => {
+    const { value } = event.target
+    setCouponCheck({ status: value.trim() ? 'checking' : 'idle', code: '', message: '' })
+    setCouponCode(value)
+  }
 
   // Var olan bir veli (yenileme ödemesi) ya da /uye-ol'dan gelen bekleyen kayıt bilgisiyle
   // (henüz hesabı yok, ödeme sonrası hesap oluşacak) buraya girilebilir. İkisi de yoksa ödeme
@@ -63,16 +111,27 @@ export default function PaymentPage() {
       setError('Adres, il ve posta kodu bilgilerini girin.')
       return
     }
+    if (!authUser && couponCode.trim() && couponCheck.status === 'checking') {
+      setError('Kupon kodu kontrol ediliyor, lütfen bekleyin.')
+      return
+    }
+    if (!authUser && couponCode.trim() && couponCheck.status === 'invalid') {
+      setError('Kupon kodu geçersiz. Kodu düzeltin veya alanı boş bırakın.')
+      return
+    }
 
     setLoading(true)
     try {
       const address = { addressLine: addressLine.trim(), city: city.trim(), zipCode: zipCode.trim() }
       const trimmedEmail = email.trim()
+      const hasTrialCoupon = couponCheck.status === 'valid' && Boolean(couponCheck.code)
+      const appliedCouponCode = hasTrialCoupon ? couponCheck.code : couponCode.trim()
 
       const result = authUser
         ? await initiateIyzicoCheckout({ billingCycle, email: trimmedEmail, identityNumber, address })
         : await initiateIyzicoCheckoutForNewParent({
             ...pendingRegistration,
+            couponCode: appliedCouponCode,
             billingCycle,
             email: trimmedEmail,
             identityNumber,
@@ -194,6 +253,38 @@ export default function PaymentPage() {
                       onChange={(event) => setZipCode(event.target.value)}
                     />
                   </div>
+
+                  {!authUser ? (
+                    <div className="signup-coupon-field">
+                      <input
+                        name="couponCode"
+                        type="text"
+                        placeholder="Kupon kodu (varsa)"
+                        aria-label="Kupon Kodu"
+                        autoComplete="off"
+                        value={couponCode}
+                        onChange={handleCouponChange}
+                      />
+                      {couponCheck.status === 'checking' ? (
+                        <p className="signup-coupon-status is-checking" role="status">
+                          <Loader2 size={15} className="spin" aria-hidden="true" />
+                          Kupon kodu kontrol ediliyor...
+                        </p>
+                      ) : null}
+                      {couponCheck.status === 'valid' ? (
+                        <p className="signup-coupon-status is-valid" role="status">
+                          <CheckCircle2 size={15} aria-hidden="true" />
+                          Uygulandı{couponCheck.message ? ` — ${couponCheck.message}` : ''}
+                        </p>
+                      ) : null}
+                      {couponCheck.status === 'invalid' ? (
+                        <p className="signup-coupon-status is-invalid" role="alert">
+                          <XCircle size={15} aria-hidden="true" />
+                          {couponCheck.message}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </form>
               </div>
 
@@ -239,7 +330,12 @@ export default function PaymentPage() {
                 </div>
                 {activeBilling.badge ? <span className="badge signup-price-badge">{activeBilling.badge}</span> : null}
 
-                <button type="submit" form="payment-form" className="btn btn-primary checkout-submit" disabled={loading}>
+                <button
+                  type="submit"
+                  form="payment-form"
+                  className="btn btn-primary checkout-submit"
+                  disabled={loading || (!authUser && couponCode.trim() !== '' && couponCheck.status === 'checking')}
+                >
                   {loading ? 'Yönlendiriliyor...' : 'Öde'}
                 </button>
 

@@ -48,6 +48,7 @@ function sanitizeUser(record) {
     themeId: record.theme_id || null,
     grade: record.role === 'ogrenci' ? (record.grade || null) : undefined,
     teacherSubjectIds: record.role === 'ogretmen' ? parseTeacherSubjectIdsJson(record.teacher_subject_ids_json) : undefined,
+    parentType: record.role === 'ebeveyn' ? (record.parent_type || null) : undefined,
   }
 }
 
@@ -62,7 +63,8 @@ function createAuthServiceErrorResponse(error, fallbackMessage) {
 
 // registerHandler ve iyzico ödeme akışındaki yeni-veli endpoint'i (henüz hesap yokken kayıt
 // bilgilerini toplayan) tarafından ortak kullanılır — mantık iki yerde tekrar yazılmasın diye.
-function validateParentRegistrationPayload(payload) {
+// requireParentType: veli kaydında (role==='ebeveyn') zorunlu, öğretmen kaydında yok sayılır.
+function validateParentRegistrationPayload(payload, { requireParentType = false } = {}) {
   const fullName = String(payload.fullName || '').trim()
   if (fullName.length < 3 || fullName.length > 120) {
     return { error: 'Ad soyad 3 ile 120 karakter arasında olmalı.' }
@@ -86,7 +88,13 @@ function validateParentRegistrationPayload(payload) {
     return { error: 'Devam etmek için aydınlatma ve KVKK onaylarını vermelisiniz.' }
   }
 
-  return { fullName, phone, email }
+  const rawParentType = String(payload.parentType || '').trim().toLowerCase()
+  const parentType = rawParentType === 'anne' || rawParentType === 'baba' ? rawParentType : null
+  if (requireParentType && !parentType) {
+    return { error: 'Anne mi baba mı olduğunuzu seçin.' }
+  }
+
+  return { fullName, phone, email, parentType }
 }
 
 // Turnstile doğrulaması + kayıt rate limit'i — public kayıt/ödeme başlatma uçlarının hepsinde
@@ -112,7 +120,7 @@ async function runRegistrationAntiAbuseChecks(request, payload) {
 
 // "DENEME" kupon koduyla anında ücretsiz aktif olan veli hesabı — registerHandler'daki kuponlu
 // veli dalıyla, iyzico ödeme akışındaki kuponlu-veli dalı arasında ortak kullanılır.
-async function createCompParentAccount({ fullName, phone, email }) {
+async function createCompParentAccount({ fullName, phone, email, parentType }) {
   const passwordHash = await hashPassword(defaultPasswordForPhone(phone))
   const now = new Date()
 
@@ -123,15 +131,16 @@ async function createCompParentAccount({ fullName, phone, email }) {
       phone: { type: sql.NVarChar(20), value: phone },
       passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       role: { type: sql.NVarChar(20), value: 'ebeveyn' },
+      parentType: { type: sql.NVarChar(10), value: parentType || null },
       consentAt: { type: sql.DateTime2, value: now },
     })
 
     const result = await insertUserDb.query(`
-      INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
+      INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, role, parent_type, aydinlatma_accepted_at, kvkk_accepted_at)
       OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
              inserted.is_admin, inserted.can_manage_library, inserted.last_login_at, inserted.created_at,
-             inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at, inserted.teacher_subject_ids_json
-      VALUES (@fullName, @email, @phone, @passwordHash, @role, @consentAt, @consentAt);
+             inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at, inserted.teacher_subject_ids_json, inserted.parent_type
+      VALUES (@fullName, @email, @phone, @passwordHash, @role, @parentType, @consentAt, @consentAt);
     `)
 
     const insertedUser = sanitizeUser(result.recordset[0])
@@ -158,11 +167,14 @@ async function registerHandler(request) {
     return json(400, { error: 'Geçersiz istek gövdesi.' })
   }
 
-  const validation = validateParentRegistrationPayload(payload)
+  // Herkese açık kayıt formu yalnızca ebeveyn veya öğretmen hesabı oluşturur; öğrenciler
+  // yalnızca bir ebeveynin "Öğrenci Profillerim" ekranından eklenebilir.
+  const role = payload.role === 'ogretmen' ? 'ogretmen' : 'ebeveyn'
+  const validation = validateParentRegistrationPayload(payload, { requireParentType: role === 'ebeveyn' })
   if (validation.error) {
     return json(400, { error: validation.error })
   }
-  const { fullName, phone, email } = validation
+  const { fullName, phone, email, parentType } = validation
 
   const antiAbuse = await runRegistrationAntiAbuseChecks(request, payload)
   if (antiAbuse.error) {
@@ -171,9 +183,6 @@ async function registerHandler(request) {
 
   const passwordHash = await hashPassword(defaultPasswordForPhone(phone))
   const now = new Date()
-  // Herkese açık kayıt formu yalnızca ebeveyn veya öğretmen hesabı oluşturur; öğrenciler
-  // yalnızca bir ebeveynin "Öğrenci Profillerim" ekranından eklenebilir.
-  const role = payload.role === 'ogretmen' ? 'ogretmen' : 'ebeveyn'
   const hasTrialCoupon = String(payload.couponCode || '').trim() === TRIAL_COUPON_CODE
 
   let teacherSubjectIds = []
@@ -196,6 +205,7 @@ async function registerHandler(request) {
         phone: { type: sql.NVarChar(20), value: phone },
         passwordHash: { type: sql.NVarChar(255), value: passwordHash },
         role: { type: sql.NVarChar(20), value: role },
+        parentType: { type: sql.NVarChar(10), value: role === 'ebeveyn' ? parentType : null },
         consentAt: { type: sql.DateTime2, value: now },
         teacherSubjectIdsJson: {
           type: sql.NVarChar(sql.MAX),
@@ -204,11 +214,11 @@ async function registerHandler(request) {
       })
 
       const result = await insertUserDb.query(`
-        INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at, teacher_subject_ids_json)
+        INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, role, parent_type, aydinlatma_accepted_at, kvkk_accepted_at, teacher_subject_ids_json)
         OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
                inserted.is_admin, inserted.can_manage_library, inserted.last_login_at, inserted.created_at,
-               inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at, inserted.teacher_subject_ids_json
-        VALUES (@fullName, @email, @phone, @passwordHash, @role, @consentAt, @consentAt, @teacherSubjectIdsJson);
+               inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at, inserted.teacher_subject_ids_json, inserted.parent_type
+        VALUES (@fullName, @email, @phone, @passwordHash, @role, @parentType, @consentAt, @consentAt, @teacherSubjectIdsJson);
       `)
 
       const insertedUser = sanitizeUser(result.recordset[0])

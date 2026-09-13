@@ -16,6 +16,7 @@ const INITIAL_FORM = {
   lastName: '',
   phone: '',
   couponCode: '',
+  parentType: '',
   acceptAydinlatma: false,
   acceptKvkk: false,
 }
@@ -215,6 +216,7 @@ export default function SignUpPage() {
     setRole(nextRole)
     setBillingCycle('monthly')
     setSubjectIds([])
+    setForm((current) => ({ ...current, parentType: '' }))
     setShowRegisterModal(true)
   }
 
@@ -249,20 +251,22 @@ export default function SignUpPage() {
     if (role === 'ogretmen' && subjectIds.length === 0) {
       return 'Branşınızı seçmelisiniz.'
     }
-    if (form.couponCode.trim() && couponCheck.status === 'checking') {
+    if (role === 'ebeveyn' && !form.parentType) {
+      return 'Anne mi baba mı olduğunuzu seçin.'
+    }
+    if (role === 'ogretmen' && form.couponCode.trim() && couponCheck.status === 'checking') {
       return 'Kupon kodu kontrol ediliyor, lütfen bekleyin.'
     }
-    if (form.couponCode.trim() && couponCheck.status === 'invalid') {
+    if (role === 'ogretmen' && form.couponCode.trim() && couponCheck.status === 'invalid') {
       return 'Kupon kodu geçersiz. Kodu düzeltin veya alanı boş bırakın.'
     }
     return null
   }
 
-  const hasTrialCoupon = couponCheck.status === 'valid' && Boolean(couponCheck.code)
-  const appliedCouponCode = hasTrialCoupon ? couponCheck.code : form.couponCode.trim()
-  // Veli, kupon kodu yoksa hesabı hemen açmıyoruz — ödeme adımına geçiyoruz, gerçek hesap
-  // yalnızca ödeme başarılı olunca backend'de oluşturuluyor (bkz. PaymentPage.jsx).
-  const isPaymentBound = role === 'ebeveyn' && !hasTrialCoupon
+  // Veli, kayıt formunda kupon girmiyor — kupon kodu ödeme sayfasında toplanıyor. Hesabı hemen
+  // açmıyoruz, ödeme adımına geçiyoruz; gerçek hesap yalnızca ödeme başarılı olunca (veya ödeme
+  // sayfasında geçerli bir deneme kuponu girilince) backend'de oluşturuluyor (bkz. PaymentPage.jsx).
+  const isPaymentBound = role === 'ebeveyn'
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -279,7 +283,7 @@ export default function SignUpPage() {
           pendingRegistration: {
             fullName: combinedFullName(),
             phone: form.phone,
-            couponCode: appliedCouponCode,
+            parentType: form.parentType,
             acceptAydinlatma: form.acceptAydinlatma,
             acceptKvkk: form.acceptKvkk,
             turnstileToken: turnstileToken || undefined,
@@ -405,35 +409,59 @@ export default function SignUpPage() {
                 onChange={handleInputChange}
               />
 
-              <div className="signup-coupon-field">
-                <input
-                  name="couponCode"
-                  type="text"
-                  placeholder="Kupon kodu (varsa)"
-                  aria-label="Kupon Kodu"
-                  autoComplete="off"
-                  value={form.couponCode}
-                  onChange={handleInputChange}
-                />
-                {couponCheck.status === 'checking' ? (
-                  <p className="signup-coupon-status is-checking" role="status">
-                    <Loader2 size={15} className="spin" aria-hidden="true" />
-                    Kupon kodu kontrol ediliyor...
-                  </p>
-                ) : null}
-                {couponCheck.status === 'valid' ? (
-                  <p className="signup-coupon-status is-valid" role="status">
-                    <CheckCircle2 size={15} aria-hidden="true" />
-                    Uygulandı{couponCheck.message ? ` — ${couponCheck.message}` : ''}
-                  </p>
-                ) : null}
-                {couponCheck.status === 'invalid' ? (
-                  <p className="signup-coupon-status is-invalid" role="alert">
-                    <XCircle size={15} aria-hidden="true" />
-                    {couponCheck.message}
-                  </p>
-                ) : null}
-              </div>
+              {role === 'ebeveyn' ? (
+                <div className="signup-parent-type">
+                  <span className="signup-subjects-label">Veli Tipi</span>
+                  <div className="billing-toggle" role="tablist" aria-label="Veli tipi">
+                    <button
+                      type="button"
+                      className={form.parentType === 'anne' ? 'active' : ''}
+                      onClick={() => setForm((current) => ({ ...current, parentType: 'anne' }))}
+                    >
+                      Anne
+                    </button>
+                    <button
+                      type="button"
+                      className={form.parentType === 'baba' ? 'active' : ''}
+                      onClick={() => setForm((current) => ({ ...current, parentType: 'baba' }))}
+                    >
+                      Baba
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {role === 'ogretmen' ? (
+                <div className="signup-coupon-field">
+                  <input
+                    name="couponCode"
+                    type="text"
+                    placeholder="Kupon kodu (varsa)"
+                    aria-label="Kupon Kodu"
+                    autoComplete="off"
+                    value={form.couponCode}
+                    onChange={handleInputChange}
+                  />
+                  {couponCheck.status === 'checking' ? (
+                    <p className="signup-coupon-status is-checking" role="status">
+                      <Loader2 size={15} className="spin" aria-hidden="true" />
+                      Kupon kodu kontrol ediliyor...
+                    </p>
+                  ) : null}
+                  {couponCheck.status === 'valid' ? (
+                    <p className="signup-coupon-status is-valid" role="status">
+                      <CheckCircle2 size={15} aria-hidden="true" />
+                      Uygulandı{couponCheck.message ? ` — ${couponCheck.message}` : ''}
+                    </p>
+                  ) : null}
+                  {couponCheck.status === 'invalid' ? (
+                    <p className="signup-coupon-status is-invalid" role="alert">
+                      <XCircle size={15} aria-hidden="true" />
+                      {couponCheck.message}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
 
               {role === 'ogretmen' ? (
                 <div className="signup-subjects">

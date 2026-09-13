@@ -331,11 +331,11 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
       return json(400, { error: 'Geçersiz istek gövdesi.' })
     }
 
-    const registration = validateParentRegistrationPayload(payload)
+    const registration = validateParentRegistrationPayload(payload, { requireParentType: true })
     if (registration.error) {
       return json(400, { error: registration.error })
     }
-    const { fullName, phone } = registration
+    const { fullName, phone, parentType } = registration
 
     const fields = validatePaymentFields(payload)
     if (fields.error) {
@@ -355,7 +355,7 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
 
     const hasTrialCoupon = String(payload.couponCode || '').trim().toUpperCase() === TRIAL_COUPON_CODE
     if (hasTrialCoupon) {
-      const user = await createCompParentAccount({ fullName, phone, email: fields.email })
+      const user = await createCompParentAccount({ fullName, phone, email: fields.email, parentType })
       // Hesap başlangıç şifresiyle (telefonun son 6 hanesi) açılır — ilk panel girişinde değişmeli.
       user.mustChangePassword = true
       const token = createSessionToken(user)
@@ -371,15 +371,16 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
       phone: { type: sql.NVarChar(20), value: phone },
       email: { type: sql.NVarChar(320), value: fields.email },
       passwordHash: { type: sql.NVarChar(255), value: passwordHash },
+      parentType: { type: sql.NVarChar(10), value: parentType },
       aydinlatmaAt: { type: sql.DateTime2, value: now },
       kvkkAt: { type: sql.DateTime2, value: now },
       expiresAt: { type: sql.DateTime2, value: expiresAt },
     })
     const insertResult = await insertDb.query(`
       INSERT INTO dbo.PendingParentRegistrations
-        (full_name, phone_number, email, password_hash, aydinlatma_accepted_at, kvkk_accepted_at, expires_at)
+        (full_name, phone_number, email, password_hash, parent_type, aydinlatma_accepted_at, kvkk_accepted_at, expires_at)
       OUTPUT inserted.id
-      VALUES (@fullName, @phone, @email, @passwordHash, @aydinlatmaAt, @kvkkAt, @expiresAt);
+      VALUES (@fullName, @phone, @email, @passwordHash, @parentType, @aydinlatmaAt, @kvkkAt, @expiresAt);
     `)
     const pendingId = insertResult.recordset[0].id
 
@@ -496,7 +497,7 @@ async function resolveCheckoutSession(token) {
 async function consumePendingParentRegistration(id) {
   const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: id } })
   const result = await requestDb.query(`
-    SELECT TOP 1 id, full_name, phone_number, email, password_hash, aydinlatma_accepted_at, kvkk_accepted_at
+    SELECT TOP 1 id, full_name, phone_number, email, password_hash, parent_type, aydinlatma_accepted_at, kvkk_accepted_at
     FROM dbo.PendingParentRegistrations
     WHERE id = @id AND consumed_at IS NULL AND expires_at > SYSUTCDATETIME();
   `)
@@ -512,15 +513,16 @@ async function createParentFromPendingRegistration(pending) {
       phone: { type: sql.NVarChar(20), value: pending.phone_number },
       email: { type: sql.NVarChar(320), value: pending.email },
       passwordHash: { type: sql.NVarChar(255), value: pending.password_hash },
+      parentType: { type: sql.NVarChar(10), value: pending.parent_type },
       aydinlatmaAt: { type: sql.DateTime2, value: pending.aydinlatma_accepted_at },
       kvkkAt: { type: sql.DateTime2, value: pending.kvkk_accepted_at },
     })
     const result = await insertUserDb.query(`
-      INSERT INTO dbo.Users (full_name, phone_number, email, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
+      INSERT INTO dbo.Users (full_name, phone_number, email, password_hash, role, parent_type, aydinlatma_accepted_at, kvkk_accepted_at)
       OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
              inserted.is_admin, inserted.can_manage_library, inserted.last_login_at, inserted.created_at,
-             inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at, inserted.teacher_subject_ids_json
-      VALUES (@fullName, @phone, @email, @passwordHash, 'ebeveyn', @aydinlatmaAt, @kvkkAt);
+             inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at, inserted.teacher_subject_ids_json, inserted.parent_type
+      VALUES (@fullName, @phone, @email, @passwordHash, 'ebeveyn', @parentType, @aydinlatmaAt, @kvkkAt);
     `)
     const insertedUser = sanitizeUser(result.recordset[0])
 
