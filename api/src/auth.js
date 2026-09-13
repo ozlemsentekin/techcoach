@@ -6,6 +6,7 @@ const { consumeRateLimit } = require('./rate-limit')
 const { verifyTurnstileToken } = require('./turnstile')
 const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
 const { buildSessionEntitlement } = require('./entitlements')
+const { resolveCoupon } = require('./coupons')
 const {
   createSessionToken,
   verifyHandoffToken,
@@ -21,10 +22,10 @@ const {
 
 const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-// "DENEME" kupon kodu (yalnızca büyük harf, tam eşleşme): veliye ücretsiz + 2 öğrenci
-// hakkı, öğretmene ücretsiz + 10 öğrenci hakkı tanır. Bkz. registerHandler.
+// "DENEME" kupon kodu (yalnızca büyük harf, tam eşleşme): öğretmene ücretsiz + 10 öğrenci
+// hakkı tanır (öğretmenin kart tahsilatı henüz iyzico'ya bağlı değil). Veli için artık kuponla
+// anında ücretsiz aktivasyon YOK — bkz. registerHandler ve payments.js coupons.js/resolveCoupon.
 const TRIAL_COUPON_CODE = 'DENEME'
-const TRIAL_COUPON_PARENT_MAX_STUDENTS = 2
 const TRIAL_COUPON_TEACHER_SEATS = 10
 
 // Test/geliştirme sırasında sık giriş denemesi yapılan bu numara için giriş rate limit kontrolü atlanır.
@@ -118,49 +119,6 @@ async function runRegistrationAntiAbuseChecks(request, payload) {
   return {}
 }
 
-// "DENEME" kupon koduyla anında ücretsiz aktif olan veli hesabı — registerHandler'daki kuponlu
-// veli dalıyla, iyzico ödeme akışındaki kuponlu-veli dalı arasında ortak kullanılır.
-async function createCompParentAccount({ fullName, phone, email, parentType }) {
-  const passwordHash = await hashPassword(defaultPasswordForPhone(phone))
-  const now = new Date()
-
-  const { user, entitlement } = await withTransaction(async (requestInTransaction) => {
-    const insertUserDb = requestInTransaction({
-      fullName: { type: sql.NVarChar(120), value: fullName },
-      email: { type: sql.NVarChar(320), value: email },
-      phone: { type: sql.NVarChar(20), value: phone },
-      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
-      role: { type: sql.NVarChar(20), value: 'ebeveyn' },
-      parentType: { type: sql.NVarChar(10), value: parentType || null },
-      consentAt: { type: sql.DateTime2, value: now },
-    })
-
-    const result = await insertUserDb.query(`
-      INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, role, parent_type, aydinlatma_accepted_at, kvkk_accepted_at)
-      OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
-             inserted.is_admin, inserted.can_manage_library, inserted.last_login_at, inserted.created_at,
-             inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at, inserted.teacher_subject_ids_json, inserted.parent_type
-      VALUES (@fullName, @email, @phone, @passwordHash, @role, @parentType, @consentAt, @consentAt);
-    `)
-
-    const insertedUser = sanitizeUser(result.recordset[0])
-
-    const entitlementDb = requestInTransaction({
-      parentId: { type: sql.UniqueIdentifier, value: insertedUser.id },
-      maxStudents: { type: sql.Int, value: TRIAL_COUPON_PARENT_MAX_STUDENTS },
-    })
-    await entitlementDb.query(`
-      INSERT INTO dbo.Entitlements (parent_id, status, source, max_students, granted_reason)
-      VALUES (@parentId, 'active', 'comp', @maxStudents, 'coupon:DENEME');
-    `)
-
-    return { user: insertedUser, entitlement: { status: 'active', source: 'comp', currentPeriodEnd: null, billingState: 'ok', overdueDays: 0 } }
-  })
-
-  user.entitlement = entitlement
-  return user
-}
-
 async function registerHandler(request) {
   const payload = await request.json().catch(() => null)
   if (!payload) {
@@ -248,19 +206,10 @@ async function registerHandler(request) {
           billingState: 'ok',
           overdueDays: 0,
         }
-      } else if (hasTrialCoupon) {
-        // "DENEME" kupon kodu girildiyse veli hesabı ücretsiz aktif olur ve 2 öğrenci ekleme
-        // hakkı tanınır (kota kontrolü createStudentHandler içinde uygulanır).
-        const entitlementDb = requestInTransaction({
-          parentId: { type: sql.UniqueIdentifier, value: insertedUser.id },
-          maxStudents: { type: sql.Int, value: TRIAL_COUPON_PARENT_MAX_STUDENTS },
-        })
-        await entitlementDb.query(`
-          INSERT INTO dbo.Entitlements (parent_id, status, source, max_students, granted_reason)
-          VALUES (@parentId, 'active', 'comp', @maxStudents, 'coupon:DENEME');
-        `)
-        insertedEntitlement = { status: 'active', source: 'comp', currentPeriodEnd: null, billingState: 'ok', overdueDays: 0 }
       }
+      // Veli için kuponla anında ücretsiz aktivasyon YOK — abonelik tekrarlayan olduğundan
+      // her veli (indirim kuponu olsa bile) gerçek kart alan iyzico ödeme akışından
+      // (initiateIyzicoCheckoutForNewParentHandler, payments.js) geçmek zorunda.
 
       return { user: insertedUser, entitlement: insertedEntitlement }
     })
@@ -673,9 +622,11 @@ async function acceptConsentHandler(request) {
   }
 }
 
-// Kayıt formundaki kupon kodu alanı için canlı doğrulama. Şu an tek geçerli kod "DENEME";
-// büyük/küçük harf ve boşluk toleranslı eşleşir. Geçerliyse frontend "Uygulandı" gösterir ve
-// kanonik kodu (`code`) kayıt isteğinde kullanır.
+// Kayıt formundaki kupon kodu alanı için canlı doğrulama. İki ayrı sistem kontrol edilir:
+// (1) öğretmen kaydı için hâlâ hardcoded "DENEME" (öğretmen hiç iyzico'ya uğramıyor, kart
+//     tahsilatı entegre değil — bkz. registerHandler); (2) veli ödeme akışı için admin
+//     panelinden yönetilen yüzdelik indirim kuponları (dbo.Coupons, bkz. coupons.js).
+// Geçerliyse frontend "Uygulandı" gösterir ve kanonik kodu (`code`) kayıt/ödeme isteğinde kullanır.
 async function validateCouponHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
@@ -683,6 +634,18 @@ async function validateCouponHandler(request) {
 
     if (!rawCode) {
       return json(400, { valid: false, error: 'Kupon kodu girin.' })
+    }
+
+    const coupon = await resolveCoupon(rawCode)
+    if (coupon) {
+      return json(200, {
+        valid: true,
+        code: coupon.code,
+        description: coupon.description || `%${coupon.discountPercent} indirim uygulanacak.`,
+        discountPercent: coupon.discountPercent,
+        monthlyPrice: coupon.monthlyPrice,
+        yearlyPrice: coupon.yearlyPrice,
+      })
     }
 
     if (rawCode.toUpperCase() === TRIAL_COUPON_CODE) {
@@ -711,6 +674,5 @@ module.exports = {
   acceptConsentHandler,
   validateParentRegistrationPayload,
   runRegistrationAntiAbuseChecks,
-  createCompParentAccount,
   TRIAL_COUPON_CODE,
 }

@@ -271,6 +271,12 @@ const {
   updatePricingPlanHandler,
   refreshIyzicoPlanHandler,
 } = require('./pricing')
+const {
+  listCouponsHandler,
+  createCouponHandler,
+  updateCouponHandler,
+  deleteCouponHandler,
+} = require('./coupons')
 
 registerHttp('auth-register', {
   authLevel: 'anonymous',
@@ -1243,6 +1249,34 @@ registerHttp('panel-admin-pricing-plans-iyzico-refresh', {
   methods: ['POST'],
   route: 'panel-admin/pricing-plans/{planKey}/iyzico-refresh',
   handler: refreshIyzicoPlanHandler,
+})
+
+registerHttp('panel-admin-coupons-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-admin/coupons',
+  handler: listCouponsHandler,
+})
+
+registerHttp('panel-admin-coupons-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-admin/coupons',
+  handler: createCouponHandler,
+})
+
+registerHttp('panel-admin-coupons-update', {
+  authLevel: 'anonymous',
+  methods: ['PUT'],
+  route: 'panel-admin/coupons/{couponId}',
+  handler: updateCouponHandler,
+})
+
+registerHttp('panel-admin-coupons-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-admin/coupons/{couponId}',
+  handler: deleteCouponHandler,
 })
 
 registerHttp('panel-admin-resource-books-list', {

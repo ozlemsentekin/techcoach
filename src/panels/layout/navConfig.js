@@ -165,5 +165,6 @@ export const PARENT_ADMIN_NAV = {
     { to: '/parent/admin/motivation-messages', label: 'Motivasyon Mesajları', icon: 'Sparkles' },
     { to: '/parent/admin/greetings', label: 'Selamlama Metinleri', icon: 'Clock' },
     { to: '/parent/admin/pricing', label: 'Üyelik Paketleri', icon: 'Tag' },
+    { to: '/parent/admin/coupons', label: 'Kuponlar', icon: 'Ticket' },
   ],
 }

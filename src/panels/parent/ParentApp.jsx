@@ -22,6 +22,7 @@ const AdminMotivationMessagesPage = lazy(() => import('./pages/AdminMotivationMe
 const AdminGreetingsPage = lazy(() => import('./pages/AdminGreetingsPage'))
 const AdminSchoolsPage = lazy(() => import('./pages/AdminSchoolsPage'))
 const AdminPricingPage = lazy(() => import('./pages/AdminPricingPage'))
+const AdminCouponsPage = lazy(() => import('./pages/AdminCouponsPage'))
 const StudentsPage = lazy(() => import('./pages/StudentsPage'))
 const TeachersPage = lazy(() => import('./pages/TeachersPage'))
 const LibraryPage = lazy(() => import('./pages/LibraryPage'))
@@ -221,6 +222,14 @@ export default function ParentApp() {
               element={
                 <RequireAdmin>
                   {pageElement(AdminPricingPage)}
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="admin/coupons"
+              element={
+                <RequireAdmin>
+                  {pageElement(AdminCouponsPage)}
                 </RequireAdmin>
               }
             />
