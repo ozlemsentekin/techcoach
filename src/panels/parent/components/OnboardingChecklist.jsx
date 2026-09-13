@@ -38,7 +38,7 @@ export default function OnboardingChecklist({ students, selectedStudentId }) {
   )
 
   const [taskStatus, setTaskStatus] = useState(null)
-  const hasPlannedTask = taskStatus?.studentId === student?.id ? taskStatus.hasTasks : null
+  const hasPlannedTask = taskStatus && taskStatus.studentId === student?.id ? taskStatus.hasTasks : null
   const [dismissed, setDismissed] = useState(() => isDismissed(parentId))
 
   useEffect(() => {
