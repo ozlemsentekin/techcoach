@@ -38,7 +38,7 @@ export default function PanelLayout({ role }) {
         })
       : role === 'teacher'
         ? getTeacherNav(canManageLibrary, lessonNotesEnabled)
-        : getStudentNav({ lessonNotesEnabled, aiReportsEnabled: Boolean(authUser?.aiReportsEnabled) })
+        : getStudentNav({ lessonNotesEnabled })
   const { primary, more } = navToMobile(roleNav)
   const primaryItems = isAdminSection ? [RETURN_TO_PANEL_ITEM] : primary
   const moreItems = isAdminSection ? PARENT_ADMIN_NAV.children : more

@@ -10,7 +10,6 @@ import {
   Layers,
   Loader2,
   Search,
-  Sparkles,
   Tag,
 } from 'lucide-react'
 import PageHeader from '../layout/PageHeader'
@@ -148,22 +147,7 @@ function PendingAnalysisChip({ count, className }) {
   )
 }
 
-function AiAnalyzedChip({ count, className }) {
-  if (!count) return null
-  return (
-    <span
-      className={cn(
-        'inline-flex w-fit items-center gap-1 rounded-full bg-panel-blue-soft/50 px-2 py-0.5 text-[11px] font-semibold text-panel-blue',
-        className,
-      )}
-    >
-      <Sparkles size={11} aria-hidden="true" />
-      {count} AI analizi yapıldı
-    </span>
-  )
-}
-
-function SubjectShelfCard({ subject, count, stats, tone, pendingCount, aiAnalyzedCount, onClick }) {
+function SubjectShelfCard({ subject, count, stats, tone, pendingCount, onClick }) {
   const solvedCount = stats?.totalAnswered ?? null
   // Sınav sonucundan hesaplanan gerçek yanlış sayısı varsa onu kullan (bkz. progress.js'deki
   // wrongCount yorumu); yoksa (stats eşleşmediyse) fotoğraflanmış satır sayısına düş.
@@ -197,7 +181,6 @@ function SubjectShelfCard({ subject, count, stats, tone, pendingCount, aiAnalyze
             </span>
           ) : null}
           <PendingAnalysisChip count={pendingCount} />
-          <AiAnalyzedChip count={aiAnalyzedCount} />
         </div>
       </div>
       <ChevronRight
@@ -487,14 +470,6 @@ function WrongQuestionThumbnail({ item, fetchPhoto, onClick, viewerRole }) {
           {caption}
         </p>
         <span className="flex shrink-0 items-center gap-1">
-          {item.aiAnalysis ? (
-            <span
-              title="AI analizi mevcut — açmak için tıkla"
-              className="flex h-5 w-5 items-center justify-center rounded-full border border-panel-blue bg-panel-blue-soft/60 text-panel-blue"
-            >
-              <Sparkles size={11} aria-hidden="true" />
-            </span>
-          ) : null}
           <MistakeAnalysisBadges analyses={item.analyses} viewerRole={viewerRole} />
         </span>
       </div>

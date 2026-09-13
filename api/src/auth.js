@@ -40,8 +40,6 @@ function sanitizeUser(record) {
     role: record.role,
     isAdmin: Boolean(record.is_admin),
     canManageLibrary: Boolean(record.can_manage_library),
-    // "AI Raporları" menüsü yalnızca admin hesabında görünür (admin'e bağlı öğrenci profilinde de değil).
-    aiReportsEnabled: Boolean(record.is_admin),
     isActive: record.is_active === undefined ? true : Boolean(record.is_active),
     lastLoginAt: record.last_login_at,
     createdAt: record.created_at,

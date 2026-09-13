@@ -796,8 +796,6 @@ async function enterStudentHandler(request) {
 
     const user = {
       ...student,
-      // "AI Raporları" menüsü yalnızca admin hesabında görünür (bkz. auth.js sanitizeUser).
-      aiReportsEnabled: false,
       actingParent: { id: parentId, fullName: parentFullName },
       ...(actingAdminId ? { actingAdmin: { id: actingAdminId, fullName: actingAdminName } } : {}),
       entitlement: await resolveEffectiveEntitlement({

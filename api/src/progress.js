@@ -122,15 +122,6 @@ function sanitizeWrongQuestion(record) {
     photoUrl: record.photo_url || undefined,
     bookImageUrl: record.book_image_url || undefined,
     createdAt: record.created_at,
-    // AI Raporları'ndan (dbo.WrongQuestionAiAnalyses) — sadece bunu seçen sorgularda (ör.
-    // listWrongQuestionsHandler) dolu gelir; Hata Defteri'nde AI rozeti/analizi için kullanılır.
-    aiAnalysis: record.ai_what_it_asked
-      ? {
-          whatItAsked: record.ai_what_it_asked,
-          likelyMistake: record.ai_likely_mistake || undefined,
-          reportId: record.ai_analysis_report_id,
-        }
-      : undefined,
   }
 }
 
@@ -434,9 +425,7 @@ async function listWrongQuestionsHandler(request) {
                COALESCE(pub.name, pub2.name, wq.publisher_name) AS publisher_name,
                wq.resource_book_id,
                t.topic_name, t.page_start, t.page_end,
-               tak.correct_label AS correct_answer,
-               wqa.what_it_asked AS ai_what_it_asked, wqa.likely_mistake AS ai_likely_mistake,
-               wqa.ai_analysis_report_id
+               tak.correct_label AS correct_answer
         FROM dbo.WrongQuestions wq
         LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
         LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
@@ -445,7 +434,6 @@ async function listWrongQuestionsHandler(request) {
         LEFT JOIN dbo.ResourceBooks rb2 ON rb2.id = wq.resource_book_id
         LEFT JOIN dbo.Publishers pub2 ON pub2.id = rb2.publisher_id
         LEFT JOIN dbo.TestAnswerKeys tak ON tak.test_id = wq.test_id AND tak.order_no = wq.question_number
-        LEFT JOIN dbo.WrongQuestionAiAnalyses wqa ON wqa.wrong_question_id = wq.id
         WHERE wq.student_id = @studentId
           AND (wq.test_id IS NOT NULL OR wq.mock_exam_subject_id IS NOT NULL
                OR wq.resource_book_id IS NOT NULL OR wq.error_type = 'serbest')
