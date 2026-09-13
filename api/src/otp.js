@@ -266,6 +266,10 @@ async function verifyOtpHandler(request) {
 
 const PASSWORD_RESET_PURPOSE = 'password_reset'
 
+// Test/geliştirme sırasında sık şifre sıfırlama denemesi yapılan bu numara için
+// password-reset rate limit kontrolleri atlanır (bkz. auth.js LOGIN_RATE_LIMIT_EXEMPT_PHONES).
+const PASSWORD_RESET_RATE_LIMIT_EXEMPT_PHONES = new Set(['+905353816943'])
+
 async function requestPasswordResetOtpHandler(request) {
   const payload = await request.json().catch(() => null)
   if (!payload) {
@@ -278,6 +282,7 @@ async function requestPasswordResetOtpHandler(request) {
   }
 
   const ip = getClientIp(request)
+  const isRateLimitExempt = PASSWORD_RESET_RATE_LIMIT_EXEMPT_PHONES.has(phone)
 
   if (isCaptchaConfigured()) {
     const turnstileResult = await verifyTurnstileToken(payload.turnstileToken, ip)
@@ -288,11 +293,13 @@ async function requestPasswordResetOtpHandler(request) {
     console.warn('[otp] TURNSTILE_SECRET_KEY yapılandırılmadı, Turnstile doğrulaması atlanıyor.')
   }
 
-  if (!(await consumeRateLimit(`password-reset-request-ip:${ip}`))) {
-    return json(429, { error: 'Çok fazla istek yapıldı. Lütfen daha sonra tekrar deneyin.' })
-  }
-  if (!(await consumeRateLimit(`password-reset-request:${phone}`, { windowMs: 10 * 60 * 1000, maxRequests: 3 }))) {
-    return json(429, { error: 'Bu numaraya çok fazla kod istendi. Lütfen birkaç dakika sonra tekrar deneyin.' })
+  if (!isRateLimitExempt) {
+    if (!(await consumeRateLimit(`password-reset-request-ip:${ip}`))) {
+      return json(429, { error: 'Çok fazla istek yapıldı. Lütfen 15 dakika sonra tekrar deneyin.' })
+    }
+    if (!(await consumeRateLimit(`password-reset-request:${phone}`, { windowMs: 10 * 60 * 1000, maxRequests: 3 }))) {
+      return json(429, { error: 'Bu numaraya çok fazla kod istendi. Lütfen 10 dakika sonra tekrar deneyin.' })
+    }
   }
 
   try {
@@ -341,8 +348,11 @@ async function verifyPasswordResetOtpHandler(request) {
   }
 
   const ip = getClientIp(request)
-  if (!(await consumeRateLimit(`password-reset-verify:${phone}:${ip}`, { windowMs: 10 * 60 * 1000, maxRequests: 15 }))) {
-    return json(429, { error: 'Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.' })
+  if (
+    !PASSWORD_RESET_RATE_LIMIT_EXEMPT_PHONES.has(phone) &&
+    !(await consumeRateLimit(`password-reset-verify:${phone}:${ip}`, { windowMs: 10 * 60 * 1000, maxRequests: 15 }))
+  ) {
+    return json(429, { error: 'Çok fazla deneme yapıldı. Lütfen 10 dakika sonra tekrar deneyin.' })
   }
 
   try {
@@ -421,7 +431,7 @@ async function confirmPasswordResetHandler(request) {
   }
 
   if (!(await consumeRateLimit(`password-reset-confirm:${claims.sub}`))) {
-    return json(429, { error: 'Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.' })
+    return json(429, { error: 'Çok fazla deneme yapıldı. Lütfen 15 dakika sonra tekrar deneyin.' })
   }
 
   try {
