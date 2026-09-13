@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, X } from 'lucide-react'
+import { ArrowRight, BookOpen, Check, ClipboardList, Info, Plus, ScanLine, X } from 'lucide-react'
 import Button from '../../ui/Button'
 import LoadingState from '../LoadingState'
 import ResourceImageField from '../../parent/components/ResourceImageField'
@@ -142,19 +142,22 @@ export default function BookFormModal({ book, onSaved, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-950/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
       <form
         onSubmit={handleSubmit}
-        className="h-full w-full overflow-y-auto border border-panel-border bg-panel-surface p-4 shadow-panel-1 sm:h-auto sm:max-h-[92vh] sm:max-w-2xl sm:rounded-2xl sm:p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="book-form-title"
+        className="h-full w-full overflow-y-auto border border-panel-border bg-panel-surface p-5 shadow-panel-1 sm:h-auto sm:max-h-[92vh] sm:max-w-3xl sm:rounded-3xl sm:p-7"
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold text-panel-text">{isEdit ? 'Kitabı Düzenle' : 'Yeni Kitap Ekle'}</h2>
-            <p className="mt-0.5 text-sm text-panel-text-muted">
+            <h2 id="book-form-title" className="text-2xl font-bold text-panel-text">{isEdit ? 'Kitabı Düzenle' : 'Yeni Kitap Ekle'}</h2>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-panel-text-muted">
               Bu kaynak yalnızca seçtiğiniz çocuk/öğrencilerin kitaplığında görünür; sistem kütüphanesine eklenmez.
             </p>
           </div>
-          <button type="button" aria-label="Kapat" onClick={onClose} className="shrink-0 text-panel-text-muted hover:text-panel-text">
+          <button type="button" aria-label="Kapat" onClick={onClose} className="rounded-full p-2 text-panel-text-muted transition hover:bg-panel-accent-soft hover:text-panel-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-panel-accent">
             <X size={20} />
           </button>
         </div>
@@ -169,11 +172,46 @@ export default function BookFormModal({ book, onSaved, onClose }) {
         {subjects === null || publishers === null || students === null ? (
           <LoadingState label="Form yükleniyor..." />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-[200px_1fr] sm:gap-5">
-            <div className="flex justify-center sm:justify-start">
-              <ResourceImageField value={imageUrl} onChange={setImageUrl} compact size={200} showUrlToggle />
-            </div>
+          <div className="space-y-6">
+            <fieldset>
+              <legend className="text-base font-semibold text-panel-text">Kitabı nasıl kullanacaksınız?</legend>
+              <p className="mt-1 text-sm text-panel-text-muted">İçerik ve cevap anahtarı eklemek, sonuçları nasıl takip edeceğinizi belirler.</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {[
+                  { value: 'structured', icon: <ScanLine size={22} aria-hidden="true" />, title: 'İçerik ve cevap anahtarıyla', subtitle: 'Konu ve test bazında takip', features: ['Konu ve testleri siz eklersiniz', 'Cevap anahtarıyla optik okuma yapılır', 'Sonuçlar cevap anahtarıyla değerlendirilir'] },
+                  { value: 'simple', icon: <ClipboardList size={22} aria-hidden="true" />, title: 'İçerik ve cevap anahtarı olmadan', subtitle: 'Görev ve sonuç takibi', features: ['Konu, test ve cevap anahtarı girmezsiniz', 'Kitap üzerinden görev verebilirsiniz', 'Sonuçları elle girersiniz'] },
+                ].map(({ value, icon, title, subtitle, features }) => {
+                  const selected = contentMode === value
+                  return (
+                    <label key={value} className={`relative flex cursor-pointer flex-col rounded-2xl border-2 p-4 transition-colors focus-within:ring-2 focus-within:ring-panel-accent focus-within:ring-offset-2 ${selected ? 'border-panel-accent bg-panel-accent-soft' : 'border-panel-border bg-panel-surface hover:border-panel-accent/50'}`}>
+                      <input type="radio" name="book-content-mode" value={value} checked={selected} onChange={() => setContentMode(value)} className="sr-only" />
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className={`rounded-xl p-2 ${selected ? 'bg-panel-accent text-white' : 'bg-panel-border/30 text-panel-text'}`}>{icon}</span>
+                        <span className={`flex h-6 w-6 items-center justify-center rounded-full border-2 ${selected ? 'border-panel-accent bg-panel-accent text-white' : 'border-panel-text-muted'}`}>{selected && <Check size={16} aria-hidden="true" />}</span>
+                      </div>
+                      <span className="text-base font-bold leading-snug text-panel-text">{title}</span>
+                      <span className="mt-1 text-sm text-panel-text-muted">{subtitle}</span>
+                      <ul className="mt-4 space-y-2 border-t border-panel-text/10 pt-3">
+                        {features.map((feature) => <li key={feature} className="flex gap-2 text-sm leading-relaxed text-panel-text"><Check size={16} className="mt-0.5 shrink-0 text-panel-warm" aria-hidden="true" />{feature}</li>)}
+                      </ul>
+                    </label>
+                  )
+                })}
+              </div>
+              <div aria-live="polite" className="mt-3 flex items-start gap-2 rounded-xl bg-panel-border/20 px-4 py-3 text-sm leading-relaxed text-panel-text">
+                <Info size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+                <p><span className="font-semibold">Ekledikten sonra: </span>{isSimpleContentMode ? 'Kitaba görev verebilir, çalışma sonuçlarını elle kaydedebilirsiniz. İçerik veya cevap anahtarı hazırlamanız gerekmez.' : 'Kitabın detayından konu, test ve cevap anahtarlarını ekleyebilirsiniz. Optik okuma için cevap anahtarlarını tamamlamanız gerekir.'}</p>
+              </div>
+            </fieldset>
 
+            <div className="border-t border-panel-border pt-5">
+              <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-panel-text"><BookOpen size={18} aria-hidden="true" />Kitap bilgileri</h3>
+              <div className="grid gap-5 sm:grid-cols-[144px_1fr]">
+                <div className="flex flex-col items-center gap-2 sm:items-start">
+                  <ResourceImageField value={imageUrl} onChange={setImageUrl} compact size={144} showUrlToggle fit="contain" />
+                  <span className="text-sm font-medium text-panel-text">Kitap kapağı</span>
+                  <span className="text-xs text-panel-text-muted">İsteğe bağlı</span>
+                </div>
             <div className="flex flex-col gap-3">
               {!isEdit && students.length > 1 ? (
                 <div className="flex flex-col gap-1.5">
@@ -189,49 +227,20 @@ export default function BookFormModal({ book, onSaved, onClose }) {
               <label className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-panel-text-muted">Kitap Adı</span>
                 <input
+                  placeholder="Örn. 8. Sınıf Matematik Soru Bankası"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+                  className="min-w-0 rounded-xl border border-panel-border bg-panel-surface p-2.5 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20"
                 />
               </label>
-
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => setContentMode('structured')}
-                  className={`rounded-xl border p-2.5 text-left text-sm transition-colors ${
-                    !isSimpleContentMode
-                      ? 'border-panel-accent bg-panel-accent-soft text-panel-text'
-                      : 'border-panel-border text-panel-text-muted'
-                  }`}
-                >
-                  <span className="block font-medium">İçerik ve cevap anahtarı gireceğim</span>
-                  <span className="mt-0.5 block text-xs opacity-80">
-                    Konu/test ekleyip cevap anahtarıyla optik okuma yapılır.
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setContentMode('simple')}
-                  className={`rounded-xl border p-2.5 text-left text-sm transition-colors ${
-                    isSimpleContentMode
-                      ? 'border-panel-accent bg-panel-accent-soft text-panel-text'
-                      : 'border-panel-border text-panel-text-muted'
-                  }`}
-                >
-                  <span className="block font-medium">İçerik ve cevap anahtarı oluşturmayacağım</span>
-                  <span className="mt-0.5 block text-xs opacity-80">
-                    Sadece kitap adıyla ekle; görev verebilir, sonucu elle girebilirsiniz.
-                  </span>
-                </button>
-              </div>
 
               <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-panel-text-muted">Yayın Evi</span>
                 <select
+                  aria-label="Yayın evi"
                   value={publisherId}
                   onChange={(event) => setPublisherId(event.target.value)}
-                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+                  className="min-w-0 rounded-xl border border-panel-border bg-panel-surface p-2.5 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20"
                 >
                   <option value="">Yayın evi seçin</option>
                   {sortedPublishers.map((publisher) => (
@@ -246,7 +255,8 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                       value={newPublisherName}
                       onChange={(event) => setNewPublisherName(event.target.value)}
                       placeholder="veya yeni yayın evi adı yazın"
-                      className="flex-1 rounded-xl border border-panel-border p-2 text-sm text-panel-text"
+                      aria-label="Yeni yayın evi adı"
+                      className="min-w-0 flex-1 rounded-xl border border-panel-border p-2 text-sm text-panel-text"
                     />
                     <Button
                       type="button"
@@ -269,7 +279,7 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                   <select
                     value={subjectId}
                     onChange={(event) => setSubjectId(event.target.value)}
-                    className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+                    className="min-w-0 rounded-xl border border-panel-border bg-panel-surface p-2.5 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20"
                   >
                     <option value="">Ders seçin</option>
                     {subjects.map((subject) => (
@@ -285,7 +295,7 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                   <select
                     value={grade}
                     onChange={(event) => setGrade(event.target.value)}
-                    className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+                    className="min-w-0 rounded-xl border border-panel-border bg-panel-surface p-2.5 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20"
                   >
                     <option value="">Sınıf seçin</option>
                     {BOOKSHELF_GRADE_OPTIONS.map((option) => (
@@ -303,7 +313,7 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                   <select
                     value={type}
                     onChange={(event) => setType(event.target.value)}
-                    className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+                    className="min-w-0 rounded-xl border border-panel-border bg-panel-surface p-2.5 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20"
                   >
                     <option value="">Tip seçin</option>
                     {BOOKSHELF_RESOURCE_TYPES.map((item) => (
@@ -327,17 +337,23 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                 </label>
               ) : null}
             </div>
+              </div>
+            </div>
           </div>
         )}
 
+        <div className="sticky -bottom-5 mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-panel-border bg-panel-surface py-4 sm:-bottom-7">
+        <button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-medium text-panel-text hover:bg-panel-border/20">Vazgeç</button>
         <Button
           type="submit"
           disabled={saving || subjects === null || publishers === null || students === null}
           size="md"
-          className="mt-5 w-full"
+          className="gap-2"
         >
-          {saving ? 'Kaydediliyor...' : isEdit ? 'Kaydet' : 'Kitabı Oluştur'}
+          {saving ? 'Kaydediliyor...' : isEdit ? 'Kaydet' : 'Kitabı Ekle'}
+          {!saving && <ArrowRight size={16} aria-hidden="true" />}
         </Button>
+        </div>
       </form>
     </div>
   )
