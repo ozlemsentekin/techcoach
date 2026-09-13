@@ -122,6 +122,9 @@ export default function AuthPage() {
                 value={form.password}
                 onChange={handleInputChange}
               />
+              <Link to="/sifremi-unuttum" className="auth-forgot-link">
+                Şifremi Unuttum
+              </Link>
               <div className="auth-hint">İlk girişte başlangıç şifreniz telefon numaranızın son 6 hanesidir. Ardından yeni şifre belirlemeniz istenir. Sonraki girişlerde belirlediğiniz şifreyi kullanın.</div>
 
               <button type="submit" className="btn btn-primary login-submit" disabled={authLoading}>

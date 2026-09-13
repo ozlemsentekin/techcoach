@@ -4971,6 +4971,30 @@ footer {
   color: #8f2530;
 }
 
+.auth-forgot-link {
+  justify-self: end;
+  margin-top: -6px;
+  color: var(--mint-dark, #2eb7a7);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.auth-forgot-link:hover {
+  text-decoration: underline;
+}
+
+.otp-code-input {
+  letter-spacing: 8px;
+  font-size: 20px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
 .auth-hint {
   margin-top: -2px;
   color: #6d769c;
