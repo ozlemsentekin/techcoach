@@ -4991,6 +4991,18 @@ footer {
   text-align: center;
 }
 
+.auth-notice {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(240, 123, 49, 0.4);
+  background: rgba(240, 123, 49, 0.14);
+  color: #7a4413;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
 .spin {
   animation: spin 0.9s linear infinite;
 }
