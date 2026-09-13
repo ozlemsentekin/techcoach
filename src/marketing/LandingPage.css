@@ -4849,6 +4849,15 @@ footer {
   gap: 6px;
 }
 
+.signup-parent-type {
+  display: grid;
+  gap: 6px;
+}
+
+.signup-parent-type .billing-toggle {
+  justify-self: start;
+}
+
 .signup-subjects-label {
   color: #293064;
   font-weight: 700;
