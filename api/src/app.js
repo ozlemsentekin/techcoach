@@ -5,6 +5,11 @@ function registerHttp(name, options) {
 }
 const { changePasswordHandler, loginHandler, logoutHandler, meHandler, sessionFromHandoffHandler, registerHandler, acceptConsentHandler, validateCouponHandler } = require('./auth')
 const {
+  requestPasswordResetOtpHandler,
+  verifyPasswordResetOtpHandler,
+  confirmPasswordResetHandler,
+} = require('./otp')
+const {
   listUsersHandler,
   updateUserHandler,
   setUserActiveHandler,
@@ -339,6 +344,27 @@ registerHttp('auth-change-password', {
   methods: ['POST'],
   route: 'auth/change-password',
   handler: changePasswordHandler,
+})
+
+registerHttp('auth-password-reset-request', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'auth/password-reset/request',
+  handler: requestPasswordResetOtpHandler,
+})
+
+registerHttp('auth-password-reset-verify', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'auth/password-reset/verify',
+  handler: verifyPasswordResetOtpHandler,
+})
+
+registerHttp('auth-password-reset-confirm', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'auth/password-reset/confirm',
+  handler: confirmPasswordResetHandler,
 })
 
 registerHttp('billing-revenuecat-webhook', {

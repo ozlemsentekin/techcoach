@@ -9,6 +9,7 @@ import { panelPathForRole } from './utils/panelPath'
 
 const LandingPage = lazy(() => import('./marketing/LandingPage'))
 const AuthPage = lazy(() => import('./marketing/AuthPage'))
+const ForgotPasswordPage = lazy(() => import('./marketing/ForgotPasswordPage'))
 const SignUpPage = lazy(() => import('./marketing/SignUpPage'))
 const PaywallPage = lazy(() => import('./marketing/PaywallPage'))
 const PaymentPage = lazy(() => import('./marketing/PaymentPage'))
@@ -74,6 +75,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path="/login" element={<AuthPage />} />
+        <Route path="/sifremi-unuttum" element={<ForgotPasswordPage />} />
         <Route path="/uye-ol" element={<SignUpPage />} />
         <Route path="/paywall" element={<PaywallPage />} />
         <Route path="/odeme" element={<PaymentPage />} />

@@ -162,6 +162,31 @@ function verifyHandoffToken(token) {
   return payload
 }
 
+// Şifremi unuttum akışında OTP doğrulandıktan sonra, kullanıcıyı doğrudan oturum açmadan
+// önce "yeni şifre belirleme" ekranına taşımak için kısa ömürlü (60 sn) tek amaçlı token.
+// createHandoffToken ile aynı desen: purpose claim'i sayesinde normal oturum çerezi olarak
+// kullanılamaz (bkz. verifySessionToken).
+function createPasswordResetToken(userId) {
+  const { jwtSecret } = getAuthConfig()
+  return jwt.sign({ sub: userId, purpose: 'password-reset' }, jwtSecret, {
+    expiresIn: 60,
+    issuer: 'techcoach-api',
+    audience: 'techcoach-web',
+  })
+}
+
+function verifyPasswordResetToken(token) {
+  const { jwtSecret } = getAuthConfig()
+  const payload = jwt.verify(token, jwtSecret, {
+    issuer: 'techcoach-api',
+    audience: 'techcoach-web',
+  })
+  if (payload.purpose !== 'password-reset' || !payload.sub) {
+    throw new jwt.JsonWebTokenError('invalid password reset token')
+  }
+  return payload
+}
+
 // True for a rejected/expired/malformed JWT (jsonwebtoken's own error types) — i.e. an
 // actually invalid session, as opposed to an unrelated failure (DB error, etc.) that
 // happened to occur while handling an otherwise-valid session.
@@ -173,6 +198,8 @@ module.exports = {
   createSessionToken,
   createHandoffToken,
   verifyHandoffToken,
+  createPasswordResetToken,
+  verifyPasswordResetToken,
   defaultPasswordForPhone,
   generateOtpCode,
   hashOtpCode,

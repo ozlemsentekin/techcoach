@@ -107,6 +107,64 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const requestPasswordReset = async (phone, turnstileToken) => {
+    setAuthLoading(true)
+    setAuthError('')
+    setAuthMessage('')
+
+    try {
+      return await authRequest('/api/auth/password-reset/request', {
+        method: 'POST',
+        body: JSON.stringify({ phone, turnstileToken }),
+      })
+    } catch (error) {
+      setAuthError(error.message)
+      throw error
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const verifyPasswordResetOtp = async (phone, code) => {
+    setAuthLoading(true)
+    setAuthError('')
+    setAuthMessage('')
+
+    try {
+      return await authRequest('/api/auth/password-reset/verify', {
+        method: 'POST',
+        body: JSON.stringify({ phone, code }),
+      })
+    } catch (error) {
+      setAuthError(error.message)
+      throw error
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const confirmPasswordReset = async (resetToken, newPassword) => {
+    setAuthLoading(true)
+    setAuthError('')
+    setAuthMessage('')
+
+    try {
+      const data = await authRequest('/api/auth/password-reset/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ resetToken, newPassword }),
+      })
+      invalidateCache()
+      setAuthUser(data.user)
+      setAuthMessage('Şifreniz güncellendi ve giriş yapıldı.')
+      return data.user
+    } catch (error) {
+      setAuthError(error.message)
+      throw error
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
   const logout = async () => {
     setAuthLoading(true)
     setAuthError('')
@@ -204,6 +262,9 @@ export function AuthProvider({ children }) {
       authMessage,
       login,
       register,
+      requestPasswordReset,
+      verifyPasswordResetOtp,
+      confirmPasswordReset,
       logout,
       acceptConsent,
       refreshSession,
