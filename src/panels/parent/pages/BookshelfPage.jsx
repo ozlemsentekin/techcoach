@@ -370,7 +370,7 @@ export default function ParentBookshelfPage() {
             </Button>
           ) : (
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" className="min-h-11 gap-1.5" disabled={!selectedStudent} onClick={() => setAssigningStudent(selectedStudent)}>
+              <Button type="button" size="md" variant="secondary" className="gap-1.5" disabled={!selectedStudent} onClick={() => setAssigningStudent(selectedStudent)}>
                 <BookOpen size={16} aria-hidden="true" />
                 Kütüphaneden kitap seç
               </Button>
