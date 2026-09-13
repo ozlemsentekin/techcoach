@@ -9,10 +9,10 @@ test('weekly note validates dates, two-level topics and image limits', () => {
   assert.equal(validateNote(valid), null)
   for (const change of [{ grade: '13' }, { subjectId: 'bad' }, { title: ' ' }, { weekEnd: '2026-09-06' }, { weekStart: '2026-02-30' }, { topics: [] }, { topics: [['nested']] }, { images: ['https://example.com/image.png'] }, { images: ['data:image/svg+xml;base64,abcd'] }, { images: Array(21).fill(valid.images[0]) }]) assert.ok(validateNote({ ...valid, ...change }))
 })
-test('workspace is opt-in for all roles and included in mobile navigation', () => {
+test('lesson notes are opt-in for all roles and included in mobile navigation', () => {
   const configs = [flag => getStudentNav({ lessonNotesEnabled: flag }), flag => getParentNav({ lessonNotesEnabled: flag }), flag => getTeacherNav(false, flag)]
   for (const config of configs) {
-    assert.equal(config(false).some(i => i.key === 'calisma-alani'), false)
+    assert.equal(navToMobile(config(false)).more.some(i => i.label === 'Ders Notları'), false)
     assert.equal(config(true).some(i => i.key === 'calisma-alani'), true)
     assert.ok(navToMobile(config(true)).more.some(i => i.label === 'Ders Notları'))
   }

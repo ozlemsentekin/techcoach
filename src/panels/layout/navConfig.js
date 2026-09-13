@@ -1,9 +1,17 @@
-const workspaceNav = role => ({ key: 'calisma-alani', label: 'Çalışma Alanı', icon: 'BookOpen', children: [{ to: `/${role}/lesson-notes`, label: 'Ders Notları', icon: 'BookOpen' }] })
+const workspaceNav = (role, lessonNotesEnabled = true, resourceItems = []) => ({
+  key: 'calisma-alani',
+  label: 'Çalışma Alanı',
+  icon: 'BookOpen',
+  children: [
+    ...(lessonNotesEnabled ? [{ to: `/${role}/lesson-notes`, label: 'Ders Notları', icon: 'BookOpen' }] : []),
+    ...resourceItems,
+  ],
+})
 
 // "Kütüphane" (sistem kataloğu) menüsü yalnızca kütüphaneye işlem yapabilenlerde görünür
 // (admin veya can_manage_library). Yetkisi olmayan veli/öğretmen/öğrenci bunun yerine
 // "Kitaplık" (yalnızca kendi üçgenlerine görünen özel kaynak rafı) görür. Admin ikisini de
-// görür: Kütüphane birincil menüde, Kitaplık "Diğer" menüsünde.
+// görür. Kitaplık ve Kütüphane "Çalışma Alanı" altında yer alır.
 const KUTUPHANE_PARENT_ITEM = { to: '/parent/library', label: 'Kütüphane', icon: 'Library' }
 const KITAPLIK_PARENT_ITEM = { to: '/parent/bookshelf', label: 'Kitaplık', icon: 'BookMarked' }
 const KUTUPHANE_TEACHER_ITEM = { to: '/teacher/library', label: 'Kütüphane', icon: 'Library' }
@@ -24,6 +32,7 @@ export function getStudentNav({ aiReportsEnabled = false, lessonNotesEnabled = f
         { to: '/student/weekly-plan', label: 'Bu Hafta', icon: 'CalendarRange' },
       ],
     },
+    ...(lessonNotesEnabled ? [workspaceNav('student')] : []),
     {
       key: 'calisma-sonuclarim',
       label: 'Çalışma Sonuçlarım',
@@ -37,7 +46,6 @@ export function getStudentNav({ aiReportsEnabled = false, lessonNotesEnabled = f
         { to: '/student/courses', label: 'Ders Başarım', icon: 'BookOpen' },
       ],
     },
-    ...(lessonNotesEnabled ? [workspaceNav('student')] : []),
     { to: '/student/teachers', label: 'Öğretmenlerim', icon: 'GraduationCap' },
     { to: '/student/requests', label: 'Taleplerim', icon: 'ClipboardList' },
     { to: '/student/guide', label: 'Rehber', icon: 'BookOpen' },
@@ -79,8 +87,6 @@ export function getParentNav({ hasStudents = true, canManageLibrary = false, isA
   if (!hasStudents) return [studentsItem, PARENT_REQUESTS_NAV_ITEM, PARENT_GUIDE_NAV_ITEM]
 
   const canManage = canManageLibrary || isAdmin
-  // "Kitaplık" (özel kaynak rafı) artık "Çalışma Sonuçları" grubunun altında.
-  // "Kütüphane" (sistem kataloğu) yalnızca yetkililerde ve birincil menüde kalır.
   const showKitaplik = isAdmin || !canManage
   const kutuphaneItems = canManage ? [KUTUPHANE_PARENT_ITEM] : []
 
@@ -94,6 +100,10 @@ export function getParentNav({ hasStudents = true, canManageLibrary = false, isA
         { to: '/parent/weekly-plan', label: 'Bu Hafta', icon: 'CalendarRange' },
       ],
     },
+    workspaceNav('parent', lessonNotesEnabled, [
+      ...(showKitaplik ? [KITAPLIK_PARENT_ITEM] : []),
+      ...kutuphaneItems,
+    ]),
     {
       key: 'calisma-sonuclari',
       label: 'Çalışma Sonuçları',
@@ -105,11 +115,8 @@ export function getParentNav({ hasStudents = true, canManageLibrary = false, isA
         ...(isAdmin ? [{ to: '/parent/ai-reports', label: 'AI Raporları', icon: 'Sparkles' }] : []),
         { to: '/parent/mock-exams', label: 'Deneme Sınavları', icon: 'FileCheck2' },
         { to: '/parent/progress', label: 'Gelişim Analizi', icon: 'TrendingUp' },
-        ...(showKitaplik ? [KITAPLIK_PARENT_ITEM] : []),
       ],
     },
-    ...(lessonNotesEnabled ? [workspaceNav('parent')] : []),
-    ...kutuphaneItems,
     studentsItem,
     PARENT_REQUESTS_NAV_ITEM,
     PARENT_GUIDE_NAV_ITEM,
@@ -145,8 +152,9 @@ export function getTeacherNav(canManageLibrary = false, lessonNotesEnabled = fal
         { to: '/teacher/class-analysis', label: 'Sınıf Analizi', icon: 'BarChart3' },
       ],
     },
-    ...(lessonNotesEnabled ? [workspaceNav('teacher')] : []),
-    canManageLibrary ? KUTUPHANE_TEACHER_ITEM : KITAPLIK_TEACHER_ITEM,
+    workspaceNav('teacher', lessonNotesEnabled, [
+      canManageLibrary ? KUTUPHANE_TEACHER_ITEM : KITAPLIK_TEACHER_ITEM,
+    ]),
     { to: '/teacher/requests', label: 'Taleplerim', icon: 'ClipboardList' },
     { to: '/teacher/guide', label: 'Rehber', icon: 'BookOpen' },
   ]
