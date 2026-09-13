@@ -28,8 +28,11 @@ test('API denies other grades/branches and requires admin for writes', async () 
   let subjectReads = 0
   const inject = (index, exports) => { require.cache[paths[index]] = { id: paths[index], filename: paths[index], loaded: true, exports } }
   inject(0, { sql: { UniqueIdentifier: 'id', NVarChar: () => 'text' }, withRequest: async () => ({ query: async query => {
+    if (query.includes('FROM dbo.Subjects')) {
+      subjectReads++
+      return { recordsets: [[{ id: valid.subjectId, name: 'Türkçe', grades_json: '[7,8]' }, { id: 'other', name: 'Matematik', grades_json: '[8]' }], [{ grade: '8', subject_id: valid.subjectId, noteCount: 6 }, { grade: '7', subject_id: valid.subjectId, noteCount: 2 }]] }
+    }
     if (query.includes('FROM dbo.LessonNotes')) { noteReads++; noteQuery = query; return { recordset: [{ id: valid.subjectId, title: valid.title, topics_json: JSON.stringify(valid.topics), images_json: JSON.stringify(valid.images), imageCount: 1 }] } }
-    if (query.includes('FROM dbo.Subjects')) { subjectReads++; return { recordset: [{ id: valid.subjectId, name: 'Türkçe', grades_json: '[7,8]' }, { id: 'other', name: 'Matematik', grades_json: '[8]' }] } }
     return { recordset: contexts }
   } }) })
   inject(1, { readSessionToken: () => 'token', verifySessionToken: () => ({ role, sub: 'user' }), isSessionError: () => false })
@@ -47,6 +50,9 @@ test('API denies other grades/branches and requires admin for writes', async () 
     const initial = await api.panelLessonNotes(request('initial=1'))
     assert.equal(initial.jsonBody.selection, `8:${valid.subjectId}`)
     assert.equal(initial.jsonBody.notes.length, 1)
+    assert.equal(initial.jsonBody.courses[0].noteCount, 6)
+    assert.equal(initial.jsonBody.courses.length, 1)
+    assert.equal(subjectReads, 1)
     assert.equal('images' in initial.jsonBody.notes[0], false)
     noteReads = 0
     assert.equal((await api.panelLessonNotes(request(`grade=7&subjectId=${valid.subjectId}`))).status, 403)

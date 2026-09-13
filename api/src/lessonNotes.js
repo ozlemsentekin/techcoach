@@ -51,9 +51,14 @@ const list = admin => protect(async request => {
   if (access.error) return access.error
   if (request.query.get('access') === '1') return json(200, { enabled: admin || access.contexts.length > 0 })
   const db = await withRequest()
-  const subjects = (await db.query('SELECT id, name, grades_json FROM dbo.Subjects WHERE is_active = 1 ORDER BY name')).recordset
+  // Count groups from the existing grade/subject index, without reading image JSON.
+  // Both result sets travel in one SQL round trip; detail requests need no counts.
+  const catalog = await db.query(`SELECT id, name, grades_json FROM dbo.Subjects WHERE is_active = 1 ORDER BY name;
+    ${request.query.get('noteId') ? '' : 'SELECT grade, subject_id, COUNT(*) AS noteCount FROM dbo.LessonNotes GROUP BY grade, subject_id;'} `)
+  const subjects = catalog.recordsets?.[0] || catalog.recordset
+  const counts = new Map((catalog.recordsets?.[1] || []).map(r => [`${r.grade}:${r.subject_id}`.toLowerCase(), r.noteCount]))
   const contexts = admin ? Array.from({ length: 12 }, (_, i) => ({ grade: String(i + 1) })) : access.contexts
-  const courses = contexts.flatMap(c => subjects.filter(s => (!c.subjectId || s.id === c.subjectId) && (!s.grades_json || JSON.parse(s.grades_json).map(String).includes(String(c.grade)))).map(s => ({ grade: String(c.grade), subjectId: s.id, subjectName: s.name })))
+  const courses = contexts.flatMap(c => subjects.filter(s => (!c.subjectId || s.id === c.subjectId) && (!s.grades_json || JSON.parse(s.grades_json).map(String).includes(String(c.grade)))).map(s => ({ grade: String(c.grade), subjectId: s.id, subjectName: s.name, noteCount: counts.get(`${c.grade}:${s.id}`.toLowerCase()) || 0 })))
   const unique = [...new Map(courses.map(c => [`${c.grade}:${c.subjectId}`, c])).values()]
   const initial = request.query.get('initial') === '1'
   const grade = request.query.get('grade') || (initial ? unique[0]?.grade : null)

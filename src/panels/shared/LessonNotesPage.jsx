@@ -67,7 +67,7 @@ function LessonNotesContent({ admin }) {
     let ignore = false
     const [grade, subjectId] = selection.split(':')
     cachedGet(`${endpoint}?grade=${grade}&subjectId=${subjectId}`).then(data => {
-      if (!ignore) { setNoteResult({ selection, revision, notes: data.notes }); setError('') }
+      if (!ignore) { setCourses(data.courses); setNoteResult({ selection, revision, notes: data.notes }); setError('') }
     }).catch(e => { if (!ignore) setNoteResult({ selection, revision, notes: [], error: e.message }) })
     return () => { ignore = true }
   }, [endpoint, selection, revision, noteResult])
@@ -130,7 +130,7 @@ function LessonNotesContent({ admin }) {
     </div>
     {error && <p role="alert" className="rounded-xl border border-red-300 p-3 text-red-600">{error}</p>}
     {loading ? <p>Yükleniyor…</p> : !courses.length ? <p>Bu alan için uygun Bilfen sınıfı veya ders bulunamadı.</p> : <>
-      <div className="flex gap-1 overflow-x-auto border-b border-panel-border" aria-label="Dersler">{courses.filter(c => c.grade === course?.grade).map(c => <button key={c.subjectId} aria-pressed={c.subjectId === course?.subjectId} className={`shrink-0 border-b-2 px-3 py-2 text-xs font-medium transition-colors sm:text-sm ${c.subjectId === course?.subjectId ? 'border-panel-warm bg-panel-accent-soft text-panel-warm' : 'border-transparent text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-text'}`} disabled={busy} onClick={() => choose(c)}>{c.subjectName}</button>)}</div>
+      <div className="flex gap-1 overflow-x-auto border-b border-panel-border" aria-label="Dersler">{courses.filter(c => c.grade === course?.grade).map(c => <button key={c.subjectId} aria-pressed={c.subjectId === course?.subjectId} className={`shrink-0 border-b-2 px-3 py-2 text-xs font-medium transition-colors sm:text-sm ${c.subjectId === course?.subjectId ? 'border-panel-warm bg-panel-accent-soft text-panel-warm' : 'border-transparent text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-text'}`} disabled={busy} onClick={() => choose(c)}>{c.subjectName} ({c.noteCount ?? 0})</button>)}</div>
       {admin && <button className={button} disabled={busy} onClick={() => setForm({ ...emptyForm })}>+ Ana konu grubu ekle</button>}
       {form && <form onSubmit={save} className="space-y-4 rounded-2xl border border-panel-border bg-panel-surface p-5">
         <label className="block">Ana konu başlığı<input required maxLength={200} className={field} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Sözcükte Anlam ve Anlam Olayları" /></label>
