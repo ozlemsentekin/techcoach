@@ -20,6 +20,7 @@ import Button from '../ui/Button'
 import Badge from '../ui/Badge'
 import { cn } from '../ui/utils'
 import WrongQuestionGalleryModal from './WrongQuestionGalleryModal'
+import AddWrongQuestionModal from './AddWrongQuestionModal'
 import MistakePhotoCaptureModal from '../student/components/MistakePhotoCaptureModal'
 import { verifyMistakePhotoQuestionNumber } from '../../services/mistakePhotoService'
 import { ResourceBookAvatar } from './ResourceBookCard'
@@ -753,12 +754,14 @@ export default function WrongQuestionsView({
   updateMistakeMeta,
   updateMistakePhoto,
   viewerRole = 'ogrenci',
+  studentId,
   title = 'Hata Defterim',
   subtitle = 'Fotoğrafını çektiğin yanlış sorular ders ders burada.',
   headerActions,
   backSlot = null,
   hideHeaderWhenUnselected = false,
 }) {
+  const [showAddModal, setShowAddModal] = useState(false)
   const [wrongQuestions, setWrongQuestions] = useState(null)
   const [bookImages, setBookImages] = useState({})
   const [topicStats, setTopicStats] = useState([])
@@ -1030,6 +1033,20 @@ export default function WrongQuestionsView({
 
   const openReplacePhoto = updateMistakePhoto ? (item) => setReplacingPhotoItem(item) : undefined
 
+  const handleWrongQuestionAdded = (wrongQuestion) => {
+    setWrongQuestions((prev) => [wrongQuestion, ...(prev || [])])
+    setShowAddModal(false)
+  }
+
+  // Öğretmen görünümü farklı bir kimlik bağlamı (studentTeacherId) üzerinden çalışıyor;
+  // serbest hata ekleme akışı şimdilik yalnızca öğrenci/veli için destekleniyor.
+  const addButton =
+    viewerRole !== 'ogretmen' ? (
+      <Button type="button" variant="secondary" onClick={() => setShowAddModal(true)}>
+        + Hata Ekle
+      </Button>
+    ) : null
+
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
       {backSlot && !activeSource && !effectiveSelectedSubject ? <div>{backSlot}</div> : null}
@@ -1043,6 +1060,7 @@ export default function WrongQuestionsView({
           actions={
             <div className="flex items-center gap-2">
               {headerActions}
+              {addButton}
               <SourcePdfExportButton subject={effectiveSelectedSubject} source={activeSource} fetchPhoto={fetchPhoto} />
               <Button variant="secondary" onClick={() => setSelectedSourceKey(null)}>
                 <ArrowLeft size={15} aria-hidden="true" />
@@ -1067,6 +1085,7 @@ export default function WrongQuestionsView({
           actions={
             <div className="flex items-center gap-2">
               {headerActions}
+              {addButton}
               {hasSingleSubject ? null : (
                 <Button variant="secondary" onClick={handleBackToSubjects}>
                   <ArrowLeft size={15} aria-hidden="true" />
@@ -1077,10 +1096,21 @@ export default function WrongQuestionsView({
           }
         />
       ) : hideHeaderWhenUnselected ? (
-        headerActions ? <div className="flex justify-end">{headerActions}</div> : null
+        <div className="flex flex-wrap justify-end gap-2">
+          {headerActions}
+          {addButton}
+        </div>
       ) : (
-        <PageHeader title={title} subtitle={subtitle} actions={headerActions} />
+        <PageHeader title={title} subtitle={subtitle} actions={<div className="flex items-center gap-2">{headerActions}{addButton}</div>} />
       )}
+
+      {showAddModal ? (
+        <AddWrongQuestionModal
+          studentId={studentId}
+          onClose={() => setShowAddModal(false)}
+          onSaved={handleWrongQuestionAdded}
+        />
+      ) : null}
 
       {allPhotoQuestions.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3 py-2">

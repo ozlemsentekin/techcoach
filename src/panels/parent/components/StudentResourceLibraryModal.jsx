@@ -215,6 +215,7 @@ export default function StudentResourceLibraryModal({ student, onClose }) {
                     <ResourceBookRates
                       completionRate={book.completionRate}
                       successRate={book.successRate}
+                      contentMode={book.contentMode}
                       className="grid-cols-2"
                     />
                     <button

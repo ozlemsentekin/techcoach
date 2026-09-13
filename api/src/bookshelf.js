@@ -80,6 +80,7 @@ function shapeBook(row, assignmentRows, ctx) {
     type: row.resource_type,
     scope: isPrivate ? 'private' : 'catalog',
     hasAnswerKey: Boolean(row.has_answer_key),
+    contentMode: row.content_mode || 'structured',
     imageUrl: row.image_url || null,
     createdByUserId: row.created_by_user_id,
     createdByRole: row.created_by_role || null,
@@ -127,7 +128,7 @@ async function loadPrivateBook(resourceBookId) {
   const db = await withRequest({ id: { type: sql.UniqueIdentifier, value: resourceBookId } })
   const result = await db.query(`
     SELECT rb.id, rb.name, rb.subject_id, sub.name AS subject_name, rb.publisher_id, p.name AS publisher_name,
-           rb.grade, rb.resource_type, rb.has_answer_key, rb.image_url, rb.is_active, rb.scope,
+           rb.grade, rb.resource_type, rb.has_answer_key, rb.content_mode, rb.image_url, rb.is_active, rb.scope,
            rb.created_by_user_id, rb.created_by_role, u.full_name AS created_by_name, rb.created_at
     FROM dbo.ResourceBooks rb
     LEFT JOIN dbo.Subjects sub ON sub.id = rb.subject_id
@@ -145,7 +146,7 @@ async function loadBookRow(resourceBookId) {
   const db = await withRequest({ id: { type: sql.UniqueIdentifier, value: resourceBookId } })
   const result = await db.query(`
     SELECT rb.id, rb.name, rb.subject_id, sub.name AS subject_name, rb.publisher_id, p.name AS publisher_name,
-           rb.grade, rb.resource_type, rb.has_answer_key, rb.image_url, rb.is_active, rb.scope,
+           rb.grade, rb.resource_type, rb.has_answer_key, rb.content_mode, rb.image_url, rb.is_active, rb.scope,
            rb.created_by_user_id, rb.created_by_role, u.full_name AS created_by_name, rb.created_at
     FROM dbo.ResourceBooks rb
     LEFT JOIN dbo.Subjects sub ON sub.id = rb.subject_id
@@ -317,7 +318,7 @@ async function listBooksHandler(request) {
     }
     const booksResult = await db.query(`
       SELECT rb.id, rb.name, rb.subject_id, sub.name AS subject_name, rb.publisher_id, p.name AS publisher_name,
-             rb.grade, rb.resource_type, rb.has_answer_key, rb.image_url, rb.scope,
+             rb.grade, rb.resource_type, rb.has_answer_key, rb.content_mode, rb.image_url, rb.scope,
              rb.created_by_user_id, rb.created_by_role, u.full_name AS created_by_name, rb.created_at
       FROM dbo.ResourceBooks rb
       LEFT JOIN dbo.Subjects sub ON sub.id = rb.subject_id
@@ -437,12 +438,16 @@ async function getTestAnswerKeyHandler(request) {
   }
 }
 
+// content_mode = 'simple' ("İçerik ve cevap anahtarı oluşturmayacağım"): kitap sadece ad/ders/sınıf
+// ile var olur, hiç konu/test eklenmez. Görev/tamamlama akışı bugün yalnızca 'soru_bankasi' tipini
+// soru bankası ödevi olarak tanıdığından bu modda tip/cevap anahtarı kullanıcıya sorulmaz, sabitlenir.
 function validateBookPayload(payload) {
   const name = payload?.name?.trim()
   const subjectId = payload?.subjectId || null
   const grade = payload?.grade || null
-  const type = payload?.type
-  const hasAnswerKey = payload?.hasAnswerKey !== false
+  const contentMode = payload?.contentMode === 'simple' ? 'simple' : 'structured'
+  const type = contentMode === 'simple' ? 'soru_bankasi' : payload?.type
+  const hasAnswerKey = contentMode === 'simple' ? false : payload?.hasAnswerKey !== false
 
   if (!name || name.length < 2) return { error: 'Kaynak adı en az 2 karakter olmalı.' }
   if (!subjectId) return { error: 'Ders seçilmeli.' }
@@ -459,6 +464,7 @@ function validateBookPayload(payload) {
       grade: String(grade),
       type,
       hasAnswerKey: type === 'soru_bankasi' ? hasAnswerKey : true,
+      contentMode,
       imageUrl: imageResult.value,
     },
   }
@@ -519,6 +525,7 @@ async function createBookHandler(request) {
         'is_active',
         'resource_type',
         'has_answer_key',
+        'content_mode',
         'image_url',
         'grade',
         'resource_source',
@@ -534,6 +541,7 @@ async function createBookHandler(request) {
         '1',
         '@resourceType',
         '@hasAnswerKey',
+        '@contentMode',
         '@imageUrl',
         '@grade',
         "'ozel'",
@@ -553,6 +561,7 @@ async function createBookHandler(request) {
         name: { type: sql.NVarChar(200), value: validated.value.name },
         resourceType: { type: sql.NVarChar(30), value: validated.value.type },
         hasAnswerKey: { type: sql.Bit, value: validated.value.hasAnswerKey },
+        contentMode: { type: sql.NVarChar(20), value: validated.value.contentMode },
         imageUrl: { type: sql.NVarChar(sql.MAX), value: validated.value.imageUrl },
         grade: { type: sql.NVarChar(20), value: validated.value.grade },
         createdByRole: { type: sql.NVarChar(20), value: ctx.isAdmin ? 'admin' : ctx.role },
@@ -626,6 +635,20 @@ async function updateBookHandler(request) {
     const validated = validateBookPayload(payload)
     if (validated.error) return json(400, { error: validated.error })
 
+    // structured → simple geçişi: kitapta zaten içerik (konu) varsa reddedilir, aksi halde o
+    // içerik "yetim" kalır (görev/tamamlama akışı artık simple kitaba göre davranır ama testler
+    // hâlâ ortada durur). simple → structured yönü her zaman serbesttir (içerik eklemeye başlamak).
+    const currentContentMode = book.content_mode || 'structured'
+    if (currentContentMode === 'structured' && validated.value.contentMode === 'simple') {
+      const topicCountDb = await withRequest({ bookId: { type: sql.UniqueIdentifier, value: book.id } })
+      const topicCountResult = await topicCountDb.query(`
+        SELECT COUNT(*) AS topic_count FROM dbo.ResourceBookTopics WHERE resource_book_id = @bookId;
+      `)
+      if (topicCountResult.recordset[0]?.topic_count > 0) {
+        return json(400, { error: 'Bu kitapta içerik var, basit moda geçirilemez.' })
+      }
+    }
+
     const updated = await withTransaction(async (requestInTransaction) => {
       const publisher = await resolvePublisherId(requestInTransaction, {
         publisherId: payload?.publisherId,
@@ -644,12 +667,14 @@ async function updateBookHandler(request) {
         name: { type: sql.NVarChar(200), value: validated.value.name },
         resourceType: { type: sql.NVarChar(30), value: validated.value.type },
         hasAnswerKey: { type: sql.Bit, value: validated.value.hasAnswerKey },
+        contentMode: { type: sql.NVarChar(20), value: validated.value.contentMode },
         imageUrl: { type: sql.NVarChar(sql.MAX), value: validated.value.imageUrl },
         grade: { type: sql.NVarChar(20), value: validated.value.grade },
       }).query(`
         UPDATE dbo.ResourceBooks
         SET publisher_id = @publisherId, subject_id = @subjectId, name = @name,
-            resource_type = @resourceType, has_answer_key = @hasAnswerKey, image_url = @imageUrl, grade = @grade
+            resource_type = @resourceType, has_answer_key = @hasAnswerKey, content_mode = @contentMode,
+            image_url = @imageUrl, grade = @grade
         WHERE id = @id AND scope = 'private';
       `)
       return book.id

@@ -99,6 +99,7 @@ function sanitizeResourceBook(record) {
     isActive: Boolean(record.is_active),
     type: record.resource_type,
     hasAnswerKey: Boolean(record.has_answer_key),
+    contentMode: record.content_mode || 'structured',
     imageUrl: record.image_url || null,
     publishYear: record.publish_year || null,
     publishMonthYear: record.publish_month_year || null,
@@ -562,7 +563,7 @@ async function listResourceBooksForPanelHandler(request) {
     )
     const result = await requestDb.query(`
       SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-             rb.name, rb.is_active, rb.resource_type, rb.has_answer_key, ${imageColumn},
+             rb.name, rb.is_active, rb.resource_type, rb.has_answer_key, rb.content_mode, ${imageColumn},
              rb.publish_month_year, rb.grade, rb.resource_source, rb.created_at
       FROM dbo.StudentResourceBooks srb
       INNER JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id

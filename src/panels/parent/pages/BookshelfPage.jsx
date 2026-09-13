@@ -234,7 +234,11 @@ function BookCard({ book, onPreviewImage, onOpen, onViewContent }) {
             </span>
           ) : null}
         </div>
-        <BookDonuts completionRate={book.completionRate} successRate={book.successRate} className="mt-3" />
+        {book.contentMode === 'simple' ? (
+          <p className="mt-3 text-xs text-panel-text-muted">Bu kitapta ilerleme takibi yapılmıyor.</p>
+        ) : (
+          <BookDonuts completionRate={book.completionRate} successRate={book.successRate} className="mt-3" />
+        )}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
             type="button"

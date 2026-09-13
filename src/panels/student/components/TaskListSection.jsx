@@ -9,9 +9,16 @@ import TaskDetailsDrawer from './TaskDetailsDrawer'
 import TaskAnswerSheetModal from './TaskAnswerSheetModal'
 import ReadingProgressModal from './ReadingProgressModal'
 import QuestionCountModal from './QuestionCountModal'
+import TaskSimpleResultModal from './TaskSimpleResultModal'
 
 function isQuestionBankTask(task) {
   return task.resourceType === 'soru_bankasi' && Boolean(task.selectedTestIds?.length)
+}
+
+// İçerik/cevap anahtarı hiç girilmemiş ("basit") kitaba bağlı görev: test seçimi yok, öğrenci
+// sonucu Sonucu Gir (TaskSimpleResultModal) ile toplam doğru/yanlış/boş sayısı olarak girer.
+function isSimpleContentTask(task) {
+  return task.resourceType === 'soru_bankasi' && task.contentMode === 'simple'
 }
 
 function isReadingTask(task) {
@@ -153,9 +160,11 @@ export default function TaskListSection({
   const [answerSheetTask, setAnswerSheetTask] = useState(null)
   const [readingTask, setReadingTask] = useState(null)
   const [questionCountTask, setQuestionCountTask] = useState(null)
+  const [simpleResultTask, setSimpleResultTask] = useState(null)
 
   const openTask = (task) => {
-    if (isQuestionBankTask(task)) {
+    if (isSimpleContentTask(task)) setSimpleResultTask(task)
+    else if (isQuestionBankTask(task)) {
       if (task.hasAnswerKey === false) setQuestionCountTask(task)
       else setAnswerSheetTask(task)
     } else if (isReadingTask(task)) setReadingTask(task)
@@ -316,6 +325,17 @@ export default function TaskListSection({
           onClose={() => setQuestionCountTask(null)}
           onSave={(payload) => {
             onSaveQuestionCount(questionCountTask, payload)
+          }}
+        />
+      ) : null}
+
+      {simpleResultTask ? (
+        <TaskSimpleResultModal
+          task={simpleResultTask}
+          onClose={() => setSimpleResultTask(null)}
+          onSaved={(updatedTask) => {
+            onAnswerSheetSaved(updatedTask)
+            setSimpleResultTask(null)
           }}
         />
       ) : null}

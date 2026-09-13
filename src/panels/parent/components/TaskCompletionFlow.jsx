@@ -3,6 +3,7 @@ import { buildCompletionUpdates, resolveCompletionFlow } from '../../shared/task
 import TaskAnswerSheetModal from '../../student/components/TaskAnswerSheetModal'
 import QuestionCountModal from '../../student/components/QuestionCountModal'
 import ReadingProgressModal from '../../student/components/ReadingProgressModal'
+import TaskSimpleResultModal from '../../student/components/TaskSimpleResultModal'
 
 // Veli, çocuğun bekleyen görevini "Tamamla" dediğinde açılan akış — öğrencinin kendi
 // akışının aynısı: soru bankası + cevap anahtarı → optik cevap kağıdı (yanlışlarda hata
@@ -19,6 +20,17 @@ export default function TaskCompletionFlow({ task, studentId, onClose, onComplet
         task={task}
         lessonLabel={task.subject || 'Görev'}
         photoMode="edit"
+        studentId={studentId}
+        onClose={onClose}
+        onSaved={(updatedTask) => onCompleted?.(updatedTask)}
+      />
+    )
+  }
+
+  if (flow === 'simple_result') {
+    return (
+      <TaskSimpleResultModal
+        task={task}
         studentId={studentId}
         onClose={onClose}
         onSaved={(updatedTask) => onCompleted?.(updatedTask)}

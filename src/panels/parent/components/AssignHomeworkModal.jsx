@@ -94,7 +94,7 @@ function groupResourceBooksBySubject(resourceBooks) {
 }
 
 function hasResourceBookRates(book) {
-  return book.completionRate !== undefined || book.successRate !== undefined
+  return book.completionRate !== undefined || book.successRate !== undefined || book.contentMode === 'simple'
 }
 
 export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, schoolHolidays, onSave, onClose }) {
@@ -522,6 +522,7 @@ export default function AssignHomeworkModal({ defaultTaskDate, schoolSchedule, s
                           <ResourceBookRates
                             completionRate={book.completionRate}
                             successRate={book.successRate}
+                            contentMode={book.contentMode}
                             className="col-start-2 mt-0 grid-cols-2 sm:col-start-auto sm:grid-cols-1"
                           />
                         ) : null}

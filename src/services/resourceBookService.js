@@ -13,3 +13,12 @@ export async function getPanelHomeworkResourceBooks() {
 export function preloadPanelHomeworkResourceBooks() {
   getPanelHomeworkResourceBooks().catch(() => undefined)
 }
+
+/** Hata Defteri "+ Hata Ekle" akışı: belirli bir öğrenciye atanmış kitapları getirir (herhangi bir content_mode). */
+export async function getResourceBooksForStudent(studentId) {
+  const path = studentId
+    ? `${PANEL_HOMEWORK_RESOURCE_BOOKS_PATH}?studentId=${studentId}`
+    : PANEL_HOMEWORK_RESOURCE_BOOKS_PATH
+  const data = await cachedGet(path, { ttlMs: PANEL_HOMEWORK_RESOURCE_BOOKS_TTL_MS })
+  return data.resourceBooks || []
+}

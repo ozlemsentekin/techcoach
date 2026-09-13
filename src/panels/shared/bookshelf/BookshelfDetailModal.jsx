@@ -11,6 +11,7 @@ import {
   getBookshelfBook,
   getBookshelfStudents,
   setBookshelfBookStudents,
+  updateBookshelfBook,
 } from '../../../services/bookshelfService'
 import { authRequest } from '../../../services/authClient'
 import { BOOKSHELF_RESOURCE_TYPE_LABELS } from './bookshelfConstants'
@@ -26,6 +27,28 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
   const [deletingTest, setDeletingTest] = useState(null)
   const [deleteError, setDeleteError] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [switchingMode, setSwitchingMode] = useState(false)
+  const [switchError, setSwitchError] = useState('')
+
+  const handleSwitchToStructured = async () => {
+    setSwitchingMode(true)
+    setSwitchError('')
+    try {
+      await updateBookshelfBook(book.id, {
+        name: book.name,
+        subjectId: book.subjectId,
+        grade: book.grade,
+        publisherId: book.publisherId,
+        imageUrl: book.imageUrl,
+        contentMode: 'structured',
+      })
+      onChanged()
+    } catch (err) {
+      setSwitchError(err.message)
+    } finally {
+      setSwitchingMode(false)
+    }
+  }
 
   const testsByTopic = useMemo(() => {
     const map = new Map()
@@ -38,6 +61,32 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
   }, [tests])
 
   const showAnswerKey = book.type === 'soru_bankasi' || book.type === 'etkinlik'
+
+  if (book.contentMode === 'simple') {
+    return (
+      <div className="flex flex-col gap-3 rounded-xl border border-panel-border bg-panel-surface-soft/60 p-4">
+        <p className="text-sm text-panel-text-muted">
+          Bu kitap "İçerik ve cevap anahtarı oluşturmayacağım" modunda eklendi: konu/test tanımlı
+          değil, görev doğrudan kitap üzerinden verilir ve sonuç elle girilir.
+        </p>
+        {canEdit ? (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="w-fit"
+              disabled={switchingMode}
+              onClick={handleSwitchToStructured}
+            >
+              {switchingMode ? 'Geçiliyor...' : 'İçerik eklemeye başla'}
+            </Button>
+            {switchError ? <p className="text-xs text-panel-warm">{switchError}</p> : null}
+          </>
+        ) : null}
+      </div>
+    )
+  }
 
   const handleDeleteTest = async () => {
     if (!deletingTest) return

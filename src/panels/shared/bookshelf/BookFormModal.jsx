@@ -32,6 +32,8 @@ export default function BookFormModal({ book, onSaved, onClose }) {
   const [addingPublisher, setAddingPublisher] = useState(false)
   const [hasAnswerKey, setHasAnswerKey] = useState(book ? book.hasAnswerKey : true)
   const [imageUrl, setImageUrl] = useState(book?.imageUrl || '')
+  const [contentMode, setContentMode] = useState(book?.contentMode || 'structured')
+  const isSimpleContentMode = contentMode === 'simple'
 
   const [selectedStudentIds, setSelectedStudentIds] = useState(() => new Set())
 
@@ -109,7 +111,7 @@ export default function BookFormModal({ book, onSaved, onClose }) {
     if (name.trim().length < 2) return setError('Kaynak adı en az 2 karakter olmalı.')
     if (!subjectId) return setError('Ders seçilmeli.')
     if (!grade) return setError('Sınıf seçilmeli.')
-    if (!type) return setError('Kaynak tipi seçilmeli.')
+    if (!isSimpleContentMode && !type) return setError('Kaynak tipi seçilmeli.')
     if (!publisherId && newPublisherName.trim().length < 2) return setError('Yayın evi seçilmeli.')
     if (!isEdit && selectedStudentIds.size === 0) {
       return setError('En az bir çocuk/öğrenci seçilmeli.')
@@ -122,8 +124,9 @@ export default function BookFormModal({ book, onSaved, onClose }) {
         name: name.trim(),
         subjectId,
         grade,
-        type,
-        hasAnswerKey: type === 'soru_bankasi' ? hasAnswerKey : true,
+        type: isSimpleContentMode ? 'soru_bankasi' : type,
+        hasAnswerKey: isSimpleContentMode ? false : type === 'soru_bankasi' ? hasAnswerKey : true,
+        contentMode,
         imageUrl: imageUrl.trim() || null,
         ...(publisherId ? { publisherId } : { newPublisherName: newPublisherName.trim() }),
       }
@@ -191,6 +194,37 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                   className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
                 />
               </label>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setContentMode('structured')}
+                  className={`rounded-xl border p-2.5 text-left text-sm transition-colors ${
+                    !isSimpleContentMode
+                      ? 'border-panel-accent bg-panel-accent-soft text-panel-text'
+                      : 'border-panel-border text-panel-text-muted'
+                  }`}
+                >
+                  <span className="block font-medium">İçerik ve cevap anahtarı gireceğim</span>
+                  <span className="mt-0.5 block text-xs opacity-80">
+                    Konu/test ekleyip cevap anahtarıyla optik okuma yapılır.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setContentMode('simple')}
+                  className={`rounded-xl border p-2.5 text-left text-sm transition-colors ${
+                    isSimpleContentMode
+                      ? 'border-panel-accent bg-panel-accent-soft text-panel-text'
+                      : 'border-panel-border text-panel-text-muted'
+                  }`}
+                >
+                  <span className="block font-medium">İçerik ve cevap anahtarı oluşturmayacağım</span>
+                  <span className="mt-0.5 block text-xs opacity-80">
+                    Sadece kitap adıyla ekle; görev verebilir, sonucu elle girebilirsiniz.
+                  </span>
+                </button>
+              </div>
 
               <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-panel-text-muted">Yayın Evi</span>
@@ -263,23 +297,25 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                 </label>
               </div>
 
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-panel-text-muted">Kaynak Tipi</span>
-                <select
-                  value={type}
-                  onChange={(event) => setType(event.target.value)}
-                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-                >
-                  <option value="">Tip seçin</option>
-                  {BOOKSHELF_RESOURCE_TYPES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {!isSimpleContentMode ? (
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-panel-text-muted">Kaynak Tipi</span>
+                  <select
+                    value={type}
+                    onChange={(event) => setType(event.target.value)}
+                    className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+                  >
+                    <option value="">Tip seçin</option>
+                    {BOOKSHELF_RESOURCE_TYPES.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
 
-              {type === 'soru_bankasi' ? (
+              {!isSimpleContentMode && type === 'soru_bankasi' ? (
                 <label className="flex items-center gap-2.5">
                   <input
                     type="checkbox"

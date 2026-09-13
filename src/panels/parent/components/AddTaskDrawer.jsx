@@ -165,6 +165,7 @@ function ResourceBookButton({ book, selected, onSelect }) {
         <ResourceBookRates
           completionRate={book.completionRate}
           successRate={book.successRate}
+          contentMode={book.contentMode}
           className="mt-1 grid-cols-2"
         />
       </span>
@@ -288,6 +289,9 @@ export default function AddTaskDrawer({
   const [lessonSubjectsError, setLessonSubjectsError] = useState('')
   const [resourceBooks, setResourceBooks] = useState(null)
   const [resourceBooksError, setResourceBooksError] = useState('')
+  // İçerik/cevap anahtarı hiç girilmemiş ("basit") kitap: topic/test seçimi hiç yapılmaz,
+  // görev doğrudan kitap üzerinden verilir; öğrenci sonucu görevi tamamlarken elle girer.
+  const isSimpleContentBook = (resourceBooks || []).find((book) => book.id === resourceBookId)?.contentMode === 'simple'
   const [topics, setTopics] = useState(null)
   const [topicsError, setTopicsError] = useState('')
   const [selectedTestIds, setSelectedTestIds] = useState(() => new Set(seed.selectedTestIds || []))
@@ -426,7 +430,7 @@ export default function AddTaskDrawer({
   }, [isPrivateLesson, lessonSubjects, lessonSubjectsError])
 
   useEffect(() => {
-    if (!isQuestionBankHomework || !resourceBookId) return undefined
+    if (!isQuestionBankHomework || !resourceBookId || isSimpleContentBook) return undefined
 
     let ignore = false
 
@@ -446,7 +450,7 @@ export default function AddTaskDrawer({
     return () => {
       ignore = true
     }
-  }, [isQuestionBankHomework, resourceBookId])
+  }, [isQuestionBankHomework, resourceBookId, isSimpleContentBook])
 
   // Kaynak seçili görev düzenlenirken kaydedilmiş kaynaktan dersi geri türet (ayrıca saklanmıyor).
   const effectiveSubjectId = useMemo(() => {
@@ -882,7 +886,7 @@ export default function AddTaskDrawer({
       setError('Soru bankası ödevi için kaynak seçin.')
       return
     }
-    if (isQuestionBankHomework && selectedTestIds.size === 0) {
+    if (isQuestionBankHomework && !isSimpleContentBook && selectedTestIds.size === 0) {
       setError('Soru bankası ödevi için en az bir içerik/test seçin.')
       return
     }
@@ -1060,7 +1064,9 @@ export default function AddTaskDrawer({
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-panel-text">{selectedBook?.name || selectedSchoolResource?.name}</p>
                       <p className="mt-1 text-xs text-panel-text-muted">{selectedSubjectName || selectedSchoolSubjectName}</p>
-                      {needsResource ? (
+                      {needsResource && isSimpleContentBook ? (
+                        <p className="mt-2 text-sm font-semibold text-panel-blue">Basit kayıt · içerik seçimi yok</p>
+                      ) : needsResource ? (
                         <>
                           <p className="mt-2 text-sm font-semibold text-panel-blue">{selectedTestIds.size} test · {totalQuestionCount} soru</p>
                           <p className="mt-1 line-clamp-3 text-xs text-panel-text-muted">
@@ -1208,8 +1214,18 @@ export default function AddTaskDrawer({
     {pickerSnapshot ? (
       <TaskResourcePicker
         title={needsResource ? 'Kaynak ve içerik seç' : 'Okul kaynağı seç'}
-        summary={needsResource ? `${selectedTestIds.size} test · ${totalQuestionCount} soru seçildi` : selectedSchoolResource?.name || 'Kaynak seçimi isteğe bağlıdır'}
-        canConfirm={!needsResource || (hasValidResourceSelection && selectedTestIds.size > 0 && topics !== null && !topicsError)}
+        summary={
+          needsResource
+            ? isSimpleContentBook
+              ? `${selectedBook?.name || ''} (basit kayıt)`
+              : `${selectedTestIds.size} test · ${totalQuestionCount} soru seçildi`
+            : selectedSchoolResource?.name || 'Kaynak seçimi isteğe bağlıdır'
+        }
+        canConfirm={
+          !needsResource ||
+          (hasValidResourceSelection &&
+            (isSimpleContentBook || (selectedTestIds.size > 0 && topics !== null && !topicsError)))
+        }
         onCancel={cancelResourcePicker}
         onConfirm={() => { setPickerSnapshot(null); setError('') }}
       >
@@ -1319,7 +1335,17 @@ export default function AddTaskDrawer({
               </div>
             ) : null}
 
-            {isQuestionBankHomework && resourceBookId ? (
+            {isQuestionBankHomework && resourceBookId && isSimpleContentBook ? (
+              <div className="flex flex-col gap-2 rounded-2xl border border-panel-border bg-panel-surface-soft/60 p-3">
+                <span className="text-sm font-semibold text-panel-text">İçerik seçimi gerekmiyor</span>
+                <p className="text-sm text-panel-text-muted">
+                  Bu kitapta içerik/cevap anahtarı tanımlı değil. Görev doğrudan kitap üzerinden verilecek;
+                  öğrenci sonucu görevi tamamlarken kendisi elle girecek.
+                </p>
+              </div>
+            ) : null}
+
+            {isQuestionBankHomework && resourceBookId && !isSimpleContentBook ? (
               <div className="flex flex-col gap-2 rounded-2xl border border-panel-border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-panel-text">İçerik seçimi</span>
