@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { CheckCircle2, Loader2, Lock, XCircle } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
-import { panelPathForRole } from '../utils/panelPath'
 import { authRequest } from '../services/authClient'
 import { initiateIyzicoCheckout, initiateIyzicoCheckoutForNewParent } from '../services/paymentService'
 import { injectCheckoutFormContent } from './iyzicoCheckoutForm'
@@ -13,10 +12,11 @@ function BrandIcon() {
   return <img src="/logo-mark.png" alt="" className="logo-mark-img" />
 }
 
+const IDLE_COUPON_CHECK = { status: 'idle', code: '', message: '', discountPercent: null, monthlyPrice: null, yearlyPrice: null }
+
 export default function PaymentPage() {
-  const { authUser, refreshSession } = useAuth()
+  const { authUser } = useAuth()
   const location = useLocation()
-  const navigate = useNavigate()
   const pendingRegistration = location.state?.pendingRegistration || null
 
   const [billingCycle, setBillingCycle] = useState('monthly')
@@ -27,7 +27,7 @@ export default function PaymentPage() {
   const [zipCode, setZipCode] = useState('')
   const [couponCode, setCouponCode] = useState('')
   // Kupon kodu canlı doğrulama: 'idle' | 'checking' | 'valid' | 'invalid'
-  const [couponCheck, setCouponCheck] = useState({ status: 'idle', code: '', message: '' })
+  const [couponCheck, setCouponCheck] = useState(IDLE_COUPON_CHECK)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [checkoutFormContent, setCheckoutFormContent] = useState(null)
@@ -58,16 +58,19 @@ export default function PaymentPage() {
               status: 'valid',
               code: data.code || code,
               message: data.description || 'Kupon kodu uygulandı.',
+              discountPercent: data.discountPercent ?? null,
+              monthlyPrice: data.monthlyPrice ?? null,
+              yearlyPrice: data.yearlyPrice ?? null,
             })
           } else {
-            setCouponCheck({ status: 'invalid', code: '', message: data?.error || 'Kupon kodu geçersiz.' })
+            setCouponCheck({ ...IDLE_COUPON_CHECK, status: 'invalid', message: data?.error || 'Kupon kodu geçersiz.' })
           }
         })
         .catch((error) => {
           if (ignore) return
           setCouponCheck({
+            ...IDLE_COUPON_CHECK,
             status: 'invalid',
-            code: '',
             message: error?.message || 'Kupon kodu doğrulanamadı. Lütfen tekrar deneyin.',
           })
         })
@@ -81,7 +84,7 @@ export default function PaymentPage() {
 
   const handleCouponChange = (event) => {
     const { value } = event.target
-    setCouponCheck({ status: value.trim() ? 'checking' : 'idle', code: '', message: '' })
+    setCouponCheck({ ...IDLE_COUPON_CHECK, status: value.trim() ? 'checking' : 'idle' })
     setCouponCode(value)
   }
 
@@ -124,8 +127,7 @@ export default function PaymentPage() {
     try {
       const address = { addressLine: addressLine.trim(), city: city.trim(), zipCode: zipCode.trim() }
       const trimmedEmail = email.trim()
-      const hasTrialCoupon = couponCheck.status === 'valid' && Boolean(couponCheck.code)
-      const appliedCouponCode = hasTrialCoupon ? couponCheck.code : couponCode.trim()
+      const appliedCouponCode = couponCheck.status === 'valid' && couponCheck.code ? couponCheck.code : couponCode.trim()
 
       const result = authUser
         ? await initiateIyzicoCheckout({ billingCycle, email: trimmedEmail, identityNumber, address })
@@ -138,14 +140,6 @@ export default function PaymentPage() {
             address,
           })
 
-      if (result.user) {
-        // Savunma amaçlı: pendingRegistration'a bir "DENEME" kupon kodu sızarsa backend hesabı
-        // ödemesiz anında açar — bu durumda normal panele geçilir.
-        await refreshSession()
-        navigate(panelPathForRole(result.user.role), { replace: true })
-        return
-      }
-
       setCheckoutFormContent(result.checkoutFormContent)
     } catch (submitError) {
       setError(submitError.message || 'Ödeme başlatılamadı.')
@@ -154,14 +148,26 @@ export default function PaymentPage() {
     }
   }
 
+  // Yeni veli akışında geçerli bir kupon varsa "Toplam" bu indirimli tutarı gösterir — gerçek
+  // tahsilat da (submit'teki appliedCouponCode üzerinden) aynı tutara sabitlenmiş kupon-özel
+  // iyzico planından yapılır, bkz. payments.js resolveCoupon.
+  const hasAppliedDiscount = !authUser && couponCheck.status === 'valid' && couponCheck.discountPercent != null
+  const discountedMonthly = hasAppliedDiscount && couponCheck.monthlyPrice != null ? couponCheck.monthlyPrice : null
+  const discountedYearly = hasAppliedDiscount && couponCheck.yearlyPrice != null ? couponCheck.yearlyPrice : null
+
   const billingOptions = {
-    monthly: { price: formatTRY(parentPlan.monthlyPrice), period: 'TL / ay' },
+    monthly: {
+      price: formatTRY(discountedMonthly ?? parentPlan.monthlyPrice),
+      originalPrice: discountedMonthly != null ? formatTRY(parentPlan.monthlyPrice) : null,
+      period: 'TL / ay',
+    },
     ...(parentPlan.yearlyPrice != null
       ? {
           yearly: {
-            price: formatTRY(parentPlan.yearlyPrice),
+            price: formatTRY(discountedYearly ?? parentPlan.yearlyPrice),
+            originalPrice: discountedYearly != null ? formatTRY(parentPlan.yearlyPrice) : null,
             period: 'TL / yıl',
-            ...(parentPlan.yearlyBadge ? { badge: parentPlan.yearlyBadge } : {}),
+            ...(parentPlan.yearlyBadge && discountedYearly == null ? { badge: parentPlan.yearlyBadge } : {}),
           },
         }
       : {}),
@@ -325,10 +331,16 @@ export default function PaymentPage() {
                 <div className="checkout-summary-total-row">
                   <span>Toplam</span>
                   <div className="checkout-summary-total-price">
+                    {activeBilling.originalPrice ? (
+                      <span className="checkout-summary-total-price-original">{activeBilling.originalPrice} TL</span>
+                    ) : null}
                     {activeBilling.price} <small>{activeBilling.period}</small>
                   </div>
                 </div>
                 {activeBilling.badge ? <span className="badge signup-price-badge">{activeBilling.badge}</span> : null}
+                {hasAppliedDiscount ? (
+                  <span className="badge signup-price-badge">Kupon: %{couponCheck.discountPercent} indirim</span>
+                ) : null}
 
                 <button
                   type="submit"

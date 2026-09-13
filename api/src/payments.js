@@ -9,9 +9,8 @@ const {
   sanitizeUser,
   validateParentRegistrationPayload,
   runRegistrationAntiAbuseChecks,
-  createCompParentAccount,
-  TRIAL_COUPON_CODE,
 } = require('./auth')
+const { resolveCoupon } = require('./coupons')
 const {
   hasActiveParentEntitlement,
   upsertParentEntitlementFromIyzico,
@@ -132,6 +131,9 @@ async function initializeParentSubscriptionCheckout({
   email,
   phone,
   planKind = 'parent',
+  // Bir indirim kuponu uygulandığında, standart (config'teki) plan referansı yerine kupona
+  // özel iyzico plan referansı kullanılır — bkz. coupons.js / resolveCoupon.
+  pricingPlanReferenceCodeOverride = null,
 }) {
   const config = getIyzicoConfig()
   const cycles =
@@ -140,7 +142,7 @@ async function initializeParentSubscriptionCheckout({
       : planKind === 'childSeat'
         ? CHILD_SEAT_BILLING_CYCLES
         : BILLING_CYCLES
-  const pricingPlanReferenceCode = cycles[billingCycle](config)
+  const pricingPlanReferenceCode = pricingPlanReferenceCodeOverride || cycles[billingCycle](config)
   const { name, surname } = splitFullName(fullName)
 
   const billingAddress = {
@@ -320,10 +322,12 @@ async function initiateTeacherSeatCheckoutHandler(request) {
 }
 
 // Henüz hiçbir hesabı olmayan bir veli için: kayıt bilgilerini + ödeme bilgilerini birlikte alır.
-// "DENEME" kupon kodu varsa iyzico'ya hiç gitmeden hesabı anında ücretsiz açar; aksi halde hesabı
-// dbo.Users'a YAZMADAN dbo.PendingParentRegistrations'a bekleyen bir kayıt bırakır ve iyzico
-// checkout formunu bu bekleyen kaydın id'sini conversationId olarak kullanarak başlatır — gerçek
-// hesap yalnızca ödeme onaylandığında iyzicoCheckoutCallbackHandler içinde oluşturulur.
+// Abonelik tekrarlayan olduğundan HER veli — indirim kuponu olsa bile — gerçek kart alan iyzico
+// checkout'undan geçer (bkz. coupons.js: %100 kupon dahi en az 1 TL'lik kendi iyzico planına
+// yönlendirilir, asla ödeme adımı atlanmaz). Hesap dbo.Users'a YAZMADAN dbo.PendingParentRegistrations'a
+// bekleyen bir kayıt bırakılır ve iyzico checkout formu bu bekleyen kaydın id'sini conversationId
+// olarak kullanarak başlatılır — gerçek hesap yalnızca ödeme onaylandığında
+// iyzicoCheckoutCallbackHandler içinde oluşturulur.
 async function initiateIyzicoCheckoutForNewParentHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
@@ -353,13 +357,18 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
       return json(409, { error: 'Bu telefon numarasıyla zaten bir hesabınız var. Giriş yapın.' })
     }
 
-    const hasTrialCoupon = String(payload.couponCode || '').trim().toUpperCase() === TRIAL_COUPON_CODE
-    if (hasTrialCoupon) {
-      const user = await createCompParentAccount({ fullName, phone, email: fields.email, parentType })
-      // Hesap başlangıç şifresiyle (telefonun son 6 hanesi) açılır — ilk panel girişinde değişmeli.
-      user.mustChangePassword = true
-      const token = createSessionToken(user)
-      return json(201, { user }, createSessionHeaders(token))
+    const rawCouponCode = String(payload.couponCode || '').trim()
+    let coupon = null
+    let pricingPlanReferenceCodeOverride = null
+    if (rawCouponCode) {
+      coupon = await resolveCoupon(rawCouponCode)
+      if (!coupon) {
+        return json(400, { error: 'Kupon kodu geçersiz.' })
+      }
+      pricingPlanReferenceCodeOverride = fields.billingCycle === 'yearly' ? coupon.yearlyPlanRef : coupon.monthlyPlanRef
+      if (!pricingPlanReferenceCodeOverride) {
+        return json(400, { error: 'Bu kupon seçilen fatura periyodunda kullanılamıyor.' })
+      }
     }
 
     const passwordHash = await hashPassword(defaultPasswordForPhone(phone))
@@ -389,6 +398,7 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
       ...fields,
       fullName,
       phone,
+      pricingPlanReferenceCodeOverride,
     })
     await recordCheckoutSession({ token: result.token, planKind: 'parentNew', conversationId: pendingId })
 

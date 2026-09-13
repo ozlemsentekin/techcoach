@@ -4610,6 +4610,14 @@ footer {
   color: var(--muted);
 }
 
+.checkout-summary-total-price-original {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
 .checkout-submit {
   width: 100%;
   margin-top: 20px;
