@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Search, X, ChevronRight, BookOpen, ArrowUpRight, Sparkles, Printer } from 'lucide-react'
-import { authRequest } from '../../services/authClient'
+import { authRequest, cachedGet } from '../../services/authClient'
 import { printLessonNote } from '../../utils/printLessonNote'
 import { useAuth } from '../../context/useAuth'
 
@@ -32,7 +32,9 @@ function LessonNotesContent({ admin }) {
   const { authUser } = useAuth()
   const [courses, setCourses] = useState([])
   const [selection, setSelection] = useState('')
-  const [notes, setNotes] = useState([])
+  const [noteResult, setNoteResult] = useState(null)
+  const [opening, setOpening] = useState(false)
+  const detailRequest = useRef(0)
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState({})
   const [error, setError] = useState('')
@@ -42,6 +44,9 @@ function LessonNotesContent({ admin }) {
   const [busy, setBusy] = useState(false)
   const [view, setView] = useState(null)
   const endpoint = admin ? '/api/panel/admin/lesson-notes' : '/api/panel/lesson-notes'
+  const notesLoading = Boolean(selection) && (noteResult?.selection !== selection || noteResult?.revision !== revision)
+  const notes = notesLoading ? [] : (noteResult?.notes || [])
+  const notesError = !notesLoading && noteResult?.error
   const course = courses.find(c => `${c.grade}:${c.subjectId}` === selection)
   useEffect(() => {
     let ignore = false
@@ -57,12 +62,24 @@ function LessonNotesContent({ admin }) {
     if (!selection) return
     let ignore = false
     const [grade, subjectId] = selection.split(':')
-    authRequest(`${endpoint}?grade=${grade}&subjectId=${subjectId}`).then(data => {
-      if (!ignore) { setNotes(data.notes); setError('') }
-    }).catch(e => { if (!ignore) setError(e.message) })
+    cachedGet(`${endpoint}?grade=${grade}&subjectId=${subjectId}`).then(data => {
+      if (!ignore) { setNoteResult({ selection, revision, notes: data.notes }); setError('') }
+    }).catch(e => { if (!ignore) setNoteResult({ selection, revision, notes: [], error: e.message }) })
     return () => { ignore = true }
   }, [endpoint, selection, revision])
-  const choose = c => { setSelection(`${c.grade}:${c.subjectId}`); setNotes([]); setForm(null); setView(null) }
+  const choose = c => { setSelection(`${c.grade}:${c.subjectId}`); detailRequest.current++; setOpening(false); setForm(null); setView(null) }
+  async function openNote(note, edit = false) {
+    const requestId = ++detailRequest.current
+    setOpening(true); setError('')
+    try {
+      const [grade, subjectId] = selection.split(':')
+      const data = await authRequest(`${endpoint}?grade=${grade}&subjectId=${subjectId}&noteId=${note.id}`, { timeoutMs: 90000 })
+      if (requestId !== detailRequest.current) return
+      if (edit) setForm(data.notes[0])
+      else setView(data.notes[0])
+    } catch (e) { if (requestId === detailRequest.current) setError(e.message) }
+    finally { if (requestId === detailRequest.current) setOpening(false) }
+  }
   async function upload(files) {
     setBusy(true); setError('')
     try {
@@ -115,8 +132,11 @@ function LessonNotesContent({ admin }) {
         <div className="flex flex-wrap gap-3">{form.images.map((img, i) => <div key={i} className="w-36 space-y-2"><img src={img} alt={`Sayfa ${i + 1}`} className="h-40 w-full object-contain" /><span>Sayfa {i + 1}</span><div className="flex gap-2"><button type="button" disabled={busy || i === 0} aria-label={`Sayfa ${i + 1} öne taşı`} onClick={() => setForm(f => { const images = [...f.images]; [images[i - 1], images[i]] = [images[i], images[i - 1]]; return { ...f, images } })}>← Öne</button><button type="button" disabled={busy} onClick={() => setForm(f => ({ ...f, images: f.images.filter((_, n) => n !== i) }))}>Kaldır</button></div></div>)}</div>
         <div className="flex gap-2"><button disabled={busy || !form.images.length} className={button}>{busy ? 'İşleniyor…' : 'Kaydet'}</button><button type="button" disabled={busy} className={button} onClick={() => setForm(null)}>Vazgeç</button></div>
       </form>}
-      <div className="flex items-center justify-between text-xs text-panel-text-muted"><span>{course?.subjectName}</span><span aria-live="polite">{visibleNotes.length} konu grubu{search ? ' bulundu' : ' · Keşfet ve tekrar et'}</span></div>
-      {!visibleNotes.length && <p className="rounded-xl bg-panel-surface-soft px-4 py-5 text-sm">{search ? 'Aramana uygun konu bulunamadı. Başka bir sözcük deneyebilirsin.' : 'Bu dersin notları eklendiğinde burada görünecek.'}</p>}
+      <div className="flex items-center justify-between text-xs text-panel-text-muted"><span>{course?.subjectName}</span><span aria-live="polite">{notesLoading ? 'Yükleniyor…' : notesError ? 'Yüklenemedi' : `${visibleNotes.length} konu grubu`}{search ? ' bulundu' : ' · Keşfet ve tekrar et'}</span></div>
+      {!notesLoading && !notesError && !visibleNotes.length && <p className="rounded-xl bg-panel-surface-soft px-4 py-5 text-sm">{search ? 'Aramana uygun konu bulunamadı. Başka bir sözcük deneyebilirsin.' : 'Bu dersin notları eklendiğinde burada görünecek.'}</p>}
+      {notesLoading && <p role="status" className="rounded-xl bg-panel-surface-soft p-4 text-sm">Konu listesi yükleniyor…</p>}
+      {notesError && <div role="alert" className="rounded-xl border border-red-300 p-3 text-sm"><p>{notesError}</p><button className={button} onClick={() => setRevision(r => r + 1)}>Tekrar dene</button></div>}
+      {opening && <p role="status" className="text-sm text-panel-text-muted">Seçilen notun görselleri yükleniyor…</p>}
       <div className="overflow-hidden rounded-xl border border-panel-border bg-panel-surface">
       {visibleNotes.map((note, index) => {
         const open = expanded[note.id] ?? Boolean(search)
@@ -125,11 +145,11 @@ function LessonNotesContent({ admin }) {
             <button type="button" aria-expanded={open} aria-controls={`topics-${note.id}`} onClick={() => setExpanded(previous => ({ ...previous, [note.id]: !open }))} className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left">
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-panel-accent-soft text-xs font-semibold text-panel-warm">{String(index + 1).padStart(2, '0')}</span>
               <ChevronRight size={15} className={`shrink-0 text-panel-text-muted transition-transform ${open ? 'rotate-90' : ''}`} />
-              <span className="min-w-0"><span className="block text-sm font-semibold leading-snug">{note.title}</span><span className="text-[11px] text-panel-text-muted">{note.topics.length} alt başlık · {note.images.length} sayfa</span></span>
+              <span className="min-w-0"><span className="block text-sm font-semibold leading-snug">{note.title}</span><span className="text-[11px] text-panel-text-muted">{note.topics.length} alt başlık · {note.imageCount} sayfa</span></span>
             </button>
             <span className="ml-11 text-[11px] text-panel-text-muted sm:ml-0 sm:shrink-0">{dateLabel(note.weekStart)} – {dateLabel(note.weekEnd)}</span>
-            <button className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-panel-accent-soft px-3 py-2 text-xs font-semibold text-panel-warm transition-colors hover:brightness-95" onClick={() => setView(note)} aria-label={`${note.title}: ders notlarını göster`}><BookOpen size={14} />Notları aç<ArrowUpRight size={13} /></button>
-            {admin && <div className="flex gap-2 text-xs"><button disabled={busy} onClick={() => setForm({ ...note })}>Düzenle</button><button disabled={busy} onClick={() => remove(note)}>Sil</button></div>}
+            <button className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-panel-accent-soft px-3 py-2 text-xs font-semibold text-panel-warm transition-colors hover:brightness-95" disabled={opening} onClick={() => openNote(note)} aria-label={`${note.title}: ders notlarını göster`}><BookOpen size={14} />Notları aç<ArrowUpRight size={13} /></button>
+            {admin && <div className="flex gap-2 text-xs"><button disabled={busy} onClick={() => openNote(note, true)}>Düzenle</button><button disabled={busy} onClick={() => remove(note)}>Sil</button></div>}
           </div>
           {open && <ul id={`topics-${note.id}`} className="mb-2 ml-[3.75rem] mr-3 border-l border-panel-border pl-3">{note.topics.map((topic, i) => <li key={i} className="flex items-start gap-2 py-1 text-xs leading-5 text-panel-text-muted"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-panel-warm" />{topic}</li>)}</ul>}
         </article>
