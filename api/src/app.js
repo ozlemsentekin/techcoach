@@ -192,6 +192,7 @@ const {
   deleteTaskHandler,
   getTaskAnswerSheetHandler,
   saveTaskAnswersHandler,
+  saveSimpleTaskResultHandler,
   saveWrongQuestionPhotoHandler,
   removeTaskTestHandler,
 } = require('./tasks')
@@ -1592,6 +1593,13 @@ registerHttp('panel-tasks-answers-save', {
   methods: ['PATCH'],
   route: 'panel/tasks/{taskId}/answers',
   handler: saveTaskAnswersHandler,
+})
+
+registerHttp('panel-tasks-simple-result-save', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel/tasks/{taskId}/simple-result',
+  handler: saveSimpleTaskResultHandler,
 })
 
 registerHttp('panel-tasks-mistake-photo-save', {

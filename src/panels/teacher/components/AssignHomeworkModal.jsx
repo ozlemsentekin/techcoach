@@ -637,6 +637,7 @@ export default function AssignHomeworkModal({
                       <ResourceBookRates
                         completionRate={book.completionRate}
                         successRate={book.successRate}
+                        contentMode={book.contentMode}
                         className="col-start-2 mt-0 grid-cols-2 sm:col-start-auto sm:grid-cols-1"
                       />
                     </button>

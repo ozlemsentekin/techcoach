@@ -192,7 +192,8 @@ async function verifyMistakePhotoQuestionNumberHandler(request) {
 }
 
 const WRONG_QUESTION_OUTPUT_COLUMNS = `
-  inserted.id, inserted.student_id, inserted.task_id, inserted.test_id, inserted.subject, inserted.topic,
+  inserted.id, inserted.student_id, inserted.task_id, inserted.test_id, inserted.resource_book_id,
+  inserted.subject, inserted.topic,
   inserted.test_name, inserted.book_name, inserted.publisher_name, inserted.question_number,
   inserted.error_type, inserted.student_note, inserted.mistake_reason, inserted.review_status, inserted.resolved_at,
   inserted.photo_url, inserted.created_at

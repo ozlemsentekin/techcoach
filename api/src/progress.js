@@ -99,6 +99,7 @@ function sanitizeWrongQuestion(record) {
     studentId: record.student_id,
     taskId: record.task_id,
     testId: record.test_id || undefined,
+    resourceBookId: record.resource_book_id || undefined,
     subject: record.subject,
     topic: record.topic || undefined,
     topicName: record.topic_name || undefined,
@@ -429,8 +430,9 @@ async function listWrongQuestionsHandler(request) {
                wq.review_status, wq.resolved_at,
                CAST(1 AS bit) AS has_photo, wq.created_at,
                COALESCE(tp.name, wq.topic) AS topic,
-               COALESCE(rb.name, wq.book_name) AS book_name,
-               COALESCE(pub.name, wq.publisher_name) AS publisher_name,
+               COALESCE(rb.name, rb2.name, wq.book_name) AS book_name,
+               COALESCE(pub.name, pub2.name, wq.publisher_name) AS publisher_name,
+               wq.resource_book_id,
                t.topic_name, t.page_start, t.page_end,
                tak.correct_label AS correct_answer,
                wqa.what_it_asked AS ai_what_it_asked, wqa.likely_mistake AS ai_likely_mistake,
@@ -440,11 +442,14 @@ async function listWrongQuestionsHandler(request) {
         LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
         LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
         LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
+        LEFT JOIN dbo.ResourceBooks rb2 ON rb2.id = wq.resource_book_id
+        LEFT JOIN dbo.Publishers pub2 ON pub2.id = rb2.publisher_id
         LEFT JOIN dbo.TestAnswerKeys tak ON tak.test_id = wq.test_id AND tak.order_no = wq.question_number
         LEFT JOIN dbo.WrongQuestionAiAnalyses wqa ON wqa.wrong_question_id = wq.id
         WHERE wq.student_id = @studentId
-          AND (wq.test_id IS NOT NULL OR wq.mock_exam_subject_id IS NOT NULL)
-        ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''}
+          AND (wq.test_id IS NOT NULL OR wq.mock_exam_subject_id IS NOT NULL
+               OR wq.resource_book_id IS NOT NULL OR wq.error_type = 'serbest')
+        ${resourceBookId ? 'AND (tp.resource_book_id = @resourceBookId OR wq.resource_book_id = @resourceBookId)' : ''}
         ORDER BY wq.created_at DESC;
       `),
       fetchWrongQuestionBookImagesByName(studentId, { resourceBookId }),
@@ -561,6 +566,11 @@ async function updateWrongQuestionPhotoHandler(request) {
   }
 }
 
+// Hata Defteri'nin serbest "+ Hata Ekle" akışı: bir görevden/testten bağımsız olarak, sadece ders
+// zorunlu tutularak yeni bir hata kaydı açar. Ya gerçek bir kitap seçilir (resourceBookId — ad/yayın
+// evi sunucu tarafında çözülür, client'tan gelen metne güvenilmez) ya da kitap serbestçe yazılır
+// (freeBookName). error_type her zaman 'serbest' sabitlenir (mock-exam/basit-kitap kayıtlarıyla
+// aynı desen: test_id yok, book_name/topic serbest metin) — bkz. listWrongQuestionsHandler filtresi.
 async function addWrongQuestionHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
@@ -570,29 +580,56 @@ async function addWrongQuestionHandler(request) {
     }
 
     const subject = payload?.subject?.trim()
-    const errorType = payload?.errorType
+    const resourceBookId = payload?.resourceBookId || null
+    const freeBookName = payload?.freeBookName?.trim() || null
 
     if (!subject) {
       return json(400, { error: 'Ders zorunludur.' })
     }
-    if (!errorType) {
-      return json(400, { error: 'Hata türü zorunludur.' })
+    if (!resourceBookId && !freeBookName) {
+      return json(400, { error: 'Bir kitap seçin veya kitap adını yazın.' })
+    }
+
+    let bookName = freeBookName
+    let publisherName = null
+    if (resourceBookId) {
+      const bookDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: resourceBookId } })
+      const bookResult = await bookDb.query(`
+        SELECT rb.name AS book_name, pub.name AS publisher_name
+        FROM dbo.ResourceBooks rb
+        LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
+        WHERE rb.id = @id;
+      `)
+      const bookRow = bookResult.recordset[0]
+      if (!bookRow) {
+        return json(404, { error: 'Seçilen kitap bulunamadı.' })
+      }
+      bookName = bookRow.book_name
+      publisherName = bookRow.publisher_name || null
+    }
+
+    const photoCheck = payload?.photo ? sanitizeMistakePhoto(payload.photo) : { value: null }
+    if (photoCheck.error) {
+      return json(400, { error: photoCheck.error })
     }
 
     const requestDb = await withRequest({
       studentId: { type: sql.UniqueIdentifier, value: studentId },
       taskId: { type: sql.UniqueIdentifier, value: payload?.taskId || null },
+      resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
       subject: { type: sql.NVarChar(100), value: subject },
       topic: { type: sql.NVarChar(200), value: payload?.topic || null },
-      questionNumber: { type: sql.NVarChar(20), value: payload?.questionNumber || null },
-      errorType: { type: sql.NVarChar(50), value: errorType },
+      bookName: { type: sql.NVarChar(200), value: bookName },
+      publisherName: { type: sql.NVarChar(200), value: publisherName },
+      errorType: { type: sql.NVarChar(50), value: 'serbest' },
       studentNote: { type: sql.NVarChar(1000), value: payload?.studentNote || null },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoCheck.value },
     })
     const result = await requestDb.query(`
-      INSERT INTO dbo.WrongQuestions (student_id, task_id, subject, topic, question_number, error_type, student_note)
-      OUTPUT inserted.id, inserted.student_id, inserted.task_id, inserted.subject, inserted.topic, inserted.question_number,
-             inserted.error_type, inserted.student_note, inserted.review_status, inserted.resolved_at, inserted.created_at
-      VALUES (@studentId, @taskId, @subject, @topic, @questionNumber, @errorType, @studentNote);
+      INSERT INTO dbo.WrongQuestions
+        (student_id, task_id, resource_book_id, subject, topic, book_name, publisher_name, error_type, student_note, photo_url)
+      OUTPUT ${WRONG_QUESTION_OUTPUT_COLUMNS}
+      VALUES (@studentId, @taskId, @resourceBookId, @subject, @topic, @bookName, @publisherName, @errorType, @studentNote, @photoUrl);
     `)
 
     return json(201, { wrongQuestion: sanitizeWrongQuestion(result.recordset[0]) })

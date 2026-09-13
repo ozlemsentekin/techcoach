@@ -93,6 +93,15 @@ export async function saveTaskAnswers(taskId, tests, studentId) {
   return data.task
 }
 
+/** "Basit kitap" (içerik/cevap anahtarı girilmemiş) görevini doğru/yanlış/boş toplam sayısıyla tamamlar; isteğe bağlı olarak yanlış sayısı kadar hata fotoğrafı ekler. */
+export async function saveSimpleTaskResult(taskId, { correctCount, wrongCount, blankCount, photos }, studentId) {
+  const data = await authRequest(withStudentId(`/api/panel/tasks/${taskId}/simple-result`, studentId), {
+    method: 'PATCH',
+    body: JSON.stringify({ correctCount, wrongCount, blankCount, photos }),
+  })
+  return data.task
+}
+
 /** Öğrenilmeyen konuları içeren tek bir testi (cevap/sonuçlarıyla) görevden kaldırır; test kaynağı silinmez, daha sonra ayrı bir görev olarak yeniden atanabilir. */
 export async function removeTaskTest(taskId, testId, studentId) {
   const data = await authRequest(withStudentId(`/api/panel/tasks/${taskId}/tests/${testId}`, studentId), { method: 'DELETE' })

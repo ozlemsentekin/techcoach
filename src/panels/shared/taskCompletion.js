@@ -30,11 +30,14 @@ export function buildCompletionUpdates(task, updates) {
 
 // Bir görev "Tamamla" denince hangi ekranı açmalı?
 //  - 'answer_sheet'   : soru bankası + cevap anahtarı → optik cevap kağıdı
-//  - 'question_count' : soru bankası, cevap anahtarı yok → doğru/yanlış/boş sayısı
+//  - 'question_count' : soru bankası, testi var ama cevap anahtarı yok → tek "kaç soru çözdün" sayısı
+//  - 'simple_result'  : soru bankası, kitapta hiç içerik/cevap anahtarı yok ("basit kitap") →
+//                       doğru/yanlış/boş sayısı + opsiyonel hata fotoğrafı
 //  - 'reading'        : okuma kitabı → sayfa ilerlemesi
 //  - 'direct'         : diğer görevler → doğrudan tamamlandı
 // (Öğrenci panelindeki TaskListSection.openTask mantığıyla birebir.)
 export function resolveCompletionFlow(task) {
+  if (task?.resourceType === 'soru_bankasi' && task?.contentMode === 'simple') return 'simple_result'
   if (task?.resourceType === 'soru_bankasi' && Boolean(task?.selectedTestIds?.length)) {
     return task?.hasAnswerKey === false ? 'question_count' : 'answer_sheet'
   }

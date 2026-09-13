@@ -159,7 +159,15 @@ export function SuccessRateBadge({ value, label = 'Başarı' }) {
   )
 }
 
-export function ResourceBookRates({ completionRate, successRate, className }) {
+export function ResourceBookRates({ completionRate, successRate, contentMode, className }) {
+  if (contentMode === 'simple') {
+    return (
+      <p className={cn('mt-2.5 text-xs text-panel-text-muted', className)}>
+        Bu kitapta ilerleme takibi yapılmıyor.
+      </p>
+    )
+  }
+
   return (
     <div className={cn('mt-2.5 grid grid-cols-1 gap-1.5', className)}>
       <RateRow icon={CheckCircle2} label="İlerleme" value={completionRate} tone={completionRateTone(completionRate)} />

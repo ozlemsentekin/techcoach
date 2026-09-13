@@ -47,6 +47,9 @@ function BookCard({ book, showAssignees, showCreator, canViewContent, onClick, o
             ) : (
               <Badge tone="sage" className="text-[10px]">Özel kaynak</Badge>
             )}
+            {book.contentMode === 'simple' ? (
+              <Badge tone="lilac" className="text-[10px]">Hızlı Kayıt</Badge>
+            ) : null}
             <span>{BOOKSHELF_RESOURCE_TYPE_LABELS[book.type] || book.type}</span>
             {book.grade ? <span>· {book.grade}. sınıf</span> : null}
             {showAssignees && book.assignedCount ? (

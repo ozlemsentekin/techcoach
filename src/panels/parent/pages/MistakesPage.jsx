@@ -86,6 +86,7 @@ export default function MistakesPage() {
       fetchTopicStats={() => getWrongQuestionTopicStats(selectedStudent.id)}
       fetchPhoto={(id) => getWrongQuestionPhoto(id, selectedStudent.id)}
       viewerRole="ebeveyn"
+      studentId={selectedStudent.id}
       updateMistakeAnalysis={(id, analysis) => updateWrongQuestion(id, { analysis }, selectedStudent.id)}
       updateMistakeMeta={(id, updates) => updateWrongQuestion(id, updates, selectedStudent.id)}
       updateMistakePhoto={(id, dataUrl) => updateWrongQuestionPhoto(id, dataUrl, selectedStudent.id)}

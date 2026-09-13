@@ -117,6 +117,7 @@ function sanitizeTask(record) {
     attachmentUrl: record.attachment_url || undefined,
     attachmentName: record.attachment_name || undefined,
     hasAnswerKey: record.has_answer_key === null || record.has_answer_key === undefined ? undefined : Boolean(record.has_answer_key),
+    contentMode: record.resource_book_content_mode || undefined,
     publisherName: record.publisher_name || undefined,
     selectedTestIds: record.selected_test_ids_json ? JSON.parse(record.selected_test_ids_json) : undefined,
     answers: record.answers_json ? JSON.parse(record.answers_json) : undefined,
@@ -140,7 +141,7 @@ const SELECT_TASK = `
          t.current_page_number, t.priority, t.status, t.description, t.parent_note, t.created_by, t.created_by_user_id,
          t.notes, t.completed_at, t.rescheduled_from, t.rescheduled_to, t.reschedule_reason, t.correct_count, t.wrong_count,
          t.blank_count, t.difficulty, t.emotion, t.reflection_answers_json, t.completed_sub_goals_json,
-         t.resource_book_id, t.selected_test_ids_json, t.answers_json, t.test_results_json, rb.name AS resource_book_name, rb.resource_type, rb.has_answer_key, p.name AS publisher_name,
+         t.resource_book_id, t.selected_test_ids_json, t.answers_json, t.test_results_json, rb.name AS resource_book_name, rb.resource_type, rb.has_answer_key, rb.content_mode AS resource_book_content_mode, p.name AS publisher_name,
          t.school_resource_id, scr.name AS school_resource_name, scr.image_url AS school_resource_image_url,
          t.attachment_url, t.attachment_name,
          t.student_teacher_id, st.teacher_full_name, cbu.full_name AS created_by_full_name,
@@ -1316,6 +1317,128 @@ async function saveTaskAnswersHandler(request) {
   }
 }
 
+// "Basit kitap" (content_mode='simple') görevleri için tamamlama: kitapta hiç içerik/cevap
+// anahtarı olmadığından soru-soru optik yapılamaz (bkz. saveTaskAnswersHandler) — öğrenci sadece
+// toplam doğru/yanlış/boş sayısını girer, isteğe bağlı olarak yanlış sayısı kadar (fazlası değil)
+// hata fotoğrafı ekleyebilir. Fotoğraflar soru kimliği taşımadığından mock-exam/serbest kayıt
+// deseniyle aynı şekilde test_id=NULL, resource_book_id dolu satırlar olarak WrongQuestions'a düşer.
+async function saveSimpleTaskResultHandler(request) {
+  try {
+    const taskId = request.params.taskId
+    const payload = await request.json().catch(() => null)
+    const { error, studentId, actorRole, actorId } = await requireStudentWriteContext(request, {
+      studentId: payload?.studentId,
+    })
+    if (error) {
+      return error
+    }
+
+    const taskDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const taskResult = await taskDb.query(`
+      SELECT t.subject, t.resource_book_id, t.status, t.completed_at, rb.content_mode, rb.name AS book_name
+      FROM dbo.Tasks t
+      LEFT JOIN dbo.ResourceBooks rb ON rb.id = t.resource_book_id
+      WHERE t.id = @id AND t.student_id = @studentId;
+    `)
+    const taskRecord = taskResult.recordset[0]
+    if (!taskRecord) {
+      return json(404, { error: 'Görev bulunamadı.' })
+    }
+    if (!taskRecord.resource_book_id || taskRecord.content_mode !== 'simple') {
+      return json(400, { error: 'Bu görev basit kayıt modunda bir kitaba bağlı değil.' })
+    }
+
+    const parseCount = (value) => {
+      const n = Number(value)
+      return Number.isFinite(n) && n >= 0 ? Math.round(n) : null
+    }
+    const correctCount = parseCount(payload?.correctCount)
+    const wrongCount = parseCount(payload?.wrongCount)
+    const blankCount = parseCount(payload?.blankCount)
+    if (correctCount === null || wrongCount === null || blankCount === null) {
+      return json(400, { error: 'Doğru, yanlış ve boş sayıları geçerli olmalı.' })
+    }
+
+    const requestedPhotos = Array.isArray(payload?.photos) ? payload.photos.slice(0, wrongCount) : []
+    const photoValues = []
+    for (const photo of requestedPhotos) {
+      const photoCheck = sanitizeMistakePhoto(photo)
+      if (photoCheck.error) return json(400, { error: photoCheck.error })
+      if (photoCheck.value) photoValues.push(photoCheck.value)
+    }
+
+    const completedNow = !DONE_STATUSES.has(taskRecord.status)
+
+    const updateDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: taskId },
+      correctCount: { type: sql.Int, value: correctCount },
+      wrongCount: { type: sql.Int, value: wrongCount },
+      blankCount: { type: sql.Int, value: blankCount },
+      completedQuestionCount: { type: sql.Int, value: correctCount + wrongCount + blankCount },
+      completedAt: { type: sql.DateTime2, value: taskRecord.completed_at || new Date() },
+    })
+    await updateDb.query(`
+      UPDATE dbo.Tasks
+      SET correct_count = @correctCount, wrong_count = @wrongCount, blank_count = @blankCount,
+          completed_question_count = @completedQuestionCount, status = 'tamamlandi', completed_at = @completedAt
+      WHERE id = @id;
+    `)
+
+    for (const photoUrl of photoValues) {
+      const photoDb = await withRequest({
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+        taskId: { type: sql.UniqueIdentifier, value: taskId },
+        resourceBookId: { type: sql.UniqueIdentifier, value: taskRecord.resource_book_id },
+        subject: { type: sql.NVarChar(100), value: taskRecord.subject || 'Genel' },
+        bookName: { type: sql.NVarChar(200), value: taskRecord.book_name || null },
+        errorType: { type: sql.NVarChar(50), value: 'soru-bankasi-basit' },
+        photoUrl: { type: sql.NVarChar(sql.MAX), value: photoUrl },
+      })
+      await photoDb.query(`
+        INSERT INTO dbo.WrongQuestions (student_id, task_id, resource_book_id, subject, book_name, error_type, photo_url)
+        VALUES (@studentId, @taskId, @resourceBookId, @subject, @bookName, @errorType, @photoUrl);
+      `)
+    }
+
+    const fetchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: taskId } })
+    const fetchResult = await fetchDb.query(`${SELECT_TASK} WHERE t.id = @id;`)
+    const finalTask = sanitizeTask(fetchResult.recordset[0])
+
+    if (actorRole === STUDENT_ACTIVITY_ACTOR_ROLE) {
+      await recordTaskActivities({
+        studentId: finalTask.studentId,
+        taskId: finalTask.id,
+        actorRole,
+        actorUserId: actorId,
+        entries: [
+          {
+            action: completedNow ? 'task_completed' : 'answers_saved',
+            metadata: taskActivityMetadata(finalTask, null, {
+              detail: `${correctCount}D ${wrongCount}Y ${blankCount}B`,
+            }),
+          },
+        ],
+      })
+    }
+
+    return json(200, { task: finalTask })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('saveSimpleTaskResultHandler failed', error)
+    return json(500, { error: 'Sonuç kaydedilemedi.' })
+  }
+}
+
 // Öğrenilmediği anlaşılan tek bir testi (cevapları ve sonucuyla) görevden çıkarır. Test kaynağı
 // (dbo.ResourceBookTopicTests) silinmez, sadece bu görevin seçim/cevap/sonuç JSON'larından düşülür;
 // böylece kütüphanede kalır ve öğrenciye daha sonra ayrı bir görev olarak yeniden atanabilir.
@@ -1606,6 +1729,7 @@ module.exports = {
   deleteTaskHandler,
   getTaskAnswerSheetHandler,
   saveTaskAnswersHandler,
+  saveSimpleTaskResultHandler,
   saveWrongQuestionPhotoHandler,
   removeTaskTestHandler,
   fetchTaskAnswerSheetData,
