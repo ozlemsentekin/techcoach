@@ -100,6 +100,36 @@ function normalizeComparisonStats(row) {
   }
 }
 
+// Konu grubu bazında karşılaştırma: [{ topicName, score?, classAvgScore?, schoolAvgScore?,
+// turkeyAvgScore? }] — sınav kurumu raporundaki konu grubu (ör. "Sözcük Grubunda Anlam")
+// dağılımı, tamamen isteğe bağlı. Dizi boş/yoksa null döner (satır hiç girilmemiş demektir).
+function normalizeTopicComparisons(rawRows) {
+  if (!Array.isArray(rawRows) || rawRows.length === 0) return { value: null }
+  const rows = []
+  for (let i = 0; i < rawRows.length; i += 1) {
+    const raw = rawRows[i] || {}
+    const topicName = typeof raw.topicName === 'string' ? raw.topicName.trim().slice(0, 200) : ''
+    if (!topicName) return { error: `${i + 1}. konu grubu için ad zorunludur.` }
+    const score = optionalDecimal(raw.score)
+    if (score.error) return { error: `${topicName}: puan geçersiz.` }
+    const classAvgScore = optionalDecimal(raw.classAvgScore)
+    if (classAvgScore.error) return { error: `${topicName}: sınıf ortalaması geçersiz.` }
+    const schoolAvgScore = optionalDecimal(raw.schoolAvgScore)
+    if (schoolAvgScore.error) return { error: `${topicName}: okul ortalaması geçersiz.` }
+    const turkeyAvgScore = optionalDecimal(raw.turkeyAvgScore)
+    if (turkeyAvgScore.error) return { error: `${topicName}: Türkiye ortalaması geçersiz.` }
+    rows.push({
+      orderNo: i + 1,
+      topicName,
+      score: score.value,
+      classAvgScore: classAvgScore.value,
+      schoolAvgScore: schoolAvgScore.value,
+      turkeyAvgScore: turkeyAvgScore.value,
+    })
+  }
+  return { value: rows }
+}
+
 // Soru bazlı giriş: [{ orderNo?, status, topicName? }] × total. Dizi boş/yoksa null döner
 // (o subject eski basit modda kalır). Dolu ama uzunluk/durum hatalıysa error döner.
 function normalizeQuestions(rawQuestions, total) {
@@ -218,6 +248,8 @@ function validateMockExamPayload(payload) {
       }
       const comparisonStats = normalizeComparisonStats(row)
       if (comparisonStats.error) return { error: `${tpl.name}: ${comparisonStats.error}` }
+      const topicComparisons = normalizeTopicComparisons(row.topicComparisons)
+      if (topicComparisons.error) return { error: `${tpl.name}: ${topicComparisons.error}` }
       subjects.push({
         subjectId: isGuid(row.subjectId) ? row.subjectId.trim().toLowerCase() : null,
         subjectName: tpl.name,
@@ -225,6 +257,7 @@ function validateMockExamPayload(payload) {
         ...counts.value,
         photos: photos.value,
         questions,
+        topicComparisons: topicComparisons.value,
         ...comparisonStats.value,
       })
     }
@@ -287,6 +320,8 @@ function validateMockExamPayload(payload) {
 
     const comparisonStats = normalizeComparisonStats(row)
     if (comparisonStats.error) return { error: comparisonStats.error }
+    const topicComparisons = normalizeTopicComparisons(row?.topicComparisons)
+    if (topicComparisons.error) return { error: topicComparisons.error }
 
     subjects = [
       {
@@ -296,6 +331,7 @@ function validateMockExamPayload(payload) {
         ...counts.value,
         photos: photos.value,
         questions,
+        topicComparisons: topicComparisons.value,
         ...comparisonStats.value,
       },
     ]
@@ -411,12 +447,13 @@ async function getMockExamDetailForStudent(studentId, mockExamId) {
   const examRecord = examResult.recordset[0]
   if (!examRecord) return null
 
-  const [subjectsDb, mockQuestionsDb, legacyQuestionsDb] = await Promise.all([
+  const [subjectsDb, mockQuestionsDb, legacyQuestionsDb, topicComparisonsDb] = await Promise.all([
+    withRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }),
     withRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }),
     withRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }),
     withRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }),
   ])
-  const [subjectsResult, mockQuestionsResult, legacyQuestionsResult] = await Promise.all([
+  const [subjectsResult, mockQuestionsResult, legacyQuestionsResult, topicComparisonsResult] = await Promise.all([
     subjectsDb.query(`
       SELECT s.id, s.mock_exam_id, s.subject_id, s.subject_name, s.total_questions,
              s.correct_count, s.wrong_count, s.blank_count,
@@ -453,6 +490,15 @@ async function getMockExamDetailForStudent(studentId, mockExamId) {
       )
       ORDER BY wq.created_at ASC;
     `),
+    // Konu grubu bazında karşılaştırma (ör. "Sözcük Grubunda Anlam") — isteğe bağlı.
+    topicComparisonsDb.query(`
+      SELECT tc.id, tc.mock_exam_subject_id, tc.order_no, tc.topic_name,
+             tc.score, tc.class_avg_score, tc.school_avg_score, tc.turkey_avg_score
+      FROM dbo.MockExamTopicComparisons tc
+      INNER JOIN dbo.MockExamSubjects s ON s.id = tc.mock_exam_subject_id
+      WHERE s.mock_exam_id = @mockExamId
+      ORDER BY tc.mock_exam_subject_id, tc.order_no ASC;
+    `),
   ])
 
   const questionsBySubject = new Map()
@@ -479,10 +525,25 @@ async function getMockExamDetailForStudent(studentId, mockExamId) {
     questionsBySubject.set(row.mock_exam_subject_id, list)
   })
 
+  const topicComparisonsBySubject = new Map()
+  topicComparisonsResult.recordset.forEach((row) => {
+    const list = topicComparisonsBySubject.get(row.mock_exam_subject_id) || []
+    list.push({
+      id: row.id,
+      topicName: row.topic_name,
+      score: row.score == null ? undefined : Number(row.score),
+      classAvgScore: row.class_avg_score == null ? undefined : Number(row.class_avg_score),
+      schoolAvgScore: row.school_avg_score == null ? undefined : Number(row.school_avg_score),
+      turkeyAvgScore: row.turkey_avg_score == null ? undefined : Number(row.turkey_avg_score),
+    })
+    topicComparisonsBySubject.set(row.mock_exam_subject_id, list)
+  })
+
   const exam = buildExam(examRecord, subjectsResult.recordset)
   exam.subjects = exam.subjects.map((subject) => ({
     ...subject,
     questions: questionsBySubject.get(subject.id) || [],
+    topicComparisons: topicComparisonsBySubject.get(subject.id) || [],
   }))
   return exam
 }
@@ -621,6 +682,24 @@ async function createMockExamHandler(request) {
             ).query(MOCK_EXAM_WQ_INSERT_SQL)
           }
         }
+
+        if (subject.topicComparisons) {
+          for (const tc of subject.topicComparisons) {
+            await makeRequest({
+              subjectRowId: { type: sql.UniqueIdentifier, value: subjectRowId },
+              orderNo: { type: sql.Int, value: tc.orderNo },
+              topicName: { type: sql.NVarChar(200), value: tc.topicName },
+              score: { type: sql.Decimal(6, 2), value: tc.score },
+              classAvgScore: { type: sql.Decimal(6, 2), value: tc.classAvgScore },
+              schoolAvgScore: { type: sql.Decimal(6, 2), value: tc.schoolAvgScore },
+              turkeyAvgScore: { type: sql.Decimal(6, 2), value: tc.turkeyAvgScore },
+            }).query(`
+              INSERT INTO dbo.MockExamTopicComparisons
+                (mock_exam_subject_id, order_no, topic_name, score, class_avg_score, school_avg_score, turkey_avg_score)
+              VALUES (@subjectRowId, @orderNo, @topicName, @score, @classAvgScore, @schoolAvgScore, @turkeyAvgScore);
+            `)
+          }
+        }
       }
 
       return newExamId
@@ -723,6 +802,29 @@ async function updateMockExamHandler(request) {
             }).query(`
               INSERT INTO dbo.MockExamQuestions (mock_exam_subject_id, order_no, status, topic_name, wrong_question_id)
               VALUES (@subjectRowId, @orderNo, @status, @topicName, @wrongQuestionId);
+            `)
+          }
+        }
+
+        // Konu grubu karşılaştırması: fotoğraf/referans gibi korunacak yan veri yok —
+        // basitçe sil + (varsa) yeniden ekle.
+        await makeRequest({ subjectRowId: { type: sql.UniqueIdentifier, value: subjectRowId } }).query(`
+          DELETE FROM dbo.MockExamTopicComparisons WHERE mock_exam_subject_id = @subjectRowId;
+        `)
+        if (subject.topicComparisons) {
+          for (const tc of subject.topicComparisons) {
+            await makeRequest({
+              subjectRowId: { type: sql.UniqueIdentifier, value: subjectRowId },
+              orderNo: { type: sql.Int, value: tc.orderNo },
+              topicName: { type: sql.NVarChar(200), value: tc.topicName },
+              score: { type: sql.Decimal(6, 2), value: tc.score },
+              classAvgScore: { type: sql.Decimal(6, 2), value: tc.classAvgScore },
+              schoolAvgScore: { type: sql.Decimal(6, 2), value: tc.schoolAvgScore },
+              turkeyAvgScore: { type: sql.Decimal(6, 2), value: tc.turkeyAvgScore },
+            }).query(`
+              INSERT INTO dbo.MockExamTopicComparisons
+                (mock_exam_subject_id, order_no, topic_name, score, class_avg_score, school_avg_score, turkey_avg_score)
+              VALUES (@subjectRowId, @orderNo, @topicName, @score, @classAvgScore, @schoolAvgScore, @turkeyAvgScore);
             `)
           }
         }
