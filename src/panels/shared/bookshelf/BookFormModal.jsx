@@ -235,7 +235,7 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                     </label>
                   ))}
                 </div>
-                <BookUsagePreview simple={isSimpleContentMode} />
+                <BookUsagePreview key={contentMode} simple={isSimpleContentMode} />
               </fieldset>
             )}
             {step === 1 && <div className="space-y-4">
