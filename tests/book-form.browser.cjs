@@ -42,11 +42,28 @@ const assert = require('node:assert/strict')
     }
     for (const viewport of [{ width: 1366, height: 768 }, { width: 390, height: 844 }, { width: 375, height: 667 }, { width: 320, height: 568 }]) {
       await page.setViewportSize(viewport)
-      await assertFits()
+      for (const mode of ['Tanımlayarak', 'Tanımlamadan']) {
+        await dialog.getByText(mode, { exact: true }).click()
+        for (const tab of ['Görev', 'Cevap', 'Hata defteri', 'Takip']) {
+          await dialog.getByRole('tab', { name: tab, exact: true }).click()
+          await assertFits()
+        }
+      }
     }
+    await dialog.getByRole('tab', { name: 'Görev', exact: true }).click()
     await page.setViewportSize({ width: 390, height: 844 })
-    await dialog.getByText('İçerik ve cevap anahtarı olmadan', { exact: true }).click()
-    await dialog.getByText('3. Sonucu gir', { exact: true }).waitFor()
+    await dialog.getByText('Tanımlamadan', { exact: true }).click()
+    await dialog.getByText('Testi görev notuna yazın', { exact: true }).waitFor()
+    await dialog.getByRole('tab', { name: 'Cevap', exact: true }).click()
+    await dialog.getByText('Öğrenci sayıları girer', { exact: true }).waitFor()
+    await dialog.getByRole('tab', { name: 'Hata defteri', exact: true }).click()
+    await dialog.getByText('Görseller testten bağımsız', { exact: true }).waitFor()
+    await dialog.getByText('Tanımlayarak', { exact: true }).click()
+    await dialog.getByText('Hatalar testle bağlantılı', { exact: true }).waitFor()
+    await dialog.getByRole('tab', { name: 'Cevap', exact: true }).click()
+    await dialog.getByText('Sistem sonucu hesaplar', { exact: true }).waitFor()
+    await page.screenshot({ path: '/tmp/book-preference-mobile.png' })
+    await dialog.getByText('Tanımlamadan', { exact: true }).click()
     await dialog.getByRole('button', { name: 'Devam', exact: true }).click()
     await dialog.getByRole('button', { name: 'Devam', exact: true }).click()
     await dialog.getByRole('alert').filter({ hasText: 'Kitap adı' }).waitFor()

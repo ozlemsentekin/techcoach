@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, BookOpen, Check, ClipboardList, Plus, ScanLine, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ClipboardList, Plus, ListChecks, X } from 'lucide-react'
 import Button from '../../ui/Button'
 import LoadingState from '../LoadingState'
 import ResourceImageField from '../../parent/components/ResourceImageField'
@@ -12,6 +12,7 @@ import {
 } from '../../../services/bookshelfService'
 import { BOOKSHELF_GRADE_OPTIONS, BOOKSHELF_RESOURCE_TYPES } from './bookshelfConstants'
 import StudentPicker from './StudentPicker'
+import BookUsagePreview from './BookUsagePreview'
 
 // Kitaplık "Yeni Kitap Ekle" / "Kitabı Düzenle" formu. Kütüphanedeki ResourceBookModal ile
 // aynı alanlar (yayın evi, ad, ders, sınıf, tip, görsel, cevap anahtarı) + oluştururken hangi
@@ -176,7 +177,7 @@ export default function BookFormModal({ book, onSaved, onClose }) {
   }
 
   const loading = subjects === null || publishers === null || students === null
-  const stepLabels = ['Kullanım', 'Kitap bilgileri', 'Tamamla']
+  const stepLabels = ['Tercih', 'Kitap bilgileri', 'Tamamla']
   const handleDialogKeyDown = (event) => {
     if (event.key === 'Escape' && !saving) onClose()
     if (event.key !== 'Tab') return
@@ -213,27 +214,28 @@ export default function BookFormModal({ book, onSaved, onClose }) {
           </ol>
         </header>
 
-        <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
-          <h3 ref={headingRef} tabIndex={-1} className="mb-3 text-lg font-bold text-panel-text outline-none">{['Nasıl takip etmek istersiniz?', 'Hangi kitabı ekleyelim?', 'Son birkaç bilgi…'][step]}</h3>
+        <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5 [@media(max-height:650px)]:py-3">
+          <h3 ref={headingRef} tabIndex={-1} className="mb-3 text-lg [@media(max-height:650px)]:text-base [@media(max-height:650px)]:mb-2 font-bold text-panel-text outline-none">{['Kitabı nasıl eklemek istersiniz?', 'Hangi kitabı ekleyelim?', 'Son birkaç bilgi…'][step]}</h3>
           {error || loadError ? <p role="alert" className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-warm">{error || loadError}</p> : null}
           {loading ? (loadError ? null : <LoadingState label="Form yükleniyor..." />) : <>
             {step === 0 && (
               <fieldset>
-                <legend className="sr-only">Kitabı kullanma biçimi</legend>
-                <div className="grid gap-2 sm:grid-cols-2">
+                <legend className="sr-only">İçindekiler ve cevap anahtarlarını tanımlama tercihi</legend>
+                <p className="mb-3 text-sm leading-snug text-panel-text-muted [@media(max-height:650px)]:mb-2 [@media(max-height:650px)]:text-xs">İçindekiler ve cevap anahtarlarını tanımlamak isteğe bağlıdır.</p>
+                <div className="grid grid-cols-2 gap-2">
                   {[
-                    { value: 'structured', icon: <ScanLine size={20} />, title: 'İçerik ve cevap anahtarıyla', subtitle: 'Testleri ekle, optikle değerlendir' },
-                    { value: 'simple', icon: <ClipboardList size={20} />, title: 'İçerik ve cevap anahtarı olmadan', subtitle: 'Görev ver, sonucu elle gir' },
+                    { value: 'structured', icon: <ListChecks size={20} />, title: 'Tanımlayarak', subtitle: 'Ön hazırlık · Test bazında takip' },
+                    { value: 'simple', icon: <ClipboardList size={20} />, title: 'Tanımlamadan', subtitle: 'Hızlı ekleme · Manuel takip' },
                   ].map(({ value, icon, title, subtitle }) => (
-                    <label key={value} className={`flex cursor-pointer items-center gap-3 rounded-2xl border-2 p-3 [@media(max-height:650px)]:p-2 transition-colors focus-within:ring-2 focus-within:ring-panel-accent focus-within:ring-offset-2 ${contentMode === value ? 'border-panel-accent bg-panel-accent-soft' : 'border-panel-border hover:bg-panel-surface-soft'}`}>
+                    <label key={value} className={`relative flex cursor-pointer items-center gap-2 rounded-2xl border-2 p-3 [@media(max-height:650px)]:p-2 focus-within:ring-2 focus-within:ring-panel-accent focus-within:ring-offset-2 ${contentMode === value ? 'border-panel-accent bg-panel-accent-soft' : 'border-panel-border hover:bg-panel-surface-soft'}`}>
                       <input type="radio" name="book-content-mode" value={value} checked={contentMode === value} onChange={() => setContentMode(value)} className="sr-only" />
-                      <span aria-hidden="true" className="shrink-0 text-panel-warm">{icon}</span>
+                      <span aria-hidden="true" className="hidden shrink-0 text-panel-warm sm:block">{icon}</span>
                       <span className="min-w-0 flex-1"><span className="block text-sm font-bold leading-snug text-panel-text">{title}</span><span className="mt-1 block text-xs text-panel-text-muted">{subtitle}</span></span>
-                      <span aria-hidden="true" className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${contentMode === value ? 'border-panel-accent bg-panel-accent text-white' : 'border-panel-text-muted'}`}>{contentMode === value && <Check size={13} />}</span>
+                      <span aria-hidden="true" className={`absolute right-1 top-1 flex h-3 w-3 shrink-0 sm:static sm:h-5 sm:w-5 items-center justify-center rounded-full border ${contentMode === value ? 'border-panel-accent bg-panel-accent text-white' : 'border-panel-text-muted'}`}>{contentMode === value && <Check size={13} />}</span>
                     </label>
                   ))}
                 </div>
-                <UsagePreview simple={isSimpleContentMode} />
+                <BookUsagePreview simple={isSimpleContentMode} />
               </fieldset>
             )}
             {step === 1 && <div className="space-y-4">
@@ -391,40 +393,6 @@ export default function BookFormModal({ book, onSaved, onClose }) {
           </Button>
         </div>
       </form>
-    </div>
-  )
-}
-
-function UsagePreview({ simple }) {
-  return (
-    <div aria-live="polite" className="mt-4 [@media(max-height:650px)]:mt-2 rounded-2xl bg-panel-surface-soft p-3 sm:mt-5 sm:p-4">
-      <div className="mb-3 flex items-center justify-between gap-2"><p className="text-sm font-semibold text-panel-text">Kullanım akışı</p><span className="rounded-full bg-panel-surface px-2 py-1 text-[10px] text-panel-text-muted">Örnek akış</span></div>
-      <ol className="grid grid-cols-3 gap-2 sm:gap-3">
-        <li className="min-w-0">
-          <div aria-hidden="true" className="flex h-20 flex-col justify-center gap-1 rounded-xl border border-panel-border bg-panel-surface p-2 sm:h-24 [@media(max-height:650px)]:h-14">
-            <div className="flex items-center gap-1 text-[10px] font-semibold text-panel-text"><BookOpen size={12} />{simple ? 'Matematik' : 'Konu / Test'}</div>
-            <div className="rounded bg-panel-surface-soft p-1 text-[10px] text-panel-text">{simple ? 'Sayfa 20–25' : 'Kesirler · Test 1'}</div>
-            {!simple && <div className="flex gap-1">{['1 A', '2 C', '3 B'].map(answer => <span key={answer} className="rounded bg-panel-accent-soft px-1 text-[9px] text-panel-warm">{answer}</span>)}</div>}
-          </div>
-          <p className="mt-2 text-xs font-semibold text-panel-text">1. {simple ? 'Görev ver' : 'İçeriği hazırla'}</p>
-          <p className="mt-1 text-[11px] leading-snug text-panel-text-muted [@media(max-height:650px)]:hidden">{simple ? 'Çalışılacak sayfaları seç' : 'Konu, test ve cevapları ekle'}</p>
-        </li>
-        <li className="min-w-0">
-          <div aria-hidden="true" className="flex h-20 flex-col items-center justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface p-2 sm:h-24 [@media(max-height:650px)]:h-14">
-            {simple ? <><ClipboardList size={23} className="text-panel-warm" /><span className="text-[10px] text-panel-text">Çalışma tamamlandı ✓</span></> : <><ScanLine size={28} className="text-panel-warm" /><span className="text-[10px] text-panel-text">A ● C D</span></>}
-          </div>
-          <p className="mt-2 text-xs font-semibold text-panel-text">2. {simple ? 'Öğrenci çözsün' : 'Optikle oku'}</p>
-          <p className="mt-1 text-[11px] leading-snug text-panel-text-muted [@media(max-height:650px)]:hidden">{simple ? 'Öğrenci kitaptan çalışır' : 'Çözülen testin cevaplarını okut'}</p>
-        </li>
-        <li className="min-w-0">
-          <div aria-hidden="true" className="flex h-20 flex-col justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface p-2 sm:h-24 [@media(max-height:650px)]:h-14">
-            <div className="flex justify-center gap-1 text-[10px] font-semibold"><span className="rounded bg-emerald-50 px-1 py-1 text-emerald-700">8 D</span><span className="rounded bg-rose-50 px-1 py-1 text-rose-700">2 Y</span></div>
-            {simple ? <div className="rounded border border-dashed border-panel-text-muted p-1 text-center text-[10px] text-panel-text">Elle giriş</div> : <div className="h-2 overflow-hidden rounded-full bg-rose-100"><div className="h-full w-4/5 rounded-full bg-emerald-500" /></div>}
-          </div>
-          <p className="mt-2 text-xs font-semibold text-panel-text">3. {simple ? 'Sonucu gir' : 'Sonucu gör'}</p>
-          <p className="mt-1 text-[11px] leading-snug text-panel-text-muted [@media(max-height:650px)]:hidden">{simple ? 'Doğru ve yanlışı sen kaydet' : 'Sistem cevap anahtarıyla hesaplar'}</p>
-        </li>
-      </ol>
     </div>
   )
 }
