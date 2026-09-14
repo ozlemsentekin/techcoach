@@ -61,7 +61,7 @@ function BookCard({ book, showAssignees, showCreator, canViewContent, onClick, o
           </div>
         </div>
       </button>
-      {canViewContent ? (
+      {canViewContent && book.contentMode !== 'simple' ? (
         <div className="col-span-2 flex justify-end">
           <button
             type="button"

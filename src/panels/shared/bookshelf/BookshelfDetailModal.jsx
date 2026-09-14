@@ -11,11 +11,11 @@ import {
   getBookshelfBook,
   getBookshelfStudents,
   setBookshelfBookStudents,
-  updateBookshelfBook,
 } from '../../../services/bookshelfService'
 import { authRequest } from '../../../services/authClient'
 import { BOOKSHELF_RESOURCE_TYPE_LABELS } from './bookshelfConstants'
 import StudentPicker from './StudentPicker'
+import SimpleBookGuide from './SimpleBookGuide'
 
 // Bir test satırında soru adedi + (adet girilince) cevap anahtarını Excel tarzı, modal açmadan
 // satır içinde düzenlemeyi sağlar. Kaydetme OTOMATİK değil: her alanın yanındaki ✓ butonuna
@@ -192,29 +192,6 @@ function ContentTab({ book, topics, tests, canEdit, onChanged, onTestUpdated }) 
   const [deletingTest, setDeletingTest] = useState(null)
   const [deleteError, setDeleteError] = useState('')
   const [deleting, setDeleting] = useState(false)
-  const [switchingMode, setSwitchingMode] = useState(false)
-  const [switchError, setSwitchError] = useState('')
-
-  const handleSwitchToStructured = async () => {
-    setSwitchingMode(true)
-    setSwitchError('')
-    try {
-      await updateBookshelfBook(book.id, {
-        name: book.name,
-        subjectId: book.subjectId,
-        grade: book.grade,
-        publisherId: book.publisherId,
-        imageUrl: book.imageUrl,
-        contentMode: 'structured',
-      })
-      onChanged()
-    } catch (err) {
-      setSwitchError(err.message)
-    } finally {
-      setSwitchingMode(false)
-    }
-  }
-
   const testsByTopic = useMemo(() => {
     const map = new Map()
     tests.forEach((test) => {
@@ -226,32 +203,6 @@ function ContentTab({ book, topics, tests, canEdit, onChanged, onTestUpdated }) 
   }, [tests])
 
   const showAnswerKey = book.type === 'soru_bankasi' || book.type === 'etkinlik'
-
-  if (book.contentMode === 'simple') {
-    return (
-      <div className="flex flex-col gap-3 rounded-xl border border-panel-border bg-panel-surface-soft/60 p-4">
-        <p className="text-sm text-panel-text-muted">
-          Bu kitap "İçerik ve cevap anahtarı oluşturmayacağım" modunda eklendi: konu/test tanımlı
-          değil, görev doğrudan kitap üzerinden verilir ve sonuç elle girilir.
-        </p>
-        {canEdit ? (
-          <>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="w-fit"
-              disabled={switchingMode}
-              onClick={handleSwitchToStructured}
-            >
-              {switchingMode ? 'Geçiliyor...' : 'İçindekiler eklemeye başla'}
-            </Button>
-            {switchError ? <p className="text-xs text-panel-warm">{switchError}</p> : null}
-          </>
-        ) : null}
-      </div>
-    )
-  }
 
   const handleDeleteTest = async () => {
     if (!deletingTest) return
@@ -516,6 +467,7 @@ export default function BookshelfDetailModal({
   showAssignees = true,
   solveStudentId = null,
   initialTab = null,
+  onGoToPlan,
   onClose,
   onChanged,
   onEdit,
@@ -563,16 +515,18 @@ export default function BookshelfDetailModal({
   const canShowAssignees = showAssignees && Boolean(book?.canManageAssignees)
   // "İçindekiler" sekmesi: solve modunda yalnızca düzenleyebilenlere; solve modu yoksa her zaman
   // (shared/teacher Kitaplık bugünkü gibi salt-görüntüleme içeriği de gösterir).
-  const canShowContent = !canSolve || Boolean(book?.canEditContent)
+  const isSimple = book?.contentMode === 'simple'
+  const canShowContent = !isSimple && (!canSolve || Boolean(book?.canEditContent))
   // Doğal iş akışı: önce İçindekiler (konu → test → cevap anahtarı) eklenir, sonra test
   // sonuçları girilir — sekmeler de bu sırayla gösterilir.
   const availableTabs = [
+    isSimple ? 'overview' : null,
     canShowContent ? 'content' : null,
-    canSolve ? 'solve' : null,
+    canSolve && !isSimple ? 'solve' : null,
     canShowAssignees ? 'assignees' : null,
   ].filter(Boolean)
   const activeTab = availableTabs.includes(tab) ? tab : availableTabs[0]
-  const TAB_LABELS = { solve: 'Test Sonuçları', content: 'İçindekiler', assignees: 'Atananlar' }
+  const TAB_LABELS = { overview: 'Kitap bilgileri', solve: 'Test Sonuçları', content: 'İçindekiler', assignees: 'Atananlar' }
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -590,7 +544,7 @@ export default function BookshelfDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
-      <div className="flex h-full w-full max-w-3xl flex-col overflow-hidden bg-panel-surface p-4 shadow-panel-1 sm:h-[86vh] sm:rounded-2xl sm:p-6">
+      <div role="dialog" aria-modal="true" aria-label={book?.name || 'Kaynak'} className="flex h-full w-full max-w-3xl flex-col overflow-hidden bg-panel-surface p-4 shadow-panel-1 sm:h-[86vh] sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             {book ? (
@@ -603,7 +557,7 @@ export default function BookshelfDetailModal({
             <div className="min-w-0">
               <h2 className="truncate text-base font-semibold text-panel-text">{book?.name || 'Kaynak'}</h2>
               <p className="text-xs text-panel-text-muted">
-                {[book?.publisherName, book?.subjectName, book?.grade ? `${book.grade}. sınıf` : null, book ? BOOKSHELF_RESOURCE_TYPE_LABELS[book.type] : null]
+                {[book?.publisherName, book?.subjectName, book?.grade ? `${book.grade}. sınıf` : null, book && !isSimple ? BOOKSHELF_RESOURCE_TYPE_LABELS[book.type] : null]
                   .filter(Boolean)
                   .join(' · ')}
               </p>
@@ -656,6 +610,8 @@ export default function BookshelfDetailModal({
             <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-sm text-panel-warm">{error}</div>
           ) : data === null ? (
             <LoadingState label="Yükleniyor..." />
+          ) : activeTab === 'overview' ? (
+            <SimpleBookGuide onGoToPlan={onGoToPlan} />
           ) : activeTab === 'solve' ? (
             <ResourceSolveList studentId={solveStudentId} book={book} />
           ) : activeTab === 'assignees' && canShowAssignees ? (

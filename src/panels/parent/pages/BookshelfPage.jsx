@@ -219,7 +219,7 @@ function BookCard({ book, onPreviewImage, onOpen, onSolve, onViewContent }) {
   const manageable = book.scope === 'private'
   // "Test sonuçlarını gir" yalnızca kitap soru bankasıysa VE cevap anahtarı tanımlıysa
   // gösterilir — aksi halde girilecek anlamlı bir sonuç yoktur.
-  const canSolveTests = book.type === 'soru_bankasi' && book.hasAnswerKey === true
+  const canSolveTests = book.contentMode !== 'simple' && book.type === 'soru_bankasi' && book.hasAnswerKey === true
 
   return (
     <article className="flex min-h-[156px] gap-4 rounded-xl border border-panel-border bg-panel-surface p-4 shadow-sm">
@@ -267,11 +267,11 @@ function BookCard({ book, onPreviewImage, onOpen, onSolve, onViewContent }) {
           ) : null}
           <button
             type="button"
-            onClick={() => onViewContent(book)}
+            onClick={() => book.contentMode === 'simple' ? onOpen(book) : onViewContent(book)}
             className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-panel-border px-3 py-1.5 text-xs font-semibold text-panel-text transition-colors hover:border-panel-blue hover:text-panel-blue"
           >
             <Eye size={14} aria-hidden="true" />
-            İçeriği Görüntüle
+            {book.contentMode === 'simple' ? 'Kitap bilgileri' : 'İçeriği Görüntüle'}
           </button>
         </div>
       </div>
@@ -364,13 +364,13 @@ export default function ParentBookshelfPage() {
     loadBooks()
     if (createdBook?.id) {
       setDetailBookId(createdBook.id)
-      setDetailInitialTab('content')
+      setDetailInitialTab(createdBook.contentMode === 'simple' ? 'overview' : 'content')
     }
   }
 
   const openBookDetail = (book) => {
     setDetailBookId(book.id)
-    setDetailInitialTab('content')
+    setDetailInitialTab(book.contentMode === 'simple' ? 'overview' : 'content')
   }
 
   const openBookSolve = (book) => {
@@ -525,6 +525,7 @@ export default function ParentBookshelfPage() {
           <BookshelfDetailModal
             resourceBookId={detailBookId}
             showAssignees
+            onGoToPlan={() => { setDetailBookId(null); navigate('/parent/weekly-plan') }}
             solveStudentId={selectedStudentId}
             initialTab={detailInitialTab}
             onChanged={loadBooks}

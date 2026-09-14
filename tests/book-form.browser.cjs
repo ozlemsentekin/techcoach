@@ -7,6 +7,8 @@ const assert = require('node:assert/strict')
     const page = await browser.newPage({ viewport: { width: 1366, height: 768 } })
     const errors = []
     const saved = []
+    const books = []
+    const results = []
     const children = [{ id: 'child-1', fullName: 'İpek Test', grade: '8' }]
     page.on('pageerror', error => errors.push(error.message))
     await page.route('**/api/**', route => {
@@ -14,8 +16,19 @@ const assert = require('node:assert/strict')
       const path = new URL(request.url()).pathname
       if (path === '/api/panel/bookshelf/resource-books' && request.method() === 'POST') {
         saved.push(request.postDataJSON())
-        return route.fulfill({ json: { resourceBook: { id: 'new-book', ...saved.at(-1) } } })
+        const book = { id: `book-${saved.length}`, ...saved.at(-1), subjectName: 'Matematik', publisherName: 'Test Yayınları', scope: 'private', assigned: true, canEditContent: true, canManageAssignees: true, assignedStudents: children }
+        books.push(book)
+        return route.fulfill({ json: { resourceBook: book } })
       }
+      if (path.startsWith('/api/panel/bookshelf/resource-books/')) {
+        return route.fulfill({ json: { resourceBook: books.find(book => path.endsWith('/' + book.id)), topics: [], tests: [] } })
+      }
+      if (path === '/api/panel/tasks/task-simple/simple-result') {
+        results.push(request.postDataJSON())
+        return route.fulfill({ json: { task: { id: 'task-simple', status: 'tamamlandi' } } })
+      }
+      if (path === '/api/panel/resource-books') return route.fulfill({ json: { resourceBooks: books } })
+      if (path === '/api/parent/students/child-1/resource-books') return route.fulfill({ json: { resourceBooks: books } })
       const json = path === '/api/auth/me' ? { user: { id: 'parent', role: 'ebeveyn', fullName: 'Deniz Test' } }
         : path === '/api/parent/students' || path === '/api/panel/bookshelf/students' ? { students: children, quota: { hasRemaining: true } }
           : path === '/api/panel/subjects' ? { subjects: [{ id: 'math', name: 'Matematik' }] }
@@ -78,6 +91,22 @@ const assert = require('node:assert/strict')
     assert.equal(saved[0].contentMode, 'simple')
     assert.equal(saved[0].hasAnswerKey, false)
     assert.deepEqual(saved[0].studentIds, ['child-1'])
+    const simpleDetail = page.getByRole('dialog', { name: 'Matematik kitabım', exact: true })
+    const assertSimpleDetail = async () => {
+      await simpleDetail.getByText('Kitap kullanıma hazır', { exact: true }).waitFor()
+      assert.equal(await simpleDetail.getByRole('button', { name: 'İçindekiler', exact: true }).count(), 0)
+      assert.equal(await simpleDetail.getByRole('button', { name: 'Test Sonuçları', exact: true }).count(), 0)
+      assert.equal(await simpleDetail.getByRole('button', { name: 'İçindekiler eklemeye başla', exact: true }).count(), 0)
+      assert.ok(await simpleDetail.evaluate(el => el.scrollWidth <= el.clientWidth))
+    }
+    await assertSimpleDetail()
+    await simpleDetail.getByRole('button', { name: 'Kapat', exact: true }).click()
+    await page.reload()
+    await page.getByRole('button', { name: /^Matematik 1 kaynak/ }).click()
+    await page.getByRole('button', { name: 'Matematik kitabım', exact: true }).click()
+    await assertSimpleDetail()
+    await simpleDetail.getByRole('button', { name: 'Çalışma planına git', exact: true }).click()
+    await page.waitForURL('**/parent/weekly-plan')
     await page.goto(`${base}/parent/bookshelf`)
 
     await page.getByRole('button', { name: 'Yeni Kitap Ekle', exact: true }).click()
@@ -104,7 +133,48 @@ const assert = require('node:assert/strict')
     assert.equal(saved[1].contentMode, 'structured')
     assert.equal(saved[1].hasAnswerKey, true)
     assert.equal(saved[1].type, 'soru_bankasi')
+    const structuredDetail = page.getByRole('dialog', { name: 'Test kitabım', exact: true })
+    await structuredDetail.getByRole('button', { name: 'İçindekiler Ekle', exact: true }).waitFor()
+    assert.equal(await structuredDetail.getByText('Kitap kullanıma hazır', { exact: true }).count(), 0)
+    await structuredDetail.getByRole('button', { name: 'Kapat', exact: true }).click()
+    // Exercise the actual task drawer and completion flow with the newly created book.
+    await page.evaluate(async (book) => {
+      const { default: React } = await import('/node_modules/.vite/deps/react.js')
+      const { default: { createRoot } } = await import('/node_modules/.vite/deps/react-dom_client.js')
+      const { default: Drawer } = await import('/src/panels/parent/components/AddTaskDrawer.jsx')
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      window.flowRoot = createRoot(host)
+      window.flowRoot.render(React.createElement(Drawer, {
+        initialTemplate: { task: { taskType: 'soru-bankasi-odevi', resourceBookId: book.id } },
+        defaultDate: '2026-09-14', studentGrade: '8', onClose() {},
+        onSave(payload) { window.savedTaskPayload = payload },
+      }))
+    }, books[0])
+    const drawer = page.getByRole('dialog', { name: 'Yeni Görev Ekle' })
+    await drawer.getByLabel('Görev açıklaması').fill('Sayfa 24–28, Test 3’ü çöz')
+    await drawer.getByRole('button', { name: 'Görevi Ekle', exact: true }).click()
+    await page.waitForFunction(() => Boolean(window.savedTaskPayload))
+    const taskPayload = await page.evaluate(() => window.savedTaskPayload)
+    assert.equal(taskPayload.resourceBookId, books[0].id)
+    assert.deepEqual(taskPayload.selectedTestIds, [])
+    assert.equal(taskPayload.description, 'Sayfa 24–28, Test 3’ü çöz')
+    await page.evaluate(async (book) => {
+      const { default: React } = await import('/node_modules/.vite/deps/react.js')
+      const { default: Completion } = await import('/src/panels/parent/components/TaskCompletionFlow.jsx')
+      window.flowRoot.render(React.createElement(Completion, {
+        task: { ...window.savedTaskPayload, id: 'task-simple', resourceType: book.type, contentMode: book.contentMode },
+        studentId: 'child-1', onClose() {}, onCompleted(task) { window.completedTask = task },
+      }))
+    }, books[0])
+    await page.getByRole('heading', { name: 'Sonucu Gir', exact: true }).waitFor()
+    await page.getByLabel('Doğru', { exact: true }).fill('8')
+    await page.getByLabel('Yanlış', { exact: true }).fill('1')
+    await page.getByLabel('Boş', { exact: true }).fill('1')
+    await page.getByRole('button', { name: 'Tamamla', exact: true }).click()
+    await page.waitForFunction(() => window.completedTask?.status === 'tamamlandi')
+    assert.deepEqual(results, [{ correctCount: 8, wrongCount: 1, blankCount: 1, photos: [] }])
     assert.deepEqual(errors, [])
-    console.log('PASS: mobile/desktop fit, both modes, preview, step validation, back navigation, preserved values, final save payloads')
+    console.log('PASS: mobile/desktop fit, both modes, preview, step validation, back navigation, preserved values, save/reopen details, plan navigation, task note and manual completion')
   } finally { await browser.close() }
 })().catch(error => { console.error(error); process.exit(1) })

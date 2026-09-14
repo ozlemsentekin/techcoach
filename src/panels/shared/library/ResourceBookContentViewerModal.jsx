@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, KeyRound, X } from 'lucide-react'
 import LoadingState from '../LoadingState'
+import SimpleBookGuide from '../bookshelf/SimpleBookGuide'
 import { getBookshelfBook, getBookshelfTestAnswerKey } from '../../../services/bookshelfService'
 import { buildBookContents } from './bookContents'
 
@@ -128,7 +129,7 @@ export default function ResourceBookContentViewerModal({ resourceBookId, onClose
           <h2 className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-[#9b7a5a]">
             <span className="min-w-0 truncate">{book?.name || 'Kaynak'}</span>
             <ChevronRight size={13} className="shrink-0 text-[#c9b4a0]" aria-hidden="true" />
-            <span className="shrink-0 font-semibold text-panel-text">İçindekiler</span>
+            <span className="shrink-0 font-semibold text-panel-text">{book?.contentMode === 'simple' ? 'Kitap bilgileri' : 'İçindekiler'}</span>
           </h2>
           <button
             type="button"
@@ -147,6 +148,8 @@ export default function ResourceBookContentViewerModal({ resourceBookId, onClose
             <div className="p-6">
               <LoadingState label="İçindekiler yükleniyor..." />
             </div>
+          ) : book?.contentMode === 'simple' ? (
+            <div className="p-4"><SimpleBookGuide /></div>
           ) : (
             <div className="relative flex flex-col bg-[#fffdf8] p-4 sm:p-5">
               <div className="absolute inset-x-4 top-2.5 h-px bg-[#eadbc8] sm:inset-x-5" aria-hidden="true" />
