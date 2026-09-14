@@ -1362,9 +1362,9 @@ function ExamComparisonChart({ exam }) {
   const axisTick = { fontSize: 10, fill: 'var(--color-panel-text-muted)' }
 
   return (
-    <div className="mt-3 rounded-xl border border-panel-border bg-white p-3">
+    <div className="min-w-0 rounded-xl border border-panel-border bg-white p-3">
       <p className="mb-2 text-xs font-semibold text-panel-text-muted">Puan karşılaştırması</p>
-      <div className="h-64 w-full">
+      <div className="h-48 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap="20%">
             <CartesianGrid vertical={false} stroke="var(--color-panel-border)" strokeDasharray="3 3" />
@@ -1404,9 +1404,9 @@ function TopicComparisonChart({ exam }) {
   const axisTick = { fontSize: 10, fill: 'var(--color-panel-text-muted)' }
 
   return (
-    <div className="mt-3 rounded-xl border border-panel-border bg-white p-3">
+    <div className="min-w-0 rounded-xl border border-panel-border bg-white p-3">
       <p className="mb-2 text-xs font-semibold text-panel-text-muted">Konu grubu karşılaştırması</p>
-      <div className="h-64 w-full">
+      <div className="h-48 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap="20%">
             <CartesianGrid vertical={false} stroke="var(--color-panel-border)" strokeDasharray="3 3" />
@@ -1526,8 +1526,10 @@ function ExamCard({
               />
             ))}
           </div>
-          <ExamComparisonChart exam={exam} />
-          <TopicComparisonChart exam={exam} />
+          <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <ExamComparisonChart exam={exam} />
+            <TopicComparisonChart exam={exam} />
+          </div>
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-panel-border/60 pt-3 text-xs text-panel-text-muted">
             <span>
               Toplam {exam.totalCorrect}D · {exam.totalWrong}Y · {exam.totalBlank}B
