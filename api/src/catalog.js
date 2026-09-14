@@ -585,7 +585,17 @@ async function listResourceBooksForPanelHandler(request) {
     const resourceBooksWithStats = resourceBooks.map((book) => {
       const bookStats = stats.get(book.id)
       if (!bookStats) return book
-      return { ...book, completionRate: bookStats.completionRate, successRate: bookStats.successRate }
+      return {
+        ...book,
+        completionRate: bookStats.completionRate,
+        successRate: bookStats.successRate,
+        // Ders kartlarında (Derslerim) birden fazla kaynağın ortalaması artık bu ham sayılarla
+        // ağırlıklı hesaplanıyor — az sorulu bir kaynağın %'si çok sorulu bir kaynağı ezmesin diye.
+        totalTests: bookStats.totalTests,
+        completedTests: bookStats.completedTests,
+        correct: bookStats.correct,
+        answered: bookStats.answered,
+      }
     })
 
     return json(200, { resourceBooks: resourceBooksWithStats })

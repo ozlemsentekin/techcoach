@@ -33,10 +33,22 @@ function groupResourceBooksBySubject(resourceBooks) {
   return Array.from(groups.values())
 }
 
-function averageRate(books, key) {
-  const values = books.map((book) => book[key]).filter((value) => value !== null && value !== undefined)
-  if (!values.length) return null
-  return values.reduce((sum, value) => sum + value, 0) / values.length
+// Ders kartındaki İlerleme/Başarı yüzdesi, kaynakların basit ortalaması DEĞİL, soru/test sayısına
+// göre ağırlıklı ortalamasıdır — aksi halde 3 sorulu bir kaynağın %100'ü, 300 sorulu bir kaynağın
+// %90'ıyla eşit ağırlıkta sayılıp dersin görünen başarısını yanıltıcı şekilde yukarı çekerdi.
+function weightedAverageRate(books, rateKey, weightKey) {
+  let weightedSum = 0
+  let weightTotal = 0
+
+  books.forEach((book) => {
+    const value = book[rateKey]
+    const weight = Number(book[weightKey]) || 0
+    if (value === null || value === undefined || weight <= 0) return
+    weightedSum += value * weight
+    weightTotal += weight
+  })
+
+  return weightTotal > 0 ? weightedSum / weightTotal : null
 }
 
 function RateDonut({ label, value, tone, size = 26 }) {
@@ -135,8 +147,8 @@ function ResourceCover({ book, className = 'h-20 w-16', onClick }) {
 
 function SubjectShelfCard({ group, onOpen }) {
   const previewBooks = group.books.slice(0, 6)
-  const completionRate = averageRate(group.books, 'completionRate')
-  const successRate = averageRate(group.books, 'successRate')
+  const completionRate = weightedAverageRate(group.books, 'completionRate', 'totalTests')
+  const successRate = weightedAverageRate(group.books, 'successRate', 'answered')
 
   return (
     <button

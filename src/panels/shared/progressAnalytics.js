@@ -327,7 +327,13 @@ export function aggregateBy(records, keyReader) {
     .map(({ publishers, ...group }) => ({
       ...group,
       publishers: Array.from(publishers),
-      accuracy: group.correct + group.wrong > 0 ? (group.correct / (group.correct + group.wrong)) * 100 : NaN,
+      // Boş bırakılan sorular da paydaya dahil — Derslerim/Hata Defteri'ndeki
+      // (correct/(correct+wrong+blank)) formülüyle tutarlı olsun diye (bkz. sohbet: aynı ders için
+      // Gelişimim/Derslerim/Hata Defterim üç farklı % gösteriyordu).
+      accuracy:
+        group.correct + group.wrong + group.blank > 0
+          ? (group.correct / (group.correct + group.wrong + group.blank)) * 100
+          : NaN,
       net: calculateNet(group.correct, group.wrong),
     }))
     .sort((a, b) => b.questions - a.questions || b.minutes - a.minutes || collator.compare(a.label, b.label))

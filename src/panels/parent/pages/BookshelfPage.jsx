@@ -30,10 +30,22 @@ function groupBySubject(books) {
   )
 }
 
-function averageRate(books, key) {
-  const values = books.map((book) => book[key]).filter((value) => value !== null && value !== undefined)
-  if (!values.length) return null
-  return values.reduce((sum, value) => sum + value, 0) / values.length
+// Basit ortalama değil, soru/test sayısına göre ağırlıklı ortalama — aksi halde 3 sorulu bir
+// kaynağın %100'ü, 300 sorulu bir kaynağın %90'ıyla eşit ağırlıkta sayılır (bkz. CoursesPage.jsx'teki
+// aynı düzeltme — öğrenci Derslerim ile veli Kitaplık aynı mantığı kullanmalı).
+function weightedAverageRate(books, rateKey, weightKey) {
+  let weightedSum = 0
+  let weightTotal = 0
+
+  books.forEach((book) => {
+    const value = book[rateKey]
+    const weight = Number(book[weightKey]) || 0
+    if (value === null || value === undefined || weight <= 0) return
+    weightedSum += value * weight
+    weightTotal += weight
+  })
+
+  return weightTotal > 0 ? weightedSum / weightTotal : null
 }
 
 function RateDonut({ label, value, tone, size = 26 }) {
@@ -167,8 +179,8 @@ function useVisibleCoverCount(total) {
 function SubjectShelfCard({ group, onOpen }) {
   const [shelfRef, visibleCount] = useVisibleCoverCount(group.books.length)
   const previewBooks = group.books.slice(0, visibleCount)
-  const completionRate = averageRate(group.books, 'completionRate')
-  const successRate = averageRate(group.books, 'successRate')
+  const completionRate = weightedAverageRate(group.books, 'completionRate', 'totalTests')
+  const successRate = weightedAverageRate(group.books, 'successRate', 'answered')
 
   return (
     <button

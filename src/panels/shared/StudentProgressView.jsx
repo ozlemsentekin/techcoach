@@ -62,9 +62,12 @@ const COMPLETED_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
 
 function buildInsights({ contentRows, wrongRows }) {
   const insights = []
+  // Tekrar Odağı doğruluk ORANINA göre değil, ham yanlış SAYISINA göre seçilir — az soru
+  // çözülmüş bir konudaki tek yanlış, çok soru çözülmüş bir konudaki üç yanlıştan öne
+  // geçmesin diye (bkz. sohbet: 34 soruda 3 yanlışken sistem 1 yanlışlı konuyu öneriyordu).
   const weakestContent = contentRows
-    .filter((row) => row.correct + row.wrong >= 3)
-    .sort((a, b) => a.accuracy - b.accuracy)[0]
+    .filter((row) => row.wrong > 0)
+    .sort((a, b) => b.wrong - a.wrong || a.accuracy - b.accuracy)[0]
   const strongestContent = contentRows
     .filter((row) => row.correct + row.wrong >= 3)
     .sort((a, b) => b.accuracy - a.accuracy)[0]
@@ -324,7 +327,7 @@ function GeneralAnalysisView({
     )
   }
 
-  const answered = stats.correct + stats.wrong
+  const answered = stats.correct + stats.wrong + stats.blank
   const accuracy = answered > 0 ? (stats.correct / answered) * 100 : NaN
   const accuracyTone = RATE_TONES[successRateTone(answered > 0 ? accuracy / 100 : null)]
 
@@ -500,7 +503,10 @@ export default function StudentProgressView({
 
   const plannedTasks = filteredTasks.length
   const completedTasks = filteredTasks.filter((task) => COMPLETED_STATUSES.has(task.status)).length
-  const accuracy = stats.correct + stats.wrong > 0 ? (stats.correct / (stats.correct + stats.wrong)) * 100 : NaN
+  const accuracy =
+    stats.correct + stats.wrong + stats.blank > 0
+      ? (stats.correct / (stats.correct + stats.wrong + stats.blank)) * 100
+      : NaN
   const subjectAccuracyTone = RATE_TONES[successRateTone(Number.isFinite(accuracy) ? accuracy / 100 : null)]
   const completedHomeworkQuestions = filteredHomeworks.reduce((sum, homework) => sum + asNumber(homework.completedQuestionCount), 0)
   const totalHomeworkQuestions = filteredHomeworks.reduce((sum, homework) => sum + asNumber(homework.totalQuestionCount), 0)
