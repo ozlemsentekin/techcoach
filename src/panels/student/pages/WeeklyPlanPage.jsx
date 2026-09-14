@@ -82,6 +82,12 @@ export default function WeeklyPlanPage() {
     showBanner('Görev silindi.')
   }
 
+  const handleMoveTask = async (task, newDate) => {
+    await patchTask(task.id, { date: newDate })
+    reload()
+    showBanner('Görev taşındı.')
+  }
+
   const handleQuickAddBreak = async (date, afterTask, minutes) => {
     const breakStart = afterTask.endTime
     await saveTaskForDay(date, {
@@ -207,6 +213,7 @@ export default function WeeklyPlanPage() {
             onAddHomework={(date) => setDrawerState({ defaultDate: date })}
             onEditTask={(task) => setDrawerState({ initialTask: task })}
             onQuickAddBreak={handleQuickAddBreak}
+            onMoveTask={handleMoveTask}
             canEditTask={(task) => task.createdBy === 'ogrenci'}
           />
 
