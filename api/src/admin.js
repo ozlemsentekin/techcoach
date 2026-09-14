@@ -450,7 +450,7 @@ async function impersonateUserHandler(request) {
     // is_active kontrolünü atlar.
 
     // Frontend'in beklediği authUser şekli /api/auth/me ile birebir aynı olmalı (needsConsent,
-    // aiReportsEnabled, themeId, grade dahil) — aksi halde panel geçişinde bu alanları okuyan
+    // themeId, grade dahil) — aksi halde panel geçişinde bu alanları okuyan
     // kod eksik veri bulup hataya düşebilir.
     const user = sanitizeSessionUser(record)
     const token = createSessionToken(user, {

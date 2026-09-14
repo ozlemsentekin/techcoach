@@ -66,14 +66,6 @@ const {
 } = require('./progress')
 const { gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGrading')
 const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
-const {
-  ReportGenerationError,
-  fetchScopeQuestions: fetchAiScopeQuestions,
-  fetchReportList: fetchAiReportList,
-  fetchReportRecord: fetchAiReportRecord,
-  buildReportDetail: buildAiReportDetail,
-  createReportForStudent: createAiReportForStudent,
-} = require('./aiAnalysis')
 
 const TEACHER_TYPE_LABELS = {
   ozel_ogretmen: 'Özel Öğretmen',
@@ -3371,16 +3363,13 @@ async function listTeacherStudentWrongQuestionsHandler(request) {
                COALESCE(rb.name, wq.book_name) AS book_name,
                COALESCE(pub.name, wq.publisher_name) AS publisher_name,
                t.topic_name, t.page_start, t.page_end,
-               tak.correct_label AS correct_answer,
-               wqa.what_it_asked AS ai_what_it_asked, wqa.likely_mistake AS ai_likely_mistake,
-               wqa.ai_analysis_report_id
+               tak.correct_label AS correct_answer
         FROM dbo.WrongQuestions wq
         LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
         LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
         LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
         LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
         LEFT JOIN dbo.TestAnswerKeys tak ON tak.test_id = wq.test_id AND tak.order_no = wq.question_number
-        LEFT JOIN dbo.WrongQuestionAiAnalyses wqa ON wqa.wrong_question_id = wq.id
         WHERE wq.student_id = @studentId AND wq.subject = @subject
           AND (wq.test_id IS NOT NULL OR wq.mock_exam_subject_id IS NOT NULL)
         ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''}
@@ -3429,75 +3418,6 @@ async function getTeacherStudentWrongQuestionPhotoHandler(request) {
     return json(200, { photoUrl })
   } catch (error) {
     return handleError(error, 'getTeacherStudentWrongQuestionPhotoHandler', 'Fotoğraf yüklenemedi.')
-  }
-}
-
-// --- AI Raporları (öğretmen) --------------------------------------------------
-// Öğretmen tarafı tek bir dersle (paylaşılan ders bağlamı) sınırlıdır; ders adı context'ten gelir.
-
-function handleAiError(error, label) {
-  if (error instanceof ReportGenerationError) {
-    return json(error.status, { error: error.message })
-  }
-  return handleError(error, label, 'Rapor işlemi başarısız oldu.')
-}
-
-async function listTeacherStudentAiReportsHandler(request) {
-  try {
-    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
-    if (error) return error
-    const subjectName = await resolveTeacherSubjectName(subjectId)
-    const [reports, questions] = await Promise.all([
-      fetchAiReportList(studentId, { subject: subjectName }),
-      fetchAiScopeQuestions(studentId, subjectName),
-    ])
-    const availableSubjects = questions.length ? [{ subject: subjectName, questionCount: questions.length }] : []
-    return json(200, { reports, availableSubjects })
-  } catch (error) {
-    return handleAiError(error, 'listTeacherStudentAiReportsHandler')
-  }
-}
-
-async function getTeacherStudentAiReportScopeHandler(request) {
-  try {
-    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
-    if (error) return error
-    const subjectName = await resolveTeacherSubjectName(subjectId)
-    return json(200, { questions: await fetchAiScopeQuestions(studentId, subjectName) })
-  } catch (error) {
-    return handleAiError(error, 'getTeacherStudentAiReportScopeHandler')
-  }
-}
-
-async function getTeacherStudentAiReportHandler(request) {
-  try {
-    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
-    if (error) return error
-    const subjectName = await resolveTeacherSubjectName(subjectId)
-    const record = await fetchAiReportRecord(studentId, request.params.reportId, { subject: subjectName })
-    if (!record) return json(404, { error: 'Rapor bulunamadı.' })
-    return json(200, { report: await buildAiReportDetail(studentId, record) })
-  } catch (error) {
-    return handleAiError(error, 'getTeacherStudentAiReportHandler')
-  }
-}
-
-async function createTeacherStudentAiReportHandler(request) {
-  try {
-    const { error, studentId, subjectId, actorId: teacherUserId } = await requireTeacherStudentContext(request)
-    if (error) return error
-    const subjectName = await resolveTeacherSubjectName(subjectId)
-    const payload = await request.json().catch(() => null)
-    const report = await createAiReportForStudent({
-      studentId,
-      subject: subjectName,
-      wrongQuestionIds: payload?.wrongQuestionIds,
-      createdByUserId: teacherUserId,
-      createdByRole: 'ogretmen',
-    })
-    return json(201, { report })
-  } catch (error) {
-    return handleAiError(error, 'createTeacherStudentAiReportHandler')
   }
 }
 
@@ -3706,10 +3626,6 @@ module.exports = {
   updateTeacherStudentWrongQuestionPhotoHandler,
   getTeacherStudentWrongQuestionTopicStatsHandler,
   updateTeacherStudentWrongQuestionHandler,
-  listTeacherStudentAiReportsHandler,
-  getTeacherStudentAiReportScopeHandler,
-  getTeacherStudentAiReportHandler,
-  createTeacherStudentAiReportHandler,
   grantParentAccessHandler,
   getTeacherEntitlementHandler,
   updateTeacherProfileHandler,
