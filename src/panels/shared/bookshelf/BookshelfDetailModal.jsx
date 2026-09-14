@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, KeyRound, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from 'lucide-react'
 import Button from '../../ui/Button'
 import LoadingState from '../LoadingState'
 import ConfirmationDialog from '../ConfirmationDialog'
 import { ResourceBookAvatar, ImagePreviewLightbox } from '../ResourceBookCard'
-import { TopicModal, TestModal, AnswerKeyFlow } from '../library/resourceBookModals'
+import { TopicModal, TestModal } from '../library/resourceBookModals'
 import ResourceSolveList from './ResourceSolveList'
 import {
   deleteBookshelfBook,
@@ -17,13 +17,178 @@ import { authRequest } from '../../../services/authClient'
 import { BOOKSHELF_RESOURCE_TYPE_LABELS } from './bookshelfConstants'
 import StudentPicker from './StudentPicker'
 
-function ContentTab({ book, topics, tests, canEdit, onChanged }) {
+// Bir test satırında soru adedi + (adet girilince) cevap anahtarını Excel tarzı, modal açmadan
+// satır içinde düzenlemeyi sağlar. Kaydetme OTOMATİK değil: her alanın yanındaki ✓ butonuna
+// basılınca kaydedilir (alandan çıkarken/Tab ile geçerken yanlışlıkla eksik kaydetmeyi veya başka
+// bir satırın o anda gelen güncellemesiyle üzerine yazılmayı önler). Kaydedilince yalnızca bu
+// testin kendi kaydı güncellenir (onTestUpdated) — tüm listeyi yeniden çekip her satırı sıfırdan
+// render etmiyoruz, bu hem daha hızlı hem başka satırlardaki kaydedilmemiş girişleri korur.
+function InlineTestRow({ test, canEdit, showAnswerKey, onTestUpdated }) {
+  const [questionCount, setQuestionCount] = useState(test.questionCount ? String(test.questionCount) : '')
+  const [countError, setCountError] = useState('')
+  const [savingCount, setSavingCount] = useState(false)
+
+  const [quickInput, setQuickInput] = useState('')
+  const [keyLoaded, setKeyLoaded] = useState(false)
+  const [keyError, setKeyError] = useState('')
+  const [savingKey, setSavingKey] = useState(false)
+
+  const effectiveCount = Number(test.questionCount) || 0
+  const showKeyField = canEdit && showAnswerKey && effectiveCount > 0
+
+  useEffect(() => {
+    setQuestionCount(test.questionCount ? String(test.questionCount) : '')
+  }, [test.questionCount])
+
+  useEffect(() => {
+    if (!showKeyField) {
+      setKeyLoaded(false)
+      setQuickInput('')
+      return undefined
+    }
+    let ignore = false
+    setKeyLoaded(false)
+    authRequest(`/api/panel-admin/resource-book-topic-tests/${test.id}/answer-key`, { method: 'GET' })
+      .then((data) => {
+        if (ignore) return
+        const labelByOrderNo = Object.fromEntries(data.entries.map((entry) => [entry.orderNo, entry.correctLabel]))
+        const loaded = Array.from({ length: effectiveCount }, (_, i) => labelByOrderNo[i + 1] || '')
+        setQuickInput(loaded.join(''))
+        setKeyLoaded(true)
+      })
+      .catch((err) => {
+        if (!ignore) setKeyError(err.message)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [test.id, effectiveCount, showKeyField])
+
+  const handleSaveQuestionCount = async () => {
+    const trimmed = questionCount.trim()
+    const num = trimmed === '' ? null : Number(trimmed)
+    if (trimmed !== '' && (!Number.isInteger(num) || num <= 0)) {
+      setCountError('Pozitif tam sayı olmalı.')
+      return
+    }
+    setCountError('')
+    setSavingCount(true)
+    try {
+      const data = await authRequest(`/api/panel-admin/resource-book-topic-tests/${test.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          topicName: test.topicName,
+          name: test.name,
+          pageStart: test.pageStart,
+          pageEnd: test.pageEnd,
+          questionCount: num,
+        }),
+      })
+      onTestUpdated(data.test)
+    } catch (err) {
+      setCountError(err.message)
+    } finally {
+      setSavingCount(false)
+    }
+  }
+
+  const handleQuickInputChange = (event) => {
+    const letters = event.target.value
+      .toUpperCase()
+      .replace(/[^ABCD]/g, '')
+      .slice(0, effectiveCount)
+    setQuickInput(letters)
+  }
+
+  const handleSaveAnswerKey = async () => {
+    setKeyError('')
+    setSavingKey(true)
+    try {
+      const entries = quickInput
+        .split('')
+        .map((label, i) => ({ orderNo: i + 1, correctLabel: label }))
+        .filter((entry) => entry.correctLabel)
+      await authRequest(`/api/panel-admin/resource-book-topic-tests/${test.id}/answer-key`, {
+        method: 'PUT',
+        body: JSON.stringify({ entries }),
+      })
+      onTestUpdated({ ...test, hasAnswerKey: entries.length === effectiveCount && effectiveCount > 0 })
+    } catch (err) {
+      setKeyError(err.message)
+    } finally {
+      setSavingKey(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1 rounded-lg px-1.5 py-1">
+      <span className="min-w-0 truncate text-xs font-medium text-panel-text-muted">
+        {test.topicName ? `${test.topicName} · ` : ''}
+        {test.name} · s.{test.pageStart}
+        {test.pageEnd && test.pageEnd !== test.pageStart ? `-${test.pageEnd}` : ''}
+      </span>
+      {canEdit ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <label className="flex shrink-0 items-center gap-1">
+            <span className="text-[10px] font-medium text-panel-text-muted">Soru</span>
+            <input
+              type="number"
+              min="1"
+              inputMode="numeric"
+              value={questionCount}
+              onChange={(event) => setQuestionCount(event.target.value)}
+              disabled={savingCount}
+              className="h-7 w-14 rounded-md border border-panel-border px-1.5 text-xs text-panel-text outline-none focus:border-panel-blue focus:ring-2 focus:ring-panel-blue-soft disabled:opacity-60"
+            />
+            <button
+              type="button"
+              aria-label="Soru sayısını kaydet"
+              title="Kaydet"
+              onClick={handleSaveQuestionCount}
+              disabled={savingCount}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-panel-border text-panel-text-muted hover:border-panel-blue hover:text-panel-blue disabled:opacity-60"
+            >
+              <Check size={13} aria-hidden="true" />
+            </button>
+          </label>
+          {showKeyField ? (
+            <label className="flex min-w-0 flex-1 items-center gap-1">
+              <span className="shrink-0 text-[10px] font-medium text-panel-text-muted">Cevap</span>
+              <input
+                value={quickInput.split('').join('-')}
+                onChange={handleQuickInputChange}
+                disabled={savingKey || !keyLoaded}
+                placeholder={keyLoaded ? 'ör. ABCDA...' : 'yükleniyor...'}
+                className="h-7 min-w-0 flex-1 rounded-md border border-panel-border px-1.5 font-mono text-xs tracking-wide text-panel-text outline-none focus:border-panel-warm focus:ring-2 focus:ring-panel-warm/15 disabled:opacity-60"
+              />
+              <button
+                type="button"
+                aria-label="Cevap anahtarını kaydet"
+                title="Kaydet"
+                onClick={handleSaveAnswerKey}
+                disabled={savingKey || !keyLoaded}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-panel-border text-panel-text-muted hover:border-panel-warm hover:text-panel-warm disabled:opacity-60"
+              >
+                <Check size={13} aria-hidden="true" />
+              </button>
+            </label>
+          ) : null}
+        </div>
+      ) : test.questionCount ? (
+        <span className="text-[11px] text-panel-text-muted">{test.questionCount} soru</span>
+      ) : null}
+      {countError ? <p className="text-[10px] text-panel-warm">{countError}</p> : null}
+      {keyError ? <p className="text-[10px] text-panel-warm">{keyError}</p> : null}
+    </div>
+  )
+}
+
+function ContentTab({ book, topics, tests, canEdit, onChanged, onTestUpdated }) {
   const [expandedTopicId, setExpandedTopicId] = useState(null)
   const [topicModalOpen, setTopicModalOpen] = useState(false)
   const [editingTopic, setEditingTopic] = useState(null)
   const [testModalTopic, setTestModalTopic] = useState(null)
   const [editingTest, setEditingTest] = useState(null)
-  const [answerKeyTest, setAnswerKeyTest] = useState(null)
   const [deletingTest, setDeletingTest] = useState(null)
   const [deleteError, setDeleteError] = useState('')
   const [deleting, setDeleting] = useState(false)
@@ -79,7 +244,7 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
               disabled={switchingMode}
               onClick={handleSwitchToStructured}
             >
-              {switchingMode ? 'Geçiliyor...' : 'İçerik eklemeye başla'}
+              {switchingMode ? 'Geçiliyor...' : 'İçindekiler eklemeye başla'}
             </Button>
             {switchError ? <p className="text-xs text-panel-warm">{switchError}</p> : null}
           </>
@@ -108,12 +273,12 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
       {canEdit ? (
         <Button type="button" size="sm" variant="secondary" className="w-fit gap-1.5" onClick={() => setTopicModalOpen(true)}>
           <Plus size={15} aria-hidden="true" />
-          İçerik Ekle
+          İçindekiler Ekle
         </Button>
       ) : null}
 
       {topics.length === 0 ? (
-        <p className="p-2 text-sm text-panel-text-muted">Bu kaynağa henüz içerik eklenmemiş.</p>
+        <p className="p-2 text-sm text-panel-text-muted">Bu kaynağa henüz içindekiler eklenmemiş.</p>
       ) : (
         <div className="flex flex-col gap-2 rounded-xl border border-panel-border p-2">
           {topics.map((topic) => {
@@ -167,29 +332,16 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
                       </p>
                     ) : (
                       topicTests.map((test) => (
-                        <div key={test.id} className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-xs text-panel-text-muted">
-                          <span className="min-w-0 flex-1 truncate">
-                            {test.topicName ? `${test.topicName} · ` : ''}
-                            {test.name} · s.{test.pageStart}
-                            {test.pageEnd && test.pageEnd !== test.pageStart ? `-${test.pageEnd}` : ''}
-                            {test.questionCount ? ` · ${test.questionCount} soru` : ''}
-                          </span>
+                        <div key={test.id} className="flex items-start gap-2 rounded-lg px-1.5 py-1">
+                          <div className="min-w-0 flex-1">
+                            <InlineTestRow test={test} canEdit={canEdit} showAnswerKey={showAnswerKey} onTestUpdated={onTestUpdated} />
+                          </div>
                           {canEdit ? (
-                            <>
-                              {showAnswerKey ? (
-                                <button
-                                  type="button"
-                                  aria-label="Cevap anahtarı"
-                                  title={test.hasAnswerKey ? 'Cevap anahtarı tam' : 'Cevap anahtarı eksik'}
-                                  onClick={() => setAnswerKeyTest(test)}
-                                  className={`hover:text-panel-text ${test.hasAnswerKey ? 'text-panel-text-muted' : 'text-panel-warm'}`}
-                                >
-                                  <KeyRound size={13} aria-hidden="true" />
-                                </button>
-                              ) : null}
+                            <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
                               <button
                                 type="button"
                                 aria-label="Testi düzenle"
+                                title="Test adı, konu veya sayfa aralığını düzenle"
                                 onClick={() => setEditingTest(test)}
                                 className="text-panel-text-muted hover:text-panel-blue"
                               >
@@ -206,7 +358,7 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
                               >
                                 <Trash2 size={12} aria-hidden="true" />
                               </button>
-                            </>
+                            </div>
                           ) : null}
                         </div>
                       ))
@@ -228,7 +380,8 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
           onTestsCreated={() => onChanged()}
           onTestDeleted={() => onChanged()}
           onSaved={(topic) => {
-            setTopicModalOpen(false)
+            // Modal kapanmaz: kullanıcı art arda birden çok içindekiler başlığı ekleyebilsin
+            // (TopicModal ekleme sonrası kendi formunu temizliyor). Kapatmak için X'e basılır.
             // Yeni içeriği hemen aç ki "Test Ekle" butonu görünür olsun.
             if (topic?.id) setExpandedTopicId(topic.id)
             onChanged()
@@ -271,21 +424,6 @@ function ContentTab({ book, topics, tests, canEdit, onChanged }) {
             onChanged()
           }}
           onClose={() => setEditingTest(null)}
-        />
-      ) : null}
-      {answerKeyTest ? (
-        <AnswerKeyFlow
-          test={answerKeyTest}
-          // Soru sayısı girilince güncel test nesnesiyle yeniden render et → optik/cevap
-          // anahtarı ekranı açılsın (aksi halde eski test.questionCount=null'da takılı kalıyordu).
-          onTestUpdated={(updatedTest) => {
-            if (updatedTest) setAnswerKeyTest(updatedTest)
-            onChanged()
-          }}
-          onClose={() => {
-            setAnswerKeyTest(null)
-            onChanged()
-          }}
         />
       ) : null}
       {deletingTest ? (
@@ -377,6 +515,7 @@ export default function BookshelfDetailModal({
   resourceBookId,
   showAssignees = true,
   solveStudentId = null,
+  initialTab = null,
   onClose,
   onChanged,
   onEdit,
@@ -384,7 +523,11 @@ export default function BookshelfDetailModal({
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const canSolve = Boolean(solveStudentId)
-  const [tab, setTab] = useState(canSolve ? 'solve' : 'content')
+  // Giriş noktasına göre açılan sekme: kitap adına/kapağa tıklanınca İçindekiler (kaynağı
+  // yönetme niyeti), "Test sonuçlarını gir" butonuna tıklanınca Test Sonuçları (sonuç girme
+  // niyeti) — ikisi de aynı solveStudentId bağlamında açılabildiği için tek başına canSolve
+  // hangi sekmenin açılacağını belirlemeye yetmiyor, çağıran taraf initialTab ile netleştirir.
+  const [tab, setTab] = useState(initialTab || (canSolve ? 'solve' : 'content'))
   const [previewImage, setPreviewImage] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -396,6 +539,20 @@ export default function BookshelfDetailModal({
       .catch((err) => setError(err.message))
   }
 
+  // İçindekiler'deki satır-içi soru sayısı/cevap anahtarı kaydından sonra çağrılır: tüm
+  // kitabı yeniden çekmek yerine sadece bu testin kaydını yerinde günceller — hem daha hızlı
+  // hem diğer satırlardaki henüz kaydedilmemiş girişleri korur (bkz. InlineTestRow).
+  const handleTestUpdated = (updatedTest) => {
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            tests: current.tests.map((item) => (item.id === updatedTest.id ? { ...item, ...updatedTest } : item)),
+          }
+        : current,
+    )
+  }
+
   useEffect(() => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -404,16 +561,18 @@ export default function BookshelfDetailModal({
   const book = data?.resourceBook || null
   // Katalog kaynaklarında atama yönetilemez → "Atananlar" sekmesi gizlenir, yalnızca içerik gösterilir.
   const canShowAssignees = showAssignees && Boolean(book?.canManageAssignees)
-  // "İçerik" sekmesi: solve modunda yalnızca düzenleyebilenlere; solve modu yoksa her zaman
+  // "İçindekiler" sekmesi: solve modunda yalnızca düzenleyebilenlere; solve modu yoksa her zaman
   // (shared/teacher Kitaplık bugünkü gibi salt-görüntüleme içeriği de gösterir).
   const canShowContent = !canSolve || Boolean(book?.canEditContent)
+  // Doğal iş akışı: önce İçindekiler (konu → test → cevap anahtarı) eklenir, sonra test
+  // sonuçları girilir — sekmeler de bu sırayla gösterilir.
   const availableTabs = [
-    canSolve ? 'solve' : null,
     canShowContent ? 'content' : null,
+    canSolve ? 'solve' : null,
     canShowAssignees ? 'assignees' : null,
   ].filter(Boolean)
   const activeTab = availableTabs.includes(tab) ? tab : availableTabs[0]
-  const TAB_LABELS = { solve: 'Test Sonuçları', content: 'İçerik', assignees: 'Atananlar' }
+  const TAB_LABELS = { solve: 'Test Sonuçları', content: 'İçindekiler', assignees: 'Atananlar' }
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -508,6 +667,7 @@ export default function BookshelfDetailModal({
               tests={data.tests}
               canEdit={Boolean(book?.canEditContent)}
               onChanged={() => { load(); onChanged?.() }}
+              onTestUpdated={handleTestUpdated}
             />
           )}
         </div>

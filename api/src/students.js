@@ -72,6 +72,7 @@ function sanitizeStudentResourceBook(record) {
     isActive: Boolean(record.is_active),
     type: record.resource_type,
     hasAnswerKey: Boolean(record.has_answer_key),
+    contentMode: record.content_mode || 'structured',
     imageUrl: record.image_url || null,
     grade: record.grade || null,
     resourceSource: record.resource_source || null,
@@ -363,7 +364,7 @@ async function fetchStudentResourceBooks(studentId, actorUserId, { assignedOnly 
   // diye INNER JOIN + assigned filtresi ile sorgu ~150 satırdan ~10-20'ye iner.
   const result = await requestDb.query(`
     SELECT rb.id, rb.publisher_id, p.name AS publisher_name, rb.subject_id, s.name AS subject_name,
-           rb.name, rb.is_active, rb.resource_type, rb.has_answer_key, rb.image_url, rb.grade, rb.status,
+           rb.name, rb.is_active, rb.resource_type, rb.has_answer_key, rb.content_mode, rb.image_url, rb.grade, rb.status,
            rb.resource_source, rb.scope,
            CASE WHEN srb.resource_book_id IS NULL THEN 0 ELSE 1 END AS assigned,
            srb.assigned_at

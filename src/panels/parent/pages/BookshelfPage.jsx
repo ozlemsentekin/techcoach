@@ -215,8 +215,11 @@ function SubjectShelfCard({ group, onOpen }) {
   )
 }
 
-function BookCard({ book, onPreviewImage, onOpen, onViewContent }) {
+function BookCard({ book, onPreviewImage, onOpen, onSolve, onViewContent }) {
   const manageable = book.scope === 'private'
+  // "Test sonuçlarını gir" yalnızca kitap soru bankasıysa VE cevap anahtarı tanımlıysa
+  // gösterilir — aksi halde girilecek anlamlı bir sonuç yoktur.
+  const canSolveTests = book.type === 'soru_bankasi' && book.hasAnswerKey === true
 
   return (
     <article className="flex min-h-[156px] gap-4 rounded-xl border border-panel-border bg-panel-surface p-4 shadow-sm">
@@ -252,14 +255,16 @@ function BookCard({ book, onPreviewImage, onOpen, onViewContent }) {
           <BookDonuts completionRate={book.completionRate} successRate={book.successRate} className="mt-3" />
         )}
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onOpen(book)}
-            className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-panel-blue px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-panel-blue/90"
-          >
-            <ClipboardList size={14} aria-hidden="true" />
-            Test sonuçlarını gir
-          </button>
+          {canSolveTests ? (
+            <button
+              type="button"
+              onClick={() => onSolve(book)}
+              className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-panel-blue px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-panel-blue/90"
+            >
+              <ClipboardList size={14} aria-hidden="true" />
+              Test sonuçlarını gir
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => onViewContent(book)}
@@ -288,6 +293,7 @@ export default function ParentBookshelfPage() {
   const [requesting, setRequesting] = useState(false)
   const [editingBook, setEditingBook] = useState(null)
   const [detailBookId, setDetailBookId] = useState(null)
+  const [detailInitialTab, setDetailInitialTab] = useState(null)
   const [viewingContentBookId, setViewingContentBookId] = useState(null)
 
   useEffect(() => {
@@ -356,7 +362,20 @@ export default function ParentBookshelfPage() {
   const handleCreated = (createdBook) => {
     setCreating(false)
     loadBooks()
-    if (createdBook?.id) setDetailBookId(createdBook.id)
+    if (createdBook?.id) {
+      setDetailBookId(createdBook.id)
+      setDetailInitialTab('content')
+    }
+  }
+
+  const openBookDetail = (book) => {
+    setDetailBookId(book.id)
+    setDetailInitialTab('content')
+  }
+
+  const openBookSolve = (book) => {
+    setDetailBookId(book.id)
+    setDetailInitialTab('solve')
   }
 
   return (
@@ -446,7 +465,8 @@ export default function ParentBookshelfPage() {
               key={book.id}
               book={book}
               onPreviewImage={setPreviewImage}
-              onOpen={(target) => setDetailBookId(target.id)}
+              onOpen={openBookDetail}
+              onSolve={openBookSolve}
               onViewContent={(target) => setViewingContentBookId(target.id)}
             />
           ))}
@@ -506,12 +526,16 @@ export default function ParentBookshelfPage() {
             resourceBookId={detailBookId}
             showAssignees
             solveStudentId={selectedStudentId}
+            initialTab={detailInitialTab}
             onChanged={loadBooks}
             onEdit={(book) => {
               setDetailBookId(null)
               setEditingBook(book)
             }}
-            onClose={() => setDetailBookId(null)}
+            onClose={() => {
+              setDetailBookId(null)
+              setDetailInitialTab(null)
+            }}
           />
         ) : null}
 

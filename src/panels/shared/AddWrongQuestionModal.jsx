@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
-import { Camera, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Camera, ChevronDown, X } from 'lucide-react'
 import { authRequest } from '../../services/authClient'
 import { getResourceBooksForStudent } from '../../services/resourceBookService'
 import { addWrongQuestion } from '../../services/wrongQuestionService'
 import LoadingState from './LoadingState'
+import Badge from '../ui/Badge'
 import Button from '../ui/Button'
 import MistakePhotoCaptureModal from '../student/components/MistakePhotoCaptureModal'
 
@@ -19,6 +20,8 @@ export default function AddWrongQuestionModal({ studentId, onClose, onSaved }) {
   const [subjectId, setSubjectId] = useState('')
   const [bookMode, setBookMode] = useState('pick')
   const [resourceBookId, setResourceBookId] = useState('')
+  const [bookDropdownOpen, setBookDropdownOpen] = useState(false)
+  const bookDropdownRef = useRef(null)
   const [freeBookName, setFreeBookName] = useState('')
   const [topic, setTopic] = useState('')
   const [studentNote, setStudentNote] = useState('')
@@ -48,6 +51,18 @@ export default function AddWrongQuestionModal({ studentId, onClose, onSaved }) {
   }, [studentId])
 
   const booksForSubject = (resourceBooks || []).filter((book) => !subjectId || book.subjectId === subjectId)
+  const selectedBook = (resourceBooks || []).find((book) => book.id === resourceBookId) || null
+
+  useEffect(() => {
+    if (!bookDropdownOpen) return undefined
+    function handleClickOutside(event) {
+      if (bookDropdownRef.current && !bookDropdownRef.current.contains(event.target)) {
+        setBookDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [bookDropdownOpen])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -114,6 +129,7 @@ export default function AddWrongQuestionModal({ studentId, onClose, onSaved }) {
                 onChange={(event) => {
                   setSubjectId(event.target.value)
                   setResourceBookId('')
+                  setBookDropdownOpen(false)
                 }}
                 className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
               >
@@ -152,24 +168,66 @@ export default function AddWrongQuestionModal({ studentId, onClose, onSaved }) {
             </div>
 
             {bookMode === 'pick' ? (
-              <label className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-panel-text-muted">Kitap</span>
-                <select
-                  value={resourceBookId}
-                  onChange={(event) => setResourceBookId(event.target.value)}
-                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
-                >
-                  <option value="">Kitap seçin</option>
-                  {booksForSubject.map((book) => (
-                    <option key={book.id} value={book.id}>
-                      {book.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative" ref={bookDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setBookDropdownOpen((prev) => !prev)}
+                    className="flex w-full items-center justify-between gap-2 rounded-xl border border-panel-border p-2.5 text-left text-base text-panel-text"
+                  >
+                    {selectedBook ? (
+                      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                        {selectedBook.publisherName ? (
+                          <Badge tone="lilac" className="shrink-0 px-1.5 py-0 text-[10px] leading-4">
+                            {selectedBook.publisherName}
+                          </Badge>
+                        ) : null}
+                        <span className="truncate">{selectedBook.name}</span>
+                      </span>
+                    ) : (
+                      <span className="text-panel-text-muted">Kitap seçin</span>
+                    )}
+                    <ChevronDown size={16} className="shrink-0 text-panel-text-muted" />
+                  </button>
+
+                  {bookDropdownOpen ? (
+                    <div className="panel-card absolute z-10 mt-1 max-h-64 w-full overflow-y-auto bg-panel-surface p-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setResourceBookId('')
+                          setBookDropdownOpen(false)
+                        }}
+                        className="flex w-full items-center rounded-lg px-2 py-1.5 text-left text-sm text-panel-text-muted hover:bg-panel-surface-soft"
+                      >
+                        Kitap seçin
+                      </button>
+                      {booksForSubject.map((book) => (
+                        <button
+                          key={book.id}
+                          type="button"
+                          onClick={() => {
+                            setResourceBookId(book.id)
+                            setBookDropdownOpen(false)
+                          }}
+                          className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-panel-surface-soft"
+                        >
+                          {book.publisherName ? (
+                            <Badge tone="lilac" className="shrink-0 px-1.5 py-0 text-[10px] leading-4">
+                              {book.publisherName}
+                            </Badge>
+                          ) : null}
+                          <span className="truncate text-panel-text">{book.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
                 {subjectId && booksForSubject.length === 0 ? (
                   <span className="text-xs text-panel-text-muted">Bu derste kayıtlı kitap yok, serbest yazabilirsin.</span>
                 ) : null}
-              </label>
+              </div>
             ) : (
               <label className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-panel-text-muted">Kitap Adı</span>
