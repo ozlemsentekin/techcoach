@@ -39,8 +39,14 @@ function NoteViewer({ note, onClose }) {
     <div className="flex h-full flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2"><h2 className="min-w-0 flex-1 font-bold">{note.title}</h2><button disabled={printing} className={`${button} flex shrink-0 items-center gap-2`} onClick={print}><Printer size={16} />{printing ? 'Hazırlanıyor…' : 'Tümünü yazdır'}</button><button autoFocus className={button} onClick={() => ref.current.close()}>Kapat</button></div>
       {printError && <p role="alert" className="text-sm text-red-600">{printError}</p>}
-      <div className="flex items-center justify-center gap-3" aria-label="Slayt gezinme"><button className={button} disabled={slide === 0} onClick={() => move(-1)}>← Önceki</button><span className="text-sm" aria-live="polite">Sayfa {slide + 1} / {note.images.length}</span><button className={button} disabled={slide === note.images.length - 1} onClick={() => move(1)}>Sonraki →</button></div>
       <div data-slide className="min-h-0 flex-1 overflow-auto"><img key={slide} decoding="async" src={note.images[slide]} alt={`${note.title} — sayfa ${slide + 1}`} className="mx-auto h-auto w-full" /></div>
+      <nav aria-label="Slayt gezinme" className="-mx-3 -mb-3 shrink-0 border-t-2 border-panel-border bg-panel-surface-soft px-3 py-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] sm:px-5">
+        <div className="mx-auto flex max-w-xl items-center justify-between gap-2 sm:gap-5">
+          <button className="min-h-11 rounded-xl border border-panel-border bg-panel-surface px-3 py-2.5 text-sm font-semibold shadow-sm transition-colors hover:bg-panel-accent-soft focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-35 sm:px-6" disabled={slide === 0} onClick={() => move(-1)}>← Önceki</button>
+          <span className="shrink-0 rounded-full bg-panel-surface px-3 py-2 text-sm font-bold tabular-nums ring-1 ring-panel-border" aria-live="polite">{slide + 1} / {note.images.length}<span className="sr-only"> sayfa</span></span>
+          <button className="min-h-11 rounded-xl bg-panel-warm px-3 py-2.5 text-sm font-bold text-white shadow-md transition-[filter] hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-35 sm:px-6" disabled={slide === note.images.length - 1} onClick={() => move(1)}>Sonraki →</button>
+        </div>
+      </nav>
     </div>
   </dialog>
 }
