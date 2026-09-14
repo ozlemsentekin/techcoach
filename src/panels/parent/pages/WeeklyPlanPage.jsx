@@ -216,6 +216,12 @@ export default function WeeklyPlanPage() {
     showBanner('Ders programı güncellendi.')
   }
 
+  const handleMoveTask = async (task, newDate) => {
+    await patchTask(task.id, { date: newDate }, selectedStudentId)
+    await refresh()
+    showBanner('Görev taşındı.')
+  }
+
   const handleQuickAddBreak = async (date, afterTask, minutes) => {
     const breakStart = afterTask.endTime
     const breakEnd = addMinutesToTime(breakStart, minutes)
@@ -471,6 +477,7 @@ export default function WeeklyPlanPage() {
             onCompleteTask={handleCompleteTask}
             onQuickAddBreak={handleQuickAddBreak}
             onManageLessonSlot={setManagingSlot}
+            onMoveTask={handleMoveTask}
           />
 
           <UnscheduledTasksPanel

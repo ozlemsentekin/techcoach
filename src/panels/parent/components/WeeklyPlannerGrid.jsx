@@ -38,6 +38,10 @@ import { useBillingGate } from '../../../context/useBillingGate'
 
 const BREAK_DURATION_OPTIONS = [15, 30, 45, 60]
 
+// Sürükle-bırak ile gün değiştirme: tamamlanmış/değerlendirilmiş/zaten yeniden planlanmış
+// görev başka bir kayda referans olduğu için taşınamaz.
+const NON_MOVABLE_TASK_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi', 'yeniden-planlandi'])
+
 const DAY_LABELS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar']
 const DAY_SHORT_LABELS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
 
@@ -635,7 +639,20 @@ function CompactMetricChips({
   )
 }
 
-function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onCompleteTask, onToggleReview, onManageLessonSlot, canEditTask, muted = false }) {
+function TaskCard({
+  task,
+  onEditTask,
+  onQuickAddBreak,
+  onViewAnswerSheet,
+  onCompleteTask,
+  onToggleReview,
+  onManageLessonSlot,
+  canEditTask,
+  canMoveTask,
+  onTaskDragStart,
+  onTaskDragEnd,
+  muted = false,
+}) {
   const [showBreakMenu, setShowBreakMenu] = useState(false)
   const [expanded, setExpanded] = useState(false)
 
@@ -679,6 +696,9 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
   // öğretmen/öğrenci yalnızca kendi eklediklerini düzenleyebilir (bkz. panel bazlı canEditTask).
   const canOpenTask =
     typeof onEditTask === 'function' && (typeof canEditTask !== 'function' || canEditTask(task))
+  // Sürükle-bırak ile gün değiştirme, kartı düzenleme yetkisiyle aynı kurala tabi (bkz.
+  // canOpenTask) + tamamlanmış/değerlendirilmiş görev taşınamaz (bkz. NON_MOVABLE_TASK_STATUSES).
+  const isMovable = Boolean(canMoveTask) && !muted && canOpenTask && !NON_MOVABLE_TASK_STATUSES.has(task.status)
   // Görev tipini konudan bağımsız her zaman ayırt edilebilir kılmak için (bkz. özel ders/spor
   // gibi konu etiketiyle renklenmeyen türler) stil tanımına sol renkli çizgi + üstte tip
   // etiketi ekliyoruz; barClassName tanımlı olmayan türlerde bu görsel hiç render edilmez.
@@ -820,6 +840,17 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
 
   return (
     <div
+      draggable={isMovable}
+      onDragStart={
+        isMovable
+          ? (event) => {
+              event.dataTransfer.effectAllowed = 'move'
+              event.dataTransfer.setData('text/plain', task.id)
+              onTaskDragStart(task)
+            }
+          : undefined
+      }
+      onDragEnd={isMovable ? onTaskDragEnd : undefined}
       onClick={handleCardActivate}
       onKeyDown={(event) => {
         if (hasDetails && (event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) {
@@ -830,7 +861,7 @@ function TaskCard({ task, onEditTask, onQuickAddBreak, onViewAnswerSheet, onComp
       role={hasDetails ? 'button' : undefined}
       tabIndex={hasDetails ? 0 : undefined}
       aria-expanded={hasDetails ? expanded : undefined}
-      className={`group relative flex min-h-[66px] w-full flex-col gap-1.5 rounded-xl border py-2.5 pr-2 transition duration-150 ${showAccentBar ? 'pl-4' : 'pl-2.5'} ${cardToneClassName} ${showBreakMenu ? 'z-30' : ''} ${hasDetails ? 'cursor-pointer' : ''}`}
+      className={`group relative flex min-h-[66px] w-full flex-col gap-1.5 rounded-xl border py-2.5 pr-2 transition duration-150 ${showAccentBar ? 'pl-4' : 'pl-2.5'} ${cardToneClassName} ${showBreakMenu ? 'z-30' : ''} ${hasDetails ? 'cursor-pointer' : ''} ${isMovable ? 'cursor-grab active:cursor-grabbing' : ''}`}
     >
       {showAccentBar ? (
         <span className={`absolute inset-y-2 left-1.5 w-1 rounded-full ${accentBarClass}`} aria-hidden="true" />
@@ -1109,6 +1140,7 @@ export default function WeeklyPlannerGrid({
   onCompleteTask,
   onToggleReview,
   onManageLessonSlot,
+  onMoveTask,
   canEditTask,
 }) {
   const { restricted: billingRestricted, promptPayment } = useBillingGate()
@@ -1116,6 +1148,19 @@ export default function WeeklyPlannerGrid({
   const isCurrentWeekView = weekDates.includes(currentDate)
   const weekKey = weekDates.join('|')
   const [pastDayExpansion, setPastDayExpansion] = useState({ weekKey: '', expandedDates: new Set() })
+  // Sürükle-bırak: taşınan görev bir ref'te tutulur (aynı sayfa içi işlem, dataTransfer'a
+  // tüm görevi koymaya gerek yok), hedef gün ise hover halkasını göstermek için state'te.
+  const draggedTaskRef = useRef(null)
+  const [dragOverDate, setDragOverDate] = useState('')
+  const canMoveTasks = typeof onMoveTask === 'function'
+
+  const handleTaskDragStart = (task) => {
+    draggedTaskRef.current = task
+  }
+  const handleTaskDragEnd = () => {
+    draggedTaskRef.current = null
+    setDragOverDate('')
+  }
   const expandedPastDates = pastDayExpansion.weekKey === weekKey ? pastDayExpansion.expandedDates : new Set()
   // Geçmiş bir günde tamamlanmamış (biriken) ödev varsa o gün elle kapatılana kadar varsayılan
   // olarak açık sayılır (bkz. renderDayColumn aynı kural). `expandedPastDates` burada "kullanıcı
@@ -1307,12 +1352,43 @@ export default function WeeklyPlannerGrid({
       )
     }
 
+    // Geçmiş güne görev bırakılamaz; diğer günler görev sürükleniyorsa hedef olabilir.
+    const canDropHere = canMoveTasks && !isPastDay
     return (
       <div
         key={date}
         className={`flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border transition-colors duration-150 ${shellTone} ${
           isToday ? 'ring-2 ring-panel-blue-soft' : ''
-        }`}
+        } ${dragOverDate === date ? 'ring-2 ring-panel-blue' : ''}`}
+        onDragOver={
+          canDropHere
+            ? (event) => {
+                event.preventDefault()
+                event.dataTransfer.dropEffect = 'move'
+              }
+            : undefined
+        }
+        onDragEnter={canDropHere ? (event) => { event.preventDefault(); setDragOverDate(date) } : undefined}
+        onDragLeave={
+          canDropHere
+            ? (event) => {
+                if (event.currentTarget.contains(event.relatedTarget)) return
+                setDragOverDate((current) => (current === date ? '' : current))
+              }
+            : undefined
+        }
+        onDrop={
+          canDropHere
+            ? (event) => {
+                event.preventDefault()
+                setDragOverDate('')
+                const draggedTask = draggedTaskRef.current
+                draggedTaskRef.current = null
+                if (!draggedTask || draggedTask.date === date) return
+                onMoveTask(draggedTask, date)
+              }
+            : undefined
+        }
       >
         <div className={`border-b px-3 py-3 ${headerTone}`}>
           <div className="flex items-start justify-between gap-3">
@@ -1381,6 +1457,9 @@ export default function WeeklyPlannerGrid({
                 onToggleReview={onToggleReview}
                 onManageLessonSlot={onManageLessonSlot}
                 canEditTask={canEditTask}
+                canMoveTask={canMoveTasks}
+                onTaskDragStart={handleTaskDragStart}
+                onTaskDragEnd={handleTaskDragEnd}
                 muted={isPastDay}
                 onQuickAddBreak={
                   isPastDay || typeof onQuickAddBreak !== 'function' || task.isScheduleSlot || task.isSchoolSlot
