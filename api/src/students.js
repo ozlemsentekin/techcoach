@@ -116,7 +116,17 @@ async function attachResourceBookStats(resourceBooks, studentId) {
   return resourceBooks.map((book) => {
     const bookStats = stats.get(book.id)
     if (!bookStats) return book
-    return { ...book, completionRate: bookStats.completionRate, successRate: bookStats.successRate }
+    return {
+      ...book,
+      completionRate: bookStats.completionRate,
+      successRate: bookStats.successRate,
+      // Veli Kitaplık'ta ders kartı ortalaması ağırlıklı hesaplanabilsin diye (bkz. catalog.js'deki
+      // aynı isimli alanlar — öğrenci Derslerim ile aynı mantık).
+      totalTests: bookStats.totalTests,
+      completedTests: bookStats.completedTests,
+      correct: bookStats.correct,
+      answered: bookStats.answered,
+    }
   })
 }
 
