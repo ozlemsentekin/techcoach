@@ -1065,7 +1065,8 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
 
   const handleTopicCreated = (topic) => {
     setTopics((current) => [...(current || []), topic])
-    setTopicModalBook(null)
+    // Modal kapanmaz: kullanıcı art arda birden çok içindekiler başlığı ekleyebilsin
+    // (TopicModal ekleme sonrası kendi formunu temizliyor). Kapatmak için X'e basılır.
   }
 
   const handleTestCreated = (testOrTests) => {

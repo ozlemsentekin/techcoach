@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, ChevronRight, Copy, FileText, Plus, Trash2, X } from 'lucide-react'
+import { BookOpen, ChevronRight, FileText, Plus, Trash2, X } from 'lucide-react'
 import Button from '../../ui/Button'
 import LoadingState from '../LoadingState'
 import { authRequest } from '../../../services/authClient'
@@ -239,6 +239,14 @@ function TopicModal({
               name: name.trim(),
             }),
           })
+      // Yeni ekleme akışında formu temizleyip odağı geri veriyoruz ki kullanıcı modal
+      // kapanmadan art arda birden çok içindekiler başlığı ekleyebilsin (parent modalı bu
+      // durumda açık bırakır, bkz. BookshelfDetailModal/PublisherCatalogScreen onSaved).
+      // Düzenleme akışında (isEdit) tek kayıt güncellendiği için parent modalı kapatır.
+      if (!isEdit) {
+        setName('')
+        document.getElementById('topic-name-input')?.focus()
+      }
       onSaved(data.topic)
     } catch (err) {
       setError(err.message)
@@ -506,89 +514,48 @@ function EditTestModal({ topic, test, onSaved, onClose }) {
   )
 }
 
-let testRowIdCounter = 0
-function createEmptyTestRow(seed = {}) {
-  testRowIdCounter += 1
-  return {
-    id: `row-${testRowIdCounter}`,
-    topicName: seed.topicName || '',
-    name: seed.name || '',
-    pageStart: seed.pageStart || '',
-  }
-}
-
-// Test adının sonundaki (ya da içindeki son) sayıyı bir artırır: "1. Test" → "2. Test",
-// "Test 4" → "Test 5". Sayı yoksa ad olduğu gibi döner.
-function bumpTestName(name) {
-  const trimmed = (name || '').trim()
-  const match = trimmed.match(/^(.*?)(\d+)(\D*)$/)
-  if (!match) return trimmed
-  return `${match[1]}${Number(match[2]) + 1}${match[3]}`
-}
-
-// Mevcut testler + doldurulan taslak satırları tek bir sayfa sırasına göre sıralı önizleme
-// listesine dönüştürür (İçindekiler önizlemesindeki mantığın testler için karşılığı).
-function buildTopicTestPreview(existingTests, draftRows) {
-  const existing = existingTests.map((test) => ({
-    key: `saved-${test.id}`,
-    id: test.id,
-    topicName: (test.topicName || '').trim(),
-    name: (test.name || '').trim(),
-    page: Number(test.pageStart) || null,
-    hasAnswerKey: Boolean(test.hasAnswerKey),
-    draft: false,
-  }))
-  const drafts = draftRows
-    .map((row) => ({
-      key: row.id,
-      topicName: row.topicName.trim(),
-      name: row.name.trim(),
-      page: Number(row.pageStart) || null,
-      draft: true,
+// Mevcut testleri sayfa sırasına göre sıralı önizleme listesine dönüştürür (İçindekiler
+// önizlemesindeki mantığın testler için karşılığı).
+function buildTopicTestPreview(existingTests) {
+  return existingTests
+    .map((test) => ({
+      key: test.id,
+      id: test.id,
+      topicName: (test.topicName || '').trim(),
+      name: (test.name || '').trim(),
+      page: Number(test.pageStart) || null,
+      pageEnd: Number(test.pageEnd) || null,
+      hasAnswerKey: Boolean(test.hasAnswerKey),
     }))
-    .filter((row) => row.topicName || row.name || row.page)
-
-  return [...existing, ...drafts].sort((a, b) => {
-    if (a.page == null && b.page == null) return 0
-    if (a.page == null) return 1
-    if (b.page == null) return -1
-    return a.page - b.page
-  })
+    .sort((a, b) => {
+      if (a.page == null && b.page == null) return 0
+      if (a.page == null) return 1
+      if (b.page == null) return -1
+      return a.page - b.page
+    })
 }
 
-// Test Ekle akışı — İçerik Ekle ile aynı kitap-açılımı görseli: solda "nasıl eklenir" rehberi
-// ve pratik çok-satırlı giriş (kopyala/sil), sağda içerik başlığı + testler eklendikçe sayfa
-// sırasına göre görünen liste.
+// Test Ekle akışı: "kaç test, hangi sayfa aralığında" söylenir, testler otomatik ardışık
+// sayfalara bölünüp tek adımda oluşturulur (tek test eklemek için sayı 1 bırakılır). Sağda
+// kitaptaki testler sayfa sırasına göre görünür, çöp kutusu ile silinebilir.
 function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onTestDeleted, onClose }) {
-  const [rows, setRows] = useState(() => [createEmptyTestRow()])
+  const [topicName, setTopicName] = useState('')
+  const [namePrefix, setNamePrefix] = useState('Test')
+  const [firstTestNumber, setFirstTestNumber] = useState('1')
+  const [count, setCount] = useState('1')
+  const [startPage, setStartPage] = useState('')
+  const [endPage, setEndPage] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [deletingTestId, setDeletingTestId] = useState(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
 
-  const updateRow = (id, patch) => {
-    setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)))
-  }
-
-  const addRow = () => {
-    setRows((current) => [...current, createEmptyTestRow()])
-  }
-
-  // Sağdaki listede görünen (kaydedilmiş) bir testi kopyalar: konu aynı, test no +1,
-  // sayfa +2 olacak şekilde yeni bir taslak satır ekler. Kullanıcı kaydetmeden önce
-  // istediği alanı değiştirebilir.
-  const copyFromSaved = (item) => {
-    const seed = {
-      topicName: item.topicName,
-      name: bumpTestName(item.name),
-      pageStart: item.page != null ? String(item.page + 2) : '',
-    }
-    setRows((current) => {
-      const pristineSingle =
-        current.length === 1 && !current[0].topicName && !current[0].name && !current[0].pageStart
-      return pristineSingle ? [createEmptyTestRow(seed)] : [...current, createEmptyTestRow(seed)]
-    })
-  }
+  const countNumber = Number(count)
+  const firstTestNumberValue = Number(firstTestNumber)
+  const startNumber = Number(startPage)
+  const endNumber = Number(endPage)
+  const hasValidRange = Number.isInteger(startNumber) && startNumber > 0 && Number.isInteger(endNumber) && endNumber >= startNumber
+  const totalPages = hasValidRange ? endNumber - startNumber + 1 : null
 
   // Kaydedilmiş bir testi siler; endpoint testin sorularını ve (varsa) cevap anahtarını da
   // birlikte temizler.
@@ -606,74 +573,70 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onTestDel
     }
   }
 
-  const removeRow = (id) => {
-    setRows((current) => (current.length > 1 ? current.filter((row) => row.id !== id) : current))
-  }
-
-  const validateRows = () => {
-    for (const row of rows) {
-      if (row.topicName.trim().length < 2) return 'Test Konusu en az 2 karakter olmalı.'
-      if (row.name.trim().length < 2) return 'Test Adı en az 2 karakter olmalı.'
-      const pageStartNumber = Number(row.pageStart)
-      if (!Number.isInteger(pageStartNumber) || pageStartNumber <= 0) {
-        return 'Başlangıç sayfası pozitif bir tam sayı olmalı.'
-      }
-    }
-    return ''
-  }
-
-  const handleSubmit = async (event) => {
+  const handleCreate = async (event) => {
     event.preventDefault()
-    const validationError = validateRows()
-    if (validationError) {
-      setError(validationError)
+    if (topicName.trim().length < 2) return setError('Test konusu en az 2 karakter olmalı.')
+    if (!Number.isInteger(countNumber) || countNumber <= 0) return setError('Test sayısı pozitif bir tam sayı olmalı.')
+    if (!Number.isInteger(firstTestNumberValue) || firstTestNumberValue <= 0) {
+      return setError('İlk test numarası pozitif bir tam sayı olmalı.')
+    }
+    if (!Number.isInteger(startNumber) || startNumber <= 0) return setError('Başlangıç sayfası pozitif bir tam sayı olmalı.')
+    if (!Number.isInteger(endNumber) || endNumber < startNumber) return setError('Bitiş sayfası başlangıçtan küçük olamaz.')
+    if (totalPages < countNumber) {
+      setError(
+        `${startNumber}-${endNumber} aralığında ${totalPages} sayfa var, ${countNumber} teste bölünemez (her test en az 1 sayfa olmalı).`,
+      )
       return
     }
 
     setError('')
     setLoading(true)
+    // Toplam sayfa aralığı testlere mümkün olduğunca eşit paylaştırılır; tam bölünmüyorsa
+    // kalan sayfalar baştaki testlere birer fazla verilir.
+    const basePages = Math.floor(totalPages / countNumber)
+    const extra = totalPages % countNumber
+    let cursor = startNumber
     const createdTests = []
-    let remainingRows = rows
     try {
-      for (const row of rows) {
+      for (let i = 0; i < countNumber; i += 1) {
+        const pagesForThisTest = basePages + (i < extra ? 1 : 0)
+        const rowStart = cursor
+        const rowEnd = rowStart + pagesForThisTest - 1
+        cursor = rowEnd + 1
         const data = await authRequest('/api/panel-admin/resource-book-topic-tests', {
           method: 'POST',
           body: JSON.stringify({
             topicId: topic.id,
-            topicName: row.topicName.trim(),
-            name: row.name.trim(),
-            pageStart: Number(row.pageStart),
-            pageEnd: Number(row.pageStart),
+            topicName: topicName.trim(),
+            name: `${namePrefix.trim() || 'Test'}${firstTestNumberValue + i}`,
+            pageStart: rowStart,
+            pageEnd: rowEnd,
           }),
         })
         createdTests.push(data.test)
-        remainingRows = remainingRows.filter((item) => item.id !== row.id)
       }
       onSaved(createdTests)
+      // Sonraki grubu eklerken kaldığı yerden devam etsin diye ilk test numarasını otomatik
+      // ilerletiyoruz (ör. 1-15 eklendiyse form 16 ile açık kalır); sayfa/adet alanları sıfırlanır.
+      setFirstTestNumber(String(firstTestNumberValue + countNumber))
+      setCount('1')
+      setStartPage('')
+      setEndPage('')
     } catch (err) {
       setError(err.message)
-      setRows(remainingRows.length > 0 ? remainingRows : [createEmptyTestRow()])
       if (createdTests.length > 0) onSaved(createdTests)
     } finally {
       setLoading(false)
     }
   }
 
-  const preview = buildTopicTestPreview(existingTests, rows)
-  const guideStep = (n, children) => (
-    <li className="flex gap-2">
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#f0dcc5] text-[10px] font-bold text-[#8a5a33]">
-        {n}
-      </span>
-      <span>{children}</span>
-    </li>
-  )
+  const preview = buildTopicTestPreview(existingTests)
 
   return (
     <div className="fixed inset-0 z-[55] flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
       <form
-        onSubmit={handleSubmit}
-        className="h-full w-full overflow-y-auto border border-panel-border bg-[#fbf4ec] p-3 shadow-panel-1 sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-2xl sm:p-5"
+        onSubmit={handleCreate}
+        className="h-full w-full overflow-y-auto border border-panel-border bg-[#fbf4ec] p-3 shadow-panel-1 sm:h-auto sm:max-h-[92vh] sm:max-w-4xl sm:rounded-2xl sm:p-5"
       >
         <ModalBreadcrumb
           segments={[book?.name || 'Kaynak', topic?.name || 'İçerik', 'test ekleniyor']}
@@ -699,105 +662,99 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onTestDel
                 <h3 className="min-w-0 break-words text-base font-semibold text-[#2f2925]">Bu içeriğe test ekle</h3>
               </div>
 
-              <div className="mb-3 rounded-lg border border-[#eadbc8] bg-[#fff4e6] p-2.5">
-                <p className="mb-1.5 text-xs font-semibold text-[#6d4a31]">Nasıl test eklenir?</p>
-                <ol className="flex flex-col gap-1.5 text-[11px] leading-snug text-[#7d6a5a]">
-                  {guideStep(
-                    1,
-                    <>
-                      <span className="font-medium text-[#3d3028]">Test Konusu</span> — testin işlediği konu.
-                      Örn. “Asal Sayılar”.
-                    </>,
-                  )}
-                  {guideStep(
-                    2,
-                    <>
-                      <span className="font-medium text-[#3d3028]">Test Adı</span> — kitaptaki adı. Örn. “1. Test”.
-                    </>,
-                  )}
-                  {guideStep(
-                    3,
-                    <>
-                      <span className="font-medium text-[#3d3028]">Başlangıç sayfası</span> — testin kitapta
-                      başladığı sayfa.
-                    </>,
-                  )}
-                </ol>
-                <p className="mt-1.5 text-[10px] text-[#9b8574]">
-                  Eklenmiş bir testi sağdaki listeden <span className="font-medium text-[#8a5a33]">kopyala</span>{' '}
-                  ile çoğaltabilir (test no +1, sayfa +2) ya da{' '}
-                  <span className="font-medium text-[#8a5a33]">çöp kutusu</span> ile silebilirsiniz. Soru sayısı ve
-                  cevap anahtarını sonra ekleyebilirsiniz.
-                </p>
+              <p className="mb-4 text-[12px] leading-snug text-[#7d6a5a]">
+                Kaç test var, hangi sayfada başlayıp bitiyor — söyle, sayfaları testlere otomatik
+                bölüştüreyim. Tek bir test ekleyeceksen "Kaç test?" alanını 1 bırakman yeterli.
+              </p>
+
+              <div className="flex flex-col gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[12px] font-medium text-[#4a3b31]">Test Konusu</span>
+                  <input
+                    value={topicName}
+                    onChange={(event) => setTopicName(event.target.value)}
+                    placeholder="ör. Asal Sayılar"
+                    autoFocus
+                    className="h-10 w-full rounded-lg border border-[#d8c6b5] bg-white px-3 text-sm text-panel-text outline-none focus:border-[#c9772f] focus:ring-2 focus:ring-[#c9772f]/15"
+                  />
+                </label>
+
+                <div className="grid grid-cols-3 gap-2.5">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[12px] font-medium text-[#4a3b31]">Kaç test?</span>
+                    <input
+                      type="number"
+                      min="1"
+                      inputMode="numeric"
+                      value={count}
+                      onChange={(event) => setCount(event.target.value)}
+                      className="h-10 w-full rounded-lg border border-[#d8c6b5] bg-white px-3 text-sm text-panel-text outline-none focus:border-[#c9772f] focus:ring-2 focus:ring-[#c9772f]/15"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[12px] font-medium text-[#4a3b31]">İlk test no</span>
+                    <input
+                      type="number"
+                      min="1"
+                      inputMode="numeric"
+                      value={firstTestNumber}
+                      onChange={(event) => setFirstTestNumber(event.target.value)}
+                      title="Kitaptaki ilk testin numarası — her zaman 1'den başlamayabilir"
+                      className="h-10 w-full rounded-lg border border-[#d8c6b5] bg-white px-3 text-sm text-panel-text outline-none focus:border-[#c9772f] focus:ring-2 focus:ring-[#c9772f]/15"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[12px] font-medium text-[#4a3b31]">Ad öneki</span>
+                    <input
+                      value={namePrefix}
+                      onChange={(event) => setNamePrefix(event.target.value)}
+                      placeholder="Test"
+                      className="h-10 w-full rounded-lg border border-[#d8c6b5] bg-white px-3 text-sm text-panel-text outline-none focus:border-[#c9772f] focus:ring-2 focus:ring-[#c9772f]/15"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[12px] font-medium text-[#4a3b31]">Başlangıç sayfası</span>
+                    <input
+                      type="number"
+                      min="1"
+                      inputMode="numeric"
+                      value={startPage}
+                      onChange={(event) => setStartPage(event.target.value)}
+                      placeholder="ör. 7"
+                      className="h-10 w-full rounded-lg border border-[#d8c6b5] bg-white px-3 text-sm text-panel-text outline-none focus:border-[#c9772f] focus:ring-2 focus:ring-[#c9772f]/15"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[12px] font-medium text-[#4a3b31]">Bitiş sayfası</span>
+                    <input
+                      type="number"
+                      min="1"
+                      inputMode="numeric"
+                      value={endPage}
+                      onChange={(event) => setEndPage(event.target.value)}
+                      placeholder="ör. 34"
+                      className="h-10 w-full rounded-lg border border-[#d8c6b5] bg-white px-3 text-sm text-panel-text outline-none focus:border-[#c9772f] focus:ring-2 focus:ring-[#c9772f]/15"
+                    />
+                  </label>
+                </div>
+
+                {hasValidRange && countNumber > 0 && Number.isInteger(firstTestNumberValue) && firstTestNumberValue > 0 ? (
+                  <p className="rounded-lg bg-[#fff4e6] px-2.5 py-2 text-[11px] text-[#8a5a33]">
+                    {countNumber > 1
+                      ? `${namePrefix.trim() || 'Test'}${firstTestNumberValue} – ${namePrefix.trim() || 'Test'}${firstTestNumberValue + countNumber - 1} arası ${countNumber} test oluşturulacak`
+                      : `${namePrefix.trim() || 'Test'}${firstTestNumberValue} oluşturulacak`}
+                    {' '}({totalPages} sayfa{countNumber > 1 ? `, ~${Math.round(totalPages / countNumber)} sayfa/test` : ''}).
+                  </p>
+                ) : null}
               </div>
 
-              <div className="flex flex-col gap-2">
-                {rows.map((row, index) => (
-                  <div key={row.id} className="rounded-lg border border-[#e6d5c1] bg-white p-2.5">
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-[#9b7a5a]">{index + 1}. test</span>
-                      {rows.length > 1 ? (
-                        <button
-                          type="button"
-                          aria-label="Satırı sil"
-                          onClick={() => removeRow(row.id)}
-                          className="flex h-6 w-6 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#a23b1e]"
-                        >
-                          <Trash2 size={13} aria-hidden="true" />
-                        </button>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <input
-                        value={row.topicName}
-                        onChange={(event) => updateRow(row.id, { topicName: event.target.value })}
-                        placeholder="Test Konusu — ör. Asal Sayılar"
-                        className="h-8 w-full rounded-md border border-[#d8c6b5] bg-white px-2 text-[13px] text-panel-text outline-none focus:border-[#c9772f] focus:ring-2 focus:ring-[#c9772f]/15"
-                      />
-                      <div className="flex gap-1.5">
-                        <input
-                          value={row.name}
-                          onChange={(event) => updateRow(row.id, { name: event.target.value })}
-                          placeholder="Test Adı — ör. 1. Test"
-                          className="h-8 min-w-0 flex-1 rounded-md border border-[#d8c6b5] bg-white px-2 text-[13px] text-panel-text outline-none focus:border-[#c9772f] focus:ring-2 focus:ring-[#c9772f]/15"
-                        />
-                        <input
-                          type="number"
-                          min="1"
-                          inputMode="numeric"
-                          value={row.pageStart}
-                          onChange={(event) => updateRow(row.id, { pageStart: event.target.value })}
-                          placeholder="Sayfa"
-                          className="h-8 w-20 shrink-0 rounded-md border border-[#d8c6b5] bg-white px-2 text-[13px] text-panel-text outline-none focus:border-[#c9772f] focus:ring-2 focus:ring-[#c9772f]/15"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                <button
-                  type="button"
-                  onClick={addRow}
-                  className="inline-flex w-fit items-center gap-1 text-[13px] font-medium text-[#b85f22] hover:underline"
-                >
-                  <Plus size={13} aria-hidden="true" />
-                  Satır ekle
-                </button>
-              </div>
-
-              <div className="mt-3 border-t border-[#eadbc8] pt-2.5">
+              <div className="mt-4 border-t border-[#eadbc8] pt-3">
                 <Button type="submit" disabled={loading} size="md" className="w-full rounded-lg">
-                  {loading
-                    ? 'Kaydediliyor…'
-                    : rows.length > 1
-                      ? `${rows.length} testi ekle`
-                      : 'Testi ekle'}
+                  {loading ? 'Oluşturuluyor…' : countNumber > 1 ? `${countNumber} Test Oluştur` : 'Testi Oluştur'}
                 </Button>
-              </div>
-
-              <div className="mt-2.5 flex items-center justify-between border-t border-[#eadbc8] pt-2 text-[11px] font-medium text-[#b49c84]">
-                <span>test girişi</span>
-                <span>01</span>
               </div>
             </section>
 
@@ -814,37 +771,30 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onTestDel
                 <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto" aria-live="polite">
                   {preview.length === 0 ? (
                     <p className="px-2 text-[13px] text-[#8b7666]">
-                      Henüz test yok. Soldan ekledikçe burada sayfa sırasına göre görünecek.
+                      Henüz test yok. Soldan oluşturdukça burada sayfa sırasına göre görünecek.
                     </p>
                   ) : (
                     preview.map((item) => (
                       <TopicBookPageRow
                         key={item.key}
-                        label={[item.topicName, item.name].filter(Boolean).join(' · ') || 'Yeni test'}
-                        page={item.page == null ? '…' : String(item.page)}
-                        active={item.draft}
+                        label={[item.topicName, item.name].filter(Boolean).join(' · ') || 'Test'}
+                        page={
+                          item.page == null
+                            ? '…'
+                            : item.pageEnd && item.pageEnd !== item.page
+                              ? `${item.page}-${item.pageEnd}`
+                              : String(item.page)
+                        }
                         action={
-                          item.draft ? null : (
-                            <span className="flex items-center gap-0.5">
-                              <button
-                                type="button"
-                                aria-label={`${item.name || 'Test'} testini kopyala`}
-                                onClick={() => copyFromSaved(item)}
-                                className="flex h-6 w-6 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#8a5a33]"
-                              >
-                                <Copy size={13} aria-hidden="true" />
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={`${item.name || 'Test'} testini sil`}
-                                disabled={deleteBusy}
-                                onClick={() => setDeletingTestId(item.id)}
-                                className="flex h-6 w-6 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#a23b1e] disabled:opacity-40"
-                              >
-                                <Trash2 size={13} aria-hidden="true" />
-                              </button>
-                            </span>
-                          )
+                          <button
+                            type="button"
+                            aria-label={`${item.name || 'Test'} testini sil`}
+                            disabled={deleteBusy}
+                            onClick={() => setDeletingTestId(item.id)}
+                            className="flex h-6 w-6 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#a23b1e] disabled:opacity-40"
+                          >
+                            <Trash2 size={13} aria-hidden="true" />
+                          </button>
                         }
                         footer={
                           deletingTestId === item.id ? (
@@ -995,19 +945,38 @@ function AnswerKeyModal({ test, onClose }) {
   const [entries, setEntries] = useState(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  // Hızlı giriş: kullanıcı harfleri art arda yazar ("abcda..."), alan otomatik "A-B-C-D-A"
+  // biçiminde tireli gösterir; her değişiklikte tüm cevap anahtarı bu harflerden yeniden
+  // kurulur (soru bazlı optik seçim hâlâ ayrı ayrı kullanılabilir, ikisi aynı entries'i besler).
+  const [quickInput, setQuickInput] = useState('')
 
   useEffect(() => {
     authRequest(`/api/panel-admin/resource-book-topic-tests/${test.id}/answer-key`, { method: 'GET' })
       .then((data) => {
         const labelByOrderNo = Object.fromEntries(data.entries.map((entry) => [entry.orderNo, entry.correctLabel]))
-        setEntries(Array.from({ length: test.questionCount }, (_, i) => labelByOrderNo[i + 1] || ''))
+        const loaded = Array.from({ length: test.questionCount }, (_, i) => labelByOrderNo[i + 1] || '')
+        setEntries(loaded)
+        setQuickInput(loaded.join(''))
       })
       .catch((err) => setError(err.message))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [test.id])
 
   const setLabel = (index, label) => {
-    setEntries((current) => current.map((value, i) => (i === index ? label : value)))
+    setEntries((current) => {
+      const next = current.map((value, i) => (i === index ? label : value))
+      setQuickInput(next.join(''))
+      return next
+    })
+  }
+
+  const handleQuickInputChange = (event) => {
+    const letters = event.target.value
+      .toUpperCase()
+      .replace(/[^ABCD]/g, '')
+      .slice(0, entries?.length || 0)
+    setQuickInput(letters)
+    setEntries((current) => current.map((_, i) => letters[i] || ''))
   }
 
   const filledCount = entries ? entries.filter(Boolean).length : 0
@@ -1053,6 +1022,24 @@ function AnswerKeyModal({ test, onClose }) {
             <LoadingState label="Cevap anahtarı yükleniyor..." />
           ) : (
             <>
+              <div className="mb-3 rounded-xl border border-panel-border bg-panel-surface-soft/60 p-2.5">
+                <label htmlFor="answer-key-quick-input" className="text-xs font-semibold text-panel-text">
+                  Hızlı giriş
+                </label>
+                <input
+                  id="answer-key-quick-input"
+                  value={quickInput.split('').join('-')}
+                  onChange={handleQuickInputChange}
+                  placeholder={`ör. ${'ABCDA'.slice(0, Math.min(5, entries.length))}...`}
+                  autoFocus
+                  className="mt-1.5 h-9 w-full rounded-lg border border-panel-border bg-white px-2.5 font-mono text-sm tracking-wide text-panel-text outline-none focus:border-panel-warm focus:ring-2 focus:ring-panel-warm/15"
+                />
+                <p className="mt-1 text-[11px] text-panel-text-muted">
+                  A, B, C, D harflerini sırayla yaz — aralarına tire otomatik gelir. İstersen aşağıdan soru soru da
+                  işaretleyebilirsin.
+                </p>
+              </div>
+
               <p className="mb-3 text-xs text-[#667475]">
                 {filledCount}/{entries.length} sorunun cevabı girildi.
               </p>
