@@ -277,6 +277,75 @@ function QuestionRows({ idPrefix, questions, editableTotal, suggestions, onPatch
   )
 }
 
+/* ------------------------------------------------------------------ konu grubu karşılaştırması */
+
+function emptyTopicComparisonRow() {
+  return { topicName: '', score: '', classAvgScore: '', schoolAvgScore: '', turkeyAvgScore: '' }
+}
+
+// Konu grubu bazında karşılaştırma: sınav kurumu raporundaki (ör. "Sözcük Grubunda Anlam")
+// öğrenci puanı + sınıf/okul/Türkiye ortalaması — ders geneli "Detay"inden bağımsız, tamamen
+// isteğe bağlı, dinamik satır listesi (QuestionRows'un "+ Soru ekle" deseniyle aynı).
+function TopicComparisonRows({ idPrefix, rows, suggestions, onPatch, onAdd, onRemove }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <datalist id={idPrefix}>
+        {suggestions.map((topic) => (
+          <option key={topic} value={topic} />
+        ))}
+      </datalist>
+      {rows.map((row, ri) => (
+        <div key={ri} className="flex flex-col gap-1.5 rounded-lg bg-panel-surface-soft/60 p-2">
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              list={idPrefix}
+              value={row.topicName}
+              onChange={(event) => onPatch(ri, { topicName: event.target.value })}
+              placeholder="Konu grubu adı"
+              maxLength={200}
+              className="h-8 min-w-0 flex-1 rounded-lg border border-panel-border bg-white px-2 text-xs text-panel-text placeholder:text-panel-text-muted/70"
+            />
+            <button
+              type="button"
+              aria-label="Konu grubunu sil"
+              onClick={() => onRemove(ri)}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-panel-text-muted hover:bg-panel-red-soft hover:text-panel-red"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <DetailField label="Puan" value={row.score} onChange={(v) => onPatch(ri, { score: v })} />
+            <DetailField
+              label="Sınıf Ort."
+              value={row.classAvgScore}
+              onChange={(v) => onPatch(ri, { classAvgScore: v })}
+            />
+            <DetailField
+              label="Okul Ort."
+              value={row.schoolAvgScore}
+              onChange={(v) => onPatch(ri, { schoolAvgScore: v })}
+            />
+            <DetailField
+              label="Türkiye Ort."
+              value={row.turkeyAvgScore}
+              onChange={(v) => onPatch(ri, { turkeyAvgScore: v })}
+            />
+          </div>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={onAdd}
+        className="self-start rounded-lg border border-dashed border-panel-blue/50 px-2 py-1 text-xs font-semibold text-panel-blue hover:bg-panel-blue-soft"
+      >
+        + Konu grubu ekle
+      </button>
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------ Yeni / düzenle çekmecesi */
 
 const emptyCounts = { correct: 0, wrong: 0, blank: 0 }
@@ -305,6 +374,17 @@ function detailFromSubject(s) {
   }
 }
 
+function topicComparisonsFromSubject(s) {
+  const asText = (n) => (n == null ? '' : String(n))
+  return (s.topicComparisons || []).map((tc) => ({
+    topicName: tc.topicName || '',
+    score: asText(tc.score),
+    classAvgScore: asText(tc.classAvgScore),
+    schoolAvgScore: asText(tc.schoolAvgScore),
+    turkeyAvgScore: asText(tc.turkeyAvgScore),
+  }))
+}
+
 function buildInitialSubjects(kind, existing) {
   if (existing) {
     return existing.subjects.map((s) => {
@@ -323,6 +403,7 @@ function buildInitialSubjects(kind, existing) {
               .map((q) => ({ orderNo: q.orderNo, status: q.status, topicName: q.topicName || '' }))
           : [],
         detail: detailFromSubject(s),
+        topicComparisons: topicComparisonsFromSubject(s),
       }
     })
   }
@@ -336,6 +417,7 @@ function buildInitialSubjects(kind, existing) {
       questionsMode: false,
       questions: [],
       detail: { ...emptyDetail },
+      topicComparisons: [],
     }))
   }
   // Etüt: sabit toplam yok (total null) — D/Y/B'yi kullanıcı girer.
@@ -349,6 +431,7 @@ function buildInitialSubjects(kind, existing) {
       questionsMode: false,
       questions: [],
       detail: { ...emptyDetail },
+      topicComparisons: [],
     },
   ]
 }
@@ -375,6 +458,11 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
       Boolean(existing?.schoolLabel) ||
       Boolean(existing?.subjects?.some((s) => s.score != null)),
   )
+  // Konu grubu karşılaştırması: ders geneli Detay'dan bağımsız isteğe bağlı bölüm —
+  // düzenlemede herhangi bir dersin konu grubu satırı varsa varsayılan olarak açık gelir.
+  const [showTopicComparisons, setShowTopicComparisons] = useState(() =>
+    Boolean(existing?.subjects?.some((s) => (s.topicComparisons || []).length > 0)),
+  )
 
   useEffect(() => {
     cachedGet('/api/panel/subjects')
@@ -399,6 +487,34 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
   const patchDetail = (index, key, value) => {
     setSubjectRows((rows) =>
       rows.map((row, i) => (i === index ? { ...row, detail: { ...row.detail, [key]: value } } : row)),
+    )
+  }
+
+  const patchTopicComparison = (index, tcIndex, patch) => {
+    setSubjectRows((rows) =>
+      rows.map((row, i) => {
+        if (i !== index) return row
+        return {
+          ...row,
+          topicComparisons: row.topicComparisons.map((tc, ti) => (ti === tcIndex ? { ...tc, ...patch } : tc)),
+        }
+      }),
+    )
+  }
+
+  const addTopicComparisonRow = (index) => {
+    setSubjectRows((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, topicComparisons: [...row.topicComparisons, emptyTopicComparisonRow()] } : row)),
+    )
+    const subjectName = subjectRows[index]?.subjectName
+    if (subjectName) loadTopicSuggestions(subjectName)
+  }
+
+  const removeTopicComparisonRow = (index, tcIndex) => {
+    setSubjectRows((rows) =>
+      rows.map((row, i) =>
+        i === index ? { ...row, topicComparisons: row.topicComparisons.filter((_, ti) => ti !== tcIndex) } : row,
+      ),
     )
   }
 
@@ -519,6 +635,21 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
           }
         : {}
 
+    const topicComparisonFields = (row) =>
+      showTopicComparisons
+        ? {
+            topicComparisons: row.topicComparisons
+              .filter((tc) => tc.topicName.trim())
+              .map((tc) => ({
+                topicName: tc.topicName.trim(),
+                score: toNumOrUndef(tc.score),
+                classAvgScore: toNumOrUndef(tc.classAvgScore),
+                schoolAvgScore: toNumOrUndef(tc.schoolAvgScore),
+                turkeyAvgScore: toNumOrUndef(tc.turkeyAvgScore),
+              })),
+          }
+        : {}
+
     const payload = {
       kind,
       examDate: kind === 'etut' && !examDate ? null : examDate,
@@ -538,6 +669,7 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
               topicName: q.topicName?.trim() || undefined,
             })),
             ...detailFields(row),
+            ...topicComparisonFields(row),
           }
         }
         return {
@@ -549,6 +681,7 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
           blank: row.counts.blank,
           photos: row.photos,
           ...detailFields(row),
+          ...topicComparisonFields(row),
         }
       }),
     }
@@ -665,13 +798,24 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
                     ))}
                   </select>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => setShowDetail((v) => !v)}
-                  className="self-start rounded-lg px-2 py-1 text-xs font-semibold text-panel-blue hover:bg-panel-blue-soft"
-                >
-                  {showDetail ? 'Puan / sıra detayını gizle' : '+ Puan / sıra detayı ekle (isteğe bağlı)'}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowDetail((v) => !v)}
+                    className="self-start rounded-lg px-2 py-1 text-xs font-semibold text-panel-blue hover:bg-panel-blue-soft"
+                  >
+                    {showDetail ? 'Puan / sıra detayını gizle' : '+ Puan / sıra detayı ekle (isteğe bağlı)'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowTopicComparisons((v) => !v)}
+                    className="self-start rounded-lg px-2 py-1 text-xs font-semibold text-panel-blue hover:bg-panel-blue-soft"
+                  >
+                    {showTopicComparisons
+                      ? 'Konu grubu karşılaştırmasını gizle'
+                      : '+ Konu grubu karşılaştırması ekle (isteğe bağlı)'}
+                  </button>
+                </div>
                 {showDetail ? (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <input
@@ -774,6 +918,17 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
                             onChange={(v) => patchDetail(index, 'turkeyAvgScore', v)}
                           />
                         </div>
+                      ) : null}
+
+                      {showTopicComparisons ? (
+                        <TopicComparisonRows
+                          idPrefix={`mock-exam-topic-comparisons-${index}`}
+                          rows={row.topicComparisons}
+                          suggestions={topicSuggestions[row.subjectName] || []}
+                          onPatch={(ti, patch) => patchTopicComparison(index, ti, patch)}
+                          onAdd={() => addTopicComparisonRow(index)}
+                          onRemove={(ti) => removeTopicComparisonRow(index, ti)}
+                        />
                       ) : null}
 
                       {row.questionsMode ? (
@@ -1228,6 +1383,48 @@ function ExamComparisonChart({ exam }) {
   )
 }
 
+// Konu grubu bazında (ör. "Sözcük Grubunda Anlam") karşılaştırma — ExamComparisonChart ile
+// aynı görsel dil, ama X ekseni ders değil konu grubu; denemedeki tüm derslerin konu grubu
+// satırları tek grafikte birleştirilir (isteğe bağlı, veri yoksa hiç render edilmez).
+function TopicComparisonChart({ exam }) {
+  const rows = (exam.subjects || []).flatMap((s) =>
+    (s.topicComparisons || [])
+      .filter((tc) => tc.score != null)
+      .map((tc) => ({
+        name: shortenSubjectName(tc.topicName),
+        fullName: tc.topicName,
+        student: tc.score,
+        classAvg: tc.classAvgScore ?? undefined,
+        schoolAvg: tc.schoolAvgScore ?? undefined,
+        turkeyAvg: tc.turkeyAvgScore ?? undefined,
+      })),
+  )
+  if (rows.length === 0) return null
+
+  const axisTick = { fontSize: 10, fill: 'var(--color-panel-text-muted)' }
+
+  return (
+    <div className="mt-3 rounded-xl border border-panel-border bg-white p-3">
+      <p className="mb-2 text-xs font-semibold text-panel-text-muted">Konu grubu karşılaştırması</p>
+      <div className="h-64 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap="20%">
+            <CartesianGrid vertical={false} stroke="var(--color-panel-border)" strokeDasharray="3 3" />
+            <XAxis dataKey="name" tick={axisTick} axisLine={false} tickLine={false} interval={0} />
+            <YAxis domain={[0, 100]} tick={axisTick} axisLine={false} tickLine={false} width={30} />
+            <Tooltip cursor={{ fill: 'var(--color-panel-surface-soft)' }} content={<ComparisonChartTooltip />} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Bar dataKey="student" name="Öğrenci" fill={COMPARISON_COLORS.student} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="classAvg" name="Sınıf" fill={COMPARISON_COLORS.classAvg} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="schoolAvg" name="Okul" fill={COMPARISON_COLORS.schoolAvg} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="turkeyAvg" name="Genel" fill={COMPARISON_COLORS.turkeyAvg} radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
 function ExamCard({
   exam: summary,
   readOnly,
@@ -1299,6 +1496,9 @@ function ExamCard({
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <StatPill label="D" value={exam.totalCorrect} tone="bg-panel-green-soft text-panel-green" />
+          <StatPill label="Y" value={exam.totalWrong} tone="bg-panel-red-soft text-panel-red" />
+          <StatPill label="B" value={exam.totalBlank} tone="bg-panel-surface-soft text-panel-text-muted" />
           <StatPill label="Net" value={exam.net} tone="bg-panel-blue-soft text-panel-blue" />
           <span className={cn('rounded-lg px-2 py-0.5 text-xs font-semibold tabular-nums', successTone(exam.successRate))}>
             %{exam.successRate}
@@ -1327,6 +1527,7 @@ function ExamCard({
             ))}
           </div>
           <ExamComparisonChart exam={exam} />
+          <TopicComparisonChart exam={exam} />
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-panel-border/60 pt-3 text-xs text-panel-text-muted">
             <span>
               Toplam {exam.totalCorrect}D · {exam.totalWrong}Y · {exam.totalBlank}B

@@ -20,6 +20,7 @@ import { authRequest, cachedGet, invalidateCache } from './authClient'
  * @property {number} [classAvgScore] Sınıf ortalaması.
  * @property {number} [schoolAvgScore] Okul ortalaması.
  * @property {number} [turkeyAvgScore] Türkiye ortalaması.
+ * @property {{ topicName: string, score?: number, classAvgScore?: number, schoolAvgScore?: number, turkeyAvgScore?: number }[]} [topicComparisons] Konu grubu bazında karşılaştırma (isteğe bağlı).
  */
 
 /**
