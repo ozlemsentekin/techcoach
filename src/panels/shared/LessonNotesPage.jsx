@@ -18,6 +18,7 @@ export default function LessonNotesPage({ admin = false }) {
 
 function NoteViewer({ note, onClose }) {
   const ref = useRef(null)
+  const [slide, setSlide] = useState(0)
   const [printing, setPrinting] = useState(false)
   const [printError, setPrintError] = useState('')
   async function print() {
@@ -27,7 +28,21 @@ function NoteViewer({ note, onClose }) {
     finally { setPrinting(false) }
   }
   useEffect(() => { ref.current?.showModal() }, [])
-  return <dialog ref={ref} onClose={onClose} aria-label={note.title} className="fixed inset-0 z-50 m-auto h-[95dvh] w-[95vw] max-w-5xl overflow-auto rounded-2xl border border-panel-border bg-panel-surface p-4 text-panel-text backdrop:bg-black/60"><div className="sticky top-0 flex items-center justify-between gap-3 bg-panel-surface p-3"><h2 className="font-bold">{note.title}</h2><button disabled={printing} className={`${button} flex shrink-0 items-center gap-2`} onClick={print}><Printer size={16} />{printing ? 'Hazırlanıyor…' : 'Yazdır'}</button><button autoFocus className={button} onClick={() => ref.current.close()}>Kapat</button></div>{printError && <p role="alert" className="p-3 text-sm text-red-600">{printError}</p>}{note.images.map((img, i) => <figure key={i} className="mb-6"><figcaption className="p-2 text-center">Sayfa {i + 1} / {note.images.length}</figcaption><img decoding="async" loading={i === 0 ? 'eager' : 'lazy'} src={img} alt={`${note.title} — sayfa ${i + 1}`} className="mx-auto h-auto w-full" /></figure>)}</dialog>
+  function move(delta) {
+    setSlide(current => Math.max(0, Math.min(note.images.length - 1, current + delta)))
+    ref.current?.querySelector('[data-slide]')?.scrollTo(0, 0)
+  }
+  return <dialog ref={ref} onClose={onClose} onKeyDown={event => {
+    if (event.key === 'ArrowRight') { event.preventDefault(); move(1) }
+    if (event.key === 'ArrowLeft') { event.preventDefault(); move(-1) }
+  }} aria-label={note.title} className="fixed inset-0 z-50 m-auto h-[95dvh] w-[95vw] max-w-5xl overflow-hidden rounded-2xl border border-panel-border bg-panel-surface p-3 text-panel-text backdrop:bg-black/60">
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2"><h2 className="min-w-0 flex-1 font-bold">{note.title}</h2><button disabled={printing} className={`${button} flex shrink-0 items-center gap-2`} onClick={print}><Printer size={16} />{printing ? 'Hazırlanıyor…' : 'Tümünü yazdır'}</button><button autoFocus className={button} onClick={() => ref.current.close()}>Kapat</button></div>
+      {printError && <p role="alert" className="text-sm text-red-600">{printError}</p>}
+      <div className="flex items-center justify-center gap-3" aria-label="Slayt gezinme"><button className={button} disabled={slide === 0} onClick={() => move(-1)}>← Önceki</button><span className="text-sm" aria-live="polite">Sayfa {slide + 1} / {note.images.length}</span><button className={button} disabled={slide === note.images.length - 1} onClick={() => move(1)}>Sonraki →</button></div>
+      <div data-slide className="min-h-0 flex-1 overflow-auto"><img key={slide} decoding="async" src={note.images[slide]} alt={`${note.title} — sayfa ${slide + 1}`} className="mx-auto h-auto w-full" /></div>
+    </div>
+  </dialog>
 }
 
 function LessonNotesContent({ admin }) {
