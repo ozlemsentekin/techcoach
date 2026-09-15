@@ -228,7 +228,9 @@ export default function DashboardPage() {
       })
       .catch((err) => {
         if (!ignore) {
-          setStudents([])
+          // students'ı [] yapmıyoruz: bu, "çocuk bağlı değil" boş ekranıyla karıştırılıp
+          // localStorage'dan zaten yüklenmiş "Bugün" akışını (ve açık bir modalı varsa onu)
+          // yanlışlıkla unmount eder. İstek başarısız oldu, liste gerçekten boş değil.
           setLoadError(err.message)
           setLoading(false)
         }
