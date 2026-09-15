@@ -56,8 +56,8 @@ export async function buildAnalysisPhotosPdf({ title, subtitle, photos }) {
   return doc
 }
 
-export function buildAnalysisPhotosPdfFileName(label) {
-  const safeName = slugifyForFileName(label || 'hata-analiz')
+export function buildAnalysisPhotosPdfFileName(label, prefix = 'hata-analiz') {
+  const safeName = slugifyForFileName(label || prefix)
   const date = new Date().toISOString().slice(0, 10)
-  return `hata-analiz-${safeName}-${date}.pdf`
+  return `${prefix}-${safeName}-${date}.pdf`
 }

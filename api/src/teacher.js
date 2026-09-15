@@ -3553,6 +3553,39 @@ async function getTeacherWrongQuestionAnalysisPhotosHandler(request) {
   }
 }
 
+// "Hata Analizlerim" menüsündeki "Soruyu Göster": asıl sorunun (Hata Defteri'nde çekilen) fotoğrafı
+// — kapsam yukarıdaki uçla aynı SQL koşuluyla (StudentTeachers üzerinden) doğrulanır,
+// studentTeacherId gerekmez (bu liste tek bir öğrenci/ders ilişkisine bağlı değil, bkz.
+// listTeacherWrongQuestionAnalysisPhotosHandler).
+async function getTeacherWrongQuestionPhotoRecordHandler(request) {
+  try {
+    const { error, teacherUserId } = await requireTeacherSession(request)
+    if (error) return error
+
+    const wrongQuestionId = request.params.wrongQuestionId
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
+      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+    })
+    const result = await requestDb.query(`
+      SELECT wq.photo_url
+      FROM dbo.WrongQuestions wq
+      INNER JOIN dbo.StudentTeachers st ON st.student_id = wq.student_id AND st.is_active = 1
+      INNER JOIN dbo.Subjects s ON s.id = st.subject_id AND s.name = wq.subject
+      WHERE wq.id = @id AND st.teacher_user_id = @teacherUserId;
+    `)
+
+    const photoUrl = result.recordset[0]?.photo_url
+    if (!photoUrl) {
+      return json(404, { error: 'Fotoğraf bulunamadı.' })
+    }
+
+    return json(200, { photoUrl })
+  } catch (error) {
+    return handleError(error, 'getTeacherWrongQuestionPhotoRecordHandler', 'Fotoğraf yüklenemedi.')
+  }
+}
+
 async function getTeacherStudentWrongQuestionTopicStatsHandler(request) {
   try {
     const { error, studentId, subjectId, studentTeacherId } = await requireTeacherStudentContext(request)
@@ -3759,6 +3792,7 @@ module.exports = {
   listTeacherStudentWrongQuestionAnalysisPhotosHandler,
   listTeacherWrongQuestionAnalysisPhotosHandler,
   getTeacherWrongQuestionAnalysisPhotosHandler,
+  getTeacherWrongQuestionPhotoRecordHandler,
   getTeacherStudentWrongQuestionTopicStatsHandler,
   updateTeacherStudentWrongQuestionHandler,
   grantParentAccessHandler,

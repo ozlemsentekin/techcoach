@@ -1,4 +1,8 @@
-import { getWrongQuestionAnalysisPhotos, getWrongQuestionAnalysisPhotoRecords } from '../../../services/wrongQuestionService'
+import {
+  getWrongQuestionAnalysisPhotos,
+  getWrongQuestionAnalysisPhotoRecords,
+  getWrongQuestionPhoto,
+} from '../../../services/wrongQuestionService'
 import AnalysisPhotosPage from '../../shared/AnalysisPhotosPage'
 
 export default function StudentAnalysisPhotosPage() {
@@ -6,6 +10,7 @@ export default function StudentAnalysisPhotosPage() {
     <AnalysisPhotosPage
       fetchItems={getWrongQuestionAnalysisPhotos}
       fetchPhotos={getWrongQuestionAnalysisPhotoRecords}
+      fetchQuestionPhoto={getWrongQuestionPhoto}
       subtitle="Velinin eklediği hata analiz görsellerine buradan ulaşabilirsin."
     />
   )
