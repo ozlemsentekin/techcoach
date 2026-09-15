@@ -2235,6 +2235,14 @@ async function setTestAnswerKeyHandler(request) {
       `)
     }
 
+    const updateCountRequestDb = await withRequest({
+      testId: { type: sql.UniqueIdentifier, value: testId },
+      questionCount: { type: sql.Int, value: normalizedEntries.length },
+    })
+    await updateCountRequestDb.query(`
+      UPDATE dbo.ResourceBookTopicTests SET question_count = @questionCount WHERE id = @testId;
+    `)
+
     return json(200, { entries: normalizedEntries })
   } catch (error) {
     if (error.number === 547) {
