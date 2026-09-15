@@ -46,17 +46,17 @@ function ModalBreadcrumb({ segments, onClose }) {
 function TopicBookPageRow({ label, page, active = false, subline, action, footer }) {
   return (
     <div
-      className={`rounded-md px-2 py-1 ${
+      className={`rounded-md px-2 py-0.5 ${
         active ? 'bg-[#f8e3d0] text-[#7a3d16] shadow-[inset_3px_0_0_#c9772f]' : 'text-[#6f6258]'
       }`}
     >
-      <div className="flex min-w-0 items-baseline gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <span className={`min-w-0 break-words text-[13px] leading-snug ${active ? 'font-semibold' : 'font-medium'}`}>
           {label}
         </span>
-        <span className="min-w-[20px] flex-1 border-b border-dotted border-[#d8c6b5]" aria-hidden="true" />
-        <span className="shrink-0 text-[11px] font-semibold tabular-nums">{page}</span>
-        {action ? <span className="shrink-0 self-center">{action}</span> : null}
+        <span className="min-w-[12px] flex-1 border-b border-dotted border-[#d8c6b5]" aria-hidden="true" />
+        <span className="w-7 shrink-0 text-right text-[11px] font-semibold tabular-nums">{page}</span>
+        {action ? <span className="flex shrink-0 items-center">{action}</span> : null}
       </div>
       {subline ? <p className="mt-0.5 pl-2 text-[11px] text-[#8b7666]">{subline}</p> : null}
       {footer ? <div className="mt-1 pl-2">{footer}</div> : null}
@@ -109,7 +109,7 @@ function TopicContentsPreview({
                         type="button"
                         aria-label={`${entry.name} içeriğine test ekle`}
                         onClick={() => onAddTests(entry)}
-                        className="flex h-11 items-center gap-1 rounded-md px-2 text-xs font-medium text-[#b85f22] hover:bg-[#f6e6d2]"
+                        className="flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-[#b85f22] hover:bg-[#f6e6d2]"
                       >
                         <Plus size={12} aria-hidden="true" />
                         Test ekle
@@ -123,7 +123,7 @@ function TopicContentsPreview({
                         onClick={() =>
                           entry.testCount > 0 ? setPendingKey(entry.name) : onDeleteEntry(entry)
                         }
-                        className="flex h-11 w-9 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#a23b1e] disabled:opacity-40"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#a23b1e] disabled:opacity-40"
                       >
                         <Trash2 size={13} aria-hidden="true" />
                       </button>
@@ -231,8 +231,12 @@ function TopicModal({
     }
 
     const trimmedPage = pageStart.trim()
-    const pageStartNumber = trimmedPage === '' ? null : Number(trimmedPage)
-    if (pageStartNumber !== null && (!Number.isInteger(pageStartNumber) || pageStartNumber <= 0)) {
+    if (trimmedPage === '') {
+      setError('Sayfa numarası zorunludur.')
+      return
+    }
+    const pageStartNumber = Number(trimmedPage)
+    if (!Number.isInteger(pageStartNumber) || pageStartNumber <= 0) {
       setError('Sayfa numarası pozitif bir tam sayı olmalı.')
       return
     }
@@ -285,8 +289,8 @@ function TopicModal({
             <label htmlFor="topic-name-input" className="mb-3 mt-1 text-base font-semibold text-panel-text">Ünite / bölüm adı</label>
             <div className="flex items-center gap-2">
               <input id="topic-name-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Örn. Çarpanlar ve Katlar" className="h-11 min-w-0 flex-1 rounded-xl border border-panel-border bg-white px-3 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20" />
-              <input id="topic-page-input" type="number" min="1" inputMode="numeric" value={pageStart} onChange={(event) => setPageStart(event.target.value)} placeholder="Sayfa" aria-label="Sayfa numarası" className="h-11 w-20 shrink-0 rounded-xl border border-panel-border bg-white px-2 text-center text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20" />
-              <Button type="submit" disabled={loading || name.trim().length < 2} className="h-11">{loading ? 'Ekleniyor…' : isEdit ? 'Kaydet' : 'Ekle'}</Button>
+              <input id="topic-page-input" type="number" min="1" required inputMode="numeric" value={pageStart} onChange={(event) => setPageStart(event.target.value)} placeholder="Sayfa *" aria-label="Sayfa numarası (zorunlu)" className="h-11 w-20 shrink-0 rounded-xl border border-panel-border bg-white px-2 text-center text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20" />
+              <Button type="submit" disabled={loading || name.trim().length < 2 || pageStart.trim() === ''} className="h-11">{loading ? 'Ekleniyor…' : isEdit ? 'Kaydet' : 'Ekle'}</Button>
             </div>
           </section>
           <section className="min-h-0 min-w-0 overflow-hidden md:shadow-[inset_12px_0_18px_-18px_#8b7666]">

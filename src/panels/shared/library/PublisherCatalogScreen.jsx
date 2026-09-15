@@ -148,9 +148,10 @@ function RejectResourceBookModal({ book, onConfirm, onClose }) {
   )
 }
 
-function ResourceBookModal({ publisher, book, subjects, presetSubjectId, onSaved, onClose }) {
+function ResourceBookModal({ publisher, publishers, book, subjects, presetSubjectId, onSaved, onClose }) {
   const isEdit = Boolean(book)
-  const effectivePublisherId = book?.publisherId || publisher?.id
+  const [publisherId, setPublisherId] = useState(book?.publisherId || publisher?.id || '')
+  const effectivePublisherId = publisherId
   const [name, setName] = useState(book?.name || '')
   const [subjectId, setSubjectId] = useState(book?.subjectId || presetSubjectId || '')
   const [grade, setGrade] = useState(book?.grade || '')
@@ -167,6 +168,10 @@ function ResourceBookModal({ publisher, book, subjects, presetSubjectId, onSaved
 
     if (name.trim().length < 2) {
       setError('Kaynak kitap adı en az 2 karakter olmalı.')
+      return
+    }
+    if (!effectivePublisherId) {
+      setError('Yayın evi seçilmeli.')
       return
     }
     if (!subjectId) {
@@ -224,7 +229,7 @@ function ResourceBookModal({ publisher, book, subjects, presetSubjectId, onSaved
               {publisher?.name || (isEdit ? 'Kaynağı Düzenle' : 'Kaynak Kitap Ekle')}
             </h2>
             <p className="mt-0.5 text-sm text-panel-text-muted">
-              {isEdit ? 'Kaynak kitabı düzenle' : 'Bu yayın evine kaynak kitap ekle'}
+              {isEdit ? 'Kaynak kitabı düzenle' : publisher ? 'Bu yayın evine kaynak kitap ekle' : 'Bir yayın evine kaynak kitap ekle'}
             </p>
           </div>
           <button
@@ -255,6 +260,29 @@ function ResourceBookModal({ publisher, book, subjects, presetSubjectId, onSaved
           </div>
 
           <div className="flex flex-col gap-3">
+            {!publisher ? (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-panel-text-muted">Yayın Evi</span>
+                <select
+                  value={publisherId}
+                  onChange={(event) => setPublisherId(event.target.value)}
+                  className="rounded-xl border border-panel-border p-2.5 text-base text-panel-text"
+                >
+                  <option value="" disabled>
+                    Yayın evi seçin
+                  </option>
+                  {publishers
+                    ?.slice()
+                    .sort((a, b) => a.name.localeCompare(b.name, 'tr', { sensitivity: 'base' }))
+                    .map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            ) : null}
+
             <label className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-panel-text-muted">Kitap Adı</span>
               <input
@@ -957,6 +985,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
   const [error, setError] = useState('')
   const [showPublisherModal, setShowPublisherModal] = useState(false)
   const [bookModalPublisher, setBookModalPublisher] = useState(null)
+  const [showGeneralBookModal, setShowGeneralBookModal] = useState(false)
   const [editingBook, setEditingBook] = useState(null)
   const [rejectingBook, setRejectingBook] = useState(null)
   const [topicModalBook, setTopicModalBook] = useState(null)
@@ -1013,6 +1042,7 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
       return exists ? current.map((item) => (item.id === book.id ? book : item)) : [...(current || []), book]
     })
     setBookModalPublisher(null)
+    setShowGeneralBookModal(false)
     setEditingBook(null)
   }
 
@@ -1221,6 +1251,15 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
             </label>
             {canEdit ? (
               <Button
+                variant="secondary"
+                onClick={() => setShowGeneralBookModal(true)}
+                className="h-10 rounded-[10px] border-[#dfe4e5] bg-white px-4 text-sm font-medium text-[#253d3e] hover:bg-[#faf3ec]"
+              >
+                + Kaynak Ekle
+              </Button>
+            ) : null}
+            {canEdit ? (
+              <Button
                 onClick={() => setShowPublisherModal(true)}
                 className="h-10 rounded-[10px] bg-[#b85f22] px-4 text-sm font-medium text-white hover:opacity-90"
               >
@@ -1315,6 +1354,16 @@ export default function PublisherCatalogScreen({ subjectId } = {}) {
           presetSubjectId={subjectId}
           onSaved={handleBookSaved}
           onClose={() => setBookModalPublisher(null)}
+        />
+      ) : null}
+
+      {canEdit && showGeneralBookModal ? (
+        <ResourceBookModal
+          publishers={publishers}
+          subjects={subjects}
+          presetSubjectId={subjectId}
+          onSaved={handleBookSaved}
+          onClose={() => setShowGeneralBookModal(false)}
         />
       ) : null}
 
