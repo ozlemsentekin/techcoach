@@ -4,6 +4,10 @@ const { clearSessionHeaders, json } = require('./http')
 const { requireAdmin } = require('./admin')
 const { isSessionError } = require('./security')
 const { Iyzipay, createSubscriptionProduct, createSubscriptionPricingPlan } = require('./iyzicoClient')
+const { cached, invalidateCache } = require('./memoryCache')
+
+const PRICING_CACHE_KEY = 'pricing-plans'
+const PRICING_CACHE_TTL_MS = 60 * 1000
 
 // Kayıt / ödeme / koltuk satın alma ekranlarında GÖRÜNEN fiyatlar ve pazarlama
 // kartı metinleri. Fiilen tahsil edilen tutar iyzico abonelik planlarına bağlıdır
@@ -84,7 +88,7 @@ async function fetchAllPlans() {
 
 async function getPublicPricingHandler() {
   try {
-    const plans = await fetchAllPlans()
+    const plans = await cached(PRICING_CACHE_KEY, PRICING_CACHE_TTL_MS, fetchAllPlans)
     return json(200, { plans: Object.fromEntries(plans.map((plan) => [plan.planKey, plan])) })
   } catch (error) {
     if (isConfigError(error)) {
@@ -201,6 +205,10 @@ async function updatePricingPlanHandler(request) {
     if (result.recordset.length === 0) {
       return json(404, { error: 'Plan bulunamadı.' })
     }
+
+    // getPublicPricingHandler'ın 60sn'lik cache'i bu değişikliği geç yansıtmasın diye
+    // admin kaydettiği anda düşürülür.
+    invalidateCache(PRICING_CACHE_KEY)
 
     return json(200, { plan: sanitizePlan(result.recordset[0]) })
   } catch (error) {

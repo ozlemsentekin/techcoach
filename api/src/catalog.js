@@ -8,6 +8,15 @@ const { gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGradin
 const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
 const { sanitizeWrongQuestion } = require('./progress')
 const { syncTasksForManualTestCompletion } = require('./tasks')
+const { cached, invalidateCache } = require('./memoryCache')
+
+// Ders ve yayınevi listeleri tüm kullanıcılar için aynı, admin dışında hiç kimse
+// yazmaz — kısa TTL'li cache (bkz. memoryCache.js) yoğun eşzamanlı girişte tekrarlayan
+// sorguları tekilleştirir. Admin bir ders/yayınevi ekleyip değiştirdiğinde ilgili anahtar
+// hemen düşürülür (aşağıdaki create/update handler'larına bkz.).
+const SUBJECTS_CACHE_KEY = 'catalog-subjects-active'
+const PUBLISHERS_CACHE_KEY = 'catalog-publishers-all'
+const SHARED_CATALOG_CACHE_TTL_MS = 60 * 1000
 
 const SUBJECT_GRADES = new Set(['1', '2', '3', '4', '5', '6', '7', '8'])
 
@@ -271,6 +280,8 @@ async function updateSubjectHandler(request) {
       return json(404, { error: 'Ders bulunamadı.' })
     }
 
+    invalidateCache(SUBJECTS_CACHE_KEY)
+
     return json(200, { subject: sanitizeSubject(record) })
   } catch (error) {
     if (isConfigError(error)) {
@@ -308,6 +319,8 @@ async function createSubjectHandler(request) {
       SELECT id, name, created_at FROM dbo.Subjects WHERE name = @name;
     `)
 
+    invalidateCache(SUBJECTS_CACHE_KEY)
+
     return json(201, { subject: sanitizeSubject(result.recordset[0]) })
   } catch (error) {
     if (isConfigError(error)) {
@@ -331,12 +344,8 @@ async function listSubjectsForPanelHandler(request) {
     }
     verifySessionToken(token)
 
-    const requestDb = await withRequest({})
-    const result = await requestDb.query(`
-      SELECT id, name, is_active, grades_json, created_at FROM dbo.Subjects WHERE is_active = 1 ORDER BY name ASC;
-    `)
-
-    return json(200, { subjects: result.recordset.map(sanitizeSubject) })
+    const subjects = await cached(SUBJECTS_CACHE_KEY, SHARED_CATALOG_CACHE_TTL_MS, fetchActiveSubjects)
+    return json(200, { subjects })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -351,14 +360,18 @@ async function listSubjectsForPanelHandler(request) {
   }
 }
 
+async function fetchActiveSubjects() {
+  const requestDb = await withRequest({})
+  const result = await requestDb.query(`
+    SELECT id, name, is_active, grades_json, created_at FROM dbo.Subjects WHERE is_active = 1 ORDER BY name ASC;
+  `)
+  return result.recordset.map(sanitizeSubject)
+}
+
 async function listSubjectsForRegistrationHandler() {
   try {
-    const requestDb = await withRequest({})
-    const result = await requestDb.query(`
-      SELECT id, name, is_active, created_at FROM dbo.Subjects WHERE is_active = 1 ORDER BY name ASC;
-    `)
-
-    return json(200, { subjects: result.recordset.map(sanitizeSubject) })
+    const subjects = await cached(SUBJECTS_CACHE_KEY, SHARED_CATALOG_CACHE_TTL_MS, fetchActiveSubjects)
+    return json(200, { subjects })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -369,6 +382,14 @@ async function listSubjectsForRegistrationHandler() {
   }
 }
 
+async function fetchAllPublishers() {
+  const requestDb = await withRequest({})
+  const result = await requestDb.query(`
+    SELECT id, name, created_at FROM dbo.Publishers ORDER BY name ASC;
+  `)
+  return result.recordset.map(sanitizePublisher)
+}
+
 async function listPublishersHandler(request) {
   try {
     const { error } = await requireCatalogStaff(request)
@@ -376,12 +397,8 @@ async function listPublishersHandler(request) {
       return error
     }
 
-    const requestDb = await withRequest({})
-    const result = await requestDb.query(`
-      SELECT id, name, created_at FROM dbo.Publishers ORDER BY name ASC;
-    `)
-
-    return json(200, { publishers: result.recordset.map(sanitizePublisher) })
+    const publishers = await cached(PUBLISHERS_CACHE_KEY, SHARED_CATALOG_CACHE_TTL_MS, fetchAllPublishers)
+    return json(200, { publishers })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -404,12 +421,8 @@ async function listPublishersForPanelHandler(request) {
     }
     verifySessionToken(token)
 
-    const requestDb = await withRequest({})
-    const result = await requestDb.query(`
-      SELECT id, name, created_at FROM dbo.Publishers ORDER BY name ASC;
-    `)
-
-    return json(200, { publishers: result.recordset.map(sanitizePublisher) })
+    const publishers = await cached(PUBLISHERS_CACHE_KEY, SHARED_CATALOG_CACHE_TTL_MS, fetchAllPublishers)
+    return json(200, { publishers })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -446,6 +459,8 @@ async function createPublisherHandler(request) {
       OUTPUT inserted.id, inserted.name, inserted.created_at
       VALUES (@name);
     `)
+
+    invalidateCache(PUBLISHERS_CACHE_KEY)
 
     return json(201, { publisher: sanitizePublisher(result.recordset[0]) })
   } catch (error) {
