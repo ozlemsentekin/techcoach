@@ -14,6 +14,24 @@ function toISODate(value) {
   return value instanceof Date ? value.toISOString().slice(0, 10) : value
 }
 
+// Seçili testlerin toplam soru sayısını (dbo.ResourceBookTopicTests) sunucu tarafında hesaplar.
+// İstemcinin gönderdiği targetQuestionCount'a güvenilmez: eski istemci sürümleri veya bir formda
+// testler seçilirken oluşan yarış durumu bu alanı boş/0 gönderebiliyordu, görev soru sayısız
+// kalıyordu. Test seçimi olan her görevde gerçek kaynak verisi tek doğru kaynak olsun diye.
+async function sumTestQuestionCounts(testIds) {
+  if (!Array.isArray(testIds) || !testIds.length) return 0
+  const bindings = {}
+  const placeholders = testIds.map((id, index) => {
+    bindings[`test${index}`] = { type: sql.UniqueIdentifier, value: id }
+    return `@test${index}`
+  })
+  const testsDb = await withRequest(bindings)
+  const result = await testsDb.query(`
+    SELECT ISNULL(SUM(question_count), 0) AS total FROM dbo.ResourceBookTopicTests WHERE id IN (${placeholders.join(', ')});
+  `)
+  return result.recordset[0]?.total || 0
+}
+
 const HOMEWORK_TASK_TYPE_SET = new Set(['odev', 'soru-bankasi-odevi', 'okul-odevi', 'etkinlik-odevi'])
 
 // Göreve eklenen tek dosya (resim veya PDF), base64 data URL olarak saklanır (bkz.
@@ -734,6 +752,12 @@ async function createTaskHandler(request) {
       if (subjResult.recordset[0]) payload.subjectId = subjResult.recordset[0].id
     }
 
+    // Soru bankası testleri seçiliyse hedef soru sayısı istemciden değil kaynağın kendi
+    // verisinden hesaplanır (bkz. sumTestQuestionCounts).
+    if (Array.isArray(payload.selectedTestIds) && payload.selectedTestIds.length) {
+      payload.targetQuestionCount = await sumTestQuestionCounts(payload.selectedTestIds)
+    }
+
     const columns = ['student_id']
     const valuePlaceholders = ['@studentId']
     const bindings = {
@@ -827,6 +851,12 @@ async function updateTaskHandler(request) {
         return json(400, { error: 'Geçersiz öğretmen seçimi.' })
       }
       payload.subject = teacherRecord.subject_name || null
+    }
+
+    // Soru bankası testleri seçiliyse hedef soru sayısı istemciden değil kaynağın kendi
+    // verisinden hesaplanır (bkz. sumTestQuestionCounts).
+    if (Array.isArray(payload?.selectedTestIds) && payload.selectedTestIds.length) {
+      payload.targetQuestionCount = await sumTestQuestionCounts(payload.selectedTestIds)
     }
 
     const setClauses = []

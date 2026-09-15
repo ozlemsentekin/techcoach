@@ -23,6 +23,24 @@ function isValidTime(value) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value || '')
 }
 
+// Seçili testlerin toplam soru sayısını (dbo.ResourceBookTopicTests) sunucu tarafında hesaplar.
+// İstemcinin gönderdiği totalQuestionCount'a güvenilmez: bu alan boş/0 gelirse ödev soru
+// sayısız kalıyordu (bkz. tasks.js sumTestQuestionCounts). Test seçimi olan her ödevde
+// gerçek kaynak verisi tek doğru kaynak olsun diye.
+async function sumTestQuestionCounts(testIds) {
+  if (!Array.isArray(testIds) || !testIds.length) return 0
+  const bindings = {}
+  const placeholders = testIds.map((id, index) => {
+    bindings[`test${index}`] = { type: sql.UniqueIdentifier, value: id }
+    return `@test${index}`
+  })
+  const testsDb = await withRequest(bindings)
+  const result = await testsDb.query(`
+    SELECT ISNULL(SUM(question_count), 0) AS total FROM dbo.ResourceBookTopicTests WHERE id IN (${placeholders.join(', ')});
+  `)
+  return result.recordset[0]?.total || 0
+}
+
 function computeEndTime(startTime, durationMinutes) {
   const [startHour, startMinute] = startTime.split(':').map(Number)
   const startMinutes = startHour * 60 + startMinute
@@ -214,6 +232,12 @@ async function createHomeworkTask(
   const sanitizedTestIds = Array.isArray(testIds) ? testIds.filter((id) => typeof id === 'string' && id) : []
   const taskType = isSchoolHomework ? 'okul-odevi' : resourceBookId ? 'soru-bankasi-odevi' : 'odev'
   const isReading = resourceType === 'okuma_kitabi'
+
+  // Soru bankası testleri seçiliyse hedef soru sayısı istemciden değil kaynağın kendi
+  // verisinden hesaplanır (bkz. sumTestQuestionCounts).
+  if (sanitizedTestIds.length) {
+    totalQuestionCount = await sumTestQuestionCounts(sanitizedTestIds)
+  }
 
   const requestDb = await withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
