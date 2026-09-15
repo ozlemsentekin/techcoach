@@ -52,6 +52,7 @@ export function getStudentNav({ lessonNotesEnabled = false } = {}) {
 export const STUDENT_NAV = getStudentNav()
 
 export const PARENT_STUDENTS_NAV_ITEM = { to: '/parent/students', label: 'Çocuklarım', icon: 'Users' }
+export const PARENT_TEACHERS_NAV_ITEM = { to: '/parent/teachers', label: 'Öğretmenler', icon: 'GraduationCap' }
 export const PARENT_GUIDE_NAV_ITEM = { to: '/parent/guide', label: 'Rehber', icon: 'BookOpen' }
 export const PARENT_REQUESTS_NAV_ITEM = { to: '/parent/requests', label: 'Taleplerim', icon: 'ClipboardList' }
 
@@ -113,6 +114,7 @@ export function getParentNav({ hasStudents = true, canManageLibrary = false, isA
       ],
     },
     studentsItem,
+    PARENT_TEACHERS_NAV_ITEM,
     PARENT_REQUESTS_NAV_ITEM,
     PARENT_GUIDE_NAV_ITEM,
   ]
