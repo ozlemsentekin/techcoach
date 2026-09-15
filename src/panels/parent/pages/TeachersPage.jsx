@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, CalendarDays, Eye, GraduationCap, KeyRound, Mail, Phone, Search, UserRound, Users, X } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { BookOpen, CalendarDays, Eye, GraduationCap, KeyRound, Mail, Phone, Plus, Search, UserRound, Users, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import PageHeader from '../../layout/PageHeader'
 import EmptyState from '../../shared/EmptyState'
@@ -10,6 +11,7 @@ import DataTable from '../../ui/DataTable'
 import TeacherProfileModal from '../components/TeacherProfileModal'
 import TeacherResourceBooksModal from '../components/TeacherResourceBooksModal'
 import GrantTeacherAccessDialog from '../components/GrantTeacherAccessDialog'
+import StudentTeacherModal from '../components/StudentTeacherModal'
 
 const WEEKDAY_SHORT_LABELS = {
   pazartesi: 'Pzt',
@@ -315,8 +317,15 @@ function TeacherDetailCard({ teacher, associations, onEditResources, onClose }) 
   )
 }
 
+function refetchTeachers() {
+  return authRequest('/api/parent/teachers', { method: 'GET' })
+}
+
 export default function TeachersPage() {
+  const [searchParams] = useSearchParams()
   const [teachers, setTeachers] = useState(null)
+  const [students, setStudents] = useState(null)
+  const [selectedStudentId, setSelectedStudentId] = useState(searchParams.get('studentId') || '')
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
   const [resourceModalTeacher, setResourceModalTeacher] = useState(null)
@@ -324,13 +333,16 @@ export default function TeachersPage() {
   const [detailTeacherId, setDetailTeacherId] = useState(null)
   const [openMenuTeacherId, setOpenMenuTeacherId] = useState(null)
   const [grantAccessTeacher, setGrantAccessTeacher] = useState(null)
+  const [addTeacherStudent, setAddTeacherStudent] = useState(null)
 
   useEffect(() => {
     let ignore = false
 
-    authRequest('/api/parent/teachers', { method: 'GET' })
-      .then((data) => {
-        if (!ignore) setTeachers(data.teachers)
+    Promise.all([refetchTeachers(), authRequest('/api/parent/students', { method: 'GET' })])
+      .then(([teachersData, studentsData]) => {
+        if (ignore) return
+        setTeachers(teachersData.teachers)
+        setStudents(studentsData.students)
       })
       .catch((err) => {
         if (!ignore) setError(err.message)
@@ -341,11 +353,16 @@ export default function TeachersPage() {
     }
   }, [])
 
+  const studentFilteredTeachers = useMemo(() => {
+    if (!selectedStudentId) return teachers || []
+    return (teachers || []).filter((teacher) => teacher.studentId === selectedStudentId)
+  }, [teachers, selectedStudentId])
+
   const filteredTeachers = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('tr-TR')
-    if (!normalizedQuery) return teachers || []
+    if (!normalizedQuery) return studentFilteredTeachers
 
-    return (teachers || []).filter((teacher) =>
+    return studentFilteredTeachers.filter((teacher) =>
       [
         teacher.fullName,
         teacher.studentFullName,
@@ -357,7 +374,7 @@ export default function TeachersPage() {
         .filter(Boolean)
         .some((value) => value.toLocaleLowerCase('tr-TR').includes(normalizedQuery)),
     )
-  }, [query, teachers])
+  }, [query, studentFilteredTeachers])
 
   const associationCounts = useMemo(() => groupAssociationCounts(teachers), [teachers])
   const selectedTeacher = useMemo(
@@ -420,9 +437,49 @@ export default function TeachersPage() {
         ]),
   ]
 
+  const handleTeacherAdded = () => {
+    refetchTeachers()
+      .then((data) => setTeachers(data.teachers))
+      .catch((err) => setError(err.message))
+  }
+
+  const selectedStudentForAdd = (students || []).find((student) => student.id === selectedStudentId) || null
+  const canAddTeacher = (students?.length || 0) === 1 || Boolean(selectedStudentForAdd)
+  const addTeacherTarget = selectedStudentForAdd || (students?.length === 1 ? students[0] : null)
+
+  const headerActions = (
+    <>
+      {(students?.length || 0) > 1 ? (
+        <select
+          value={selectedStudentId}
+          onChange={(event) => setSelectedStudentId(event.target.value)}
+          className="h-10 rounded-xl border border-panel-border bg-panel-surface px-3 text-sm font-medium text-panel-text"
+          aria-label="Çocuğum"
+        >
+          <option value="">Tüm Çocuklarım</option>
+          {students.map((student) => (
+            <option key={student.id} value={student.id}>
+              {student.fullName}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      <Button
+        type="button"
+        size="sm"
+        disabled={!canAddTeacher}
+        title={canAddTeacher ? undefined : 'Öğretmen eklemek için önce bir çocuk seçin'}
+        onClick={() => setAddTeacherStudent(addTeacherTarget)}
+      >
+        <Plus size={14} aria-hidden="true" />
+        Öğretmen Ekle
+      </Button>
+    </>
+  )
+
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Öğretmenler" />
+      <PageHeader title="Öğretmenler" actions={headerActions} />
 
       {error ? (
         <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
@@ -458,7 +515,9 @@ export default function TeachersPage() {
 
           {filteredTeachers.length === 0 ? (
             <p className="rounded-xl border border-dashed border-[#dfe4e5] bg-white px-4 py-8 text-center text-sm text-[#667475]">
-              Aramayla eşleşen öğretmen yok.
+              {query.trim()
+                ? 'Aramayla eşleşen öğretmen yok.'
+                : 'Bu çocuk için henüz öğretmen eklenmedi.'}
             </p>
           ) : (
             <>
@@ -607,6 +666,14 @@ export default function TeachersPage() {
           associationCount={associationCounts.get(teacherGroupKey(grantAccessTeacher)) || 1}
           onGranted={(updatedTeachers) => setTeachers(updatedTeachers)}
           onClose={() => setGrantAccessTeacher(null)}
+        />
+      ) : null}
+
+      {addTeacherStudent ? (
+        <StudentTeacherModal
+          student={addTeacherStudent}
+          onSaved={handleTeacherAdded}
+          onClose={() => setAddTeacherStudent(null)}
         />
       ) : null}
     </div>
