@@ -16,6 +16,7 @@ export default function AnalysisPhotoViewer({
   onDeletePhoto,
   title = 'Hata Analiz',
   contextLabel,
+  pdfFileNamePrefix = 'hata-analiz',
 }) {
   const [photos, setPhotos] = useState(null)
   const [index, setIndex] = useState(0)
@@ -86,13 +87,20 @@ export default function AnalysisPhotoViewer({
   const handlePrint = async () => {
     if (!photos?.length || printing) return
     setPrinting(true)
+    // Popup engelleyiciden kaçınmak için pencere PDF üretimi (await'ler) başlamadan, tıklama
+    // jestiyle senkron açılır — bkz. printPdfDocument'taki `printWindow` yorumu.
+    const printWindow = window.open('', '_blank')
     try {
-      const [{ buildAnalysisPhotosPdf, buildAnalysisPhotosPdfFileName }, { savePdfDocument }] = await Promise.all([
+      const [{ buildAnalysisPhotosPdf, buildAnalysisPhotosPdfFileName }, { printPdfDocument }] = await Promise.all([
         import('../../utils/analysisPhotosPdf'),
         import('../../utils/savePdfDocument'),
       ])
       const doc = await buildAnalysisPhotosPdf({ title, subtitle: contextLabel, photos })
-      await savePdfDocument(doc, buildAnalysisPhotosPdfFileName(contextLabel || title))
+      await printPdfDocument(
+        doc,
+        buildAnalysisPhotosPdfFileName(contextLabel || title, pdfFileNamePrefix),
+        printWindow,
+      )
     } finally {
       setPrinting(false)
     }

@@ -444,6 +444,16 @@ export async function getTeacherWrongQuestionAnalysisPhotoRecords(wrongQuestionI
   return data.photos || []
 }
 
+/**
+ * "Hata Analizlerim" tablosundaki "Soruyu Göster": asıl sorunun (Hata Defteri'nde çekilen)
+ * fotoğrafı — tek bir studentTeacherId'ye bağlı değil, kapsam StudentTeachers üzerinden doğrulanır.
+ * @returns {Promise<string>} photoUrl
+ */
+export async function getTeacherWrongQuestionPhotoRecord(wrongQuestionId) {
+  const data = await authRequest(`/api/panel-teacher/wrong-question-photos/${wrongQuestionId}`, { method: 'GET' })
+  return data.photoUrl
+}
+
 /* -------------------------------------------------------------------- Deneme Sınavları (salt-okuma) */
 
 /** @returns {Promise<import('./mockExamService').MockExam[]>} */

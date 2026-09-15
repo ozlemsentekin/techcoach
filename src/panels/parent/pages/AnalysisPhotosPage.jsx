@@ -6,6 +6,7 @@ import Button from '../../ui/Button'
 import {
   getWrongQuestionAnalysisPhotos,
   getWrongQuestionAnalysisPhotoRecords,
+  getWrongQuestionPhoto,
 } from '../../../services/wrongQuestionService'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
@@ -81,6 +82,7 @@ export default function ParentAnalysisPhotosPage() {
       key={selectedStudent.id}
       fetchItems={() => getWrongQuestionAnalysisPhotos(selectedStudent.id)}
       fetchPhotos={(id) => getWrongQuestionAnalysisPhotoRecords(id, selectedStudent.id)}
+      fetchQuestionPhoto={(id) => getWrongQuestionPhoto(id, selectedStudent.id)}
       title="Hata Analizlerim"
       subtitle={`${selectedStudent.fullName} için eklenen hata analiz görselleri.`}
       headerActions={headerActions}
