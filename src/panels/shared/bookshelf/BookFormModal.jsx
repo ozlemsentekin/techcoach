@@ -249,10 +249,10 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-3">
+              <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3">
                 <div className="flex flex-col items-center gap-1">
-                  <ResourceImageField value={imageUrl} onChange={setImageUrl} compact size={56} fit="contain" />
-                  <span className="text-center text-[10px] leading-snug text-panel-text-muted">Kapak (isteğe bağlı)</span>
+                  <ResourceImageField value={imageUrl} onChange={setImageUrl} compact size={80} fit="contain" />
+                  <span className="text-center text-[10px] leading-snug text-panel-text-muted">Kapak</span>
                 </div>
               <label className="flex min-w-0 flex-col gap-1.5">
                 <span className="text-sm font-medium text-panel-text-muted">Kitap Adı</span>
