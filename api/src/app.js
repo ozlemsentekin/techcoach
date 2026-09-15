@@ -99,6 +99,7 @@ const {
   listTeacherStudentWrongQuestionAnalysisPhotosHandler,
   listTeacherWrongQuestionAnalysisPhotosHandler,
   getTeacherWrongQuestionAnalysisPhotosHandler,
+  getTeacherWrongQuestionPhotoRecordHandler,
   getTeacherStudentWrongQuestionTopicStatsHandler,
   updateTeacherStudentWrongQuestionHandler,
   grantParentAccessHandler,
@@ -988,6 +989,13 @@ registerHttp('panel-teacher-wrong-question-analysis-photos-get', {
   methods: ['GET'],
   route: 'panel-teacher/wrong-question-analysis-photos/{wrongQuestionId}',
   handler: getTeacherWrongQuestionAnalysisPhotosHandler,
+})
+
+registerHttp('panel-teacher-wrong-question-photo-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/wrong-question-photos/{wrongQuestionId}',
+  handler: getTeacherWrongQuestionPhotoRecordHandler,
 })
 
 registerHttp('parent-return', {

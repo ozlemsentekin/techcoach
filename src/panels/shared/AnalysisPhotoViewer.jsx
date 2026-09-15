@@ -16,6 +16,7 @@ export default function AnalysisPhotoViewer({
   onDeletePhoto,
   title = 'Hata Analiz',
   contextLabel,
+  pdfFileNamePrefix = 'hata-analiz',
 }) {
   const [photos, setPhotos] = useState(null)
   const [index, setIndex] = useState(0)
@@ -92,7 +93,7 @@ export default function AnalysisPhotoViewer({
         import('../../utils/savePdfDocument'),
       ])
       const doc = await buildAnalysisPhotosPdf({ title, subtitle: contextLabel, photos })
-      await savePdfDocument(doc, buildAnalysisPhotosPdfFileName(contextLabel || title))
+      await savePdfDocument(doc, buildAnalysisPhotosPdfFileName(contextLabel || title, pdfFileNamePrefix))
     } finally {
       setPrinting(false)
     }
