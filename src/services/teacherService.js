@@ -416,13 +416,13 @@ export async function getTeacherStudentWrongQuestionPhoto(studentTeacherId, wron
   return data.photoUrl
 }
 
-/** Hata Analiz görselini tembel çeker (öğretmen salt-okuma, sadece kendi dersinde). @returns {Promise<string>} analysisPhotoUrl */
-export async function getTeacherStudentWrongQuestionAnalysisPhoto(studentTeacherId, wrongQuestionId) {
+/** Bir sorunun TÜM Hata Analiz görsellerini çeker (öğretmen salt-okuma, sadece kendi dersinde). @returns {Promise<import('./wrongQuestionService').WrongQuestionAnalysisPhoto[]>} */
+export async function getTeacherStudentWrongQuestionAnalysisPhotos(studentTeacherId, wrongQuestionId) {
   const data = await authRequest(
-    `/api/panel-teacher/students/${studentTeacherId}/wrong-questions/${wrongQuestionId}/analysis-photo`,
+    `/api/panel-teacher/students/${studentTeacherId}/wrong-questions/${wrongQuestionId}/analysis-photos`,
     { method: 'GET' },
   )
-  return data.analysisPhotoUrl
+  return data.photos || []
 }
 
 /**
@@ -436,12 +436,12 @@ export async function getTeacherWrongQuestionAnalysisPhotos() {
   return data.items || []
 }
 
-/** @returns {Promise<string>} analysisPhotoUrl */
-export async function getTeacherWrongQuestionAnalysisPhoto(wrongQuestionId) {
+/** Bir sorunun TÜM Hata Analiz görsellerini çeker ("Hata Analizlerim" tablosundan). @returns {Promise<import('./wrongQuestionService').WrongQuestionAnalysisPhoto[]>} */
+export async function getTeacherWrongQuestionAnalysisPhotoRecords(wrongQuestionId) {
   const data = await authRequest(`/api/panel-teacher/wrong-question-analysis-photos/${wrongQuestionId}`, {
     method: 'GET',
   })
-  return data.analysisPhotoUrl
+  return data.photos || []
 }
 
 /* -------------------------------------------------------------------- Deneme Sınavları (salt-okuma) */

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Image as ImageIcon, Loader2, X } from 'lucide-react'
+import { Image as ImageIcon } from 'lucide-react'
 import PageHeader from '../layout/PageHeader'
 import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
+import AnalysisPhotoViewer from './AnalysisPhotoViewer'
 
 function formatAddedAt(value) {
   if (!value) return ''
@@ -14,13 +15,13 @@ function formatAddedAt(value) {
 }
 
 // "Hata Analizlerim" menüsü: veli tarafından eklenmiş Hata Analiz görsellerini YayınEvi/Kaynak/
-// İçerik/Test/Soru No tablosunda listeler; "Analizi Göster" tembel çekip büyük görselde açar
-// (WrongQuestionGalleryModal'daki aynı desen, bkz. o dosyadaki analysisPhotoOpen yorumu). Öğrenci
-// ve veli panelinde tek öğrenci bağlamında, öğretmen panelinde kendi kapsamındaki tüm öğrenciler
-// için (bu yüzden showStudentColumn) kullanılır.
+// İçerik/Test/Soru No tablosunda listeler; "Analizi Göster" AnalysisPhotoViewer'ı açar (slayt gibi
+// gezinme + yazdırma — bkz. o dosyadaki yorum). Ekleme/kaldırma burada değil, Hata Defteri'nden
+// yapılır (bu sayfa salt-görüntüleme). Öğrenci ve veli panelinde tek öğrenci bağlamında, öğretmen
+// panelinde kendi kapsamındaki tüm öğrenciler için (bu yüzden showStudentColumn) kullanılır.
 export default function AnalysisPhotosPage({
   fetchItems,
-  fetchPhoto,
+  fetchPhotos,
   showStudentColumn = false,
   title = 'Hata Analizlerim',
   subtitle = 'Eklenen hata analiz görsellerine buradan ulaşabilirsin.',
@@ -30,17 +31,14 @@ export default function AnalysisPhotosPage({
   const [items, setItems] = useState(null)
   const [error, setError] = useState('')
   const [openItem, setOpenItem] = useState(null)
-  const [photoUrl, setPhotoUrl] = useState('')
-  const [photoError, setPhotoError] = useState('')
-  const [loadingPhoto, setLoadingPhoto] = useState(false)
 
   useEffect(() => {
     let ignore = false
-    setItems(null)
-    setError('')
     fetchItems()
       .then((data) => {
-        if (!ignore) setItems(data)
+        if (ignore) return
+        setError('')
+        setItems(data)
       })
       .catch((err) => {
         if (!ignore) setError(err.message)
@@ -49,21 +47,6 @@ export default function AnalysisPhotosPage({
       ignore = true
     }
   }, [fetchItems])
-
-  const handleShow = async (item) => {
-    setOpenItem(item)
-    setPhotoUrl('')
-    setPhotoError('')
-    setLoadingPhoto(true)
-    try {
-      const url = await fetchPhoto(item.id)
-      setPhotoUrl(url)
-    } catch (err) {
-      setPhotoError(err.message || 'Hata analiz görseli yüklenemedi.')
-    } finally {
-      setLoadingPhoto(false)
-    }
-  }
 
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
@@ -92,7 +75,7 @@ export default function AnalysisPhotosPage({
                 <th className="px-3 py-2.5">İçerik Adı</th>
                 <th className="px-3 py-2.5">Test Adı</th>
                 <th className="px-3 py-2.5">Soru No</th>
-                <th className="px-3 py-2.5">Eklenme Tarihi</th>
+                <th className="px-3 py-2.5">Son Ekleme</th>
                 <th className="px-3 py-2.5" />
               </tr>
             </thead>
@@ -112,11 +95,11 @@ export default function AnalysisPhotosPage({
                   <td className="px-3 py-2.5">
                     <button
                       type="button"
-                      onClick={() => handleShow(item)}
+                      onClick={() => setOpenItem(item)}
                       className="flex items-center gap-1.5 whitespace-nowrap rounded-full border-2 border-panel-blue px-3 py-1.5 text-xs font-bold text-panel-blue hover:bg-panel-blue-soft"
                     >
                       <ImageIcon size={14} aria-hidden="true" />
-                      Analizi Göster
+                      Analizi Göster{item.analysisPhotoCount > 1 ? ` (${item.analysisPhotoCount})` : ''}
                     </button>
                   </td>
                 </tr>
@@ -127,39 +110,18 @@ export default function AnalysisPhotosPage({
       )}
 
       {openItem ? (
-        <div
-          className="fixed inset-0 z-[70] flex flex-col items-center justify-center gap-3 bg-panel-text/95 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Hata Analiz görseli"
-        >
-          <span className="text-sm font-semibold uppercase tracking-wide text-white/80">
-            {openItem.testName || openItem.topic || 'Hata Analiz'}
-            {openItem.questionNumber != null ? ` · Soru No: ${openItem.questionNumber}` : ''}
-          </span>
-          {photoUrl ? (
-            <img loading="lazy" decoding="async"
-              src={photoUrl}
-              alt="Hata analiz görseli"
-              className="max-h-[85vh] max-w-[95vw] rounded-xl object-contain shadow-2xl"
-            />
-          ) : photoError ? (
-            <p className="max-w-xs text-center text-sm text-white/70">{photoError}</p>
-          ) : loadingPhoto ? (
-            <div className="flex flex-col items-center gap-2 text-white/70">
-              <Loader2 size={28} className="animate-spin" aria-hidden="true" />
-              <span className="text-xs">Görsel yükleniyor...</span>
-            </div>
-          ) : null}
-          <button
-            type="button"
-            aria-label="Kapat"
-            onClick={() => setOpenItem(null)}
-            className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25"
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
-        </div>
+        <AnalysisPhotoViewer
+          wrongQuestionId={openItem.id}
+          fetchPhotos={fetchPhotos}
+          contextLabel={[
+            openItem.publisherName,
+            openItem.testName || openItem.topic,
+            openItem.questionNumber != null ? `Soru ${openItem.questionNumber}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+          onClose={() => setOpenItem(null)}
+        />
       ) : null}
     </div>
   )

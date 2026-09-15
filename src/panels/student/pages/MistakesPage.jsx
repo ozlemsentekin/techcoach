@@ -2,7 +2,7 @@ import {
   getWrongQuestions,
   getWrongQuestionTopicStats,
   getWrongQuestionPhoto,
-  getWrongQuestionAnalysisPhoto,
+  getWrongQuestionAnalysisPhotoRecords,
   updateWrongQuestion,
   updateWrongQuestionPhoto,
 } from '../../../services/wrongQuestionService'
@@ -14,7 +14,7 @@ export default function MistakesPage() {
       fetchWrongQuestions={getWrongQuestions}
       fetchTopicStats={getWrongQuestionTopicStats}
       fetchPhoto={getWrongQuestionPhoto}
-      fetchAnalysisPhoto={getWrongQuestionAnalysisPhoto}
+      fetchAnalysisPhotos={getWrongQuestionAnalysisPhotoRecords}
       viewerRole="ogrenci"
       updateMistakeAnalysis={(id, analysis) => updateWrongQuestion(id, { analysis })}
       updateMistakeMeta={(id, updates) => updateWrongQuestion(id, updates)}

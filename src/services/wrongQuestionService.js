@@ -23,10 +23,16 @@ import { authRequest, cachedGet } from './authClient'
  * @property {boolean} hasPhoto
  * @property {string} [photoUrl] Sadece foto kaydeden akışların döndürdüğü nesnelerde dolu gelir;
  * liste uçları (getWrongQuestions) performans için bunu hiç seçmez, bkz. getWrongQuestionPhoto.
- * @property {boolean} hasAnalysisPhoto "Hata Analiz" görseli eklenmiş mi — sadece veli ekler,
- * herkes görüntüler (öğrenci/veli/öğretmen). bkz. getWrongQuestionAnalysisPhoto.
- * @property {string} [analysisPhotoUrl] Sadece analiz görseli kaydeden akışların döndürdüğü
- * nesnelerde dolu gelir; liste uçları bunu hiç seçmez.
+ * @property {boolean} hasAnalysisPhoto En az bir "Hata Analiz" görseli eklenmiş mi — sadece veli
+ * ekler/kaldırır, herkes görüntüler (öğrenci/veli/öğretmen). bkz. getWrongQuestionAnalysisPhotos.
+ * @property {number} [analysisPhotoCount] Eklenen Hata Analiz görseli sayısı (birden fazla olabilir).
+ */
+
+/**
+ * @typedef {Object} WrongQuestionAnalysisPhoto
+ * @property {string} id
+ * @property {string} photoUrl data:image/... base64
+ * @property {string} createdAt
  */
 
 /**
@@ -133,47 +139,49 @@ export async function updateWrongQuestionPhoto(id, photoDataUrl, studentId) {
 }
 
 /**
- * Bir sorunun Hata Analiz görselini tembel çeker (bkz. getWrongQuestionPhoto'daki aynı gerekçe).
- * @param {string} [studentId] @returns {Promise<string>} analysisPhotoUrl
+ * Bir sorunun TÜM Hata Analiz görsellerini çeker (slayt gibi gezinme + yazdırma için). Diğer
+ * tembel-çekim uçlarından farklı olarak hepsi tek seferde gelir — "Analizi Göster" tıklamasıyla
+ * tetiklenen tekil bir aksiyon, soru başına görsel sayısı da az (genelde 1-5).
+ * @param {string} [studentId] @returns {Promise<WrongQuestionAnalysisPhoto[]>}
  */
-export async function getWrongQuestionAnalysisPhoto(id, studentId) {
+export async function getWrongQuestionAnalysisPhotoRecords(id, studentId) {
   const query = studentId ? `?studentId=${studentId}` : ''
-  const data = await authRequest(`/api/panel/wrong-questions/${id}/analysis-photo${query}`, { method: 'GET' })
-  return data.analysisPhotoUrl
+  const data = await authRequest(`/api/panel/wrong-questions/${id}/analysis-photos${query}`, { method: 'GET' })
+  return data.photos || []
 }
 
 /**
- * Hata Analiz görselini ekler/değiştirir. Sadece veli çağırabilir (backend 403 döner aksi halde).
+ * Bir soruya yeni bir Hata Analiz görseli ekler (mevcutları değiştirmez). Sadece veli çağırabilir
+ * (backend 403 döner aksi halde).
  * @param {string} photoDataUrl data:image/... base64
  * @param {string} [studentId]
- * @returns {Promise<WrongQuestion>}
+ * @returns {Promise<WrongQuestionAnalysisPhoto>}
  */
-export async function updateWrongQuestionAnalysisPhoto(id, photoDataUrl, studentId) {
+export async function addWrongQuestionAnalysisPhoto(id, photoDataUrl, studentId) {
   const body = studentId ? { photo: photoDataUrl, studentId } : { photo: photoDataUrl }
-  const data = await authRequest(`/api/panel/wrong-questions/${id}/analysis-photo`, {
-    method: 'PUT',
+  const data = await authRequest(`/api/panel/wrong-questions/${id}/analysis-photos`, {
+    method: 'POST',
     body: JSON.stringify(body),
   })
-  return data.wrongQuestion
+  return data.photo
 }
 
 /**
- * Hata Analiz görselini kaldırır. Sadece veli çağırabilir.
+ * Bir Hata Analiz görselini kaldırır. Sadece veli çağırabilir.
  * @param {string} [studentId]
- * @returns {Promise<WrongQuestion>}
+ * @returns {Promise<void>}
  */
-export async function deleteWrongQuestionAnalysisPhoto(id, studentId) {
-  const body = studentId ? { studentId } : {}
-  const data = await authRequest(`/api/panel/wrong-questions/${id}/analysis-photo`, {
+export async function deleteWrongQuestionAnalysisPhoto(id, photoId, studentId) {
+  const query = studentId ? `?studentId=${studentId}` : ''
+  await authRequest(`/api/panel/wrong-questions/${id}/analysis-photos/${photoId}${query}`, {
     method: 'DELETE',
-    body: JSON.stringify(body),
+    body: JSON.stringify(studentId ? { studentId } : {}),
   })
-  return data.wrongQuestion
 }
 
 /**
  * "Hata Analizlerim" menüsü: Hata Analiz görseli eklenmiş tüm soruların YayınEvi/Kaynak/İçerik/
- * Test/Soru No listesi (görselin kendisi olmadan — tembel çekim, bkz. getWrongQuestionAnalysisPhoto).
+ * Test/Soru No listesi (görsellerin kendisi olmadan — tembel çekim, bkz. getWrongQuestionAnalysisPhotoRecords).
  * @param {string} [studentId]
  * @returns {Promise<Array>}
  */
