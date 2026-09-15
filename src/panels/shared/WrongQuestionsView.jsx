@@ -26,6 +26,22 @@ import { ResourceBookAvatar } from './ResourceBookCard'
 import { RATE_TONES, completionRateTone, successRateTone } from './rateTones'
 import MistakeAnalysisBadges from './MistakeAnalysisBadges'
 import { analysisFilterOptions, applyAnalysisFilter, pendingAnalysisCount } from './mistakeAnalysis'
+import { dateInRange, toDateKey } from './progressAnalytics'
+import { todayISODate } from '../../utils/time'
+
+// Hata kaydedilme tarihine (WrongQuestions.created_at) göre daraltma seçenekleri — Gelişim
+// Analizi'ndeki (StudentProgressView.jsx) RANGE_FILTERS ile aynı id/etiket seti ve aynı
+// dateInRange yardımcısı kullanılır, tutarlılık için. Not: burada filtrelenen yalnızca
+// fotoğraflanmış yanlış soru KAYITLARI (galeriler, kartlardaki liste); test sonuçlarından
+// hesaplanan backend istatistikleri (subjectStatsMap vb. — bkz. computeWrongQuestionTopicStats)
+// her zaman tüm zamanları kapsar, bu yüzden bir kaynağın "yanlış" rozeti bazen bu filtreden
+// bağımsız görünebilir (stats mevcutsa fotoğraf sayısına değil ona öncelik verilir).
+const MISTAKE_DATE_FILTERS = [
+  { value: 'today', label: 'Bugün' },
+  { value: 'week', label: 'Bu Hafta' },
+  { value: 'month', label: 'Bu Ay' },
+  { value: 'all', label: 'Tümü' },
+]
 
 const NO_BOOK_KEY = '__kaynaksiz__'
 const sourceKeyFor = (bookName) => bookName || NO_BOOK_KEY
@@ -752,6 +768,8 @@ export default function WrongQuestionsView({
   const [selectedTopicKeys, setSelectedTopicKeys] = useState(() => new Set())
   const [replacingPhotoItem, setReplacingPhotoItem] = useState(null)
   const [analysisFilter, setAnalysisFilter] = useState('tumu')
+  const [dateFilter, setDateFilter] = useState('all')
+  const today = todayISODate()
 
   useEffect(() => {
     let ignore = false
@@ -790,9 +808,13 @@ export default function WrongQuestionsView({
     () => (wrongQuestions ? wrongQuestions.filter((item) => item.hasPhoto) : []),
     [wrongQuestions],
   )
+  const dateFilteredQuestions = useMemo(
+    () => allPhotoQuestions.filter((item) => dateInRange(toDateKey(item.createdAt), dateFilter, today)),
+    [allPhotoQuestions, dateFilter, today],
+  )
   const photoQuestions = useMemo(
-    () => applyAnalysisFilter(allPhotoQuestions, analysisFilter),
-    [allPhotoQuestions, analysisFilter],
+    () => applyAnalysisFilter(dateFilteredQuestions, analysisFilter),
+    [dateFilteredQuestions, analysisFilter],
   )
   const filterOptions = useMemo(() => analysisFilterOptions(viewerRole), [viewerRole])
 
@@ -815,11 +837,11 @@ export default function WrongQuestionsView({
   // daraltılır: ders seçiliyse o ders, kaynak da seçiliyse o kaynak. Ders seçilmemiş üst
   // seviyede tüm dersler kapsanır.
   const scopedPhotoQuestions = useMemo(() => {
-    let list = allPhotoQuestions
+    let list = dateFilteredQuestions
     if (effectiveSelectedSubject) list = list.filter((item) => item.subject === effectiveSelectedSubject)
     if (activeSource) list = list.filter((item) => sourceKeyFor(item.bookName) === selectedSourceKey)
     return list
-  }, [allPhotoQuestions, effectiveSelectedSubject, activeSource, selectedSourceKey])
+  }, [dateFilteredQuestions, effectiveSelectedSubject, activeSource, selectedSourceKey])
   const scopedFilteredCount = useMemo(
     () => applyAnalysisFilter(scopedPhotoQuestions, analysisFilter).length,
     [scopedPhotoQuestions, analysisFilter],
@@ -1099,6 +1121,21 @@ export default function WrongQuestionsView({
             className="h-9 rounded-lg border border-panel-border bg-panel-surface px-2 text-sm font-medium text-panel-text focus:border-panel-blue focus:outline-none"
           >
             {filterOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <label htmlFor="mistake-date-filter" className="text-xs font-semibold text-panel-text-muted">
+            Tarih
+          </label>
+          <select
+            id="mistake-date-filter"
+            value={dateFilter}
+            onChange={(event) => setDateFilter(event.target.value)}
+            className="h-9 rounded-lg border border-panel-border bg-panel-surface px-2 text-sm font-medium text-panel-text focus:border-panel-blue focus:outline-none"
+          >
+            {MISTAKE_DATE_FILTERS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
