@@ -23,6 +23,10 @@ import { authRequest, cachedGet } from './authClient'
  * @property {boolean} hasPhoto
  * @property {string} [photoUrl] Sadece foto kaydeden akışların döndürdüğü nesnelerde dolu gelir;
  * liste uçları (getWrongQuestions) performans için bunu hiç seçmez, bkz. getWrongQuestionPhoto.
+ * @property {boolean} hasAnalysisPhoto "Hata Analiz" görseli eklenmiş mi — sadece veli ekler,
+ * herkes görüntüler (öğrenci/veli/öğretmen). bkz. getWrongQuestionAnalysisPhoto.
+ * @property {string} [analysisPhotoUrl] Sadece analiz görseli kaydeden akışların döndürdüğü
+ * nesnelerde dolu gelir; liste uçları bunu hiç seçmez.
  */
 
 /**
@@ -126,6 +130,57 @@ export async function updateWrongQuestionPhoto(id, photoDataUrl, studentId) {
     body: JSON.stringify(body),
   })
   return data.wrongQuestion
+}
+
+/**
+ * Bir sorunun Hata Analiz görselini tembel çeker (bkz. getWrongQuestionPhoto'daki aynı gerekçe).
+ * @param {string} [studentId] @returns {Promise<string>} analysisPhotoUrl
+ */
+export async function getWrongQuestionAnalysisPhoto(id, studentId) {
+  const query = studentId ? `?studentId=${studentId}` : ''
+  const data = await authRequest(`/api/panel/wrong-questions/${id}/analysis-photo${query}`, { method: 'GET' })
+  return data.analysisPhotoUrl
+}
+
+/**
+ * Hata Analiz görselini ekler/değiştirir. Sadece veli çağırabilir (backend 403 döner aksi halde).
+ * @param {string} photoDataUrl data:image/... base64
+ * @param {string} [studentId]
+ * @returns {Promise<WrongQuestion>}
+ */
+export async function updateWrongQuestionAnalysisPhoto(id, photoDataUrl, studentId) {
+  const body = studentId ? { photo: photoDataUrl, studentId } : { photo: photoDataUrl }
+  const data = await authRequest(`/api/panel/wrong-questions/${id}/analysis-photo`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+  return data.wrongQuestion
+}
+
+/**
+ * Hata Analiz görselini kaldırır. Sadece veli çağırabilir.
+ * @param {string} [studentId]
+ * @returns {Promise<WrongQuestion>}
+ */
+export async function deleteWrongQuestionAnalysisPhoto(id, studentId) {
+  const body = studentId ? { studentId } : {}
+  const data = await authRequest(`/api/panel/wrong-questions/${id}/analysis-photo`, {
+    method: 'DELETE',
+    body: JSON.stringify(body),
+  })
+  return data.wrongQuestion
+}
+
+/**
+ * "Hata Analizlerim" menüsü: Hata Analiz görseli eklenmiş tüm soruların YayınEvi/Kaynak/İçerik/
+ * Test/Soru No listesi (görselin kendisi olmadan — tembel çekim, bkz. getWrongQuestionAnalysisPhoto).
+ * @param {string} [studentId]
+ * @returns {Promise<Array>}
+ */
+export async function getWrongQuestionAnalysisPhotos(studentId) {
+  const query = studentId ? `?studentId=${studentId}` : ''
+  const data = await cachedGet(`/api/panel/wrong-question-analysis-photos${query}`)
+  return data.items || []
 }
 
 /** @returns {Promise<WrongQuestion>} */

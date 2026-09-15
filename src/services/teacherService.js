@@ -416,6 +416,34 @@ export async function getTeacherStudentWrongQuestionPhoto(studentTeacherId, wron
   return data.photoUrl
 }
 
+/** Hata Analiz görselini tembel çeker (öğretmen salt-okuma, sadece kendi dersinde). @returns {Promise<string>} analysisPhotoUrl */
+export async function getTeacherStudentWrongQuestionAnalysisPhoto(studentTeacherId, wrongQuestionId) {
+  const data = await authRequest(
+    `/api/panel-teacher/students/${studentTeacherId}/wrong-questions/${wrongQuestionId}/analysis-photo`,
+    { method: 'GET' },
+  )
+  return data.analysisPhotoUrl
+}
+
+/**
+ * "Hata Analizlerim" menüsü (öğretmen): tek öğrenciyle sınırlı değil, öğretmenin kendi kapsamındaki
+ * TÜM aktif öğrenci/ders ilişkilerinde Hata Analiz görseli eklenmiş sorular. Satırlar studentFullName
+ * de taşır (çapraz öğrenci listesi).
+ * @returns {Promise<Array>}
+ */
+export async function getTeacherWrongQuestionAnalysisPhotos() {
+  const data = await authRequest('/api/panel-teacher/wrong-question-analysis-photos', { method: 'GET' })
+  return data.items || []
+}
+
+/** @returns {Promise<string>} analysisPhotoUrl */
+export async function getTeacherWrongQuestionAnalysisPhoto(wrongQuestionId) {
+  const data = await authRequest(`/api/panel-teacher/wrong-question-analysis-photos/${wrongQuestionId}`, {
+    method: 'GET',
+  })
+  return data.analysisPhotoUrl
+}
+
 /* -------------------------------------------------------------------- Deneme Sınavları (salt-okuma) */
 
 /** @returns {Promise<import('./mockExamService').MockExam[]>} */

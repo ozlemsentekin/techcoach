@@ -1,5 +1,17 @@
 import { useEffect, useState } from 'react'
-import { BookOpen, Camera, Check, ChevronLeft, ChevronRight, FileText, Hash, HelpCircle, Loader2, X } from 'lucide-react'
+import {
+  BookOpen,
+  Camera,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  Hash,
+  HelpCircle,
+  Image as ImageIcon,
+  Loader2,
+  X,
+} from 'lucide-react'
 import { cn } from '../ui/utils'
 import { ANALYSIS_LANES, MISTAKE_REASON_LABELS, laneLabel } from './mistakeAnalysis'
 
@@ -52,12 +64,22 @@ export default function WrongQuestionGalleryModal({
   onUpdateMistakeMeta,
   onCapturePhoto,
   onIndexChange,
+  fetchAnalysisPhoto,
+  onAddAnalysisPhoto,
+  onRemoveAnalysisPhoto,
 }) {
+  const [removingAnalysisPhoto, setRemovingAnalysisPhoto] = useState(false)
   const [index, setIndex] = useState(initialIndex)
   const [savingReason, setSavingReason] = useState(false)
   const [photosById, setPhotosById] = useState({})
   const [photoError, setPhotoError] = useState('')
   const [zoomed, setZoomed] = useState(false)
+  // Hata Analiz görseli ayrı bir tembel çekim + kendi zoom durumu taşır (ana soru fotoğrafından
+  // bağımsız) — sadece "Analizi Göster" tıklanınca (nadir) çekilir, önceden yüklenmez.
+  const [analysisPhotosById, setAnalysisPhotosById] = useState({})
+  const [analysisPhotoError, setAnalysisPhotoError] = useState('')
+  const [analysisPhotoOpen, setAnalysisPhotoOpen] = useState(false)
+  const [loadingAnalysisPhoto, setLoadingAnalysisPhoto] = useState(false)
   // Konu/Not alanları: item değişince testin içerik adıyla ön-dolu gelir, alandan çıkınca (blur)
   // yalnızca değişmişse kaydedilir. savedMeta son kaydedilen/başlangıç değerini tutar. `note`
   // izleyicinin kendi analiz kulvarının notudur (onUpdateMistakeAnalysis), `topic` ise soruya
@@ -69,6 +91,7 @@ export default function WrongQuestionGalleryModal({
   const item = items[index]
   const hasMultiple = items.length > 1
   const currentPhotoUrl = item ? item.photoUrl || photosById[item.id] : undefined
+  const currentAnalysisPhotoUrl = item ? item.analysisPhotoUrl || analysisPhotosById[item.id] : undefined
   const viewerAnalysis = item?.analyses?.[viewerRole]
   const otherLaneAnalyses = ANALYSIS_LANES.filter(
     (lane) => lane.role !== viewerRole && item?.analyses?.[lane.role]?.mistakeReason,
@@ -76,6 +99,7 @@ export default function WrongQuestionGalleryModal({
 
   const goTo = (nextIndex) => {
     setZoomed(false)
+    setAnalysisPhotoOpen(false)
     setIndex((nextIndex + items.length) % items.length)
   }
 
@@ -88,6 +112,7 @@ export default function WrongQuestionGalleryModal({
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         if (zoomed) setZoomed(false)
+        else if (analysisPhotoOpen) setAnalysisPhotoOpen(false)
         else onClose()
       } else if (event.key === 'ArrowLeft' && hasMultiple) goTo(index - 1)
       else if (event.key === 'ArrowRight' && hasMultiple) goTo(index + 1)
@@ -95,7 +120,41 @@ export default function WrongQuestionGalleryModal({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, hasMultiple, zoomed])
+  }, [index, hasMultiple, zoomed, analysisPhotoOpen])
+
+  // Hata Analiz görselini tembel çeker — sadece "Analizi Göster" tıklanınca (item değişince değil,
+  // ana fotoğrafın aksine bu daha az görüntülenir ve önceden çekmeye değmez).
+  const handleShowAnalysisPhoto = async () => {
+    if (!item) return
+    setAnalysisPhotoOpen(true)
+    if (item.analysisPhotoUrl || analysisPhotosById[item.id] || !fetchAnalysisPhoto) return
+    setAnalysisPhotoError('')
+    setLoadingAnalysisPhoto(true)
+    try {
+      const url = await fetchAnalysisPhoto(item.id)
+      setAnalysisPhotosById((prev) => ({ ...prev, [item.id]: url }))
+    } catch (err) {
+      setAnalysisPhotoError(err.message || 'Hata analiz görseli yüklenemedi.')
+    } finally {
+      setLoadingAnalysisPhoto(false)
+    }
+  }
+
+  const handleRemoveAnalysisPhoto = async () => {
+    if (!item || !onRemoveAnalysisPhoto || removingAnalysisPhoto) return
+    setRemovingAnalysisPhoto(true)
+    try {
+      await onRemoveAnalysisPhoto(item)
+      setAnalysisPhotosById((prev) => {
+        const next = { ...prev }
+        delete next[item.id]
+        return next
+      })
+      setAnalysisPhotoOpen(false)
+    } finally {
+      setRemovingAnalysisPhoto(false)
+    }
+  }
 
   useEffect(() => {
     if (!item || item.photoUrl || photosById[item.id]) return
@@ -216,37 +275,46 @@ export default function WrongQuestionGalleryModal({
 
       <div className="flex shrink-0 flex-col items-center gap-2 px-3 pb-2">
         <div className="w-full max-w-2xl rounded-2xl border-2 border-panel-accent bg-panel-surface px-4 py-3 shadow-panel-2">
-          <div className="flex flex-col items-center gap-2">
-            <span className="flex items-center gap-2 text-center text-base font-extrabold uppercase tracking-wide text-panel-warm sm:text-lg">
-              <HelpCircle size={22} className="shrink-0" aria-hidden="true" />
-              {ANALYSIS_PROMPT_BY_ROLE[viewerRole] || ANALYSIS_PROMPT_BY_ROLE.ogrenci}
-            </span>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
-              {MISTAKE_REASON_OPTIONS.map((option) => {
-                const selected = viewerAnalysis?.mistakeReason === option.value
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    aria-pressed={selected}
-                    disabled={savingReason}
-                    onClick={() => handleSelectReason(option.value)}
-                    className={cn(
-                      'rounded-full border-2 px-4 py-2 text-center text-sm font-bold transition-colors disabled:opacity-50',
-                      selected
-                        ? 'border-panel-blue bg-panel-blue text-white'
-                        : 'border-panel-border text-panel-text hover:border-panel-blue hover:text-panel-blue',
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                )
-              })}
+          {/* Hata nedeni chip'leri + kulvar notu sadece öğretmende kaldı — veli/öğrenci metin
+              tabanlı analiz akışı kaldırıldı, yerine aşağıdaki "Hata Analiz" görseli geldi. */}
+          {viewerRole === 'ogretmen' && onUpdateMistakeAnalysis ? (
+            <div className="flex flex-col items-center gap-2">
+              <span className="flex items-center gap-2 text-center text-base font-extrabold uppercase tracking-wide text-panel-warm sm:text-lg">
+                <HelpCircle size={22} className="shrink-0" aria-hidden="true" />
+                {ANALYSIS_PROMPT_BY_ROLE[viewerRole] || ANALYSIS_PROMPT_BY_ROLE.ogrenci}
+              </span>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
+                {MISTAKE_REASON_OPTIONS.map((option) => {
+                  const selected = viewerAnalysis?.mistakeReason === option.value
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={selected}
+                      disabled={savingReason}
+                      onClick={() => handleSelectReason(option.value)}
+                      className={cn(
+                        'rounded-full border-2 px-4 py-2 text-center text-sm font-bold transition-colors disabled:opacity-50',
+                        selected
+                          ? 'border-panel-blue bg-panel-blue text-white'
+                          : 'border-panel-border text-panel-text hover:border-panel-blue hover:text-panel-blue',
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          ) : null}
 
-          {onUpdateMistakeMeta || onUpdateMistakeAnalysis ? (
-            <div className="mt-3 grid grid-cols-1 gap-2 border-t border-panel-border pt-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+          {onUpdateMistakeMeta || (viewerRole === 'ogretmen' && onUpdateMistakeAnalysis) ? (
+            <div
+              className={cn(
+                'mt-3 grid grid-cols-1 gap-2 pt-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]',
+                viewerRole === 'ogretmen' && onUpdateMistakeAnalysis ? 'border-t border-panel-border' : '',
+              )}
+            >
               {onUpdateMistakeMeta ? (
                 <label className="flex flex-col gap-1">
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">Konu</span>
@@ -260,7 +328,7 @@ export default function WrongQuestionGalleryModal({
                   />
                 </label>
               ) : null}
-              {onUpdateMistakeAnalysis ? (
+              {viewerRole === 'ogretmen' && onUpdateMistakeAnalysis ? (
                 <label className={cn('flex flex-col gap-1', onUpdateMistakeMeta ? '' : 'sm:col-span-2')}>
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">
                     {laneLabel(viewerRole)} notu <span className="font-normal normal-case">(isteğe bağlı)</span>
@@ -288,6 +356,49 @@ export default function WrongQuestionGalleryModal({
                   <span className="text-[11px] text-panel-red">Kaydedilemedi, tekrar dene.</span>
                 ) : null}
               </div>
+            </div>
+          ) : null}
+
+          {/* Hata Analiz: veli görsel ekler/değiştirir (onAddAnalysisPhoto), herkes görüntüler
+              (item.hasAnalysisPhoto + fetchAnalysisPhoto). Eski üç kulvarlı metin analizinin
+              yerine geçti (bkz. yukarısındaki yorum). */}
+          {item.hasAnalysisPhoto || onAddAnalysisPhoto ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-panel-border pt-3">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">
+                Hata Analiz
+              </span>
+              {item.hasAnalysisPhoto ? (
+                <button
+                  type="button"
+                  onClick={handleShowAnalysisPhoto}
+                  className="flex items-center gap-1.5 rounded-full border-2 border-panel-blue px-3 py-1.5 text-xs font-bold text-panel-blue hover:bg-panel-blue-soft"
+                >
+                  <ImageIcon size={14} aria-hidden="true" />
+                  Analizi Göster
+                </button>
+              ) : (
+                <span className="text-xs text-panel-text-muted">Henüz hata analizi eklenmedi.</span>
+              )}
+              {onAddAnalysisPhoto ? (
+                <button
+                  type="button"
+                  onClick={() => onAddAnalysisPhoto(item)}
+                  className="flex items-center gap-1.5 rounded-full border border-panel-border px-3 py-1.5 text-xs font-semibold text-panel-text hover:bg-panel-surface-soft"
+                >
+                  <Camera size={14} aria-hidden="true" />
+                  {item.hasAnalysisPhoto ? 'Hata Analizini Değiştir' : 'Hata Analiz Ekle'}
+                </button>
+              ) : null}
+              {onAddAnalysisPhoto && item.hasAnalysisPhoto && onRemoveAnalysisPhoto ? (
+                <button
+                  type="button"
+                  onClick={handleRemoveAnalysisPhoto}
+                  disabled={removingAnalysisPhoto}
+                  className="text-xs font-semibold text-panel-warm hover:underline disabled:opacity-50"
+                >
+                  {removingAnalysisPhoto ? 'Kaldırılıyor...' : 'Kaldır'}
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -403,6 +514,39 @@ export default function WrongQuestionGalleryModal({
             type="button"
             aria-label="Kapat"
             onClick={() => setZoomed(false)}
+            className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+
+      {analysisPhotoOpen ? (
+        <div
+          className="fixed inset-0 z-[70] flex flex-col items-center justify-center gap-3 bg-panel-text/95 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Hata Analiz görseli"
+        >
+          <span className="text-sm font-semibold uppercase tracking-wide text-white/80">Hata Analiz</span>
+          {currentAnalysisPhotoUrl ? (
+            <img loading="lazy" decoding="async"
+              src={currentAnalysisPhotoUrl}
+              alt={`${item.topic || title || 'Soru'} hata analiz görseli`}
+              className="max-h-[85vh] max-w-[95vw] rounded-xl object-contain shadow-2xl"
+            />
+          ) : analysisPhotoError ? (
+            <p className="max-w-xs text-center text-sm text-white/70">{analysisPhotoError}</p>
+          ) : loadingAnalysisPhoto ? (
+            <div className="flex flex-col items-center gap-2 text-white/70">
+              <Loader2 size={28} className="animate-spin" aria-hidden="true" />
+              <span className="text-xs">Görsel yükleniyor...</span>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            aria-label="Kapat"
+            onClick={() => setAnalysisPhotoOpen(false)}
             className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25"
           >
             <X size={18} aria-hidden="true" />

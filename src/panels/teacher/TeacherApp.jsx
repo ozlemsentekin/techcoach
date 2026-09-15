@@ -17,6 +17,7 @@ const BookshelfPage = lazy(() => import('./pages/BookshelfPage'))
 const GuidePage = lazy(() => import('../shared/GuidePage'))
 const RequestsPage = lazy(() => import('./pages/RequestsPage'))
 const ClassAnalysisPage = lazy(() => import('./pages/ClassAnalysisPage'))
+const AnalysisPhotosPage = lazy(() => import('./pages/AnalysisPhotosPage'))
 
 function pageElement(Page) {
   return (
@@ -84,6 +85,7 @@ export default function TeacherApp() {
             <Route path="library" element={pageElement(LibraryPage)} />
             <Route path="bookshelf" element={pageElement(BookshelfPage)} />
             <Route path="class-analysis" element={pageElement(ClassAnalysisPage)} />
+            <Route path="analysis-photos" element={pageElement(AnalysisPhotosPage)} />
             <Route path="requests" element={pageElement(RequestsPage)} />
             <Route path="guide" element={pageElement(GuidePage)} />
             <Route path="*" element={<Navigate to="students" replace />} />

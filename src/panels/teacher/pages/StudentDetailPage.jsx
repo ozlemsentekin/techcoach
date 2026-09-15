@@ -26,6 +26,7 @@ import {
   getTeacherStudentWrongQuestions,
   getTeacherStudentWrongQuestionTopicStats,
   getTeacherStudentWrongQuestionPhoto,
+  getTeacherStudentWrongQuestionAnalysisPhoto,
   updateTeacherStudentWrongQuestion,
   updateTeacherStudentWrongQuestionPhoto,
   updateTeacherStudentTask,
@@ -271,6 +272,10 @@ export default function StudentDetailPage() {
     (id) => getTeacherStudentWrongQuestionPhoto(studentTeacherId, id),
     [studentTeacherId],
   )
+  const fetchAnalysisPhoto = useCallback(
+    (id) => getTeacherStudentWrongQuestionAnalysisPhoto(studentTeacherId, id),
+    [studentTeacherId],
+  )
   const updateMistakeAnalysis = useCallback(
     (id, analysis) => updateTeacherStudentWrongQuestion(studentTeacherId, id, { analysis }),
     [studentTeacherId],
@@ -458,6 +463,7 @@ export default function StudentDetailPage() {
             fetchWrongQuestions={fetchWrongQuestions}
             fetchTopicStats={fetchTopicStats}
             fetchPhoto={fetchPhoto}
+            fetchAnalysisPhoto={fetchAnalysisPhoto}
             viewerRole="ogretmen"
             updateMistakeAnalysis={updateMistakeAnalysis}
             updateMistakeMeta={updateMistakeMeta}
