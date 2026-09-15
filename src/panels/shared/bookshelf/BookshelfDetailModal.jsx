@@ -183,9 +183,9 @@ function InlineTestRow({ test, canEdit, showAnswerKey, onTestUpdated }) {
   )
 }
 
-function ContentTab({ book, topics, tests, canEdit, onChanged, onTestUpdated }) {
+function ContentTab({ book, topics, tests, canEdit, onChanged, onTestUpdated, startSetup, onSetupClosed }) {
   const [expandedTopicId, setExpandedTopicId] = useState(null)
-  const [topicModalOpen, setTopicModalOpen] = useState(false)
+  const [topicModalOpen, setTopicModalOpen] = useState(() => Boolean(startSetup && canEdit))
   const [editingTopic, setEditingTopic] = useState(null)
   const [testModalTopic, setTestModalTopic] = useState(null)
   const [editingTest, setEditingTest] = useState(null)
@@ -337,7 +337,7 @@ function ContentTab({ book, topics, tests, canEdit, onChanged, onTestUpdated }) 
             if (topic?.id) setExpandedTopicId(topic.id)
             onChanged()
           }}
-          onClose={() => setTopicModalOpen(false)}
+          onClose={() => { setTopicModalOpen(false); onSetupClosed?.() }}
         />
       ) : null}
       {editingTopic ? (
@@ -479,7 +479,8 @@ export default function BookshelfDetailModal({
   // yönetme niyeti), "Test sonuçlarını gir" butonuna tıklanınca Test Sonuçları (sonuç girme
   // niyeti) — ikisi de aynı solveStudentId bağlamında açılabildiği için tek başına canSolve
   // hangi sekmenin açılacağını belirlemeye yetmiyor, çağıran taraf initialTab ile netleştirir.
-  const [tab, setTab] = useState(initialTab || (canSolve ? 'solve' : 'content'))
+  const [tab, setTab] = useState(initialTab === 'setup' ? 'content' : initialTab || (canSolve ? 'solve' : 'content'))
+  const [startSetup, setStartSetup] = useState(initialTab === 'setup')
   const [previewImage, setPreviewImage] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -618,6 +619,8 @@ export default function BookshelfDetailModal({
             <AssigneesTab book={book} onChanged={() => { load(); onChanged?.() }} />
           ) : (
             <ContentTab
+              startSetup={startSetup}
+              onSetupClosed={() => setStartSetup(false)}
               book={book}
               topics={data.topics}
               tests={data.tests}

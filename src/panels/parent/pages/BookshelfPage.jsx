@@ -364,7 +364,7 @@ export default function ParentBookshelfPage() {
     loadBooks()
     if (createdBook?.id) {
       setDetailBookId(createdBook.id)
-      setDetailInitialTab(createdBook.contentMode === 'simple' ? 'overview' : 'content')
+      setDetailInitialTab(createdBook.contentMode === 'simple' ? 'overview' : 'setup')
     }
   }
 

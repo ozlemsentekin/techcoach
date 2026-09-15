@@ -9,6 +9,8 @@ const assert = require('node:assert/strict')
     const saved = []
     const books = []
     const results = []
+    const topics = []
+    const tests = []
     const children = [{ id: 'child-1', fullName: 'İpek Test', grade: '8' }]
     page.on('pageerror', error => errors.push(error.message))
     await page.route('**/api/**', route => {
@@ -20,8 +22,18 @@ const assert = require('node:assert/strict')
         books.push(book)
         return route.fulfill({ json: { resourceBook: book } })
       }
+      if (path === '/api/panel-admin/resource-book-topics' && request.method() === 'POST') {
+        const topic = { id: `topic-${topics.length + 1}`, ...request.postDataJSON() }
+        topics.push(topic)
+        return route.fulfill({ json: { topic } })
+      }
+      if (path === '/api/panel-admin/resource-book-topic-tests' && request.method() === 'POST') {
+        const test = { id: `test-${tests.length + 1}`, ...request.postDataJSON() }
+        tests.push(test)
+        return route.fulfill({ json: { test } })
+      }
       if (path.startsWith('/api/panel/bookshelf/resource-books/')) {
-        return route.fulfill({ json: { resourceBook: books.find(book => path.endsWith('/' + book.id)), topics: [], tests: [] } })
+        return route.fulfill({ json: { resourceBook: books.find(book => path.endsWith('/' + book.id)), topics: topics.filter(topic => path.endsWith('/' + topic.resourceBookId)), tests } })
       }
       if (path === '/api/panel/tasks/task-simple/simple-result') {
         results.push(request.postDataJSON())
@@ -135,6 +147,35 @@ const assert = require('node:assert/strict')
     assert.equal(saved[1].contentMode, 'structured')
     assert.equal(saved[1].hasAnswerKey, true)
     assert.equal(saved[1].type, 'soru_bankasi')
+    const contentsEditor = page.getByRole('dialog', { name: 'İçindekileri tanımla', exact: true })
+    await contentsEditor.waitFor()
+    for (const viewport of [{ width: 1366, height: 768 }, { width: 390, height: 844 }, { width: 320, height: 568 }]) {
+      await page.setViewportSize(viewport)
+      const bounds = await contentsEditor.boundingBox()
+      assert.ok(bounds.width <= viewport.width && bounds.height <= viewport.height)
+      const footerButton = await contentsEditor.getByRole('button', { name: /^(Kitaba dön|Cevap anahtarlarına geç)$/ }).boundingBox()
+      assert.ok(footerButton.y + footerButton.height <= viewport.height)
+    }
+    await contentsEditor.getByLabel('Ünite / bölüm adı', { exact: true }).fill('Çarpanlar ve Katlar')
+    await contentsEditor.getByRole('button', { name: 'Ekle', exact: true }).click()
+    await contentsEditor.getByRole('button', { name: 'Çarpanlar ve Katlar içeriğine test ekle', exact: true }).click()
+    const testEditor = page.getByRole('dialog', { name: 'Testleri ekle', exact: true })
+    await testEditor.waitFor()
+    const editorBounds = await testEditor.boundingBox()
+    assert.ok(editorBounds.width <= 320 && editorBounds.height <= 568)
+    await testEditor.getByLabel('Test Konusu', { exact: true }).fill('Asal Sayılar')
+    await testEditor.getByLabel('Kaç test?', { exact: true }).fill('2')
+    await testEditor.getByLabel('Başlangıç sayfası', { exact: true }).fill('10')
+    await testEditor.getByLabel('Bitiş sayfası', { exact: true }).fill('13')
+    await page.screenshot({ path: '/tmp/book-test-editor-mobile.png' })
+    await testEditor.getByRole('button', { name: 'Testleri ekle', exact: true }).click()
+    await testEditor.waitFor({ state: 'hidden' })
+    assert.equal(tests.length, 2)
+    assert.deepEqual(tests.map(test => [test.pageStart, test.pageEnd]), [[10, 11], [12, 13]])
+    await page.screenshot({ path: '/tmp/book-contents-mobile.png' })
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.screenshot({ path: '/tmp/book-contents-desktop.png' })
+    await contentsEditor.getByRole('button', { name: /^(Kitaba dön|Cevap anahtarlarına geç)$/ }).click()
     const structuredDetail = page.getByRole('dialog', { name: 'Test kitabım', exact: true })
     await structuredDetail.getByRole('button', { name: 'İçindekiler Ekle', exact: true }).waitFor()
     assert.equal(await structuredDetail.getByText('Kitap kullanıma hazır', { exact: true }).count(), 0)
@@ -157,6 +198,7 @@ const assert = require('node:assert/strict')
       await dialog.waitFor({ state: 'hidden' })
       assert.equal(saved.at(-1).hasAnswerKey, expectedKey)
       assert.equal(saved.at(-1).type, type)
+      await contentsEditor.getByRole('button', { name: /^(Kitaba dön|Cevap anahtarlarına geç)$/ }).click()
       await page.getByRole('dialog', { name: `Kitap ${type}`, exact: true }).getByRole('button', { name: 'Kapat', exact: true }).click()
     }
     // Exercise the actual task drawer and completion flow with the newly created book.

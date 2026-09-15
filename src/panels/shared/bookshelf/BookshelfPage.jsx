@@ -97,6 +97,7 @@ export default function BookshelfPage({ showAssignees = true }) {
   const [requesting, setRequesting] = useState(false)
   const [editingBook, setEditingBook] = useState(null)
   const [detailBookId, setDetailBookId] = useState(null)
+  const [setupBookId, setSetupBookId] = useState(null)
   const [viewingContentBookId, setViewingContentBookId] = useState(null)
 
   const load = () => {
@@ -132,7 +133,10 @@ export default function BookshelfPage({ showAssignees = true }) {
   const handleCreated = (createdBook) => {
     setCreating(false)
     load()
-    if (createdBook?.id) setDetailBookId(createdBook.id)
+    if (createdBook?.id) {
+      setDetailBookId(createdBook.id)
+      setSetupBookId(createdBook.contentMode === 'simple' ? null : createdBook.id)
+    }
   }
 
   return (
@@ -299,13 +303,14 @@ export default function BookshelfPage({ showAssignees = true }) {
         {detailBookId ? (
           <BookshelfDetailModal
             resourceBookId={detailBookId}
+            initialTab={setupBookId === detailBookId ? 'setup' : null}
             showAssignees={showAssignees}
             onChanged={load}
             onEdit={(book) => {
               setDetailBookId(null)
               setEditingBook(book)
             }}
-            onClose={() => setDetailBookId(null)}
+            onClose={() => { setDetailBookId(null); setSetupBookId(null) }}
           />
         ) : null}
 

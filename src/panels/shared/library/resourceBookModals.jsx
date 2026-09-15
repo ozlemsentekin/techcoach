@@ -5,8 +5,6 @@ import LoadingState from '../LoadingState'
 import { authRequest } from '../../../services/authClient'
 import { buildBookContents } from './bookContents'
 
-const CONTENT_TOPIC_EXAMPLE = '1. Ünite — Çarpanlar ve Katlar'
-
 // Kitap-açılımı modallerinin tek satırlık başlığı: "Kaynak › İçerik › işlem" gibi bir
 // breadcrumb + kapat düğmesi. Ara segmentler taşarsa kısalır, son segment (işlem) sabit.
 function ModalBreadcrumb({ segments, onClose }) {
@@ -61,7 +59,6 @@ function TopicBookPageRow({ label, page, active = false, subline, action, footer
 }
 
 function TopicContentsPreview({
-  bookName,
   topicName,
   bookContents,
   editingName,
@@ -76,13 +73,13 @@ function TopicContentsPreview({
   const canAddTests = Boolean(onAddTests) && !isEdit
 
   return (
-    <div className="relative flex h-full min-h-[300px] flex-col bg-[#fffdf8] p-4 sm:p-5">
+    <div className="relative flex h-full min-h-0 flex-col bg-[#fffdf8] p-4 sm:p-5">
       <div className="absolute inset-x-4 top-2.5 h-px bg-[#eadbc8] sm:inset-x-5" aria-hidden="true" />
       <h3 className="mb-2.5 mt-1 break-words text-base font-semibold text-[#2f2925]">
-        {(bookName || 'Kaynak Kitap') + ' — İçindekiler'}
+        İçindekiler
       </h3>
 
-      <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto" aria-live="polite">
+      <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto" aria-live="polite">
         {bookContents.map((entry) => {
           const active = isEdit && entry.name === editingName
           const confirming = pendingKey === entry.name
@@ -92,6 +89,7 @@ function TopicContentsPreview({
               label={active ? trimmed || entry.name : entry.name}
               page={entry.page == null ? '—' : String(entry.page)}
               active={active}
+              subline={entry.testCount > 0 ? `${entry.testCount} test eklendi` : undefined}
               action={
                 canAddTests || canDelete ? (
                   <span className="flex items-center gap-0.5">
@@ -100,10 +98,10 @@ function TopicContentsPreview({
                         type="button"
                         aria-label={`${entry.name} içeriğine test ekle`}
                         onClick={() => onAddTests(entry)}
-                        className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-[#b85f22] hover:bg-[#f6e6d2]"
+                        className="flex h-11 items-center gap-1 rounded-md px-2 text-xs font-medium text-[#b85f22] hover:bg-[#f6e6d2]"
                       >
                         <Plus size={12} aria-hidden="true" />
-                        test
+                        Test ekle
                       </button>
                     ) : null}
                     {canDelete ? (
@@ -114,7 +112,7 @@ function TopicContentsPreview({
                         onClick={() =>
                           entry.testCount > 0 ? setPendingKey(entry.name) : onDeleteEntry(entry)
                         }
-                        className="flex h-6 w-6 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#a23b1e] disabled:opacity-40"
+                        className="flex h-11 w-9 items-center justify-center rounded-md text-[#b49c84] hover:bg-[#f1e2d0] hover:text-[#a23b1e] disabled:opacity-40"
                       >
                         <Trash2 size={13} aria-hidden="true" />
                       </button>
@@ -153,19 +151,15 @@ function TopicContentsPreview({
           )
         })}
 
-        {!isEdit ? (
+        {!isEdit && trimmed ? (
           <TopicBookPageRow label={trimmed || 'Yeni içerik başlığı'} page={trimmed ? '…' : '—'} active />
         ) : null}
 
-        {bookContents.length === 0 && isEdit ? (
-          <p className="px-2 text-[13px] text-[#8b7666]">Bu kaynağa henüz içerik eklenmedi.</p>
+        {bookContents.length === 0 && !trimmed ? (
+          <p className="px-2 text-[13px] text-[#8b7666]">İlk üniteyi veya bölümü ekleyerek başlayın.</p>
         ) : null}
       </div>
 
-      <div className="mt-3 flex items-center justify-between border-t border-[#eadbc8] pt-2 text-[11px] font-medium text-[#b49c84]">
-        <span>techcoach kitaplık</span>
-        <span>02</span>
-      </div>
     </div>
   )
 }
@@ -256,125 +250,38 @@ function TopicModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
-      <form
-        onSubmit={handleSubmit}
-        className="h-full w-full overflow-y-auto border border-panel-border bg-[#fbf4ec] p-3 shadow-panel-1 sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-2xl sm:p-5"
-      >
-        <ModalBreadcrumb
-          segments={[book?.name || 'Kaynak', isEdit ? 'İçerik düzenleniyor' : 'İçerik ekleniyor']}
-          onClose={onClose}
-        />
-
-        {error ? (
-          <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
-        ) : null}
-
-        <div className="relative overflow-hidden rounded-2xl border border-[#eadbc8] bg-[#e8d7c3] p-1.5 shadow-[0_18px_50px_rgba(92,62,35,0.18)] sm:p-2">
-          <div
-            className="pointer-events-none absolute bottom-3 left-1/2 top-3 z-10 hidden w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-[#cdb49a] to-transparent md:block"
-            aria-hidden="true"
-          />
-          <div className="grid overflow-hidden rounded-xl border border-[#eadbc8] bg-white shadow-[inset_0_0_34px_rgba(133,92,55,0.08)] md:grid-cols-2">
-            <section className="relative flex min-h-[300px] min-w-0 flex-col bg-[#fffaf4] p-4 sm:p-5 md:border-r md:border-[#eadbc8]">
-              <div className="absolute inset-x-4 top-2.5 h-px bg-[#eadbc8] sm:inset-x-5" aria-hidden="true" />
-              <div className="mb-3 flex items-center gap-2.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8e3d0] text-[#c9772f]">
-                  <BookOpen size={16} aria-hidden="true" />
-                </span>
-                <h3 className="min-w-0 break-words text-base font-semibold text-[#2f2925]">
-                  {isEdit ? 'İçerik başlığını düzenle' : 'Yeni içerik ekle'}
-                </h3>
-              </div>
-
-              <div className="mb-3 rounded-lg border border-[#eadbc8] bg-[#fff4e6] p-2.5">
-                <p className="mb-1.5 text-xs font-semibold text-[#6d4a31]">Nasıl içerik eklenir?</p>
-                <ol className="flex flex-col gap-1.5 text-[11px] leading-snug text-[#7d6a5a]">
-                  <li className="flex gap-2">
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#f0dcc5] text-[10px] font-bold text-[#8a5a33]">
-                      1
-                    </span>
-                    <span>
-                      İçeriğin kitaptaki başlığını yazın — bir bölüm ya da ünite. Örn.{' '}
-                      <span className="font-medium text-[#3d3028]">“{CONTENT_TOPIC_EXAMPLE}”</span>
-                    </span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#f0dcc5] text-[10px] font-bold text-[#8a5a33]">
-                      2
-                    </span>
-                    <span>
-                      <span className="font-medium text-[#3d3028]">İçeriği Oluştur</span>’a basın; içerik
-                      sağdaki içindekiler listesine sayfa sırasına göre yerleşir.
-                    </span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#f0dcc5] text-[10px] font-bold text-[#8a5a33]">
-                      3
-                    </span>
-                    <span>Sonra bu içeriğe testlerini (konu, ad, başlangıç sayfası) ekleyin.</span>
-                  </li>
-                </ol>
-                <p className="mt-1.5 text-[10px] text-[#9b8574]">
-                  Yanlış eklediğiniz içeriği sağdaki listedeki çöp kutusu ile silebilirsiniz.
-                </p>
-              </div>
-
-              <div className="mt-auto flex flex-col gap-1.5">
-                <label htmlFor="topic-name-input" className="text-[13px] font-semibold text-[#4a3b31]">
-                  İçerik Adı
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="topic-name-input"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder={`Örn. ${CONTENT_TOPIC_EXAMPLE}`}
-                    className="h-9 min-w-0 flex-1 rounded-lg border border-[#d8c6b5] bg-white px-3 text-sm text-panel-text shadow-[0_1px_0_rgba(255,255,255,0.8)] outline-none focus:border-[#c9772f] focus:ring-2 focus:ring-[#c9772f]/15"
-                    autoFocus
-                  />
-                  <Button type="submit" disabled={loading} size="md" className="shrink-0 rounded-lg">
-                    {loading ? 'Kaydediliyor...' : isEdit ? 'Kaydet' : 'Ekle'}
-                  </Button>
-                </div>
-                <span className="text-[11px] text-[#7d6a5a]">
-                  Kitabın içindekiler bölümündeki başlığı yazın.
-                </span>
-              </div>
-
-              <div className="mt-3 flex items-center justify-between border-t border-[#eadbc8] pt-2 text-[11px] font-medium text-[#b49c84]">
-                <span>giriş</span>
-                <span>01</span>
-              </div>
-            </section>
-
-            <section className="min-w-0">
-              <TopicContentsPreview
-                bookName={book?.name}
-                topicName={name}
-                bookContents={bookContents}
-                editingName={topic?.name || ''}
-                onDeleteEntry={onDeleted ? handleDeleteEntry : undefined}
-                deleteBusy={deleteBusy}
-                onAddTests={onTestsCreated ? setTestEntry : undefined}
-              />
-            </section>
-          </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 sm:p-4">
+      <form onSubmit={handleSubmit} role="dialog" aria-modal="true" aria-label="İçindekileri tanımla"
+        className="flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden border border-panel-border bg-panel-surface shadow-panel-1 sm:h-[640px] sm:max-h-[92dvh] sm:max-w-5xl sm:rounded-2xl">
+        <div className="flex shrink-0 items-center gap-3 border-b border-panel-border p-4">
+          {book?.imageUrl ? <img src={book.imageUrl} alt="Kitap kapağı" className="h-12 w-10 shrink-0 rounded object-contain" /> : <BookOpen size={28} className="shrink-0 text-panel-warm" aria-hidden="true" />}
+          <div className="min-w-0 flex-1"><h2 className="text-lg font-bold text-panel-text">İçindekileri tanımla</h2><p className="truncate text-sm text-panel-text-muted">{book?.name}</p></div>
+          <button type="button" aria-label="Kapat" disabled={loading || deleteBusy} onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-panel-text-muted hover:bg-panel-surface-soft"><X size={20} /></button>
+        </div>
+        {error && <p role="alert" className="shrink-0 px-4 py-2 text-sm text-panel-warm">{error}</p>}
+        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-px overflow-hidden bg-[#eadbc8] md:grid-cols-2 md:grid-rows-1">
+          <section className="flex min-h-0 flex-col justify-center bg-[#fffaf4] p-4 md:p-8">
+            <h3 className="mb-1 text-base font-semibold text-panel-text">{isEdit ? 'Başlığı düzenleyin' : '1. Ünite veya bölüm ekleyin'}</h3>
+            <p className="mb-4 text-sm text-panel-text-muted">Kitabın içindekiler sayfasındaki başlıkları kullanın.</p>
+            <label htmlFor="topic-name-input" className="mb-2 text-sm font-medium text-panel-text">Ünite / bölüm adı</label>
+            <div className="flex items-center gap-2">
+              <input id="topic-name-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Örn. Çarpanlar ve Katlar" className="h-11 min-w-0 flex-1 rounded-xl border border-panel-border bg-white px-3 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20" />
+              <Button type="submit" disabled={loading || name.trim().length < 2} className="h-11">{loading ? 'Ekleniyor…' : isEdit ? 'Kaydet' : 'Ekle'}</Button>
+            </div>
+            {!isEdit && onTestsCreated && <p className="mt-3 text-xs text-panel-text-muted">2. Eklediğiniz başlıktan “Test ekle” ile devam edin.</p>}
+          </section>
+          <section className="min-h-0 min-w-0 overflow-hidden md:shadow-[inset_12px_0_18px_-18px_#8b7666]">
+            <TopicContentsPreview topicName={name} bookContents={bookContents} editingName={topic?.name || ''} onDeleteEntry={onDeleted ? handleDeleteEntry : undefined} deleteBusy={deleteBusy} onAddTests={onTestsCreated ? setTestEntry : undefined} />
+          </section>
+        </div>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-panel-border px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+          <p className="text-xs text-panel-text-muted">{bookContents.length} başlık eklendi</p>
+          <Button type="button" disabled={loading || deleteBusy} variant="secondary" className="h-11" onClick={onClose}>{book?.hasAnswerKey && tests.length > 0 ? 'Cevap anahtarlarına geç' : 'Kitaba dön'}</Button>
         </div>
       </form>
-
       {testEntry ? (
-        <AddTestsBookModal
-          book={book}
-          topic={{ id: testEntry.topicIds[0], name: testEntry.name }}
-          existingTests={tests.filter((item) => testEntry.topicIds.includes(item.topicId))}
-          onSaved={(createdTests) => {
-            onTestsCreated?.(createdTests)
-            setTestEntry(null)
-          }}
-          onTestDeleted={onTestDeleted}
-          onClose={() => setTestEntry(null)}
-        />
+        <AddTestsBookModal book={book} topic={{ id: testEntry.topicIds[0], name: testEntry.name }} existingTests={tests.filter((item) => testEntry.topicIds.includes(item.topicId))}
+          onSaved={(createdTests) => { onTestsCreated?.(createdTests); setTestEntry(null) }} onTestDeleted={onTestDeleted} onClose={() => setTestEntry(null)} />
       ) : null}
     </div>
   )
@@ -539,6 +446,7 @@ function buildTopicTestPreview(existingTests) {
 // sayfalara bölünüp tek adımda oluşturulur (tek test eklemek için sayı 1 bırakılır). Sağda
 // kitaptaki testler sayfa sırasına göre görünür, çöp kutusu ile silinebilir.
 function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onTestDeleted, onClose }) {
+  const [mobilePage, setMobilePage] = useState('form')
   const [topicName, setTopicName] = useState('')
   const [namePrefix, setNamePrefix] = useState('Test')
   const [firstTestNumber, setFirstTestNumber] = useState('1')
@@ -636,36 +544,32 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onTestDel
     <div className="fixed inset-0 z-[55] flex items-stretch justify-center bg-black/30 p-0 sm:items-center sm:p-4">
       <form
         onSubmit={handleCreate}
-        className="h-full w-full overflow-y-auto border border-panel-border bg-[#fbf4ec] p-3 shadow-panel-1 sm:h-auto sm:max-h-[92vh] sm:max-w-4xl sm:rounded-2xl sm:p-5"
+        role="dialog" aria-modal="true" aria-label="Testleri ekle"
+        className="flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden border border-panel-border bg-[#fbf4ec] p-3 shadow-panel-1 sm:h-[640px] sm:max-h-[92dvh] sm:max-w-5xl sm:rounded-2xl sm:p-5"
       >
-        <ModalBreadcrumb
-          segments={[book?.name || 'Kaynak', topic?.name || 'İçerik', 'test ekleniyor']}
-          onClose={onClose}
-        />
+        <div className="mb-3 flex shrink-0 items-center gap-3">
+          <FileText size={24} className="shrink-0 text-panel-warm" aria-hidden="true" />
+          <div className="min-w-0 flex-1"><h2 className="text-lg font-bold text-panel-text">Testleri ekle</h2><p className="truncate text-xs text-panel-text-muted">{topic?.name}</p></div>
+          <button type="button" aria-label="Kapat" disabled={loading} onClick={onClose} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-panel-text-muted"><X size={20} /></button>
+        </div>
 
+        <div className="mb-3 flex shrink-0 gap-2 md:hidden">
+          <Button type="button" className="h-11 flex-1" variant={mobilePage === 'form' ? 'primary' : 'secondary'} onClick={() => setMobilePage('form')}>Test bilgileri</Button>
+          <Button type="button" className="h-11 flex-1" variant={mobilePage === 'list' ? 'primary' : 'secondary'} onClick={() => setMobilePage('list')}>Eklenenler ({preview.length})</Button>
+        </div>
         {error ? (
           <div className="mb-3 rounded-xl bg-panel-accent-soft px-3 py-1.5 text-sm text-panel-warm">{error}</div>
         ) : null}
 
-        <div className="relative overflow-hidden rounded-2xl border border-[#eadbc8] bg-[#e8d7c3] p-1.5 shadow-[0_18px_50px_rgba(92,62,35,0.18)] sm:p-2">
+        <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-[#eadbc8] bg-[#e8d7c3] p-1.5 shadow-[0_18px_50px_rgba(92,62,35,0.18)] sm:p-2">
           <div
             className="pointer-events-none absolute bottom-3 left-1/2 top-3 z-10 hidden w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-[#cdb49a] to-transparent md:block"
             aria-hidden="true"
           />
-          <div className="grid overflow-hidden rounded-xl border border-[#eadbc8] bg-white shadow-[inset_0_0_34px_rgba(133,92,55,0.08)] md:grid-cols-2">
-            <section className="relative flex min-h-[300px] min-w-0 flex-col bg-[#fffaf4] p-4 sm:p-5 md:border-r md:border-[#eadbc8]">
+          <div className="grid h-full min-h-0 overflow-hidden rounded-xl border border-[#eadbc8] bg-white shadow-[inset_0_0_34px_rgba(133,92,55,0.08)] md:grid-cols-2">
+            <section className={`relative min-h-0 min-w-0 flex-col overflow-y-auto bg-[#fffaf4] p-3 sm:p-5 md:flex md:border-r md:border-[#eadbc8] ${mobilePage === 'form' ? 'flex' : 'hidden'}`}>
               <div className="absolute inset-x-4 top-2.5 h-px bg-[#eadbc8] sm:inset-x-5" aria-hidden="true" />
-              <div className="mb-3 flex items-center gap-2.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8e3d0] text-[#c9772f]">
-                  <FileText size={16} aria-hidden="true" />
-                </span>
-                <h3 className="min-w-0 break-words text-base font-semibold text-[#2f2925]">Bu içeriğe test ekle</h3>
-              </div>
-
-              <p className="mb-4 text-[12px] leading-snug text-[#7d6a5a]">
-                Kaç test var, hangi sayfada başlayıp bitiyor — söyle, sayfaları testlere otomatik
-                bölüştüreyim. Tek bir test ekleyeceksen "Kaç test?" alanını 1 bırakman yeterli.
-              </p>
+              <p className="mb-3 text-xs text-panel-text-muted">Sayfa aralığı testlere eşit paylaştırılır.</p>
 
               <div className="flex flex-col gap-3">
                 <label className="flex flex-col gap-1">
@@ -751,15 +655,10 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onTestDel
                 ) : null}
               </div>
 
-              <div className="mt-4 border-t border-[#eadbc8] pt-3">
-                <Button type="submit" disabled={loading} size="md" className="w-full rounded-lg">
-                  {loading ? 'Oluşturuluyor…' : countNumber > 1 ? `${countNumber} Test Oluştur` : 'Testi Oluştur'}
-                </Button>
-              </div>
             </section>
 
-            <section className="min-w-0">
-              <div className="relative flex h-full min-h-[300px] flex-col bg-[#fffdf8] p-4 sm:p-5">
+            <section className={`min-h-0 min-w-0 md:block ${mobilePage === 'list' ? 'block' : 'hidden'}`}>
+              <div className="relative flex h-full min-h-0 flex-col bg-[#fffdf8] p-4 sm:p-5">
                 <div className="absolute inset-x-4 top-2.5 h-px bg-[#eadbc8] sm:inset-x-5" aria-hidden="true" />
                 <p className="mt-1 break-words text-[11px] font-medium text-[#9b7a5a]">
                   {book?.name || 'Kaynak Kitap'}
@@ -768,10 +667,10 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onTestDel
                   {topic?.name || 'İçerik'}
                 </h3>
 
-                <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto" aria-live="polite">
+                <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto" aria-live="polite">
                   {preview.length === 0 ? (
                     <p className="px-2 text-[13px] text-[#8b7666]">
-                      Henüz test yok. Soldan oluşturdukça burada sayfa sırasına göre görünecek.
+                      Eklediğiniz testler burada görünür.
                     </p>
                   ) : (
                     preview.map((item) => (
@@ -834,6 +733,10 @@ function AddTestsBookModal({ book, topic, existingTests = [], onSaved, onTestDel
               </div>
             </section>
           </div>
+        </div>
+        <div className="flex shrink-0 items-center justify-between gap-3 pt-3 pb-[env(safe-area-inset-bottom)]">
+          <Button variant="secondary" className="h-11" disabled={loading} onClick={onClose}>İçindekilere dön</Button>
+          <Button type="submit" disabled={loading} className="h-11">{loading ? 'Ekleniyor…' : 'Testleri ekle'}</Button>
         </div>
       </form>
     </div>
