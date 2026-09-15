@@ -39,6 +39,22 @@ function normalizeSubjectName(value) {
     .trim()
 }
 
+// Branş İzleme / Etüt: öğretmenin belirli bir derse atanmış olması durumunda (subjectId/subjectName
+// dolu) yalnızca kendi dersine ait sonucu görür. Ders ataması olmayan (tüm dersleri takip eden)
+// öğretmen için kısıtlama uygulanmaz. Genel Deneme her zaman görünür.
+function examVisibleToTeacher(exam, { subjectId, subjectName }) {
+  if (exam.kind === 'genel') return true
+  const normalizedRestrictName = subjectName ? normalizeSubjectName(subjectName) : null
+  const restricted = Boolean(subjectId || normalizedRestrictName)
+  if (!restricted) return true
+  const subject = exam.subjects[0]
+  if (!subject) return false
+  if (subjectId && subject.subjectId && String(subject.subjectId).toLowerCase() === String(subjectId).toLowerCase()) {
+    return true
+  }
+  return normalizedRestrictName ? normalizeSubjectName(subject.subjectName) === normalizedRestrictName : false
+}
+
 function toISODate(value) {
   if (!value) return null
   return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10)
@@ -1095,9 +1111,19 @@ async function getMockExamTopicStatsHandler(request) {
 
 async function listTeacherMockExamsHandler(request) {
   try {
-    const { error, studentId } = await requireTeacherStudentContext(request)
+    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
     if (error) return error
-    return json(200, { mockExams: await listMockExamsForStudent(studentId) })
+
+    let subjectName = null
+    if (subjectId) {
+      const subjectDb = await withRequest({ subjectId: { type: sql.UniqueIdentifier, value: subjectId } })
+      const subjectResult = await subjectDb.query(`SELECT name FROM dbo.Subjects WHERE id = @subjectId;`)
+      subjectName = subjectResult.recordset[0]?.name || null
+    }
+
+    const exams = await listMockExamsForStudent(studentId)
+    const visibleExams = exams.filter((exam) => examVisibleToTeacher(exam, { subjectId, subjectName }))
+    return json(200, { mockExams: visibleExams })
   } catch (error) {
     return handleError(error, 'listTeacherMockExamsHandler', 'Deneme sınavları yüklenemedi.')
   }
@@ -1257,6 +1283,7 @@ module.exports = {
   BRANS_QUESTION_COUNT,
   validateMockExamPayload,
   computeNet,
+  examVisibleToTeacher,
   listMockExamsForStudent,
   listMockExamsHandler,
   getMockExamHandler,

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
-const { validateMockExamPayload, GENEL_DENEME_TEMPLATE, computeNet } = require('../api/src/mockExams.js')
+const { validateMockExamPayload, GENEL_DENEME_TEMPLATE, computeNet, examVisibleToTeacher } = require('../api/src/mockExams.js')
 
 const PHOTO = `data:image/png;base64,${'A'.repeat(40)}`
 
@@ -177,6 +177,27 @@ test('Soru bazlı giriş: Genel Deneme her ders için ayrı ayrı çalışır', 
     assert.equal(s.correct, GENEL_DENEME_TEMPLATE[idx].total)
     assert.equal(s.questions.length, GENEL_DENEME_TEMPLATE[idx].total)
   })
+})
+
+test('examVisibleToTeacher: Genel Deneme her zaman görünür', () => {
+  const exam = { kind: 'genel', subjects: [{ subjectId: 'math-id', subjectName: 'Matematik' }] }
+  assert.equal(examVisibleToTeacher(exam, { subjectId: 'other-id', subjectName: 'Türkçe' }), true)
+  assert.equal(examVisibleToTeacher(exam, { subjectId: null, subjectName: null }), true)
+})
+
+test('examVisibleToTeacher: Branş/Etüt sadece öğretmenin dersiyle eşleşince görünür', () => {
+  const matematikExam = { kind: 'brans', subjects: [{ subjectId: 'math-id', subjectName: 'Matematik' }] }
+  const turkceExam = { kind: 'etut', subjects: [{ subjectId: 'tr-id', subjectName: 'Türkçe' }] }
+
+  assert.equal(examVisibleToTeacher(matematikExam, { subjectId: 'math-id', subjectName: 'Matematik' }), true)
+  assert.equal(examVisibleToTeacher(turkceExam, { subjectId: 'math-id', subjectName: 'Matematik' }), false)
+  // İsimle eşleşme (subjectId eşleşmese/olmasa bile).
+  assert.equal(examVisibleToTeacher(matematikExam, { subjectId: null, subjectName: 'Matematik' }), true)
+})
+
+test('examVisibleToTeacher: öğretmenin ders ataması yoksa (subject_id NULL) kısıtlama uygulanmaz', () => {
+  const turkceExam = { kind: 'brans', subjects: [{ subjectId: 'tr-id', subjectName: 'Türkçe' }] }
+  assert.equal(examVisibleToTeacher(turkceExam, { subjectId: null, subjectName: null }), true)
 })
 
 test('Soru bazlı giriş: Etüt soru sayısını kendi belirler', () => {
