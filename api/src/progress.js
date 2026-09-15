@@ -995,12 +995,16 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
   const normalizedTopicKeys = normalizeTopicStatKeys(topicKeys)
   if (!normalizedTopicKeys.length) return { topicStats: [], sourceTopicStats: [] }
 
-  const statsDb = await withRequest({
+  // computeWrongQuestionSourceBookStats yalnızca normalizedTopicKeys/studentId/teacherId'e bağlı,
+  // aşağıdaki statsResult'a değil — bu yüzden sırayla değil paralel çalıştırılabilir. Hata
+  // Defteri'nin istatistik ucu (getWrongQuestionTopicStatsHandler) bunları önceden art arda
+  // bekliyordu, her round-trip Azure SQL'e ayrı bir gidiş-dönüş demekti ve sayfanın "yükleniyor"da
+  // takılmasının başlıca nedeniydi (bkz. fetchResourceBookStatsForStudent'taki aynı düzeltme).
+  const statsDbPromise = withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
     topicKeysJson: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(normalizedTopicKeys) },
     ...(teacherId ? { teacherId: { type: sql.UniqueIdentifier, value: teacherId } } : {}),
-  })
-  const statsResult = await statsDb.query(`
+  }).then((statsDb) => statsDb.query(`
     WITH WantedTopics AS (
       SELECT DISTINCT
              LTRIM(RTRIM(COALESCE(JSON_VALUE([value], '$.subject'), N''))) AS subject_name,
@@ -1089,7 +1093,12 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
            SUM(blank_count) AS blank_count
     FROM ChosenResults
     GROUP BY subject_name, topic_name, book_name;
-  `)
+  `))
+
+  const [statsResult, sourceBookStats] = await Promise.all([
+    statsDbPromise,
+    computeWrongQuestionSourceBookStats(studentId, normalizedTopicKeys, { teacherId }),
+  ])
 
   const totals = new Map()
   const sourceTopicStats = statsResult.recordset.map((row) => {
@@ -1138,8 +1147,8 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
   // toplam test) göstermek için, yanlışı olan konuların ait olduğu kitapları bulup
   // catalog.js'deki aynı toplu istatistik hesabını kullanırız — böylece bu oran Kitaplık
   // donut'larıyla birebir aynıdır. catalog.js progress.js'i require ettiği için döngüsel
-  // bağımlılığı önlemek adına burada tembel require ediyoruz.
-  const sourceBookStats = await computeWrongQuestionSourceBookStats(studentId, normalizedTopicKeys, { teacherId })
+  // bağımlılığı önlemek adına burada tembel require ediyoruz. (Sorgusu yukarıda statsResult ile
+  // paralel çalıştırıldı.)
 
   return { topicStats, sourceTopicStats, sourceBookStats }
 }

@@ -1307,13 +1307,42 @@ async function fetchResourceBookStatsForStudent(studentId, resourceBookIds) {
   )
   const idPlaceholders = resourceBookIds.map((_, index) => `@resourceBookId${index}`).join(', ')
 
-  const testsDb = await withRequest(idBindings)
-  const testsResult = await testsDb.query(`
-    SELECT tt.id AS test_id, t.resource_book_id
-    FROM dbo.ResourceBookTopicTests tt
-    INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
-    WHERE t.resource_book_id IN (${idPlaceholders});
-  `)
+  // Üç sorgu birbirinin SQL sonucuna değil, sadece girdi parametrelerine (resourceBookIds/
+  // studentId) bağlı — eşleştirme (bookIdByTestId) tamamen JS tarafında yapılıyor. Bu yüzden
+  // sırayla değil paralel atılabilir; her round-trip'in (Azure SQL'e) ayrı ayrı beklenmesi
+  // Hata Defteri'nin yüklenmesini gereksiz yere yavaşlatıyordu.
+  const [testsResult, tasksResult, manualResult] = await Promise.all([
+    withRequest(idBindings).then((testsDb) =>
+      testsDb.query(`
+        SELECT tt.id AS test_id, t.resource_book_id
+        FROM dbo.ResourceBookTopicTests tt
+        INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
+        WHERE t.resource_book_id IN (${idPlaceholders});
+      `),
+    ),
+    withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      ...idBindings,
+    }).then((tasksDb) =>
+      tasksDb.query(`
+        SELECT test_results_json
+        FROM dbo.Tasks
+        WHERE student_id = @studentId AND resource_book_id IN (${idPlaceholders}) AND test_results_json IS NOT NULL;
+      `),
+    ),
+    withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      ...idBindings,
+    }).then((manualDb) =>
+      manualDb.query(`
+        SELECT smtc.test_id, smtc.correct_count, smtc.wrong_count, smtc.blank_count
+        FROM dbo.StudentManualTestCompletions smtc
+        INNER JOIN dbo.ResourceBookTopicTests tt ON tt.id = smtc.test_id
+        INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
+        WHERE smtc.student_id = @studentId AND t.resource_book_id IN (${idPlaceholders});
+      `),
+    ),
+  ])
 
   const bookIdByTestId = new Map()
   testsResult.recordset.forEach((row) => {
@@ -1329,15 +1358,6 @@ async function fetchResourceBookStatsForStudent(studentId, resourceBookIds) {
   const completedTestIds = new Set()
   const testResultCounts = new Map()
 
-  const tasksDb = await withRequest({
-    studentId: { type: sql.UniqueIdentifier, value: studentId },
-    ...idBindings,
-  })
-  const tasksResult = await tasksDb.query(`
-    SELECT test_results_json
-    FROM dbo.Tasks
-    WHERE student_id = @studentId AND resource_book_id IN (${idPlaceholders}) AND test_results_json IS NOT NULL;
-  `)
   tasksResult.recordset.forEach((row) => {
     let results
     try {
@@ -1355,17 +1375,6 @@ async function fetchResourceBookStatsForStudent(studentId, resourceBookIds) {
     })
   })
 
-  const manualDb = await withRequest({
-    studentId: { type: sql.UniqueIdentifier, value: studentId },
-    ...idBindings,
-  })
-  const manualResult = await manualDb.query(`
-    SELECT smtc.test_id, smtc.correct_count, smtc.wrong_count, smtc.blank_count
-    FROM dbo.StudentManualTestCompletions smtc
-    INNER JOIN dbo.ResourceBookTopicTests tt ON tt.id = smtc.test_id
-    INNER JOIN dbo.ResourceBookTopics t ON t.id = tt.topic_id
-    WHERE smtc.student_id = @studentId AND t.resource_book_id IN (${idPlaceholders});
-  `)
   manualResult.recordset.forEach((row) => {
     if (!bookIdByTestId.has(row.test_id)) return
     completedTestIds.add(row.test_id)
