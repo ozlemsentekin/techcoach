@@ -812,6 +812,12 @@ export default function WrongQuestionsView({
     () => allPhotoQuestions.filter((item) => dateInRange(toDateKey(item.createdAt), dateFilter, today)),
     [allPhotoQuestions, dateFilter, today],
   )
+  // Backend istatistikleri (subjectStatsMap vb.) her zaman TÜM ZAMANLARI kapsar (bkz.
+  // computeWrongQuestionTopicStats yorumu); bir tarih aralığı seçiliyken bu sayıları kartlarda
+  // göstermek kafa karıştırıyordu (ör. "Bu Hafta" seçiliyken hâlâ tüm zamanların "148 yanlış"ı
+  // görünüyordu). Bu yüzden dateFilter aktifken stats'i kartlara hiç vermiyoruz; kartlar o zaman
+  // otomatik olarak (zaten tarihe göre filtrelenmiş) fotoğraf sayısına düşüyor.
+  const dateFilterActive = dateFilter !== 'all'
   const photoQuestions = useMemo(
     () => applyAnalysisFilter(dateFilteredQuestions, analysisFilter),
     [dateFilteredQuestions, analysisFilter],
@@ -1051,7 +1057,9 @@ export default function WrongQuestionsView({
         <PageHeader
           title={activeSource.bookName || 'Kaynak belirtilmemiş'}
           subtitle={`${activeSource.publisherName || 'Yayın evi belirtilmemiş'} · ${
-            sourceBookStatsMap.get(sourceBookKey(effectiveSelectedSubject, activeSource.bookName))?.wrongCount ??
+            (dateFilterActive
+              ? null
+              : sourceBookStatsMap.get(sourceBookKey(effectiveSelectedSubject, activeSource.bookName))?.wrongCount) ??
             activeSource.items.length
           } yanlış soru`}
           actions={
@@ -1070,7 +1078,7 @@ export default function WrongQuestionsView({
         <PageHeader
           title={effectiveSelectedSubject}
           subtitle={(() => {
-            const subjectStats = subjectStatsMap.get(effectiveSelectedSubject)
+            const subjectStats = dateFilterActive ? null : subjectStatsMap.get(effectiveSelectedSubject)
             const wrongCount = subjectStats?.wrongCount ?? selectedContentGroup?.items.length ?? 0
             if (subjectStats && subjectStats.totalAnswered > 0) {
               const percent =
@@ -1188,7 +1196,9 @@ export default function WrongQuestionsView({
           subject={effectiveSelectedSubject}
           topics={activeSource.topics}
           statsForTopic={(topic) =>
-            sourceTopicStatsMap.get(sourceStatsKey(effectiveSelectedSubject, topic, activeSource.bookName))
+            dateFilterActive
+              ? null
+              : sourceTopicStatsMap.get(sourceStatsKey(effectiveSelectedSubject, topic, activeSource.bookName))
           }
           fetchPhoto={fetchPhoto}
           viewerRole={viewerRole}
@@ -1208,7 +1218,11 @@ export default function WrongQuestionsView({
                   publisherName={source.publisherName}
                   bookImageUrl={source.bookImageUrl}
                   wrongCount={source.items.length}
-                  stats={sourceBookStatsMap.get(sourceBookKey(effectiveSelectedSubject, source.bookName))}
+                  stats={
+                    dateFilterActive
+                      ? null
+                      : sourceBookStatsMap.get(sourceBookKey(effectiveSelectedSubject, source.bookName))
+                  }
                   completionRate={sourceBookCompletionMap.get(
                     sourceBookKey(effectiveSelectedSubject, source.bookName),
                   )}
@@ -1245,7 +1259,7 @@ export default function WrongQuestionsView({
                       key={topicKey}
                       topic={topicGroup.topic}
                       wrongCount={topicGroup.items.length}
-                      stats={topicStatsMap.get(topicKey)}
+                      stats={dateFilterActive ? null : topicStatsMap.get(topicKey)}
                       scopeLabel="tüm kaynaklar"
                       pendingCount={pendingAnalysisCount(topicGroup.items, viewerRole)}
                       selectMode={topicSelectMode}
@@ -1271,7 +1285,7 @@ export default function WrongQuestionsView({
               key={group.subject}
               subject={group.subject}
               count={group.items.length}
-              stats={subjectStatsMap.get(group.subject)}
+              stats={dateFilterActive ? null : subjectStatsMap.get(group.subject)}
               tone={SHELF_TONES[index % SHELF_TONES.length]}
               pendingCount={pendingAnalysisCount(group.items, viewerRole)}
               onClick={() => handleSelectSubject(group.subject)}
