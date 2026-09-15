@@ -363,7 +363,7 @@ async function getBookHandler(request) {
 
     const contentDb = await withRequest({ bookId: { type: sql.UniqueIdentifier, value: book.id } })
     const topicsResult = await contentDb.query(`
-      SELECT id, name FROM dbo.ResourceBookTopics WHERE resource_book_id = @bookId ORDER BY created_at ASC;
+      SELECT id, name, page_start FROM dbo.ResourceBookTopics WHERE resource_book_id = @bookId ORDER BY created_at ASC;
     `)
     const testsDb = await withRequest({ bookId: { type: sql.UniqueIdentifier, value: book.id } })
     const testsResult = await testsDb.query(`
@@ -377,7 +377,7 @@ async function getBookHandler(request) {
 
     return json(200, {
       resourceBook: shaped,
-      topics: topicsResult.recordset.map((r) => ({ id: r.id, name: r.name })),
+      topics: topicsResult.recordset.map((r) => ({ id: r.id, name: r.name, pageStart: r.page_start })),
       tests: testsResult.recordset.map((r) => ({
         id: r.id,
         topicId: r.topic_id,

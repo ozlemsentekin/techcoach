@@ -137,11 +137,22 @@ function sanitizeTestAnswerKeyEntry(record) {
   }
 }
 
+const INVALID_PAGE_START = Symbol('invalid-page-start')
+
+// Konu/ünite sayfa numarası isteğe bağlı: boş bırakılırsa null, verilirse pozitif tam sayı olmalı.
+function parsePageStart(value) {
+  if (value === undefined || value === null || value === '') return null
+  const number = Number(value)
+  if (!Number.isInteger(number) || number <= 0) return INVALID_PAGE_START
+  return number
+}
+
 function sanitizeResourceBookTopic(record) {
   return {
     id: record.id,
     resourceBookId: record.resource_book_id,
     name: record.name,
+    pageStart: record.page_start ?? null,
     createdAt: record.created_at,
   }
 }
@@ -928,7 +939,7 @@ async function listResourceBookTopicsHandler(request) {
 
     const requestDb = await withRequest({})
     const result = await requestDb.query(`
-      SELECT rbt.id, rbt.resource_book_id, rbt.name, rbt.created_at
+      SELECT rbt.id, rbt.resource_book_id, rbt.name, rbt.page_start, rbt.created_at
       FROM dbo.ResourceBookTopics rbt
       INNER JOIN dbo.ResourceBooks rb ON rb.id = rbt.resource_book_id
       WHERE rb.scope = 'catalog'
@@ -968,15 +979,21 @@ async function createResourceBookTopicHandler(request) {
       return json(400, { error: 'İçerik adı en az 2 karakter olmalı.' })
     }
 
+    const pageStart = parsePageStart(payload?.pageStart)
+    if (pageStart === INVALID_PAGE_START) {
+      return json(400, { error: 'Sayfa numarası pozitif bir tam sayı olmalı.' })
+    }
+
     const requestDb = await withRequest({
       resourceBookId: { type: sql.UniqueIdentifier, value: resourceBookId },
       name: { type: sql.NVarChar(200), value: name },
+      pageStart: { type: sql.Int, value: pageStart },
     })
 
     const result = await requestDb.query(`
-      INSERT INTO dbo.ResourceBookTopics (resource_book_id, name)
-      OUTPUT inserted.id, inserted.resource_book_id, inserted.name, inserted.created_at
-      VALUES (@resourceBookId, @name);
+      INSERT INTO dbo.ResourceBookTopics (resource_book_id, name, page_start)
+      OUTPUT inserted.id, inserted.resource_book_id, inserted.name, inserted.page_start, inserted.created_at
+      VALUES (@resourceBookId, @name, @pageStart);
     `)
 
     return json(201, { topic: sanitizeResourceBookTopic(result.recordset[0]) })
@@ -1009,15 +1026,21 @@ async function updateResourceBookTopicHandler(request) {
       return json(400, { error: 'İçerik adı en az 2 karakter olmalı.' })
     }
 
+    const pageStart = parsePageStart(payload?.pageStart)
+    if (pageStart === INVALID_PAGE_START) {
+      return json(400, { error: 'Sayfa numarası pozitif bir tam sayı olmalı.' })
+    }
+
     const requestDb = await withRequest({
       id: { type: sql.UniqueIdentifier, value: topicId },
       name: { type: sql.NVarChar(200), value: name },
+      pageStart: { type: sql.Int, value: pageStart },
     })
 
     const result = await requestDb.query(`
       UPDATE dbo.ResourceBookTopics
-      SET name = @name
-      OUTPUT inserted.id, inserted.resource_book_id, inserted.name, inserted.created_at
+      SET name = @name, page_start = @pageStart
+      OUTPUT inserted.id, inserted.resource_book_id, inserted.name, inserted.page_start, inserted.created_at
       WHERE id = @id;
     `)
 

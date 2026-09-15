@@ -5,6 +5,12 @@ import LoadingState from '../LoadingState'
 import { authRequest } from '../../../services/authClient'
 import { buildBookContents } from './bookContents'
 
+// İçindekiler başlıkları her zaman büyük harfle başlasın (kullanıcı küçük harfle yazsa bile).
+function capitalizeFirstLetter(text) {
+  if (!text) return text
+  return text.charAt(0).toLocaleUpperCase('tr-TR') + text.slice(1)
+}
+
 // Kitap-açılımı modallerinin tek satırlık başlığı: "Kaynak › İçerik › işlem" gibi bir
 // breadcrumb + kapat düğmesi. Ara segmentler taşarsa kısalır, son segment (işlem) sabit.
 function ModalBreadcrumb({ segments, onClose }) {
@@ -60,6 +66,7 @@ function TopicBookPageRow({ label, page, active = false, subline, action, footer
 
 function TopicContentsPreview({
   topicName,
+  topicPage,
   bookContents,
   editingName,
   onDeleteEntry,
@@ -71,6 +78,10 @@ function TopicContentsPreview({
   const [pendingKey, setPendingKey] = useState(null)
   const canDelete = Boolean(onDeleteEntry) && !isEdit
   const canAddTests = Boolean(onAddTests) && !isEdit
+
+  const trimmedPage = String(topicPage ?? '').trim()
+  const typedPageNumber = Number(trimmedPage)
+  const typedPage = trimmedPage !== '' && Number.isInteger(typedPageNumber) && typedPageNumber > 0 ? String(typedPageNumber) : null
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-[#fffdf8] p-4 sm:p-5">
@@ -87,7 +98,7 @@ function TopicContentsPreview({
             <TopicBookPageRow
               key={entry.name}
               label={active ? trimmed || entry.name : entry.name}
-              page={entry.page == null ? '—' : String(entry.page)}
+              page={active && typedPage ? typedPage : entry.page == null ? '—' : String(entry.page)}
               active={active}
               subline={entry.testCount > 0 ? `${entry.testCount} test eklendi` : undefined}
               action={
@@ -152,7 +163,7 @@ function TopicContentsPreview({
         })}
 
         {!isEdit && trimmed ? (
-          <TopicBookPageRow label={trimmed || 'Yeni içerik başlığı'} page={trimmed ? '…' : '—'} active />
+          <TopicBookPageRow label={trimmed || 'Yeni içerik başlığı'} page={typedPage || '…'} active />
         ) : null}
 
         {bookContents.length === 0 && !trimmed ? (
@@ -177,6 +188,7 @@ function TopicModal({
 }) {
   const isEdit = Boolean(topic)
   const [name, setName] = useState(topic?.name || '')
+  const [pageStart, setPageStart] = useState(topic?.pageStart != null ? String(topic.pageStart) : '')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
@@ -218,19 +230,27 @@ function TopicModal({
       return
     }
 
+    const trimmedPage = pageStart.trim()
+    const pageStartNumber = trimmedPage === '' ? null : Number(trimmedPage)
+    if (pageStartNumber !== null && (!Number.isInteger(pageStartNumber) || pageStartNumber <= 0)) {
+      setError('Sayfa numarası pozitif bir tam sayı olmalı.')
+      return
+    }
+
     setError('')
     setLoading(true)
     try {
       const data = isEdit
         ? await authRequest(`/api/panel-admin/resource-book-topics/${topic.id}`, {
             method: 'PATCH',
-            body: JSON.stringify({ name: name.trim() }),
+            body: JSON.stringify({ name: capitalizeFirstLetter(name.trim()), pageStart: pageStartNumber }),
           })
         : await authRequest('/api/panel-admin/resource-book-topics', {
             method: 'POST',
             body: JSON.stringify({
               resourceBookId: book.id,
-              name: name.trim(),
+              name: capitalizeFirstLetter(name.trim()),
+              pageStart: pageStartNumber,
             }),
           })
       // Yeni ekleme akışında formu temizleyip odağı geri veriyoruz ki kullanıcı modal
@@ -239,6 +259,7 @@ function TopicModal({
       // Düzenleme akışında (isEdit) tek kayıt güncellendiği için parent modalı kapatır.
       if (!isEdit) {
         setName('')
+        setPageStart('')
         document.getElementById('topic-name-input')?.focus()
       }
       onSaved(data.topic)
@@ -264,11 +285,12 @@ function TopicModal({
             <label htmlFor="topic-name-input" className="mb-3 mt-1 text-base font-semibold text-panel-text">Ünite / bölüm adı</label>
             <div className="flex items-center gap-2">
               <input id="topic-name-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Örn. Çarpanlar ve Katlar" className="h-11 min-w-0 flex-1 rounded-xl border border-panel-border bg-white px-3 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20" />
+              <input id="topic-page-input" type="number" min="1" inputMode="numeric" value={pageStart} onChange={(event) => setPageStart(event.target.value)} placeholder="Sayfa" aria-label="Sayfa numarası" className="h-11 w-20 shrink-0 rounded-xl border border-panel-border bg-white px-2 text-center text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20" />
               <Button type="submit" disabled={loading || name.trim().length < 2} className="h-11">{loading ? 'Ekleniyor…' : isEdit ? 'Kaydet' : 'Ekle'}</Button>
             </div>
           </section>
           <section className="min-h-0 min-w-0 overflow-hidden md:shadow-[inset_12px_0_18px_-18px_#8b7666]">
-            <TopicContentsPreview topicName={name} bookContents={bookContents} editingName={topic?.name || ''} onDeleteEntry={onDeleted ? handleDeleteEntry : undefined} deleteBusy={deleteBusy} onAddTests={onTestsCreated ? setTestEntry : undefined} />
+            <TopicContentsPreview topicName={name} topicPage={pageStart} bookContents={bookContents} editingName={topic?.name || ''} onDeleteEntry={onDeleted ? handleDeleteEntry : undefined} deleteBusy={deleteBusy} onAddTests={onTestsCreated ? setTestEntry : undefined} />
           </section>
         </div>
         <div className="flex shrink-0 items-center justify-between gap-3 border-t border-panel-border px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">

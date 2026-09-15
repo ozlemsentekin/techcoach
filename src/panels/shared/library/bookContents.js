@@ -1,13 +1,21 @@
 // Kaynağa eklenmiş içerikleri (aynı adlı satırları birleştirerek) başlangıç sayfasına göre
-// sıralı bir "İçindekiler" listesine dönüştürür. Bir içeriğin başlangıç sayfası, o içeriğe
-// bağlı testlerin en küçük başlangıç sayfasıdır; hiç testi yoksa sayfa bilinmiyor demektir.
+// sıralı bir "İçindekiler" listesine dönüştürür. Bir içeriğin başlangıç sayfası önce konunun
+// kendi üzerinde girilmiş sayfa numarasına bakar; girilmemişse o içeriğe bağlı testlerin en
+// küçük başlangıç sayfasına düşer (eski kayıtlarla geriye dönük uyum için).
 // bookTopics / bookTests bu kaynağa göre önceden filtrelenmiş olarak beklenir.
 export function buildBookContents(bookTopics, bookTests) {
   const groups = new Map()
   bookTopics.forEach((topic) => {
+    const topicPage = Number.isInteger(topic.pageStart) && topic.pageStart > 0 ? topic.pageStart : null
     const existing = groups.get(topic.name)
-    if (existing) existing.topicIds.push(topic.id)
-    else groups.set(topic.name, { name: topic.name, topicIds: [topic.id] })
+    if (existing) {
+      existing.topicIds.push(topic.id)
+      if (topicPage != null && (existing.pageStart == null || topicPage < existing.pageStart)) {
+        existing.pageStart = topicPage
+      }
+    } else {
+      groups.set(topic.name, { name: topic.name, topicIds: [topic.id], pageStart: topicPage })
+    }
   })
 
   const entries = Array.from(groups.values()).map((group) => {
@@ -19,7 +27,7 @@ export function buildBookContents(bookTopics, bookTests) {
       name: group.name,
       topicIds: group.topicIds,
       testCount: groupTests.length,
-      page: pages.length ? Math.min(...pages) : null,
+      page: group.pageStart != null ? group.pageStart : (pages.length ? Math.min(...pages) : null),
     }
   })
 
