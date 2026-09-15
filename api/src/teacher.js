@@ -3359,6 +3359,7 @@ async function listTeacherStudentWrongQuestionsHandler(request) {
                wq.question_number, wq.error_type,
                wq.review_status, wq.resolved_at,
                CAST(1 AS bit) AS has_photo, wq.created_at,
+               CASE WHEN wq.analysis_photo_url IS NOT NULL THEN 1 ELSE 0 END AS has_analysis_photo,
                COALESCE(tp.name, wq.topic) AS topic,
                COALESCE(rb.name, wq.book_name) AS book_name,
                COALESCE(pub.name, wq.publisher_name) AS publisher_name,
@@ -3418,6 +3419,122 @@ async function getTeacherStudentWrongQuestionPhotoHandler(request) {
     return json(200, { photoUrl })
   } catch (error) {
     return handleError(error, 'getTeacherStudentWrongQuestionPhotoHandler', 'Fotoğraf yüklenemedi.')
+  }
+}
+
+// Öğretmenin, öğrencinin Hata Defteri'ndeki Hata Analiz görselini tembel çekmesi (bkz. progress.js
+// getWrongQuestionAnalysisPhotoHandler — panel muadili). Sadece kendi dersindeki kayıt, salt-okuma
+// (öğretmen görseli ekleyemez/değiştiremez — bunu sadece veli yapar).
+async function getTeacherStudentWrongQuestionAnalysisPhotoHandler(request) {
+  try {
+    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    const subjectName = await resolveTeacherSubjectName(subjectId)
+    const wrongQuestionId = request.params.wrongQuestionId
+
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      subject: { type: sql.NVarChar(100), value: subjectName },
+    })
+    const result = await requestDb.query(`
+      SELECT analysis_photo_url FROM dbo.WrongQuestions WHERE id = @id AND student_id = @studentId AND subject = @subject;
+    `)
+
+    const analysisPhotoUrl = result.recordset[0]?.analysis_photo_url
+    if (!analysisPhotoUrl) {
+      return json(404, { error: 'Hata analiz görseli bulunamadı.' })
+    }
+
+    return json(200, { analysisPhotoUrl })
+  } catch (error) {
+    return handleError(error, 'getTeacherStudentWrongQuestionAnalysisPhotoHandler', 'Hata analiz görseli yüklenemedi.')
+  }
+}
+
+// "Hata Analizlerim" menüsü (öğretmen): tek bir öğrenciyle sınırlı değil — öğretmenin kendi
+// kapsamındaki (dbo.StudentTeachers) TÜM aktif öğrenci/ders ilişkilerinde, veli tarafından Hata
+// Analiz görseli eklenmiş soruları tek listede toplar. Diğer iki (öğrenci/veli) uçtan farklı olarak
+// studentTeacherId gerekmez (requireTeacherSession yeterli); kapsam SQL'de teacher_user_id ile
+// sağlanır. Çapraz öğrenci listesi olduğu için satırlar studentFullName de taşır.
+async function listTeacherWrongQuestionAnalysisPhotosHandler(request) {
+  try {
+    const { error, teacherUserId } = await requireTeacherSession(request)
+    if (error) return error
+
+    const requestDb = await withRequest({
+      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+    })
+    const result = await requestDb.query(`
+      SELECT wq.id, wq.subject, wq.question_number, wq.analysis_photo_added_at,
+             u.full_name AS student_full_name,
+             COALESCE(tp.name, wq.topic) AS topic,
+             COALESCE(rb.name, rb2.name, wq.book_name) AS book_name,
+             COALESCE(pub.name, pub2.name, wq.publisher_name) AS publisher_name,
+             t.topic_name, wq.test_name
+      FROM dbo.StudentTeachers st
+      INNER JOIN dbo.Users u ON u.id = st.student_id
+      INNER JOIN dbo.Subjects s ON s.id = st.subject_id
+      INNER JOIN dbo.WrongQuestions wq ON wq.student_id = st.student_id AND wq.subject = s.name
+      LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
+      LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
+      LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
+      LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
+      LEFT JOIN dbo.ResourceBooks rb2 ON rb2.id = wq.resource_book_id
+      LEFT JOIN dbo.Publishers pub2 ON pub2.id = rb2.publisher_id
+      WHERE st.teacher_user_id = @teacherUserId AND st.is_active = 1
+        AND wq.analysis_photo_url IS NOT NULL
+      ORDER BY wq.analysis_photo_added_at DESC;
+    `)
+
+    return json(200, {
+      items: result.recordset.map((row) => ({
+        id: row.id,
+        subject: row.subject,
+        studentFullName: row.student_full_name,
+        topic: row.topic || undefined,
+        topicName: row.topic_name || undefined,
+        testName: row.test_name || undefined,
+        bookName: row.book_name || undefined,
+        publisherName: row.publisher_name || undefined,
+        questionNumber: row.question_number || undefined,
+        analysisPhotoAddedAt: row.analysis_photo_added_at,
+      })),
+    })
+  } catch (error) {
+    return handleError(error, 'listTeacherWrongQuestionAnalysisPhotosHandler', 'Hata analizleri yüklenemedi.')
+  }
+}
+
+// "Hata Analizlerim" menüsündeki tek bir görselin tembel çekimi — kapsam yukarıdaki listeyle
+// aynı SQL koşuluyla (StudentTeachers üzerinden) doğrulanır, studentTeacherId gerekmez.
+async function getTeacherWrongQuestionAnalysisPhotoHandler(request) {
+  try {
+    const { error, teacherUserId } = await requireTeacherSession(request)
+    if (error) return error
+
+    const wrongQuestionId = request.params.wrongQuestionId
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
+      teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
+    })
+    const result = await requestDb.query(`
+      SELECT wq.analysis_photo_url
+      FROM dbo.WrongQuestions wq
+      INNER JOIN dbo.StudentTeachers st ON st.student_id = wq.student_id AND st.is_active = 1
+      INNER JOIN dbo.Subjects s ON s.id = st.subject_id AND s.name = wq.subject
+      WHERE wq.id = @id AND st.teacher_user_id = @teacherUserId;
+    `)
+
+    const analysisPhotoUrl = result.recordset[0]?.analysis_photo_url
+    if (!analysisPhotoUrl) {
+      return json(404, { error: 'Hata analiz görseli bulunamadı.' })
+    }
+
+    return json(200, { analysisPhotoUrl })
+  } catch (error) {
+    return handleError(error, 'getTeacherWrongQuestionAnalysisPhotoHandler', 'Hata analiz görseli yüklenemedi.')
   }
 }
 
@@ -3624,6 +3741,9 @@ module.exports = {
   listTeacherStudentWrongQuestionsHandler,
   getTeacherStudentWrongQuestionPhotoHandler,
   updateTeacherStudentWrongQuestionPhotoHandler,
+  getTeacherStudentWrongQuestionAnalysisPhotoHandler,
+  listTeacherWrongQuestionAnalysisPhotosHandler,
+  getTeacherWrongQuestionAnalysisPhotoHandler,
   getTeacherStudentWrongQuestionTopicStatsHandler,
   updateTeacherStudentWrongQuestionHandler,
   grantParentAccessHandler,

@@ -17,6 +17,13 @@ const KITAPLIK_PARENT_ITEM = { to: '/parent/bookshelf', label: 'Kitaplık', icon
 const KUTUPHANE_TEACHER_ITEM = { to: '/teacher/library', label: 'Kütüphane', icon: 'Library' }
 const KITAPLIK_TEACHER_ITEM = { to: '/teacher/bookshelf', label: 'Kitaplık', icon: 'BookMarked' }
 
+// "Hata Analizlerim": veli tarafından eklenen Hata Analiz görsellerinin listesi (öğrenci/öğretmen
+// salt-okunur görüntüler). Üçü de "Çalışma Alanı" altında; öğretmende kendi kapsamındaki tüm
+// öğrencileri tek listede toplar (bkz. AnalysisPhotosPage.jsx'teki showStudentColumn).
+const ANALYSIS_PHOTOS_STUDENT_ITEM = { to: '/student/analysis-photos', label: 'Hata Analizlerim', icon: 'Image' }
+const ANALYSIS_PHOTOS_PARENT_ITEM = { to: '/parent/analysis-photos', label: 'Hata Analizlerim', icon: 'Image' }
+const ANALYSIS_PHOTOS_TEACHER_ITEM = { to: '/teacher/analysis-photos', label: 'Hata Analizlerim', icon: 'Image' }
+
 // Öğrenci menüsü iki ana başlık altında gruplanır ("Çalışma Planım", "Çalışma
 // Sonuçlarım"); "Öğretmenlerim" ve "Taleplerim" tekil öğe olarak kalır.
 export function getStudentNav({ lessonNotesEnabled = false } = {}) {
@@ -30,7 +37,7 @@ export function getStudentNav({ lessonNotesEnabled = false } = {}) {
         { to: '/student/weekly-plan', label: 'Bu Hafta', icon: 'CalendarRange' },
       ],
     },
-    ...(lessonNotesEnabled ? [workspaceNav('student')] : []),
+    workspaceNav('student', lessonNotesEnabled, [ANALYSIS_PHOTOS_STUDENT_ITEM]),
     {
       key: 'calisma-sonuclarim',
       label: 'Çalışma Sonuçlarım',
@@ -101,6 +108,7 @@ export function getParentNav({ hasStudents = true, canManageLibrary = false, isA
     workspaceNav('parent', lessonNotesEnabled, [
       ...(showKitaplik ? [KITAPLIK_PARENT_ITEM] : []),
       ...kutuphaneItems,
+      ANALYSIS_PHOTOS_PARENT_ITEM,
     ]),
     {
       key: 'calisma-sonuclari',
@@ -151,6 +159,7 @@ export function getTeacherNav(canManageLibrary = false, lessonNotesEnabled = fal
     },
     workspaceNav('teacher', lessonNotesEnabled, [
       canManageLibrary ? KUTUPHANE_TEACHER_ITEM : KITAPLIK_TEACHER_ITEM,
+      ANALYSIS_PHOTOS_TEACHER_ITEM,
     ]),
     { to: '/teacher/requests', label: 'Taleplerim', icon: 'ClipboardList' },
     { to: '/teacher/guide', label: 'Rehber', icon: 'BookOpen' },

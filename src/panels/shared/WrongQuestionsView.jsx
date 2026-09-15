@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  Image as ImageIcon,
   Layers,
   Loader2,
   Search,
@@ -486,6 +487,14 @@ function WrongQuestionThumbnail({ item, fetchPhoto, onClick, viewerRole }) {
           {caption}
         </p>
         <span className="flex shrink-0 items-center gap-1">
+          {item.hasAnalysisPhoto ? (
+            <span
+              title="Hata Analiz eklendi"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-panel-blue bg-panel-blue-soft text-panel-blue"
+            >
+              <ImageIcon size={11} aria-hidden="true" />
+            </span>
+          ) : null}
           <MistakeAnalysisBadges analyses={item.analyses} viewerRole={viewerRole} />
         </span>
       </div>
@@ -744,6 +753,9 @@ export default function WrongQuestionsView({
   updateMistakeAnalysis,
   updateMistakeMeta,
   updateMistakePhoto,
+  fetchAnalysisPhoto,
+  updateAnalysisPhoto,
+  removeAnalysisPhoto,
   viewerRole = 'ogrenci',
   studentId,
   title = 'Hata Defterim',
@@ -767,6 +779,7 @@ export default function WrongQuestionsView({
   const [topicSelectMode, setTopicSelectMode] = useState(false)
   const [selectedTopicKeys, setSelectedTopicKeys] = useState(() => new Set())
   const [replacingPhotoItem, setReplacingPhotoItem] = useState(null)
+  const [addingAnalysisPhotoItem, setAddingAnalysisPhotoItem] = useState(null)
   const [analysisFilter, setAnalysisFilter] = useState('tumu')
   const [dateFilter, setDateFilter] = useState('all')
   const today = todayISODate()
@@ -1036,6 +1049,40 @@ export default function WrongQuestionsView({
 
   const openReplacePhoto = updateMistakePhoto ? (item) => setReplacingPhotoItem(item) : undefined
 
+  // Hata Analiz görseli sadece veli tarafından eklenir/değiştirilir (updateAnalysisPhoto prop'u
+  // sadece veli MistakesPage'inde geçirilir); öğrenci/öğretmen bu butonu hiç görmez.
+  const handleAddAnalysisPhoto = async (dataUrl) => {
+    if (!addingAnalysisPhotoItem || !updateAnalysisPhoto) return
+    const updated = await updateAnalysisPhoto(addingAnalysisPhotoItem.id, dataUrl)
+    const nextAnalysisPhotoUrl = updated?.analysisPhotoUrl || dataUrl
+    setWrongQuestions((prev) =>
+      prev
+        ? prev.map((item) =>
+            item.id === addingAnalysisPhotoItem.id
+              ? { ...item, analysisPhotoUrl: nextAnalysisPhotoUrl, hasAnalysisPhoto: true }
+              : item,
+          )
+        : prev,
+    )
+  }
+
+  const openAddAnalysisPhoto = updateAnalysisPhoto ? (item) => setAddingAnalysisPhotoItem(item) : undefined
+
+  const handleRemoveAnalysisPhoto = removeAnalysisPhoto
+    ? async (item) => {
+        await removeAnalysisPhoto(item.id)
+        setWrongQuestions((prev) =>
+          prev
+            ? prev.map((question) =>
+                question.id === item.id
+                  ? { ...question, analysisPhotoUrl: undefined, hasAnalysisPhoto: false }
+                  : question,
+              )
+            : prev,
+        )
+      }
+    : undefined
+
   const handleWrongQuestionAdded = (wrongQuestion) => {
     setWrongQuestions((prev) => [wrongQuestion, ...(prev || [])])
     setShowAddModal(false)
@@ -1119,21 +1166,27 @@ export default function WrongQuestionsView({
 
       {allPhotoQuestions.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3 py-2">
-          <label htmlFor="mistake-analysis-filter" className="text-xs font-semibold text-panel-text-muted">
-            Analiz durumu
-          </label>
-          <select
-            id="mistake-analysis-filter"
-            value={analysisFilter}
-            onChange={(event) => setAnalysisFilter(event.target.value)}
-            className="h-9 rounded-lg border border-panel-border bg-panel-surface px-2 text-sm font-medium text-panel-text focus:border-panel-blue focus:outline-none"
-          >
-            {filterOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          {/* Analiz durumu filtresi ve "eksik analiz" rozeti sadece öğretmende kalır — veli/öğrenci
+              kulvarları kaldırıldı (bkz. mistakeAnalysis.js ANALYSIS_LANES yorumu). */}
+          {viewerRole === 'ogretmen' ? (
+            <>
+              <label htmlFor="mistake-analysis-filter" className="text-xs font-semibold text-panel-text-muted">
+                Analiz durumu
+              </label>
+              <select
+                id="mistake-analysis-filter"
+                value={analysisFilter}
+                onChange={(event) => setAnalysisFilter(event.target.value)}
+                className="h-9 rounded-lg border border-panel-border bg-panel-surface px-2 text-sm font-medium text-panel-text focus:border-panel-blue focus:outline-none"
+              >
+                {filterOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : null}
           <label htmlFor="mistake-date-filter" className="text-xs font-semibold text-panel-text-muted">
             Tarih
           </label>
@@ -1149,25 +1202,27 @@ export default function WrongQuestionsView({
               </option>
             ))}
           </select>
-          {(() => {
-            const pending = pendingAnalysisCount(scopedPhotoQuestions, viewerRole)
-            const scopePrefix = activeSource
-              ? `${activeSource.bookName || 'Bu kaynakta'}: `
-              : effectiveSelectedSubject
-                ? `${effectiveSelectedSubject}: `
-                : ''
-            return pending > 0 ? (
-              <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                {scopePrefix}
-                {pending} soruda senin analizin eksik
-              </span>
-            ) : (
-              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                {scopePrefix}tüm sorular analiz edildi
-              </span>
-            )
-          })()}
-          {analysisFilter !== 'tumu' ? (
+          {viewerRole === 'ogretmen'
+            ? (() => {
+                const pending = pendingAnalysisCount(scopedPhotoQuestions, viewerRole)
+                const scopePrefix = activeSource
+                  ? `${activeSource.bookName || 'Bu kaynakta'}: `
+                  : effectiveSelectedSubject
+                    ? `${effectiveSelectedSubject}: `
+                    : ''
+                return pending > 0 ? (
+                  <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                    {scopePrefix}
+                    {pending} soruda senin analizin eksik
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                    {scopePrefix}tüm sorular analiz edildi
+                  </span>
+                )
+              })()
+            : null}
+          {viewerRole === 'ogretmen' && analysisFilter !== 'tumu' ? (
             <span className="text-[11px] text-panel-text-muted">{scopedFilteredCount} soru gösteriliyor</span>
           ) : null}
         </div>
@@ -1226,7 +1281,7 @@ export default function WrongQuestionsView({
                   completionRate={sourceBookCompletionMap.get(
                     sourceBookKey(effectiveSelectedSubject, source.bookName),
                   )}
-                  pendingCount={pendingAnalysisCount(source.items, viewerRole)}
+                  pendingCount={viewerRole === 'ogretmen' ? pendingAnalysisCount(source.items, viewerRole) : 0}
                   onClick={() => setSelectedSourceKey(sourceKeyFor(source.bookName))}
                 />
               ))}
@@ -1261,7 +1316,7 @@ export default function WrongQuestionsView({
                       wrongCount={topicGroup.items.length}
                       stats={dateFilterActive ? null : topicStatsMap.get(topicKey)}
                       scopeLabel="tüm kaynaklar"
-                      pendingCount={pendingAnalysisCount(topicGroup.items, viewerRole)}
+                      pendingCount={viewerRole === 'ogretmen' ? pendingAnalysisCount(topicGroup.items, viewerRole) : 0}
                       selectMode={topicSelectMode}
                       selected={selectedTopicKeys.has(topicKey)}
                       onClick={() =>
@@ -1287,14 +1342,14 @@ export default function WrongQuestionsView({
               count={group.items.length}
               stats={dateFilterActive ? null : subjectStatsMap.get(group.subject)}
               tone={SHELF_TONES[index % SHELF_TONES.length]}
-              pendingCount={pendingAnalysisCount(group.items, viewerRole)}
+              pendingCount={viewerRole === 'ogretmen' ? pendingAnalysisCount(group.items, viewerRole) : 0}
               onClick={() => handleSelectSubject(group.subject)}
             />
           ))}
         </div>
       )}
 
-      {galleryTopicGroup && !replacingPhotoItem ? (
+      {galleryTopicGroup && !replacingPhotoItem && !addingAnalysisPhotoItem ? (
         <WrongQuestionGalleryModal
           title={galleryTopicGroup.topic || 'Genel'}
           items={galleryTopicGroup.items}
@@ -1304,10 +1359,13 @@ export default function WrongQuestionsView({
           onUpdateMistakeAnalysis={handleUpdateMistakeAnalysis}
           onUpdateMistakeMeta={handleUpdateMistakeMeta}
           onCapturePhoto={openReplacePhoto}
+          fetchAnalysisPhoto={fetchAnalysisPhoto}
+          onAddAnalysisPhoto={openAddAnalysisPhoto}
+          onRemoveAnalysisPhoto={handleRemoveAnalysisPhoto}
         />
       ) : null}
 
-      {sourceGallerySelection && !replacingPhotoItem ? (
+      {sourceGallerySelection && !replacingPhotoItem && !addingAnalysisPhotoItem ? (
         <WrongQuestionGalleryModal
           title={activeSource?.bookName || 'Kaynak'}
           items={sourceGallerySelection.items}
@@ -1318,6 +1376,9 @@ export default function WrongQuestionsView({
           onUpdateMistakeAnalysis={handleUpdateMistakeAnalysis}
           onUpdateMistakeMeta={handleUpdateMistakeMeta}
           onCapturePhoto={openReplacePhoto}
+          fetchAnalysisPhoto={fetchAnalysisPhoto}
+          onAddAnalysisPhoto={openAddAnalysisPhoto}
+          onRemoveAnalysisPhoto={handleRemoveAnalysisPhoto}
         />
       ) : null}
 
@@ -1331,6 +1392,15 @@ export default function WrongQuestionsView({
           }
           onClose={() => setReplacingPhotoItem(null)}
           onSave={handleReplacePhoto}
+        />
+      ) : null}
+
+      {addingAnalysisPhotoItem ? (
+        <MistakePhotoCaptureModal
+          title="Hata Analiz"
+          description="Çocuğunuzun bu soruyu neden yanlış yaptığını gösteren bir görsel ekleyin (çözüm, açıklama vb.)."
+          onClose={() => setAddingAnalysisPhotoItem(null)}
+          onSave={handleAddAnalysisPhoto}
         />
       ) : null}
     </div>

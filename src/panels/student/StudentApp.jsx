@@ -11,6 +11,7 @@ const TodayPage = lazy(() => import('./pages/TodayPage'))
 const WeeklyPlanPage = lazy(() => import('./pages/WeeklyPlanPage'))
 const CoursesPage = lazy(() => import('./pages/CoursesPage'))
 const MistakesPage = lazy(() => import('./pages/MistakesPage'))
+const AnalysisPhotosPage = lazy(() => import('./pages/AnalysisPhotosPage'))
 const ProgressPage = lazy(() => import('./pages/ProgressPage'))
 const StudyHistoryPage = lazy(() => import('./pages/StudyHistoryPage'))
 const MockExamsPage = lazy(() => import('./pages/MockExamsPage'))
@@ -48,6 +49,7 @@ export default function StudentApp() {
           {/* Kitaplık öğrenci panelinde gösterilmez; eski yer imleri Bugün'e yönlendirilir. */}
           <Route path="bookshelf" element={<Navigate to="today" replace />} />
           <Route path="mistakes" element={pageElement(MistakesPage)} />
+          <Route path="analysis-photos" element={pageElement(AnalysisPhotosPage)} />
           <Route path="study-history" element={pageElement(StudyHistoryPage)} />
           <Route path="mock-exams" element={pageElement(MockExamsPage)} />
           <Route path="progress" element={pageElement(ProgressPage)} />

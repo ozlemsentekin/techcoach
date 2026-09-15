@@ -31,6 +31,7 @@ const RequestsPage = lazy(() => import('./pages/RequestsPage'))
 const AdminBookRequestsPage = lazy(() => import('./pages/AdminBookRequestsPage'))
 const TestsPage = lazy(() => import('./pages/TestsPage'))
 const MistakesPage = lazy(() => import('./pages/MistakesPage'))
+const AnalysisPhotosPage = lazy(() => import('./pages/AnalysisPhotosPage'))
 const StudyHistoryPage = lazy(() => import('./pages/StudyHistoryPage'))
 const MockExamsPage = lazy(() => import('./pages/MockExamsPage'))
 
@@ -131,6 +132,7 @@ export default function ParentApp() {
             <Route path="homework" element={<Navigate to="/parent/weekly-plan" replace />} />
             <Route path="tests" element={pageElement(TestsPage)} />
             <Route path="mistakes" element={pageElement(MistakesPage)} />
+            <Route path="analysis-photos" element={pageElement(AnalysisPhotosPage)} />
             <Route
               path="study-history"
               element={<RequireStudents>{pageElement(StudyHistoryPage)}</RequireStudents>}

@@ -3,21 +3,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Users } from 'lucide-react'
 import { cachedGet } from '../../../services/authClient'
 import Button from '../../ui/Button'
-import {
-  getWrongQuestions,
-  getWrongQuestionTopicStats,
-  getWrongQuestionPhoto,
-  getWrongQuestionAnalysisPhoto,
-  updateWrongQuestionAnalysisPhoto,
-  deleteWrongQuestionAnalysisPhoto,
-  updateWrongQuestion,
-  updateWrongQuestionPhoto,
-} from '../../../services/wrongQuestionService'
+import { getWrongQuestionAnalysisPhotos, getWrongQuestionAnalysisPhoto } from '../../../services/wrongQuestionService'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
-import WrongQuestionsView from '../../shared/WrongQuestionsView'
+import AnalysisPhotosPage from '../../shared/AnalysisPhotosPage'
 
-export default function MistakesPage() {
+export default function ParentAnalysisPhotosPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const requestedStudentId = searchParams.get('studentId') || ''
@@ -59,7 +50,7 @@ export default function MistakesPage() {
       <EmptyState
         icon={Users}
         title="Bağlı öğrenci bulunamadı"
-        description="Hata defterini görebilmek için önce bir öğrenci profili eklemelisin."
+        description="Hata analizlerini görebilmek için önce bir öğrenci profili eklemelisin."
       />
     )
   }
@@ -83,21 +74,12 @@ export default function MistakesPage() {
     ) : null
 
   return (
-    <WrongQuestionsView
+    <AnalysisPhotosPage
       key={selectedStudent.id}
-      fetchWrongQuestions={() => getWrongQuestions(selectedStudent.id)}
-      fetchTopicStats={() => getWrongQuestionTopicStats(selectedStudent.id)}
-      fetchPhoto={(id) => getWrongQuestionPhoto(id, selectedStudent.id)}
-      fetchAnalysisPhoto={(id) => getWrongQuestionAnalysisPhoto(id, selectedStudent.id)}
-      updateAnalysisPhoto={(id, dataUrl) => updateWrongQuestionAnalysisPhoto(id, dataUrl, selectedStudent.id)}
-      removeAnalysisPhoto={(id) => deleteWrongQuestionAnalysisPhoto(id, selectedStudent.id)}
-      viewerRole="ebeveyn"
-      studentId={selectedStudent.id}
-      updateMistakeAnalysis={(id, analysis) => updateWrongQuestion(id, { analysis }, selectedStudent.id)}
-      updateMistakeMeta={(id, updates) => updateWrongQuestion(id, updates, selectedStudent.id)}
-      updateMistakePhoto={(id, dataUrl) => updateWrongQuestionPhoto(id, dataUrl, selectedStudent.id)}
-      title="Hata Defteri"
-      subtitle={`${selectedStudent.fullName} için fotoğraflanan yanlış sorular ders ders burada.`}
+      fetchItems={() => getWrongQuestionAnalysisPhotos(selectedStudent.id)}
+      fetchPhoto={(id) => getWrongQuestionAnalysisPhoto(id, selectedStudent.id)}
+      title="Hata Analizlerim"
+      subtitle={`${selectedStudent.fullName} için eklenen hata analiz görselleri.`}
       headerActions={headerActions}
       backSlot={
         <Button

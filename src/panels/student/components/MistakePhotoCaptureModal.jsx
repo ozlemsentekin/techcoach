@@ -246,6 +246,8 @@ export default function MistakePhotoCaptureModal({
   onClose,
   onSave,
   onVerifyQuestionNumber,
+  title,
+  description,
 }) {
   const cropFrameRef = useRef(null)
   const verificationSeqRef = useRef(0)
@@ -514,18 +516,18 @@ export default function MistakePhotoCaptureModal({
       className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-black/30 p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
-      aria-label="Soru fotoğrafı ekle"
+      aria-label={title || 'Soru fotoğrafı ekle'}
     >
       <div className="flex max-h-[94dvh] min-w-0 w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-panel-border bg-panel-surface shadow-lg sm:rounded-2xl">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0 p-5 pb-0 sm:p-6 sm:pb-0">
             <h2 className="break-words text-lg font-semibold leading-tight text-panel-text">
-              {questionLabel ? `${questionLabel}. Soru Fotoğrafı` : 'Soru Fotoğrafı'}
+              {title || (questionLabel ? `${questionLabel}. Soru Fotoğrafı` : 'Soru Fotoğrafı')}
             </h2>
             <p className="mt-1 text-sm text-panel-text-muted">
               {draft
                 ? 'Fotoğrafı kaydetmeden önce kırpabilir veya sağa sola döndürebilirsin.'
-                : "Fotoğrafı Hata Defterim'de daha sonra tekrar görebilirsin."}
+                : description || "Fotoğrafı Hata Defterim'de daha sonra tekrar görebilirsin."}
             </p>
           </div>
           <button

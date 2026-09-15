@@ -1,12 +1,9 @@
 // Hata Defteri'nde bir yanlış sorunun analizi rol başına ayrı kulvarlarda tutulur
-// (bkz. api/sql/create-wrong-question-analyses-schema.sql). Öğrenci, veli ve öğretmen
-// birbirinden bağımsız analiz yapar; her biri karşı kulvarları salt-okunur görür.
-
-export const ANALYSIS_LANES = [
-  { role: 'ogrenci', short: 'Ö', label: 'Öğrenci' },
-  { role: 'ebeveyn', short: 'V', label: 'Veli' },
-  { role: 'ogretmen', short: 'Öğr', label: 'Öğretmen' },
-]
+// (bkz. api/sql/create-wrong-question-analyses-schema.sql). Veli ve öğrenci kulvarları kaldırıldı:
+// artık veli "Hata Analiz" adıyla tek bir görsel ekliyor, öğrenci ve öğretmen sadece görüntülüyor
+// (bkz. WrongQuestionGalleryModal'daki "Hata Analiz" bölümü). Öğretmenin kendi metin tabanlı
+// analiz kulvarı (hata nedeni + not) değişmeden kaldı — ANALYSIS_LANES bu yüzden tek kulvara indi.
+export const ANALYSIS_LANES = [{ role: 'ogretmen', short: 'Öğr', label: 'Öğretmen' }]
 
 export const MISTAKE_REASON_LABELS = {
   'dikkat-hatasi': 'Dikkat Hatası',

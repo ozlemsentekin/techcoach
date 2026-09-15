@@ -120,6 +120,15 @@ function sanitizeWrongQuestion(record) {
     // fotoğraf uçlarından (getWrongQuestionPhotoHandler) veya foto kaydeden akışlardan gelir.
     hasPhoto: record.has_photo !== undefined ? Boolean(record.has_photo) : Boolean(record.photo_url),
     photoUrl: record.photo_url || undefined,
+    // "Hata Analiz" görseli (yalnızca veli ekler/değiştirir, herkes görüntüler) — aynı tembel
+    // çekim deseni: liste uçları sadece hasAnalysisPhoto bayrağını taşır, tam görsel
+    // getWrongQuestionAnalysisPhotoHandler'dan gelir (bkz. yukarısındaki hasPhoto/photoUrl yorumu).
+    hasAnalysisPhoto:
+      record.has_analysis_photo !== undefined
+        ? Boolean(record.has_analysis_photo)
+        : Boolean(record.analysis_photo_url),
+    analysisPhotoUrl: record.analysis_photo_url || undefined,
+    analysisPhotoAddedAt: record.analysis_photo_added_at || undefined,
     bookImageUrl: record.book_image_url || undefined,
     createdAt: record.created_at,
   }
@@ -420,6 +429,7 @@ async function listWrongQuestionsHandler(request) {
                wq.question_number, wq.error_type,
                wq.review_status, wq.resolved_at,
                CAST(1 AS bit) AS has_photo, wq.created_at,
+               CASE WHEN wq.analysis_photo_url IS NOT NULL THEN 1 ELSE 0 END AS has_analysis_photo,
                COALESCE(tp.name, wq.topic) AS topic,
                COALESCE(rb.name, rb2.name, wq.book_name) AS book_name,
                COALESCE(pub.name, pub2.name, wq.publisher_name) AS publisher_name,
@@ -551,6 +561,201 @@ async function updateWrongQuestionPhotoHandler(request) {
 
     console.error('updateWrongQuestionPhotoHandler failed', error)
     return json(500, { error: 'Fotoğraf güncellenemedi.' })
+  }
+}
+
+// Hata Analiz görselini tembel çeker (bkz. getWrongQuestionPhotoHandler'daki aynı gerekçe).
+// Hem öğrenci hem veli kendi Hata Defteri'nden görüntüleyebilir; ekleme/değiştirme veliye özeldir
+// (bkz. updateWrongQuestionAnalysisPhotoHandler).
+async function getWrongQuestionAnalysisPhotoHandler(request) {
+  try {
+    const { error, studentId } = await requireStudentContext(request)
+    if (error) {
+      return error
+    }
+
+    const wrongQuestionId = request.params.wrongQuestionId
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const result = await requestDb.query(`
+      SELECT analysis_photo_url FROM dbo.WrongQuestions WHERE id = @id AND student_id = @studentId;
+    `)
+
+    const analysisPhotoUrl = result.recordset[0]?.analysis_photo_url
+    if (!analysisPhotoUrl) {
+      return json(404, { error: 'Hata analiz görseli bulunamadı.' })
+    }
+
+    return json(200, { analysisPhotoUrl })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('getWrongQuestionAnalysisPhotoHandler failed', error)
+    return json(500, { error: 'Hata analiz görseli yüklenemedi.' })
+  }
+}
+
+// Hata Analiz görselini ekler/değiştirir. Sadece veli ekleyebilir — öğrenci/öğretmen akışı
+// kaldırıldı, bkz. mistakeAnalysis.js'deki ANALYSIS_LANES yorumu.
+async function updateWrongQuestionAnalysisPhotoHandler(request) {
+  try {
+    const wrongQuestionId = request.params.wrongQuestionId
+    const payload = await request.json().catch(() => null)
+    const { error, studentId, actorRole, actorId } = await requireStudentWriteContext(request, {
+      studentId: payload?.studentId,
+    })
+    if (error) {
+      return error
+    }
+    if (actorRole !== 'ebeveyn') {
+      return json(403, { error: 'Hata analiz görseli sadece veli tarafından eklenebilir.' })
+    }
+
+    const photoCheck = sanitizeMistakePhoto(payload?.photo)
+    if (photoCheck.error) {
+      return json(400, { error: photoCheck.error })
+    }
+
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoCheck.value },
+      addedBy: { type: sql.UniqueIdentifier, value: actorId },
+    })
+    const result = await requestDb.query(`
+      UPDATE dbo.WrongQuestions
+      SET analysis_photo_url = @photoUrl, analysis_photo_added_by = @addedBy,
+          analysis_photo_added_at = SYSUTCDATETIME()
+      OUTPUT ${WRONG_QUESTION_OUTPUT_COLUMNS}, inserted.analysis_photo_url, inserted.analysis_photo_added_at
+      WHERE id = @id AND student_id = @studentId;
+    `)
+
+    if (!result.recordset[0]) {
+      return json(404, { error: 'Kayıt bulunamadı.' })
+    }
+
+    return json(200, { wrongQuestion: sanitizeWrongQuestion(result.recordset[0]) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('updateWrongQuestionAnalysisPhotoHandler failed', error)
+    return json(500, { error: 'Hata analiz görseli kaydedilemedi.' })
+  }
+}
+
+// Yanlış eklenmiş bir Hata Analiz görselini kaldırır. Sadece veli.
+async function deleteWrongQuestionAnalysisPhotoHandler(request) {
+  try {
+    const wrongQuestionId = request.params.wrongQuestionId
+    const payload = await request.json().catch(() => null)
+    const { error, studentId, actorRole } = await requireStudentWriteContext(request, {
+      studentId: payload?.studentId,
+    })
+    if (error) {
+      return error
+    }
+    if (actorRole !== 'ebeveyn') {
+      return json(403, { error: 'Hata analiz görseli sadece veli tarafından kaldırılabilir.' })
+    }
+
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const result = await requestDb.query(`
+      UPDATE dbo.WrongQuestions
+      SET analysis_photo_url = NULL, analysis_photo_added_by = NULL, analysis_photo_added_at = NULL
+      OUTPUT ${WRONG_QUESTION_OUTPUT_COLUMNS}
+      WHERE id = @id AND student_id = @studentId;
+    `)
+
+    if (!result.recordset[0]) {
+      return json(404, { error: 'Kayıt bulunamadı.' })
+    }
+
+    return json(200, { wrongQuestion: sanitizeWrongQuestion(result.recordset[0]) })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('deleteWrongQuestionAnalysisPhotoHandler failed', error)
+    return json(500, { error: 'Hata analiz görseli kaldırılamadı.' })
+  }
+}
+
+// "Hata Analizlerim" menüsü: bu öğrencinin (veli seçtiği çocuk ya da öğrencinin kendisi) Hata
+// Analiz görseli eklenmiş tüm sorularını, YayınEvi/Kaynak/İçerik/Test/Soru No kırılımıyla listeler.
+// Fotoğrafın kendisini taşımaz (tembel çekim, bkz. getWrongQuestionAnalysisPhotoHandler).
+async function listWrongQuestionAnalysisPhotosHandler(request) {
+  try {
+    const { error, studentId } = await requireStudentContext(request)
+    if (error) {
+      return error
+    }
+
+    const requestDb = await withRequest({
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const result = await requestDb.query(`
+      SELECT wq.id, wq.subject, wq.question_number, wq.analysis_photo_added_at,
+             COALESCE(tp.name, wq.topic) AS topic,
+             COALESCE(rb.name, rb2.name, wq.book_name) AS book_name,
+             COALESCE(pub.name, pub2.name, wq.publisher_name) AS publisher_name,
+             t.topic_name, wq.test_name
+      FROM dbo.WrongQuestions wq
+      LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
+      LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
+      LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
+      LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
+      LEFT JOIN dbo.ResourceBooks rb2 ON rb2.id = wq.resource_book_id
+      LEFT JOIN dbo.Publishers pub2 ON pub2.id = rb2.publisher_id
+      WHERE wq.student_id = @studentId AND wq.analysis_photo_url IS NOT NULL
+      ORDER BY wq.analysis_photo_added_at DESC;
+    `)
+
+    return json(200, {
+      items: result.recordset.map((row) => ({
+        id: row.id,
+        subject: row.subject,
+        topic: row.topic || undefined,
+        topicName: row.topic_name || undefined,
+        testName: row.test_name || undefined,
+        bookName: row.book_name || undefined,
+        publisherName: row.publisher_name || undefined,
+        questionNumber: row.question_number || undefined,
+        analysisPhotoAddedAt: row.analysis_photo_added_at,
+      })),
+    })
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('listWrongQuestionAnalysisPhotosHandler failed', error)
+    return json(500, { error: 'Hata analizleri yüklenemedi.' })
   }
 }
 
@@ -1597,6 +1802,10 @@ module.exports = {
   fetchWrongQuestionBookImagesByName,
   getWrongQuestionPhotoHandler,
   updateWrongQuestionPhotoHandler,
+  getWrongQuestionAnalysisPhotoHandler,
+  updateWrongQuestionAnalysisPhotoHandler,
+  deleteWrongQuestionAnalysisPhotoHandler,
+  listWrongQuestionAnalysisPhotosHandler,
   addWrongQuestionHandler,
   updateWrongQuestionHandler,
   getWrongQuestionTopicStatsHandler,
