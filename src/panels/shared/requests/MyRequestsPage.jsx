@@ -8,7 +8,7 @@ import {
   getMyPanelRequests,
   PANEL_REQUEST_TYPE_LABELS,
 } from '../../../services/panelRequestService'
-import { formatRequestDate } from './requestFormat'
+import { formatMessageTime, formatRequestDate } from './requestFormat'
 import { RequestStatusBadge } from './requestPresentation'
 import RequestDetailModal from './RequestDetailModal'
 import GeneralRequestModal from './GeneralRequestModal'
@@ -36,7 +36,12 @@ function RequestCard({ request, onClick }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-base font-semibold text-panel-text">{requestTitle(request)}</p>
+          <div className="flex items-center gap-1.5">
+            {request.hasUnread ? (
+              <span className="h-2 w-2 shrink-0 rounded-full bg-panel-warm" aria-hidden="true" />
+            ) : null}
+            <p className="truncate text-base font-semibold text-panel-text">{requestTitle(request)}</p>
+          </div>
           <p className="mt-0.5 text-xs text-panel-text-muted">
             {PANEL_REQUEST_TYPE_LABELS[request.type]} · {formatRequestDate(request.createdAt)}
           </p>
@@ -56,6 +61,18 @@ function RequestCard({ request, onClick }) {
         <p className="rounded-lg bg-panel-blue-soft/60 px-2.5 py-1.5 text-xs text-panel-text">
           <span className="font-semibold">Yönetici notu: </span>
           {request.adminNote}
+        </p>
+      ) : null}
+
+      {request.lastMessage ? (
+        <p
+          className={`line-clamp-1 text-xs ${
+            request.hasUnread ? 'font-semibold text-panel-text' : 'text-panel-text-muted'
+          }`}
+        >
+          {request.lastMessage.authorRole === 'admin' ? 'Yönetici: ' : 'Siz: '}
+          {request.lastMessage.body}
+          <span className="font-normal text-panel-text-muted"> · {formatMessageTime(request.lastMessage.createdAt)}</span>
         </p>
       ) : null}
     </button>
@@ -110,7 +127,13 @@ export default function MyRequestsPage() {
       )}
 
       {detailId ? (
-        <RequestDetailModal requestId={detailId} onClose={() => setDetailId(null)} />
+        <RequestDetailModal
+          requestId={detailId}
+          onClose={() => {
+            setDetailId(null)
+            load()
+          }}
+        />
       ) : null}
 
       {creating ? (

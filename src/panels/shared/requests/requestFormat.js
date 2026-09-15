@@ -38,3 +38,27 @@ export function formatRequestDateTime(value) {
     return ''
   }
 }
+
+/** Sohbet balonları için kısa zaman damgası: bugünse sadece saat, değilse gün+ay(+saat). */
+export function formatMessageTime(value) {
+  if (!value) return ''
+  try {
+    const date = new Date(value)
+    const now = new Date()
+    const isToday =
+      date.getDate() === now.getDate() &&
+      date.getMonth() === now.getMonth() &&
+      date.getFullYear() === now.getFullYear()
+    if (isToday) {
+      return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+    }
+    return date.toLocaleString('tr-TR', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return ''
+  }
+}

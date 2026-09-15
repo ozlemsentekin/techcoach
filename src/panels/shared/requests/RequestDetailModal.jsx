@@ -21,7 +21,7 @@ function InfoRow({ label, value }) {
  * Bir talebin tüm ayrıntısı (bilgiler + fotoğraflar + yazışma). `renderActions` verilirse
  * (admin "Talepler" ekranı) footer'da aksiyonlar gösterilir.
  */
-export default function RequestDetailModal({ requestId, showRequester = false, renderActions, onClose }) {
+export default function RequestDetailModal({ requestId, showRequester = false, viewerIsAdmin = false, renderActions, onClose }) {
   const [detail, setDetail] = useState(null)
   const [subjects, setSubjects] = useState([])
   const [error, setError] = useState('')
@@ -118,7 +118,11 @@ export default function RequestDetailModal({ requestId, showRequester = false, r
               ) : null}
 
               <div className="border-t border-panel-border pt-4">
-                <RequestMessageThread requestId={detail.id} messages={detail.messages || []} />
+                <RequestMessageThread
+                  requestId={detail.id}
+                  messages={detail.messages || []}
+                  viewerIsAdmin={viewerIsAdmin}
+                />
               </div>
             </div>
           )}

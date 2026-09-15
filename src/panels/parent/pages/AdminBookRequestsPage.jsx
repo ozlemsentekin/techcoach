@@ -9,7 +9,7 @@ import {
   updateAdminPanelRequest,
   PANEL_REQUEST_TYPE_LABELS,
 } from '../../../services/panelRequestService'
-import { formatRequestDate, roleLabel } from '../../shared/requests/requestFormat'
+import { formatMessageTime, formatRequestDate, roleLabel } from '../../shared/requests/requestFormat'
 import { RequestStatusBadge } from '../../shared/requests/requestPresentation'
 import RequestDetailModal from '../../shared/requests/RequestDetailModal'
 
@@ -218,7 +218,12 @@ export default function AdminBookRequestsPage() {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-base font-semibold text-panel-text">{cardTitle(request)}</p>
+                  <div className="flex items-center gap-1.5">
+                    {request.hasUnread ? (
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-panel-warm" aria-hidden="true" />
+                    ) : null}
+                    <p className="truncate text-base font-semibold text-panel-text">{cardTitle(request)}</p>
+                  </div>
                   <p className="mt-0.5 text-xs text-panel-text-muted">
                     {PANEL_REQUEST_TYPE_LABELS[request.type]}
                     {' · '}
@@ -241,6 +246,17 @@ export default function AdminBookRequestsPage() {
                   {photoSummary(request.photoCounts) ? ` — ${photoSummary(request.photoCounts)}` : ''}
                 </p>
               )}
+              {request.lastMessage ? (
+                <p
+                  className={`line-clamp-1 text-xs ${
+                    request.hasUnread ? 'font-semibold text-panel-text' : 'text-panel-text-muted'
+                  }`}
+                >
+                  {request.lastMessage.authorRole === 'admin' ? 'Siz: ' : ''}
+                  {request.lastMessage.body}
+                  <span className="font-normal text-panel-text-muted"> · {formatMessageTime(request.lastMessage.createdAt)}</span>
+                </p>
+              ) : null}
             </button>
           ))}
         </div>
@@ -250,8 +266,12 @@ export default function AdminBookRequestsPage() {
         <RequestDetailModal
           requestId={detailId}
           showRequester
+          viewerIsAdmin
           renderActions={(detail) => <AdminActions request={detail} onDone={handleDone} />}
-          onClose={() => setDetailId(null)}
+          onClose={() => {
+            setDetailId(null)
+            load()
+          }}
         />
       ) : null}
     </div>

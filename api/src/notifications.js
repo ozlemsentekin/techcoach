@@ -5,6 +5,7 @@ const { isSessionError } = require('./security')
 const { requireParentSession } = require('./students')
 const { requireTeacherSession } = require('./teacherScope')
 const { teacherTaskScopeSql } = require('./teacher')
+const { parsePayload, requirePanelUser } = require('./panelRequests')
 
 // Bildirim listesi YALNIZCA okunmamışları gösterir (zil = "yeni olanlar"): bir
 // satır okunduğunda / "Tümünü okundu" ile listeden düşer. dbo.TaskActivityReads
@@ -43,6 +44,7 @@ function notifyActionsClause(bindings) {
 function sanitizeNotification(record) {
   return {
     id: record.id,
+    kind: 'task',
     action: record.action,
     createdAt: record.created_at,
     isRead: Boolean(record.is_read),
@@ -98,11 +100,65 @@ function handleNotificationError(error, label) {
   return json(500, { error: 'Bildirimler yüklenemedi.' })
 }
 
+/* ------------------------- Talep bildirimleri ---------------------------- */
+// dbo.PanelRequestNotifications: bir talebe mesaj eklendiğinde veya admin durum
+// değiştirdiğinde karşı tarafa düşen bildirim (bkz. api/src/panelRequests.js).
+// recipient_user_id NULL = tüm adminlere yayın. Parent/öğretmen bildirim ziline
+// görev bildirimleriyle birleştirilerek eklenir (`kind: 'request'`).
+
+function requestNotificationTitle(row) {
+  const payload = parsePayload(row.payload_json)
+  if (row.request_type === 'genel') return payload.title || 'Genel talep'
+  return payload.bookName || 'Kitap ekleme talebi'
+}
+
+function sanitizeRequestNotification(row) {
+  return {
+    id: row.id,
+    kind: 'request',
+    action: row.type === 'status_changed' ? 'request_status_changed' : 'request_new_message',
+    createdAt: row.created_at,
+    isRead: false,
+    requestId: row.request_id,
+    requestType: row.request_type,
+    requestTitle: requestNotificationTitle(row),
+    fromAdmin: Boolean(row.from_admin),
+    actorName: row.actor_name || null,
+    bodySnippet: row.body_snippet || null,
+    status: row.status || null,
+  }
+}
+
+async function fetchUnreadRequestNotifications({ userId, includeBroadcast, limit }) {
+  const requestDb = await withRequest({
+    userId: { type: sql.UniqueIdentifier, value: userId },
+    limit: { type: sql.Int, value: limit },
+  })
+  const result = await requestDb.query(`
+    SELECT TOP (@limit)
+           n.id, n.request_id, n.type, n.from_admin, n.actor_name, n.body_snippet, n.status, n.created_at,
+           r.type AS request_type, r.payload_json
+    FROM dbo.PanelRequestNotifications n
+    INNER JOIN dbo.PanelRequests r ON r.id = n.request_id
+    LEFT JOIN dbo.PanelRequestNotificationReads rd ON rd.notification_id = n.id AND rd.user_id = @userId
+    WHERE (n.recipient_user_id = @userId ${includeBroadcast ? 'OR n.recipient_user_id IS NULL' : ''})
+      AND rd.notification_id IS NULL
+    ORDER BY n.created_at DESC, n.id DESC;
+  `)
+  return result.recordset.map(sanitizeRequestNotification)
+}
+
+function mergeNotifications(taskNotifications, requestNotifications, limit) {
+  return [...taskNotifications, ...requestNotifications]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, limit)
+}
+
 /* --------------------------------- Veli --------------------------------- */
 
 async function listParentNotificationsHandler(request) {
   try {
-    const { error, parentId } = await requireParentSession(request)
+    const { error, parentId, isAdmin } = await requireParentSession(request)
     if (error) return error
 
     const limit = parseLimit(request)
@@ -126,7 +182,13 @@ async function listParentNotificationsHandler(request) {
       ORDER BY l.created_at DESC, l.id DESC;
     `)
 
-    const notifications = result.recordset.map(sanitizeNotification)
+    const taskNotifications = result.recordset.map(sanitizeNotification)
+    const requestNotifications = await fetchUnreadRequestNotifications({
+      userId: parentId,
+      includeBroadcast: isAdmin,
+      limit,
+    })
+    const notifications = mergeNotifications(taskNotifications, requestNotifications, limit)
     return json(200, { notifications, unreadCount: notifications.length })
   } catch (error) {
     return handleNotificationError(error, 'listParentNotificationsHandler')
@@ -135,7 +197,7 @@ async function listParentNotificationsHandler(request) {
 
 async function markParentNotificationReadHandler(request) {
   try {
-    const { error, parentId } = await requireParentSession(request)
+    const { error, parentId, isAdmin } = await requireParentSession(request)
     if (error) return error
 
     const activityId = request.params.activityId
@@ -152,6 +214,15 @@ async function markParentNotificationReadHandler(request) {
         AND NOT EXISTS (
           SELECT 1 FROM dbo.TaskActivityReads ar WHERE ar.activity_id = l.id AND ar.user_id = @parentId
         );
+
+      INSERT INTO dbo.PanelRequestNotificationReads (notification_id, user_id)
+      SELECT n.id, @parentId
+      FROM dbo.PanelRequestNotifications n
+      WHERE n.id = @activityId
+        AND (n.recipient_user_id = @parentId ${isAdmin ? 'OR n.recipient_user_id IS NULL' : ''})
+        AND NOT EXISTS (
+          SELECT 1 FROM dbo.PanelRequestNotificationReads rd WHERE rd.notification_id = n.id AND rd.user_id = @parentId
+        );
     `)
 
     return json(200, { success: true })
@@ -163,7 +234,7 @@ async function markParentNotificationReadHandler(request) {
 
 async function markAllParentNotificationsReadHandler(request) {
   try {
-    const { error, parentId } = await requireParentSession(request)
+    const { error, parentId, isAdmin } = await requireParentSession(request)
     if (error) return error
 
     const bindings = { parentId: { type: sql.UniqueIdentifier, value: parentId } }
@@ -177,6 +248,14 @@ async function markAllParentNotificationsReadHandler(request) {
       WHERE l.actor_role = 'ogrenci' AND l.action IN (${actions})
         AND NOT EXISTS (
           SELECT 1 FROM dbo.TaskActivityReads ar WHERE ar.activity_id = l.id AND ar.user_id = @parentId
+        );
+
+      INSERT INTO dbo.PanelRequestNotificationReads (notification_id, user_id)
+      SELECT n.id, @parentId
+      FROM dbo.PanelRequestNotifications n
+      WHERE (n.recipient_user_id = @parentId ${isAdmin ? 'OR n.recipient_user_id IS NULL' : ''})
+        AND NOT EXISTS (
+          SELECT 1 FROM dbo.PanelRequestNotificationReads rd WHERE rd.notification_id = n.id AND rd.user_id = @parentId
         );
     `)
 
@@ -209,7 +288,7 @@ const TEACHER_REL_SCOPE = `(
 
 async function listTeacherNotificationsHandler(request) {
   try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
+    const { error, teacherUserId, isAdmin } = await requireTeacherSession(request)
     if (error) return error
 
     const limit = parseLimit(request)
@@ -245,7 +324,13 @@ async function listTeacherNotificationsHandler(request) {
       ORDER BY l.created_at DESC, l.id DESC;
     `)
 
-    const notifications = result.recordset.map(sanitizeNotification)
+    const taskNotifications = result.recordset.map(sanitizeNotification)
+    const requestNotifications = await fetchUnreadRequestNotifications({
+      userId: teacherUserId,
+      includeBroadcast: isAdmin,
+      limit,
+    })
+    const notifications = mergeNotifications(taskNotifications, requestNotifications, limit)
     return json(200, { notifications, unreadCount: notifications.length })
   } catch (error) {
     return handleNotificationError(error, 'listTeacherNotificationsHandler')
@@ -254,7 +339,7 @@ async function listTeacherNotificationsHandler(request) {
 
 async function markTeacherNotificationReadHandler(request) {
   try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
+    const { error, teacherUserId, isAdmin } = await requireTeacherSession(request)
     if (error) return error
 
     const activityId = request.params.activityId
@@ -275,6 +360,15 @@ async function markTeacherNotificationReadHandler(request) {
         AND NOT EXISTS (
           SELECT 1 FROM dbo.TaskActivityReads ar WHERE ar.activity_id = l.id AND ar.user_id = @teacherUserId
         );
+
+      INSERT INTO dbo.PanelRequestNotificationReads (notification_id, user_id)
+      SELECT n.id, @teacherUserId
+      FROM dbo.PanelRequestNotifications n
+      WHERE n.id = @activityId
+        AND (n.recipient_user_id = @teacherUserId ${isAdmin ? 'OR n.recipient_user_id IS NULL' : ''})
+        AND NOT EXISTS (
+          SELECT 1 FROM dbo.PanelRequestNotificationReads rd WHERE rd.notification_id = n.id AND rd.user_id = @teacherUserId
+        );
     `)
 
     return json(200, { success: true })
@@ -286,7 +380,7 @@ async function markTeacherNotificationReadHandler(request) {
 
 async function markAllTeacherNotificationsReadHandler(request) {
   try {
-    const { error, teacherUserId } = await requireTeacherSession(request)
+    const { error, teacherUserId, isAdmin } = await requireTeacherSession(request)
     if (error) return error
 
     const bindings = {
@@ -309,12 +403,100 @@ async function markAllTeacherNotificationsReadHandler(request) {
         AND NOT EXISTS (
           SELECT 1 FROM dbo.TaskActivityReads ar WHERE ar.activity_id = l.id AND ar.user_id = @teacherUserId
         );
+
+      INSERT INTO dbo.PanelRequestNotificationReads (notification_id, user_id)
+      SELECT n.id, @teacherUserId
+      FROM dbo.PanelRequestNotifications n
+      WHERE (n.recipient_user_id = @teacherUserId ${isAdmin ? 'OR n.recipient_user_id IS NULL' : ''})
+        AND NOT EXISTS (
+          SELECT 1 FROM dbo.PanelRequestNotificationReads rd WHERE rd.notification_id = n.id AND rd.user_id = @teacherUserId
+        );
     `)
 
     return json(200, { success: true })
   } catch (error) {
     if (respondEmptyOnMissingTable(error)) return json(200, { success: true })
     return handleNotificationError(error, 'markAllTeacherNotificationsReadHandler')
+  }
+}
+
+/* -------------------------------- Öğrenci -------------------------------- */
+// Öğrencinin kendi görev işlemleri (task_completed vb.) kendisi için bildirim
+// değeri taşımaz — bu zil yalnızca talep bildirimlerini gösterir (bkz. yukarısı).
+
+async function requireStudentAuth(request) {
+  const auth = await requirePanelUser(request)
+  if (auth.error) return auth
+  if (auth.role !== 'ogrenci') {
+    return { error: json(403, { error: 'Bu alana erişim yetkiniz yok.' }) }
+  }
+  return auth
+}
+
+async function listStudentNotificationsHandler(request) {
+  try {
+    const auth = await requireStudentAuth(request)
+    if (auth.error) return auth.error
+
+    const limit = parseLimit(request)
+    const notifications = await fetchUnreadRequestNotifications({
+      userId: auth.userId,
+      includeBroadcast: false,
+      limit,
+    })
+    return json(200, { notifications, unreadCount: notifications.length })
+  } catch (error) {
+    return handleNotificationError(error, 'listStudentNotificationsHandler')
+  }
+}
+
+async function markStudentNotificationReadHandler(request) {
+  try {
+    const auth = await requireStudentAuth(request)
+    if (auth.error) return auth.error
+
+    const activityId = request.params.activityId
+    const requestDb = await withRequest({
+      userId: { type: sql.UniqueIdentifier, value: auth.userId },
+      activityId: { type: sql.UniqueIdentifier, value: activityId },
+    })
+    await requestDb.query(`
+      INSERT INTO dbo.PanelRequestNotificationReads (notification_id, user_id)
+      SELECT n.id, @userId
+      FROM dbo.PanelRequestNotifications n
+      WHERE n.id = @activityId AND n.recipient_user_id = @userId
+        AND NOT EXISTS (
+          SELECT 1 FROM dbo.PanelRequestNotificationReads rd WHERE rd.notification_id = n.id AND rd.user_id = @userId
+        );
+    `)
+
+    return json(200, { success: true })
+  } catch (error) {
+    if (respondEmptyOnMissingTable(error)) return json(200, { success: true })
+    return handleNotificationError(error, 'markStudentNotificationReadHandler')
+  }
+}
+
+async function markAllStudentNotificationsReadHandler(request) {
+  try {
+    const auth = await requireStudentAuth(request)
+    if (auth.error) return auth.error
+
+    const requestDb = await withRequest({ userId: { type: sql.UniqueIdentifier, value: auth.userId } })
+    await requestDb.query(`
+      INSERT INTO dbo.PanelRequestNotificationReads (notification_id, user_id)
+      SELECT n.id, @userId
+      FROM dbo.PanelRequestNotifications n
+      WHERE n.recipient_user_id = @userId
+        AND NOT EXISTS (
+          SELECT 1 FROM dbo.PanelRequestNotificationReads rd WHERE rd.notification_id = n.id AND rd.user_id = @userId
+        );
+    `)
+
+    return json(200, { success: true })
+  } catch (error) {
+    if (respondEmptyOnMissingTable(error)) return json(200, { success: true })
+    return handleNotificationError(error, 'markAllStudentNotificationsReadHandler')
   }
 }
 
@@ -326,4 +508,7 @@ module.exports = {
   listTeacherNotificationsHandler,
   markTeacherNotificationReadHandler,
   markAllTeacherNotificationsReadHandler,
+  listStudentNotificationsHandler,
+  markStudentNotificationReadHandler,
+  markAllStudentNotificationsReadHandler,
 }

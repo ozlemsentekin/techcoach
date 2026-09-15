@@ -203,6 +203,9 @@ const {
   listTeacherNotificationsHandler,
   markTeacherNotificationReadHandler,
   markAllTeacherNotificationsReadHandler,
+  listStudentNotificationsHandler,
+  markStudentNotificationReadHandler,
+  markAllStudentNotificationsReadHandler,
 } = require('./notifications')
 const {
   listCoachNotesHandler,
@@ -1629,6 +1632,27 @@ registerHttp('panel-notifications-mark-all-read', {
   methods: ['POST'],
   route: 'panel/notifications/read-all',
   handler: markAllParentNotificationsReadHandler,
+})
+
+registerHttp('panel-student-notifications-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/student-notifications',
+  handler: listStudentNotificationsHandler,
+})
+
+registerHttp('panel-student-notifications-mark-read', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel/student-notifications/{activityId}/read',
+  handler: markStudentNotificationReadHandler,
+})
+
+registerHttp('panel-student-notifications-mark-all-read', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel/student-notifications/read-all',
+  handler: markAllStudentNotificationsReadHandler,
 })
 
 registerHttp('panel-tasks-answer-sheet-get', {

@@ -31,3 +31,18 @@ export async function markTeacherNotificationRead(activityId) {
 export async function markAllTeacherNotificationsRead() {
   await authRequest('/api/panel-teacher/notifications/read-all', { method: 'POST' })
 }
+
+// Öğrencinin kendi görev bildirimi yok — yalnızca talep bildirimleri (bkz. NotificationBell kind: 'request').
+/** @returns {Promise<{ notifications: Array, unreadCount: number }>} */
+export async function getStudentNotifications({ limit = 40 } = {}) {
+  const data = await authRequest(`/api/panel/student-notifications?limit=${limit}`, { method: 'GET' })
+  return { notifications: data.notifications || [], unreadCount: data.unreadCount || 0 }
+}
+
+export async function markStudentNotificationRead(activityId) {
+  await authRequest(`/api/panel/student-notifications/${activityId}/read`, { method: 'PATCH' })
+}
+
+export async function markAllStudentNotificationsRead() {
+  await authRequest('/api/panel/student-notifications/read-all', { method: 'POST' })
+}

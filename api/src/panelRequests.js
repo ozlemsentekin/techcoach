@@ -105,6 +105,15 @@ function sanitizeRequestRow(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     reviewedAt: row.reviewed_at || null,
+    lastMessage:
+      row.last_message_at != null
+        ? {
+            body: row.last_message_body,
+            authorRole: row.last_message_author_role || null,
+            createdAt: row.last_message_at,
+          }
+        : null,
+    hasUnread: Boolean(row.has_unread),
   }
   if (row.type === 'genel') {
     return { ...base, book: {}, title: payload.title || null, description: payload.description || null }
@@ -299,8 +308,22 @@ async function listMyPanelRequestsHandler(request) {
     const result = await requestDb.query(`
       SELECT r.id, r.type, r.status, r.payload_json, r.admin_note,
              r.created_at, r.updated_at, r.reviewed_at,
-             ${PHOTO_COUNT_SELECT}
+             ${PHOTO_COUNT_SELECT},
+             lm.body AS last_message_body,
+             lm.author_role AS last_message_author_role,
+             lm.created_at AS last_message_at,
+             CASE
+               WHEN lm.author_role = 'admin'
+                    AND (r.requester_last_read_at IS NULL OR lm.created_at > r.requester_last_read_at)
+               THEN 1 ELSE 0
+             END AS has_unread
       FROM dbo.PanelRequests r
+      OUTER APPLY (
+        SELECT TOP 1 body, author_role, created_at
+        FROM dbo.PanelRequestMessages m
+        WHERE m.request_id = r.id
+        ORDER BY m.created_at DESC
+      ) lm
       WHERE r.created_by_user_id = @userId
       ORDER BY r.created_at DESC;
     `)
@@ -363,6 +386,13 @@ async function getPanelRequestHandler(request) {
       ORDER BY m.created_at ASC;
     `)
 
+    // Detay açıldığında ilgili tarafın "okundu" zaman damgasını güncelle; liste
+    // ekranındaki "yeni yanıt" rozeti buna göre söner.
+    const readColumn = auth.isAdmin ? 'admin_last_read_at' : 'requester_last_read_at'
+    await requestDb.query(`
+      UPDATE dbo.PanelRequests SET ${readColumn} = SYSUTCDATETIME() WHERE id = @id;
+    `)
+
     return json(200, {
       request: {
         ...sanitizeRequestRow(row),
@@ -414,11 +444,19 @@ async function addPanelRequestMessageHandler(request) {
     }
 
     const authorRole = auth.isAdmin ? 'admin' : auth.role
+    // Admin yazınca talep sahibine, talep sahibi yazınca tüm adminlere (recipient NULL =
+    // yayın) bildirim düşer. Admin kendi talebine yazarsa (nadir) hiç bildirim atılmaz.
+    const isSelfRequest = String(owner.created_by_user_id).toLowerCase() === String(auth.userId).toLowerCase()
+    const shouldNotify = authorRole !== 'admin' || !isSelfRequest
+    const notifyRecipientId = authorRole === 'admin' ? owner.created_by_user_id : null
     const insertDb = await withRequest({
       requestId: { type: sql.UniqueIdentifier, value: requestId },
       authorId: { type: sql.UniqueIdentifier, value: auth.userId },
       authorRole: { type: sql.NVarChar(20), value: authorRole || null },
       body: { type: sql.NVarChar(MAX_MESSAGE_LENGTH), value: text },
+      notifyRecipientId: { type: sql.UniqueIdentifier, value: notifyRecipientId },
+      actorName: { type: sql.NVarChar(200), value: (auth.name || '').slice(0, 200) || null },
+      snippet: { type: sql.NVarChar(300), value: text.slice(0, 300) },
     })
     const result = await insertDb.query(`
       INSERT INTO dbo.PanelRequestMessages (request_id, author_user_id, author_role, body)
@@ -426,6 +464,11 @@ async function addPanelRequestMessageHandler(request) {
       VALUES (@requestId, @authorId, @authorRole, @body);
 
       UPDATE dbo.PanelRequests SET updated_at = SYSUTCDATETIME() WHERE id = @requestId;
+
+      ${shouldNotify
+        ? `INSERT INTO dbo.PanelRequestNotifications (request_id, recipient_user_id, type, from_admin, actor_name, body_snippet)
+           VALUES (@requestId, @notifyRecipientId, 'new_message', ${authorRole === 'admin' ? 1 : 0}, @actorName, @snippet);`
+        : ''}
     `)
     const row = result.recordset[0]
 
@@ -460,9 +503,23 @@ async function listAdminPanelRequestsHandler(request) {
       SELECT r.id, r.type, r.status, r.payload_json, r.admin_note,
              r.created_by_role, r.created_at, r.updated_at, r.reviewed_at,
              creator.full_name AS creator_name,
-             ${PHOTO_COUNT_SELECT}
+             ${PHOTO_COUNT_SELECT},
+             lm.body AS last_message_body,
+             lm.author_role AS last_message_author_role,
+             lm.created_at AS last_message_at,
+             CASE
+               WHEN lm.author_role IS NOT NULL AND lm.author_role <> 'admin'
+                    AND (r.admin_last_read_at IS NULL OR lm.created_at > r.admin_last_read_at)
+               THEN 1 ELSE 0
+             END AS has_unread
       FROM dbo.PanelRequests r
       LEFT JOIN dbo.Users creator ON creator.id = r.created_by_user_id
+      OUTER APPLY (
+        SELECT TOP 1 body, author_role, created_at
+        FROM dbo.PanelRequestMessages m
+        WHERE m.request_id = r.id
+        ORDER BY m.created_at DESC
+      ) lm
       WHERE (@type IS NULL OR r.type = @type)
         AND (@status IS NULL OR r.status = @status)
       ORDER BY
@@ -517,7 +574,7 @@ async function updateAdminPanelRequestHandler(request) {
           updated_at = SYSUTCDATETIME()
       WHERE id = @id;
 
-      SELECT r.id, r.type, r.status, r.payload_json, r.admin_note,
+      SELECT r.id, r.type, r.status, r.payload_json, r.admin_note, r.created_by_user_id,
              r.created_by_role, r.created_at, r.updated_at, r.reviewed_at,
              ${PHOTO_COUNT_SELECT}
       FROM dbo.PanelRequests r
@@ -526,6 +583,20 @@ async function updateAdminPanelRequestHandler(request) {
     const row = result.recordset[0]
     if (!row) {
       return json(404, { error: 'Talep bulunamadı.' })
+    }
+
+    // Admin kendi talebini güncellerse (nadir) kendine bildirim atılmaz.
+    if (String(row.created_by_user_id).toLowerCase() !== String(session.sub).toLowerCase()) {
+      const notifyDb = await withRequest({
+        requestId: { type: sql.UniqueIdentifier, value: requestId },
+        recipientId: { type: sql.UniqueIdentifier, value: row.created_by_user_id },
+        status: { type: sql.NVarChar(20), value: status },
+        snippet: { type: sql.NVarChar(300), value: adminNote ? adminNote.slice(0, 300) : null },
+      })
+      await notifyDb.query(`
+        INSERT INTO dbo.PanelRequestNotifications (request_id, recipient_user_id, type, from_admin, status, body_snippet)
+        VALUES (@requestId, @recipientId, 'status_changed', 1, @status, @snippet);
+      `)
     }
 
     return json(200, { request: sanitizeRequestRow(row) })
@@ -545,4 +616,6 @@ module.exports = {
   addPanelRequestMessageHandler,
   listAdminPanelRequestsHandler,
   updateAdminPanelRequestHandler,
+  parsePayload,
+  requirePanelUser,
 }

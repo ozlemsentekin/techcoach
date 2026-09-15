@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { Bell, CheckCircle2, CircleDot, HelpCircle, Loader2, PlayCircle, Trash2, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Bell, CheckCircle2, CircleDot, HelpCircle, Loader2, MessageSquare, PlayCircle, Trash2, X } from 'lucide-react'
 import { useAuth } from '../../context/useAuth'
 import useVisiblePolling from '../../hooks/useVisiblePolling'
 import { formatDateShort } from '../../utils/time'
@@ -8,12 +9,16 @@ import { getTaskById } from '../../services/taskService'
 import { getTeacherStudentTask } from '../../services/teacherService'
 import {
   getParentNotifications,
+  getStudentNotifications,
   getTeacherNotifications,
   markAllParentNotificationsRead,
+  markAllStudentNotificationsRead,
   markAllTeacherNotificationsRead,
   markParentNotificationRead,
+  markStudentNotificationRead,
   markTeacherNotificationRead,
 } from '../../services/notificationService'
+import RequestDetailModal from '../shared/requests/RequestDetailModal'
 
 const TaskAnswerSheetModal = lazy(() => import('../student/components/TaskAnswerSheetModal'))
 const TaskOpticalResultModal = lazy(() => import('../teacher/components/TaskOpticalResultModal'))
@@ -35,6 +40,11 @@ const SERVICES = {
     markRead: markTeacherNotificationRead,
     markAll: markAllTeacherNotificationsRead,
   },
+  student: {
+    list: getStudentNotifications,
+    markRead: markStudentNotificationRead,
+    markAll: markAllStudentNotificationsRead,
+  },
 }
 
 const ACTION_LABEL = {
@@ -44,10 +54,19 @@ const ACTION_LABEL = {
   help_requested: 'yardım istedi',
 }
 
+const REQUEST_STATUS_LABEL = {
+  tamamlandi: 'Tamamlandı',
+  iptal: 'İptal edildi',
+  beklemede: 'yeniden beklemeye alındı',
+}
+
 function ActionIcon({ action }) {
   if (action === 'task_completed') return <CheckCircle2 size={14} className="text-emerald-600" aria-hidden="true" />
   if (action === 'task_partially_completed') return <CircleDot size={14} className="text-amber-500" aria-hidden="true" />
   if (action === 'help_requested') return <HelpCircle size={14} className="text-panel-red" aria-hidden="true" />
+  if (action === 'request_new_message' || action === 'request_status_changed') {
+    return <MessageSquare size={14} className="text-panel-blue" aria-hidden="true" />
+  }
   return <PlayCircle size={14} className="text-panel-blue" aria-hidden="true" />
 }
 
@@ -84,6 +103,8 @@ const ACTION_ACCENT = {
   task_partially_completed: 'border-l-amber-400',
   help_requested: 'border-l-panel-red',
   task_started: 'border-l-panel-blue',
+  request_new_message: 'border-l-panel-blue',
+  request_status_changed: 'border-l-panel-blue',
 }
 
 function resourceLabel(notif) {
@@ -105,8 +126,28 @@ function buildDetailLine(notif) {
   return parts.join(' · ')
 }
 
+// Talep bildirimleri (kind: 'request'): fromAdmin=true ise "talebiniz güncellendi"
+// (yönetici sizi bilgilendirdi), false ise admin bildirim zilinde "birisi yazdı"
+// yayını (bkz. api/src/notifications.js fetchUnreadRequestNotifications).
+function requestNotificationTitle(notif) {
+  if (notif.action === 'request_status_changed') {
+    return notif.fromAdmin ? 'Talebiniz güncellendi' : 'Bir talep güncellendi'
+  }
+  if (notif.fromAdmin) return 'Yönetici yanıtladı'
+  return `${notif.actorName || 'Biri'} yazdı`
+}
+
+function requestNotificationDetail(notif) {
+  if (notif.action === 'request_status_changed') {
+    const statusLabel = REQUEST_STATUS_LABEL[notif.status] || notif.status
+    return notif.bodySnippet ? `${notif.requestTitle} · ${statusLabel} — ${notif.bodySnippet}` : `${notif.requestTitle} · ${statusLabel}`
+  }
+  return notif.bodySnippet ? `${notif.requestTitle} · "${notif.bodySnippet}"` : notif.requestTitle
+}
+
 export default function NotificationBell({ role }) {
   const { authUser } = useAuth()
+  const navigate = useNavigate()
   const service = SERVICES[role]
   const [open, setOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
@@ -116,6 +157,7 @@ export default function NotificationBell({ role }) {
   const [markingAll, setMarkingAll] = useState(false)
   const [detail, setDetail] = useState(null) // { notif, task } | { notif, error }
   const [detailLoading, setDetailLoading] = useState(false)
+  const [requestDetailId, setRequestDetailId] = useState(null)
   const menuRef = useRef(null)
 
   const refresh = useCallback(async () => {
@@ -164,6 +206,18 @@ export default function NotificationBell({ role }) {
   const handleRowClick = async (notif) => {
     dismissRow(notif.id)
     service.markRead(notif.id).catch(() => refresh())
+
+    if (notif.kind === 'request') {
+      setOpen(false)
+      // fromAdmin: yönetici size yazdı/durum değiştirdi → kendi talep detayınızı açın.
+      // değilse: bu bir admin yayını (birisi yeni mesaj yazdı) → Talepler ekranına git.
+      if (notif.fromAdmin) {
+        setRequestDetailId(notif.requestId)
+      } else {
+        navigate('/parent/admin/book-requests')
+      }
+      return
+    }
 
     if (!notif.taskId) return
 
@@ -269,10 +323,16 @@ export default function NotificationBell({ role }) {
                     <span className="min-w-0 flex-1">
                       <span className="flex items-baseline justify-between gap-2">
                         <span className="truncate text-[13px] font-semibold leading-snug text-panel-text">
-                          {notif.studentName || 'Öğrenci'}{' '}
-                          <span className="font-normal text-panel-text-muted">
-                            {ACTION_LABEL[notif.action] || 'işlem yaptı'}
-                          </span>
+                          {notif.kind === 'request' ? (
+                            requestNotificationTitle(notif)
+                          ) : (
+                            <>
+                              {notif.studentName || 'Öğrenci'}{' '}
+                              <span className="font-normal text-panel-text-muted">
+                                {ACTION_LABEL[notif.action] || 'işlem yaptı'}
+                              </span>
+                            </>
+                          )}
                         </span>
                         <span className="flex shrink-0 flex-col items-end leading-tight">
                           <span className="text-[10px] font-medium text-panel-text-muted/80">
@@ -283,8 +343,8 @@ export default function NotificationBell({ role }) {
                           </span>
                         </span>
                       </span>
-                      <span className="mt-1 block text-[12px] leading-snug text-panel-text-muted">
-                        {buildDetailLine(notif)}
+                      <span className="mt-1 block truncate text-[12px] leading-snug text-panel-text-muted">
+                        {notif.kind === 'request' ? requestNotificationDetail(notif) : buildDetailLine(notif)}
                       </span>
                     </span>
                   </button>
@@ -302,6 +362,10 @@ export default function NotificationBell({ role }) {
           loading={detailLoading}
           onClose={() => setDetail(null)}
         />
+      ) : null}
+
+      {requestDetailId ? (
+        <RequestDetailModal requestId={requestDetailId} onClose={() => setRequestDetailId(null)} />
       ) : null}
     </div>
   )

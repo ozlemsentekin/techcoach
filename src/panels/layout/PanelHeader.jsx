@@ -47,6 +47,7 @@ export default function PanelHeader() {
   const contactLabel = authUser?.email || authUser?.phone || roleLabel
   const isParent = authUser?.role === 'ebeveyn'
   const isTeacher = authUser?.role === 'ogretmen'
+  const isStudent = authUser?.role === 'ogrenci'
   const actingParent = authUser?.actingParent
   const actingAdmin = authUser?.actingAdmin
   const themeCtx = useContext(ThemeContext)
@@ -181,8 +182,8 @@ export default function PanelHeader() {
       </button>
       <div className="h-6 w-px shrink-0 bg-panel-border" aria-hidden="true" />
 
-      {isParent || isTeacher ? (
-        <NotificationBell role={isParent ? 'parent' : 'teacher'} />
+      {isParent || isTeacher || isStudent ? (
+        <NotificationBell role={isParent ? 'parent' : isTeacher ? 'teacher' : 'student'} />
       ) : null}
 
       {themeCtx && !themeCtx.locked ? (
