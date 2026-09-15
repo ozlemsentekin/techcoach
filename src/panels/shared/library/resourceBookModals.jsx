@@ -260,15 +260,12 @@ function TopicModal({
         </div>
         {error && <p role="alert" className="shrink-0 px-4 py-2 text-sm text-panel-warm">{error}</p>}
         <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-px overflow-hidden bg-[#eadbc8] md:grid-cols-2 md:grid-rows-1">
-          <section className="flex min-h-0 flex-col justify-center bg-[#fffaf4] p-4 md:p-8">
-            <h3 className="mb-1 text-base font-semibold text-panel-text">{isEdit ? 'Başlığı düzenleyin' : '1. Ünite veya bölüm ekleyin'}</h3>
-            <p className="mb-4 text-sm text-panel-text-muted">Kitabın içindekiler sayfasındaki başlıkları kullanın.</p>
-            <label htmlFor="topic-name-input" className="mb-2 text-sm font-medium text-panel-text">Ünite / bölüm adı</label>
+          <section className="flex min-h-0 flex-col bg-[#fffaf4] p-4 sm:p-5">
+            <label htmlFor="topic-name-input" className="mb-3 mt-1 text-base font-semibold text-panel-text">Ünite / bölüm adı</label>
             <div className="flex items-center gap-2">
               <input id="topic-name-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Örn. Çarpanlar ve Katlar" className="h-11 min-w-0 flex-1 rounded-xl border border-panel-border bg-white px-3 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20" />
               <Button type="submit" disabled={loading || name.trim().length < 2} className="h-11">{loading ? 'Ekleniyor…' : isEdit ? 'Kaydet' : 'Ekle'}</Button>
             </div>
-            {!isEdit && onTestsCreated && <p className="mt-3 text-xs text-panel-text-muted">2. Eklediğiniz başlıktan “Test ekle” ile devam edin.</p>}
           </section>
           <section className="min-h-0 min-w-0 overflow-hidden md:shadow-[inset_12px_0_18px_-18px_#8b7666]">
             <TopicContentsPreview topicName={name} bookContents={bookContents} editingName={topic?.name || ''} onDeleteEntry={onDeleted ? handleDeleteEntry : undefined} deleteBusy={deleteBusy} onAddTests={onTestsCreated ? setTestEntry : undefined} />
