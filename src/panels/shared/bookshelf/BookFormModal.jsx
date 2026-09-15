@@ -51,10 +51,10 @@ export default function BookFormModal({ book, onSaved, onClose }) {
   const [newPublisherName, setNewPublisherName] = useState('')
   const [showNewPublisher, setShowNewPublisher] = useState(false)
   const [addingPublisher, setAddingPublisher] = useState(false)
-  const [hasAnswerKey, setHasAnswerKey] = useState(book ? book.hasAnswerKey : true)
   const [imageUrl, setImageUrl] = useState(book?.imageUrl || '')
   const [contentMode, setContentMode] = useState(book?.contentMode || 'structured')
   const isSimpleContentMode = contentMode === 'simple'
+  const hasAnswerKey = !isSimpleContentMode && ['soru_bankasi', 'etkinlik'].includes(type)
 
   const [selectedStudentIds, setSelectedStudentIds] = useState(() => new Set())
 
@@ -160,7 +160,7 @@ export default function BookFormModal({ book, onSaved, onClose }) {
         subjectId,
         grade,
         type: isSimpleContentMode ? 'soru_bankasi' : type,
-        hasAnswerKey: isSimpleContentMode ? false : type === 'soru_bankasi' ? hasAnswerKey : true,
+        hasAnswerKey,
         contentMode,
         imageUrl: imageUrl.trim() || null,
         ...(publisherId ? { publisherId } : { newPublisherName: newPublisherName.trim() }),
@@ -351,6 +351,7 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                   <span className="text-sm font-medium text-panel-text-muted">Kaynak Tipi</span>
                   <select
                     aria-label="Kaynak Tipi"
+                    required
                     value={type}
                     onChange={(event) => setType(event.target.value)}
                     className="min-w-0 rounded-xl border border-panel-border bg-panel-surface p-2.5 text-base text-panel-text outline-none focus:border-panel-accent focus:ring-2 focus:ring-panel-accent/20"
@@ -365,19 +366,7 @@ export default function BookFormModal({ book, onSaved, onClose }) {
                 </label>
               ) : null}
 
-              {!isSimpleContentMode && type === 'soru_bankasi' ? (
-                <label className="flex items-center gap-2.5">
-                  <input
-                    type="checkbox"
-                    checked={hasAnswerKey}
-                    onChange={(event) => setHasAnswerKey(event.target.checked)}
-                    className="h-4 w-4"
-                  />
-                  <span className="text-sm font-medium text-panel-text">Cevap Anahtarı Var</span>
-                </label>
-              ) : null}
-
-              <p className="rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-text">{isSimpleContentMode ? 'Kitabı ekledikten sonra görev verebilirsiniz.' : 'Kitabı ekledikten sonra içindekileri ve varsa cevap anahtarını hazırlayabilirsiniz.'}</p>
+              <p className="rounded-xl bg-panel-accent-soft px-3 py-2 text-sm text-panel-text">{isSimpleContentMode ? 'Kitabı ekledikten sonra görev verebilirsiniz.' : hasAnswerKey ? 'Kitabı ekledikten sonra içindekileri ve cevap anahtarını hazırlayabilirsiniz.' : 'Kitabı ekledikten sonra içindekileri hazırlayabilirsiniz.'}</p>
             </div>}
           </>}
         </div>

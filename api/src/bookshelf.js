@@ -447,7 +447,7 @@ function validateBookPayload(payload) {
   const grade = payload?.grade || null
   const contentMode = payload?.contentMode === 'simple' ? 'simple' : 'structured'
   const type = contentMode === 'simple' ? 'soru_bankasi' : payload?.type
-  const hasAnswerKey = contentMode === 'simple' ? false : payload?.hasAnswerKey !== false
+  const hasAnswerKey = contentMode === 'structured' && ['soru_bankasi', 'etkinlik'].includes(type)
 
   if (!name || name.length < 2) return { error: 'Kaynak adı en az 2 karakter olmalı.' }
   if (!subjectId) return { error: 'Ders seçilmeli.' }
@@ -463,7 +463,7 @@ function validateBookPayload(payload) {
       subjectId,
       grade: String(grade),
       type,
-      hasAnswerKey: type === 'soru_bankasi' ? hasAnswerKey : true,
+      hasAnswerKey,
       contentMode,
       imageUrl: imageResult.value,
     },
@@ -826,6 +826,7 @@ async function createPublisherForPanelHandler(request) {
 }
 
 module.exports = {
+  validateBookPayload,
   listBooksHandler,
   getBookHandler,
   createBookHandler,
