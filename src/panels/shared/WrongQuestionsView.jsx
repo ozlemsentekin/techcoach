@@ -753,8 +753,8 @@ export default function WrongQuestionsView({
   updateMistakeAnalysis,
   updateMistakeMeta,
   updateMistakePhoto,
-  fetchAnalysisPhoto,
-  updateAnalysisPhoto,
+  fetchAnalysisPhotos,
+  addAnalysisPhoto,
   removeAnalysisPhoto,
   viewerRole = 'ogrenci',
   studentId,
@@ -779,7 +779,6 @@ export default function WrongQuestionsView({
   const [topicSelectMode, setTopicSelectMode] = useState(false)
   const [selectedTopicKeys, setSelectedTopicKeys] = useState(() => new Set())
   const [replacingPhotoItem, setReplacingPhotoItem] = useState(null)
-  const [addingAnalysisPhotoItem, setAddingAnalysisPhotoItem] = useState(null)
   const [analysisFilter, setAnalysisFilter] = useState('tumu')
   const [dateFilter, setDateFilter] = useState('all')
   const today = todayISODate()
@@ -1049,35 +1048,36 @@ export default function WrongQuestionsView({
 
   const openReplacePhoto = updateMistakePhoto ? (item) => setReplacingPhotoItem(item) : undefined
 
-  // Hata Analiz görseli sadece veli tarafından eklenir/değiştirilir (updateAnalysisPhoto prop'u
-  // sadece veli MistakesPage'inde geçirilir); öğrenci/öğretmen bu butonu hiç görmez.
-  const handleAddAnalysisPhoto = async (dataUrl) => {
-    if (!addingAnalysisPhotoItem || !updateAnalysisPhoto) return
-    const updated = await updateAnalysisPhoto(addingAnalysisPhotoItem.id, dataUrl)
-    const nextAnalysisPhotoUrl = updated?.analysisPhotoUrl || dataUrl
-    setWrongQuestions((prev) =>
-      prev
-        ? prev.map((item) =>
-            item.id === addingAnalysisPhotoItem.id
-              ? { ...item, analysisPhotoUrl: nextAnalysisPhotoUrl, hasAnalysisPhoto: true }
-              : item,
-          )
-        : prev,
-    )
-  }
-
-  const openAddAnalysisPhoto = updateAnalysisPhoto ? (item) => setAddingAnalysisPhotoItem(item) : undefined
-
-  const handleRemoveAnalysisPhoto = removeAnalysisPhoto
-    ? async (item) => {
-        await removeAnalysisPhoto(item.id)
+  // Hata Analiz görselleri sadece veli tarafından eklenir/kaldırılır (addAnalysisPhoto/
+  // removeAnalysisPhoto prop'ları sadece veli MistakesPage'inde geçirilir); öğrenci/öğretmen bu
+  // butonları hiç görmez. Görsellerin kendisini AnalysisPhotoViewer kendi başına tembel çeker;
+  // burada sadece galerideki hasAnalysisPhoto/analysisPhotoCount sayaçları senkronize edilir.
+  const handleAddAnalysisPhoto = addAnalysisPhoto
+    ? async (wrongQuestionId, dataUrl) => {
+        const photo = await addAnalysisPhoto(wrongQuestionId, dataUrl)
         setWrongQuestions((prev) =>
           prev
-            ? prev.map((question) =>
-                question.id === item.id
-                  ? { ...question, analysisPhotoUrl: undefined, hasAnalysisPhoto: false }
-                  : question,
+            ? prev.map((item) =>
+                item.id === wrongQuestionId
+                  ? { ...item, hasAnalysisPhoto: true, analysisPhotoCount: (item.analysisPhotoCount || 0) + 1 }
+                  : item,
               )
+            : prev,
+        )
+        return photo
+      }
+    : undefined
+
+  const handleRemoveAnalysisPhoto = removeAnalysisPhoto
+    ? async (wrongQuestionId, photoId) => {
+        await removeAnalysisPhoto(wrongQuestionId, photoId)
+        setWrongQuestions((prev) =>
+          prev
+            ? prev.map((item) => {
+                if (item.id !== wrongQuestionId) return item
+                const nextCount = Math.max(0, (item.analysisPhotoCount || 1) - 1)
+                return { ...item, hasAnalysisPhoto: nextCount > 0, analysisPhotoCount: nextCount }
+              })
             : prev,
         )
       }
@@ -1349,7 +1349,7 @@ export default function WrongQuestionsView({
         </div>
       )}
 
-      {galleryTopicGroup && !replacingPhotoItem && !addingAnalysisPhotoItem ? (
+      {galleryTopicGroup && !replacingPhotoItem ? (
         <WrongQuestionGalleryModal
           title={galleryTopicGroup.topic || 'Genel'}
           items={galleryTopicGroup.items}
@@ -1359,13 +1359,13 @@ export default function WrongQuestionsView({
           onUpdateMistakeAnalysis={handleUpdateMistakeAnalysis}
           onUpdateMistakeMeta={handleUpdateMistakeMeta}
           onCapturePhoto={openReplacePhoto}
-          fetchAnalysisPhoto={fetchAnalysisPhoto}
-          onAddAnalysisPhoto={openAddAnalysisPhoto}
+          fetchAnalysisPhotos={fetchAnalysisPhotos}
+          onAddAnalysisPhoto={handleAddAnalysisPhoto}
           onRemoveAnalysisPhoto={handleRemoveAnalysisPhoto}
         />
       ) : null}
 
-      {sourceGallerySelection && !replacingPhotoItem && !addingAnalysisPhotoItem ? (
+      {sourceGallerySelection && !replacingPhotoItem ? (
         <WrongQuestionGalleryModal
           title={activeSource?.bookName || 'Kaynak'}
           items={sourceGallerySelection.items}
@@ -1376,8 +1376,8 @@ export default function WrongQuestionsView({
           onUpdateMistakeAnalysis={handleUpdateMistakeAnalysis}
           onUpdateMistakeMeta={handleUpdateMistakeMeta}
           onCapturePhoto={openReplacePhoto}
-          fetchAnalysisPhoto={fetchAnalysisPhoto}
-          onAddAnalysisPhoto={openAddAnalysisPhoto}
+          fetchAnalysisPhotos={fetchAnalysisPhotos}
+          onAddAnalysisPhoto={handleAddAnalysisPhoto}
           onRemoveAnalysisPhoto={handleRemoveAnalysisPhoto}
         />
       ) : null}
@@ -1392,15 +1392,6 @@ export default function WrongQuestionsView({
           }
           onClose={() => setReplacingPhotoItem(null)}
           onSave={handleReplacePhoto}
-        />
-      ) : null}
-
-      {addingAnalysisPhotoItem ? (
-        <MistakePhotoCaptureModal
-          title="Hata Analiz"
-          description="Çocuğunuzun bu soruyu neden yanlış yaptığını gösteren bir görsel ekleyin (çözüm, açıklama vb.)."
-          onClose={() => setAddingAnalysisPhotoItem(null)}
-          onSave={handleAddAnalysisPhoto}
         />
       ) : null}
     </div>

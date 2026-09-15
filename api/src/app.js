@@ -96,9 +96,9 @@ const {
   listTeacherStudentWrongQuestionsHandler,
   getTeacherStudentWrongQuestionPhotoHandler,
   updateTeacherStudentWrongQuestionPhotoHandler,
-  getTeacherStudentWrongQuestionAnalysisPhotoHandler,
+  listTeacherStudentWrongQuestionAnalysisPhotosHandler,
   listTeacherWrongQuestionAnalysisPhotosHandler,
-  getTeacherWrongQuestionAnalysisPhotoHandler,
+  getTeacherWrongQuestionAnalysisPhotosHandler,
   getTeacherStudentWrongQuestionTopicStatsHandler,
   updateTeacherStudentWrongQuestionHandler,
   grantParentAccessHandler,
@@ -227,8 +227,8 @@ const {
   listWrongQuestionsHandler,
   getWrongQuestionPhotoHandler,
   updateWrongQuestionPhotoHandler,
-  getWrongQuestionAnalysisPhotoHandler,
-  updateWrongQuestionAnalysisPhotoHandler,
+  listWrongQuestionAnalysisPhotoRecordsHandler,
+  addWrongQuestionAnalysisPhotoHandler,
   deleteWrongQuestionAnalysisPhotoHandler,
   listWrongQuestionAnalysisPhotosHandler,
   addWrongQuestionHandler,
@@ -969,11 +969,11 @@ registerHttp('panel-teacher-wrong-questions-photo-update', {
   handler: updateTeacherStudentWrongQuestionPhotoHandler,
 })
 
-registerHttp('panel-teacher-wrong-questions-analysis-photo', {
+registerHttp('panel-teacher-wrong-questions-analysis-photos', {
   authLevel: 'anonymous',
   methods: ['GET'],
-  route: 'panel-teacher/students/{studentTeacherId}/wrong-questions/{wrongQuestionId}/analysis-photo',
-  handler: getTeacherStudentWrongQuestionAnalysisPhotoHandler,
+  route: 'panel-teacher/students/{studentTeacherId}/wrong-questions/{wrongQuestionId}/analysis-photos',
+  handler: listTeacherStudentWrongQuestionAnalysisPhotosHandler,
 })
 
 registerHttp('panel-teacher-wrong-question-analysis-photos-list', {
@@ -987,7 +987,7 @@ registerHttp('panel-teacher-wrong-question-analysis-photos-get', {
   authLevel: 'anonymous',
   methods: ['GET'],
   route: 'panel-teacher/wrong-question-analysis-photos/{wrongQuestionId}',
-  handler: getTeacherWrongQuestionAnalysisPhotoHandler,
+  handler: getTeacherWrongQuestionAnalysisPhotosHandler,
 })
 
 registerHttp('parent-return', {
@@ -1788,24 +1788,24 @@ registerHttp('panel-wrong-questions-photo-update', {
   handler: updateWrongQuestionPhotoHandler,
 })
 
-registerHttp('panel-wrong-questions-analysis-photo', {
+registerHttp('panel-wrong-questions-analysis-photos-list', {
   authLevel: 'anonymous',
   methods: ['GET'],
-  route: 'panel/wrong-questions/{wrongQuestionId}/analysis-photo',
-  handler: getWrongQuestionAnalysisPhotoHandler,
+  route: 'panel/wrong-questions/{wrongQuestionId}/analysis-photos',
+  handler: listWrongQuestionAnalysisPhotoRecordsHandler,
 })
 
-registerHttp('panel-wrong-questions-analysis-photo-update', {
+registerHttp('panel-wrong-questions-analysis-photos-add', {
   authLevel: 'anonymous',
-  methods: ['PUT'],
-  route: 'panel/wrong-questions/{wrongQuestionId}/analysis-photo',
-  handler: updateWrongQuestionAnalysisPhotoHandler,
+  methods: ['POST'],
+  route: 'panel/wrong-questions/{wrongQuestionId}/analysis-photos',
+  handler: addWrongQuestionAnalysisPhotoHandler,
 })
 
-registerHttp('panel-wrong-questions-analysis-photo-delete', {
+registerHttp('panel-wrong-questions-analysis-photos-delete', {
   authLevel: 'anonymous',
   methods: ['DELETE'],
-  route: 'panel/wrong-questions/{wrongQuestionId}/analysis-photo',
+  route: 'panel/wrong-questions/{wrongQuestionId}/analysis-photos/{photoId}',
   handler: deleteWrongQuestionAnalysisPhotoHandler,
 })
 

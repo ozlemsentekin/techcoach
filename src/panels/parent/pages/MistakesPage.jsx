@@ -7,8 +7,8 @@ import {
   getWrongQuestions,
   getWrongQuestionTopicStats,
   getWrongQuestionPhoto,
-  getWrongQuestionAnalysisPhoto,
-  updateWrongQuestionAnalysisPhoto,
+  getWrongQuestionAnalysisPhotoRecords,
+  addWrongQuestionAnalysisPhoto,
   deleteWrongQuestionAnalysisPhoto,
   updateWrongQuestion,
   updateWrongQuestionPhoto,
@@ -88,9 +88,9 @@ export default function MistakesPage() {
       fetchWrongQuestions={() => getWrongQuestions(selectedStudent.id)}
       fetchTopicStats={() => getWrongQuestionTopicStats(selectedStudent.id)}
       fetchPhoto={(id) => getWrongQuestionPhoto(id, selectedStudent.id)}
-      fetchAnalysisPhoto={(id) => getWrongQuestionAnalysisPhoto(id, selectedStudent.id)}
-      updateAnalysisPhoto={(id, dataUrl) => updateWrongQuestionAnalysisPhoto(id, dataUrl, selectedStudent.id)}
-      removeAnalysisPhoto={(id) => deleteWrongQuestionAnalysisPhoto(id, selectedStudent.id)}
+      fetchAnalysisPhotos={(id) => getWrongQuestionAnalysisPhotoRecords(id, selectedStudent.id)}
+      addAnalysisPhoto={(id, dataUrl) => addWrongQuestionAnalysisPhoto(id, dataUrl, selectedStudent.id)}
+      removeAnalysisPhoto={(id, photoId) => deleteWrongQuestionAnalysisPhoto(id, photoId, selectedStudent.id)}
       viewerRole="ebeveyn"
       studentId={selectedStudent.id}
       updateMistakeAnalysis={(id, analysis) => updateWrongQuestion(id, { analysis }, selectedStudent.id)}

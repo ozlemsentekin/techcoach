@@ -3,7 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Users } from 'lucide-react'
 import { cachedGet } from '../../../services/authClient'
 import Button from '../../ui/Button'
-import { getWrongQuestionAnalysisPhotos, getWrongQuestionAnalysisPhoto } from '../../../services/wrongQuestionService'
+import {
+  getWrongQuestionAnalysisPhotos,
+  getWrongQuestionAnalysisPhotoRecords,
+} from '../../../services/wrongQuestionService'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
 import AnalysisPhotosPage from '../../shared/AnalysisPhotosPage'
@@ -77,7 +80,7 @@ export default function ParentAnalysisPhotosPage() {
     <AnalysisPhotosPage
       key={selectedStudent.id}
       fetchItems={() => getWrongQuestionAnalysisPhotos(selectedStudent.id)}
-      fetchPhoto={(id) => getWrongQuestionAnalysisPhoto(id, selectedStudent.id)}
+      fetchPhotos={(id) => getWrongQuestionAnalysisPhotoRecords(id, selectedStudent.id)}
       title="Hata Analizlerim"
       subtitle={`${selectedStudent.fullName} için eklenen hata analiz görselleri.`}
       headerActions={headerActions}

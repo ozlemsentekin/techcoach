@@ -3359,7 +3359,7 @@ async function listTeacherStudentWrongQuestionsHandler(request) {
                wq.question_number, wq.error_type,
                wq.review_status, wq.resolved_at,
                CAST(1 AS bit) AS has_photo, wq.created_at,
-               CASE WHEN wq.analysis_photo_url IS NOT NULL THEN 1 ELSE 0 END AS has_analysis_photo,
+               ISNULL(ap.photo_count, 0) AS analysis_photo_count,
                COALESCE(tp.name, wq.topic) AS topic,
                COALESCE(rb.name, wq.book_name) AS book_name,
                COALESCE(pub.name, wq.publisher_name) AS publisher_name,
@@ -3371,6 +3371,11 @@ async function listTeacherStudentWrongQuestionsHandler(request) {
         LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
         LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
         LEFT JOIN dbo.TestAnswerKeys tak ON tak.test_id = wq.test_id AND tak.order_no = wq.question_number
+        LEFT JOIN (
+          SELECT wrong_question_id, COUNT(*) AS photo_count
+          FROM dbo.WrongQuestionAnalysisPhotos
+          GROUP BY wrong_question_id
+        ) ap ON ap.wrong_question_id = wq.id
         WHERE wq.student_id = @studentId AND wq.subject = @subject
           AND (wq.test_id IS NOT NULL OR wq.mock_exam_subject_id IS NOT NULL)
         ${resourceBookId ? 'AND tp.resource_book_id = @resourceBookId' : ''}
@@ -3422,10 +3427,10 @@ async function getTeacherStudentWrongQuestionPhotoHandler(request) {
   }
 }
 
-// Öğretmenin, öğrencinin Hata Defteri'ndeki Hata Analiz görselini tembel çekmesi (bkz. progress.js
-// getWrongQuestionAnalysisPhotoHandler — panel muadili). Sadece kendi dersindeki kayıt, salt-okuma
-// (öğretmen görseli ekleyemez/değiştiremez — bunu sadece veli yapar).
-async function getTeacherStudentWrongQuestionAnalysisPhotoHandler(request) {
+// Öğretmenin, öğrencinin Hata Defteri'ndeki TÜM Hata Analiz görsellerini çekmesi (bkz. progress.js
+// listWrongQuestionAnalysisPhotoRecordsHandler — panel muadili). Sadece kendi dersindeki kayıt,
+// salt-okuma (öğretmen görsel ekleyemez/silemez — bunu sadece veli yapar).
+async function listTeacherStudentWrongQuestionAnalysisPhotosHandler(request) {
   try {
     const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
     if (error) return error
@@ -3439,17 +3444,22 @@ async function getTeacherStudentWrongQuestionAnalysisPhotoHandler(request) {
       subject: { type: sql.NVarChar(100), value: subjectName },
     })
     const result = await requestDb.query(`
-      SELECT analysis_photo_url FROM dbo.WrongQuestions WHERE id = @id AND student_id = @studentId AND subject = @subject;
+      SELECT p.id, p.photo_url, p.created_at
+      FROM dbo.WrongQuestionAnalysisPhotos p
+      INNER JOIN dbo.WrongQuestions wq ON wq.id = p.wrong_question_id
+      WHERE p.wrong_question_id = @id AND wq.student_id = @studentId AND wq.subject = @subject
+      ORDER BY p.created_at ASC;
     `)
 
-    const analysisPhotoUrl = result.recordset[0]?.analysis_photo_url
-    if (!analysisPhotoUrl) {
-      return json(404, { error: 'Hata analiz görseli bulunamadı.' })
-    }
-
-    return json(200, { analysisPhotoUrl })
+    return json(200, {
+      photos: result.recordset.map((row) => ({ id: row.id, photoUrl: row.photo_url, createdAt: row.created_at })),
+    })
   } catch (error) {
-    return handleError(error, 'getTeacherStudentWrongQuestionAnalysisPhotoHandler', 'Hata analiz görseli yüklenemedi.')
+    return handleError(
+      error,
+      'listTeacherStudentWrongQuestionAnalysisPhotosHandler',
+      'Hata analiz görselleri yüklenemedi.',
+    )
   }
 }
 
@@ -3467,7 +3477,8 @@ async function listTeacherWrongQuestionAnalysisPhotosHandler(request) {
       teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
     })
     const result = await requestDb.query(`
-      SELECT wq.id, wq.subject, wq.question_number, wq.analysis_photo_added_at,
+      SELECT wq.id, wq.subject, wq.question_number,
+             photos.photo_count, photos.last_added_at,
              u.full_name AS student_full_name,
              COALESCE(tp.name, wq.topic) AS topic,
              COALESCE(rb.name, rb2.name, wq.book_name) AS book_name,
@@ -3477,6 +3488,11 @@ async function listTeacherWrongQuestionAnalysisPhotosHandler(request) {
       INNER JOIN dbo.Users u ON u.id = st.student_id
       INNER JOIN dbo.Subjects s ON s.id = st.subject_id
       INNER JOIN dbo.WrongQuestions wq ON wq.student_id = st.student_id AND wq.subject = s.name
+      INNER JOIN (
+        SELECT wrong_question_id, COUNT(*) AS photo_count, MAX(created_at) AS last_added_at
+        FROM dbo.WrongQuestionAnalysisPhotos
+        GROUP BY wrong_question_id
+      ) photos ON photos.wrong_question_id = wq.id
       LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
       LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
       LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
@@ -3484,8 +3500,7 @@ async function listTeacherWrongQuestionAnalysisPhotosHandler(request) {
       LEFT JOIN dbo.ResourceBooks rb2 ON rb2.id = wq.resource_book_id
       LEFT JOIN dbo.Publishers pub2 ON pub2.id = rb2.publisher_id
       WHERE st.teacher_user_id = @teacherUserId AND st.is_active = 1
-        AND wq.analysis_photo_url IS NOT NULL
-      ORDER BY wq.analysis_photo_added_at DESC;
+      ORDER BY photos.last_added_at DESC;
     `)
 
     return json(200, {
@@ -3499,7 +3514,8 @@ async function listTeacherWrongQuestionAnalysisPhotosHandler(request) {
         bookName: row.book_name || undefined,
         publisherName: row.publisher_name || undefined,
         questionNumber: row.question_number || undefined,
-        analysisPhotoAddedAt: row.analysis_photo_added_at,
+        analysisPhotoCount: row.photo_count,
+        analysisPhotoAddedAt: row.last_added_at,
       })),
     })
   } catch (error) {
@@ -3507,9 +3523,9 @@ async function listTeacherWrongQuestionAnalysisPhotosHandler(request) {
   }
 }
 
-// "Hata Analizlerim" menüsündeki tek bir görselin tembel çekimi — kapsam yukarıdaki listeyle
+// "Hata Analizlerim" menüsündeki bir sorunun TÜM görsellerinin çekimi — kapsam yukarıdaki listeyle
 // aynı SQL koşuluyla (StudentTeachers üzerinden) doğrulanır, studentTeacherId gerekmez.
-async function getTeacherWrongQuestionAnalysisPhotoHandler(request) {
+async function getTeacherWrongQuestionAnalysisPhotosHandler(request) {
   try {
     const { error, teacherUserId } = await requireTeacherSession(request)
     if (error) return error
@@ -3520,21 +3536,20 @@ async function getTeacherWrongQuestionAnalysisPhotoHandler(request) {
       teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId },
     })
     const result = await requestDb.query(`
-      SELECT wq.analysis_photo_url
-      FROM dbo.WrongQuestions wq
+      SELECT p.id, p.photo_url, p.created_at
+      FROM dbo.WrongQuestionAnalysisPhotos p
+      INNER JOIN dbo.WrongQuestions wq ON wq.id = p.wrong_question_id
       INNER JOIN dbo.StudentTeachers st ON st.student_id = wq.student_id AND st.is_active = 1
       INNER JOIN dbo.Subjects s ON s.id = st.subject_id AND s.name = wq.subject
-      WHERE wq.id = @id AND st.teacher_user_id = @teacherUserId;
+      WHERE p.wrong_question_id = @id AND st.teacher_user_id = @teacherUserId
+      ORDER BY p.created_at ASC;
     `)
 
-    const analysisPhotoUrl = result.recordset[0]?.analysis_photo_url
-    if (!analysisPhotoUrl) {
-      return json(404, { error: 'Hata analiz görseli bulunamadı.' })
-    }
-
-    return json(200, { analysisPhotoUrl })
+    return json(200, {
+      photos: result.recordset.map((row) => ({ id: row.id, photoUrl: row.photo_url, createdAt: row.created_at })),
+    })
   } catch (error) {
-    return handleError(error, 'getTeacherWrongQuestionAnalysisPhotoHandler', 'Hata analiz görseli yüklenemedi.')
+    return handleError(error, 'getTeacherWrongQuestionAnalysisPhotosHandler', 'Hata analiz görselleri yüklenemedi.')
   }
 }
 
@@ -3741,9 +3756,9 @@ module.exports = {
   listTeacherStudentWrongQuestionsHandler,
   getTeacherStudentWrongQuestionPhotoHandler,
   updateTeacherStudentWrongQuestionPhotoHandler,
-  getTeacherStudentWrongQuestionAnalysisPhotoHandler,
+  listTeacherStudentWrongQuestionAnalysisPhotosHandler,
   listTeacherWrongQuestionAnalysisPhotosHandler,
-  getTeacherWrongQuestionAnalysisPhotoHandler,
+  getTeacherWrongQuestionAnalysisPhotosHandler,
   getTeacherStudentWrongQuestionTopicStatsHandler,
   updateTeacherStudentWrongQuestionHandler,
   grantParentAccessHandler,
