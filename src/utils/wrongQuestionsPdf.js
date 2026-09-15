@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf'
-import { ROBOTO_REGULAR_TTF_BASE64, ROBOTO_BOLD_TTF_BASE64 } from './fonts/robotoTurkish'
+import { registerTurkishFont, detectImageFormat, loadImageSize, slugifyForFileName } from './pdfHelpers'
 
 const PAGE_MARGIN = 12
 const BOX_GAP = 6
@@ -8,38 +8,11 @@ const CAPTION_HEIGHT = 11
 const BOX_HEIGHT = 66
 const TOPIC_HEADER_GAP = 9
 
-// jsPDF'in yerleşik (Helvetica vb.) fontları WinAnsi encoding kullanıyor ve Türkçe'ye özgü
-// ı/İ/ş/ğ karakterlerini içermiyor (ör. "İfadeler" "0fadeler" olarak basılıyordu). Bunu çözmek
-// için Latin + Türkçe karakter setine subsetlenmiş bir Roboto TTF'i (bkz. fonts/robotoTurkish.js,
-// yaklaşık 20KB/ağırlık) gömüp varsayılan font yerine kullanıyoruz.
-function registerTurkishFont(doc) {
-  doc.addFileToVFS('Roboto-Regular.ttf', ROBOTO_REGULAR_TTF_BASE64)
-  doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal')
-  doc.addFileToVFS('Roboto-Bold.ttf', ROBOTO_BOLD_TTF_BASE64)
-  doc.addFont('Roboto-Bold.ttf', 'Roboto', 'bold')
-  doc.setFont('Roboto', 'normal')
-}
-
-function detectImageFormat(dataUrl) {
-  const match = /^data:image\/(\w+);base64,/i.exec(dataUrl || '')
-  const type = (match?.[1] || 'jpeg').toLowerCase()
-  return type === 'png' ? 'PNG' : 'JPEG'
-}
-
 function formatPageLabel(item) {
   const { pageStart, pageEnd } = item
   if (pageStart == null && pageEnd == null) return null
   if (pageStart != null && pageEnd != null && pageStart !== pageEnd) return `Sayfa ${pageStart}-${pageEnd}`
   return `Sayfa ${pageStart ?? pageEnd}`
-}
-
-function loadImageSize(dataUrl) {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.onload = () => resolve({ width: img.naturalWidth || 1, height: img.naturalHeight || 1 })
-    img.onerror = () => resolve(null)
-    img.src = dataUrl
-  })
 }
 
 // Fotoğrafın üzerine gelen konu/kaynak kartı; sağına aynı boyutta boş bir "Yeniden Çöz" kutusu
@@ -159,16 +132,7 @@ export async function buildWrongQuestionsPdf({ subject, source, fetchPhoto, onPr
 }
 
 export function buildWrongQuestionsPdfFileName(bookName) {
-  const safeName = (bookName || 'kaynak')
-    .toLocaleLowerCase('tr')
-    .replace(/ı/g, 'i')
-    .replace(/ş/g, 's')
-    .replace(/ğ/g, 'g')
-    .replace(/ü/g, 'u')
-    .replace(/ö/g, 'o')
-    .replace(/ç/g, 'c')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+  const safeName = slugifyForFileName(bookName || 'kaynak')
   const date = new Date().toISOString().slice(0, 10)
   return `hata-defteri-${safeName}-${date}.pdf`
 }

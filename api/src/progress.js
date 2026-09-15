@@ -120,15 +120,12 @@ function sanitizeWrongQuestion(record) {
     // fotoğraf uçlarından (getWrongQuestionPhotoHandler) veya foto kaydeden akışlardan gelir.
     hasPhoto: record.has_photo !== undefined ? Boolean(record.has_photo) : Boolean(record.photo_url),
     photoUrl: record.photo_url || undefined,
-    // "Hata Analiz" görseli (yalnızca veli ekler/değiştirir, herkes görüntüler) — aynı tembel
-    // çekim deseni: liste uçları sadece hasAnalysisPhoto bayrağını taşır, tam görsel
-    // getWrongQuestionAnalysisPhotoHandler'dan gelir (bkz. yukarısındaki hasPhoto/photoUrl yorumu).
-    hasAnalysisPhoto:
-      record.has_analysis_photo !== undefined
-        ? Boolean(record.has_analysis_photo)
-        : Boolean(record.analysis_photo_url),
-    analysisPhotoUrl: record.analysis_photo_url || undefined,
-    analysisPhotoAddedAt: record.analysis_photo_added_at || undefined,
+    // "Hata Analiz" görselleri (yalnızca veli ekler/kaldırır, herkes görüntüler; birden fazla
+    // olabilir) — aynı tembel çekim deseni: liste uçları sadece sayı/bayrak taşır, görsellerin
+    // kendisi listWrongQuestionAnalysisPhotoRecordsHandler'dan gelir (bkz. yukarısındaki
+    // hasPhoto/photoUrl yorumu).
+    hasAnalysisPhoto: Boolean(record.analysis_photo_count),
+    analysisPhotoCount: record.analysis_photo_count ?? undefined,
     bookImageUrl: record.book_image_url || undefined,
     createdAt: record.created_at,
   }
@@ -429,7 +426,7 @@ async function listWrongQuestionsHandler(request) {
                wq.question_number, wq.error_type,
                wq.review_status, wq.resolved_at,
                CAST(1 AS bit) AS has_photo, wq.created_at,
-               CASE WHEN wq.analysis_photo_url IS NOT NULL THEN 1 ELSE 0 END AS has_analysis_photo,
+               ISNULL(ap.photo_count, 0) AS analysis_photo_count,
                COALESCE(tp.name, wq.topic) AS topic,
                COALESCE(rb.name, rb2.name, wq.book_name) AS book_name,
                COALESCE(pub.name, pub2.name, wq.publisher_name) AS publisher_name,
@@ -444,6 +441,11 @@ async function listWrongQuestionsHandler(request) {
         LEFT JOIN dbo.ResourceBooks rb2 ON rb2.id = wq.resource_book_id
         LEFT JOIN dbo.Publishers pub2 ON pub2.id = rb2.publisher_id
         LEFT JOIN dbo.TestAnswerKeys tak ON tak.test_id = wq.test_id AND tak.order_no = wq.question_number
+        LEFT JOIN (
+          SELECT wrong_question_id, COUNT(*) AS photo_count
+          FROM dbo.WrongQuestionAnalysisPhotos
+          GROUP BY wrong_question_id
+        ) ap ON ap.wrong_question_id = wq.id
         WHERE wq.student_id = @studentId
           AND (wq.test_id IS NOT NULL OR wq.mock_exam_subject_id IS NOT NULL
                OR wq.resource_book_id IS NOT NULL OR wq.error_type = 'serbest')
@@ -564,10 +566,12 @@ async function updateWrongQuestionPhotoHandler(request) {
   }
 }
 
-// Hata Analiz görselini tembel çeker (bkz. getWrongQuestionPhotoHandler'daki aynı gerekçe).
-// Hem öğrenci hem veli kendi Hata Defteri'nden görüntüleyebilir; ekleme/değiştirme veliye özeldir
-// (bkz. updateWrongQuestionAnalysisPhotoHandler).
-async function getWrongQuestionAnalysisPhotoHandler(request) {
+// Bir sorunun TÜM Hata Analiz görsellerini döner (slayt gibi gezinme + yazdırma için, bkz.
+// AnalysisPhotoViewer.jsx). Diğer tembel-çekim uçlarından farklı olarak burada hepsi tek seferde
+// gelir — bu uç zaten kullanıcının "Analizi Göster" tıklamasıyla tetiklenen tekil bir aksiyon,
+// soru başına görsel sayısı da az olduğundan (genelde 1-5) ayrı ayrı çekmeye gerek yok.
+// Hem öğrenci hem veli kendi Hata Defteri'nden görüntüleyebilir; ekleme/silme veliye özeldir.
+async function listWrongQuestionAnalysisPhotoRecordsHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
     if (error) {
@@ -580,15 +584,20 @@ async function getWrongQuestionAnalysisPhotoHandler(request) {
       studentId: { type: sql.UniqueIdentifier, value: studentId },
     })
     const result = await requestDb.query(`
-      SELECT analysis_photo_url FROM dbo.WrongQuestions WHERE id = @id AND student_id = @studentId;
+      SELECT p.id, p.photo_url, p.created_at
+      FROM dbo.WrongQuestionAnalysisPhotos p
+      INNER JOIN dbo.WrongQuestions wq ON wq.id = p.wrong_question_id
+      WHERE p.wrong_question_id = @id AND wq.student_id = @studentId
+      ORDER BY p.created_at ASC;
     `)
 
-    const analysisPhotoUrl = result.recordset[0]?.analysis_photo_url
-    if (!analysisPhotoUrl) {
-      return json(404, { error: 'Hata analiz görseli bulunamadı.' })
-    }
-
-    return json(200, { analysisPhotoUrl })
+    return json(200, {
+      photos: result.recordset.map((row) => ({
+        id: row.id,
+        photoUrl: row.photo_url,
+        createdAt: row.created_at,
+      })),
+    })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -598,14 +607,15 @@ async function getWrongQuestionAnalysisPhotoHandler(request) {
       return json(401, { error: 'Oturum geçersiz.' })
     }
 
-    console.error('getWrongQuestionAnalysisPhotoHandler failed', error)
-    return json(500, { error: 'Hata analiz görseli yüklenemedi.' })
+    console.error('listWrongQuestionAnalysisPhotoRecordsHandler failed', error)
+    return json(500, { error: 'Hata analiz görselleri yüklenemedi.' })
   }
 }
 
-// Hata Analiz görselini ekler/değiştirir. Sadece veli ekleyebilir — öğrenci/öğretmen akışı
-// kaldırıldı, bkz. mistakeAnalysis.js'deki ANALYSIS_LANES yorumu.
-async function updateWrongQuestionAnalysisPhotoHandler(request) {
+// Bir soruya yeni bir Hata Analiz görseli ekler (mevcutları değiştirmez — birden fazla görsel
+// desteklenir). Sadece veli ekleyebilir — öğrenci/öğretmen akışı kaldırıldı, bkz.
+// mistakeAnalysis.js'deki ANALYSIS_LANES yorumu.
+async function addWrongQuestionAnalysisPhotoHandler(request) {
   try {
     const wrongQuestionId = request.params.wrongQuestionId
     const payload = await request.json().catch(() => null)
@@ -624,25 +634,30 @@ async function updateWrongQuestionAnalysisPhotoHandler(request) {
       return json(400, { error: photoCheck.error })
     }
 
-    const requestDb = await withRequest({
+    const ownerDb = await withRequest({
       id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
       studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const ownerResult = await ownerDb.query(
+      `SELECT 1 AS ok FROM dbo.WrongQuestions WHERE id = @id AND student_id = @studentId;`,
+    )
+    if (!ownerResult.recordset.length) {
+      return json(404, { error: 'Kayıt bulunamadı.' })
+    }
+
+    const requestDb = await withRequest({
+      wrongQuestionId: { type: sql.UniqueIdentifier, value: wrongQuestionId },
       photoUrl: { type: sql.NVarChar(sql.MAX), value: photoCheck.value },
       addedBy: { type: sql.UniqueIdentifier, value: actorId },
     })
     const result = await requestDb.query(`
-      UPDATE dbo.WrongQuestions
-      SET analysis_photo_url = @photoUrl, analysis_photo_added_by = @addedBy,
-          analysis_photo_added_at = SYSUTCDATETIME()
-      OUTPUT ${WRONG_QUESTION_OUTPUT_COLUMNS}, inserted.analysis_photo_url, inserted.analysis_photo_added_at
-      WHERE id = @id AND student_id = @studentId;
+      INSERT INTO dbo.WrongQuestionAnalysisPhotos (wrong_question_id, photo_url, added_by_user_id)
+      OUTPUT inserted.id, inserted.photo_url, inserted.created_at
+      VALUES (@wrongQuestionId, @photoUrl, @addedBy);
     `)
 
-    if (!result.recordset[0]) {
-      return json(404, { error: 'Kayıt bulunamadı.' })
-    }
-
-    return json(200, { wrongQuestion: sanitizeWrongQuestion(result.recordset[0]) })
+    const row = result.recordset[0]
+    return json(201, { photo: { id: row.id, photoUrl: row.photo_url, createdAt: row.created_at } })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -652,15 +667,16 @@ async function updateWrongQuestionAnalysisPhotoHandler(request) {
       return json(401, { error: 'Oturum geçersiz.' })
     }
 
-    console.error('updateWrongQuestionAnalysisPhotoHandler failed', error)
+    console.error('addWrongQuestionAnalysisPhotoHandler failed', error)
     return json(500, { error: 'Hata analiz görseli kaydedilemedi.' })
   }
 }
 
-// Yanlış eklenmiş bir Hata Analiz görselini kaldırır. Sadece veli.
+// Bir Hata Analiz görselini kaldırır. Sadece veli.
 async function deleteWrongQuestionAnalysisPhotoHandler(request) {
   try {
     const wrongQuestionId = request.params.wrongQuestionId
+    const photoId = request.params.photoId
     const payload = await request.json().catch(() => null)
     const { error, studentId, actorRole } = await requireStudentWriteContext(request, {
       studentId: payload?.studentId,
@@ -673,21 +689,23 @@ async function deleteWrongQuestionAnalysisPhotoHandler(request) {
     }
 
     const requestDb = await withRequest({
-      id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
+      photoId: { type: sql.UniqueIdentifier, value: photoId },
+      wrongQuestionId: { type: sql.UniqueIdentifier, value: wrongQuestionId },
       studentId: { type: sql.UniqueIdentifier, value: studentId },
     })
     const result = await requestDb.query(`
-      UPDATE dbo.WrongQuestions
-      SET analysis_photo_url = NULL, analysis_photo_added_by = NULL, analysis_photo_added_at = NULL
-      OUTPUT ${WRONG_QUESTION_OUTPUT_COLUMNS}
-      WHERE id = @id AND student_id = @studentId;
+      DELETE p
+      OUTPUT deleted.id
+      FROM dbo.WrongQuestionAnalysisPhotos p
+      INNER JOIN dbo.WrongQuestions wq ON wq.id = p.wrong_question_id
+      WHERE p.id = @photoId AND p.wrong_question_id = @wrongQuestionId AND wq.student_id = @studentId;
     `)
 
     if (!result.recordset[0]) {
       return json(404, { error: 'Kayıt bulunamadı.' })
     }
 
-    return json(200, { wrongQuestion: sanitizeWrongQuestion(result.recordset[0]) })
+    return json(200, { ok: true })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -702,9 +720,9 @@ async function deleteWrongQuestionAnalysisPhotoHandler(request) {
   }
 }
 
-// "Hata Analizlerim" menüsü: bu öğrencinin (veli seçtiği çocuk ya da öğrencinin kendisi) Hata
-// Analiz görseli eklenmiş tüm sorularını, YayınEvi/Kaynak/İçerik/Test/Soru No kırılımıyla listeler.
-// Fotoğrafın kendisini taşımaz (tembel çekim, bkz. getWrongQuestionAnalysisPhotoHandler).
+// "Hata Analizlerim" menüsü: bu öğrencinin (veli seçtiği çocuk ya da öğrencinin kendisi) en az bir
+// Hata Analiz görseli eklenmiş tüm sorularını, YayınEvi/Kaynak/İçerik/Test/Soru No kırılımıyla
+// listeler. Görsellerin kendisini taşımaz (bkz. listWrongQuestionAnalysisPhotoRecordsHandler).
 async function listWrongQuestionAnalysisPhotosHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
@@ -716,20 +734,26 @@ async function listWrongQuestionAnalysisPhotosHandler(request) {
       studentId: { type: sql.UniqueIdentifier, value: studentId },
     })
     const result = await requestDb.query(`
-      SELECT wq.id, wq.subject, wq.question_number, wq.analysis_photo_added_at,
+      SELECT wq.id, wq.subject, wq.question_number,
+             photos.photo_count, photos.last_added_at,
              COALESCE(tp.name, wq.topic) AS topic,
              COALESCE(rb.name, rb2.name, wq.book_name) AS book_name,
              COALESCE(pub.name, pub2.name, wq.publisher_name) AS publisher_name,
              t.topic_name, wq.test_name
       FROM dbo.WrongQuestions wq
+      INNER JOIN (
+        SELECT wrong_question_id, COUNT(*) AS photo_count, MAX(created_at) AS last_added_at
+        FROM dbo.WrongQuestionAnalysisPhotos
+        GROUP BY wrong_question_id
+      ) photos ON photos.wrong_question_id = wq.id
       LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
       LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
       LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
       LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
       LEFT JOIN dbo.ResourceBooks rb2 ON rb2.id = wq.resource_book_id
       LEFT JOIN dbo.Publishers pub2 ON pub2.id = rb2.publisher_id
-      WHERE wq.student_id = @studentId AND wq.analysis_photo_url IS NOT NULL
-      ORDER BY wq.analysis_photo_added_at DESC;
+      WHERE wq.student_id = @studentId
+      ORDER BY photos.last_added_at DESC;
     `)
 
     return json(200, {
@@ -742,7 +766,8 @@ async function listWrongQuestionAnalysisPhotosHandler(request) {
         bookName: row.book_name || undefined,
         publisherName: row.publisher_name || undefined,
         questionNumber: row.question_number || undefined,
-        analysisPhotoAddedAt: row.analysis_photo_added_at,
+        analysisPhotoCount: row.photo_count,
+        analysisPhotoAddedAt: row.last_added_at,
       })),
     })
   } catch (error) {
@@ -1802,8 +1827,8 @@ module.exports = {
   fetchWrongQuestionBookImagesByName,
   getWrongQuestionPhotoHandler,
   updateWrongQuestionPhotoHandler,
-  getWrongQuestionAnalysisPhotoHandler,
-  updateWrongQuestionAnalysisPhotoHandler,
+  listWrongQuestionAnalysisPhotoRecordsHandler,
+  addWrongQuestionAnalysisPhotoHandler,
   deleteWrongQuestionAnalysisPhotoHandler,
   listWrongQuestionAnalysisPhotosHandler,
   addWrongQuestionHandler,

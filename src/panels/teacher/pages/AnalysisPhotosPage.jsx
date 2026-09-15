@@ -1,6 +1,6 @@
 import {
   getTeacherWrongQuestionAnalysisPhotos,
-  getTeacherWrongQuestionAnalysisPhoto,
+  getTeacherWrongQuestionAnalysisPhotoRecords,
 } from '../../../services/teacherService'
 import AnalysisPhotosPage from '../../shared/AnalysisPhotosPage'
 
@@ -11,7 +11,7 @@ export default function TeacherAnalysisPhotosPage() {
   return (
     <AnalysisPhotosPage
       fetchItems={getTeacherWrongQuestionAnalysisPhotos}
-      fetchPhoto={getTeacherWrongQuestionAnalysisPhoto}
+      fetchPhotos={getTeacherWrongQuestionAnalysisPhotoRecords}
       showStudentColumn
       subtitle="Öğrencilerinin Hata Defteri'nde eklenen hata analiz görselleri (sadece kendi derslerin)."
     />
