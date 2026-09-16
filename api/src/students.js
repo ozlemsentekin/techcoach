@@ -3,8 +3,6 @@ const { isConfigError } = require('./config')
 const { accountDisabledResponse, clearSessionHeaders, createSessionHeaders, json } = require('./http')
 const {
   createSessionToken,
-  defaultPasswordForPhone,
-  hashPassword,
   isSessionError,
   normalizeEmail,
   normalizePhone,
@@ -618,16 +616,6 @@ async function createStudentHandler(request) {
       return json(400, { error: 'Telefon numarası geçersiz. Örn: 05XX XXX XX XX' })
     }
 
-    let password = String(payload.password || '').trim()
-    if (!password) {
-      // Öğrenciye şifre girilmediyse (sihirbazın 1. adımı), varsayılan olarak
-      // telefon numarasının son 6 hanesi kullanılır — profil güncellemede de aynı kural geçerli.
-      password = defaultPasswordForPhone(phone)
-    }
-    if (password.length < 6 || password.length > 72) {
-      return json(400, { error: 'Şifre 6 ile 72 karakter arasında olmalı.' })
-    }
-
     const gender = String(payload.gender || '').trim()
     if (!STUDENT_GENDERS.has(gender)) {
       return json(400, { error: 'Cinsiyet seçilmeli.' })
@@ -688,13 +676,11 @@ async function createStudentHandler(request) {
     }
 
     const now = new Date()
-    const passwordHash = await hashPassword(password)
 
     const insertDb = await withRequest({
       fullName: { type: sql.NVarChar(120), value: fullName },
       email: { type: sql.NVarChar(320), value: email },
       phone: { type: sql.NVarChar(30), value: phone },
-      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       role: { type: sql.NVarChar(20), value: 'ogrenci' },
       parentId: { type: sql.UniqueIdentifier, value: parentId },
       consentAt: { type: sql.DateTime2, value: now },
@@ -703,10 +689,10 @@ async function createStudentHandler(request) {
     let insertResult
     try {
       insertResult = await insertDb.query(`
-        INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, role, parent_id, aydinlatma_accepted_at, kvkk_accepted_at)
+        INSERT INTO dbo.Users (full_name, email, phone_number, has_panel_access, role, parent_id, aydinlatma_accepted_at, kvkk_accepted_at)
         OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.role, inserted.created_at,
                0 AS resource_count, 0 AS teacher_count
-        VALUES (@fullName, @email, @phone, @passwordHash, @role, @parentId, @consentAt, @consentAt);
+        VALUES (@fullName, @email, @phone, 1, @role, @parentId, @consentAt, @consentAt);
       `)
     } catch (insertError) {
       if (insertError.number === 2601 || insertError.number === 2627) {
@@ -1103,31 +1089,27 @@ async function ensureTeacherPanelUser({ requestFactory = withRequest, fullName, 
       )
     }
 
-    return { teacherUserId: existingUser.id, isNewAccount: false, temporaryPassword: null }
+    return { teacherUserId: existingUser.id, isNewAccount: false }
   }
 
-  const temporaryPassword = defaultPasswordForPhone(normalizedPhone)
-  const passwordHash = await hashPassword(temporaryPassword)
   const now = new Date()
   const insertDb = await requestFactory({
     fullName: { type: sql.NVarChar(120), value: fullName },
     phone: { type: sql.NVarChar(20), value: normalizedPhone },
-    passwordHash: { type: sql.NVarChar(255), value: passwordHash },
     role: { type: sql.NVarChar(20), value: 'ogretmen' },
     consentAt: { type: sql.DateTime2, value: now },
   })
 
   try {
     const insertResult = await insertDb.query(`
-      INSERT INTO dbo.Users (full_name, phone_number, password_hash, role, aydinlatma_accepted_at, kvkk_accepted_at)
+      INSERT INTO dbo.Users (full_name, phone_number, has_panel_access, role, aydinlatma_accepted_at, kvkk_accepted_at)
       OUTPUT inserted.id
-      VALUES (@fullName, @phone, @passwordHash, @role, @consentAt, @consentAt);
+      VALUES (@fullName, @phone, 1, @role, @consentAt, @consentAt);
     `)
 
     return {
       teacherUserId: insertResult.recordset[0].id,
       isNewAccount: true,
-      temporaryPassword,
     }
   } catch (insertError) {
     if (!isUniqueViolation(insertError)) {
@@ -1143,7 +1125,7 @@ async function ensureTeacherPanelUser({ requestFactory = withRequest, fullName, 
     `)
     const retryUser = retryResult.recordset[0]
     if (retryUser?.role === 'ogretmen') {
-      return { teacherUserId: retryUser.id, isNewAccount: false, temporaryPassword: null }
+      return { teacherUserId: retryUser.id, isNewAccount: false }
     }
 
     throw createPublicError(
@@ -1247,7 +1229,6 @@ async function grantTeacherAccessHandler(request) {
       teacher: teachers.find((item) => item.id === teacherId) || null,
       teachers,
       isNewAccount: accessResult.isNewAccount,
-      temporaryPassword: accessResult.temporaryPassword,
     })
   } catch (error) {
     if (error.statusCode && error.publicMessage) {
@@ -1348,7 +1329,6 @@ async function createStudentTeacherHandler(request) {
       teacherCount: teachers.length,
       teacherAccess: {
         isNewAccount: accessResult.isNewAccount,
-        temporaryPassword: accessResult.temporaryPassword,
       },
     })
   } catch (error) {

@@ -1,5 +1,4 @@
 const crypto = require('crypto')
-const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const { getAuthConfig, getRuntimeConfig } = require('./config')
 
@@ -25,35 +24,6 @@ function normalizePhone(value) {
   }
 
   return `+90${digits}`
-}
-
-// Netgsm hesabı kurulana kadar geçici olarak: her kullanıcının şifresi telefon
-// numarasının son 6 hanesidir (kayıt anında otomatik atanır). Netgsm bağlandığında
-// gerçek SMS/OTP akışına dönülebilir; bu yardımcı yalnızca varsayılan şifreyi türetir,
-// ilk doğrudan panel girişinde bu şifrenin değiştirilmesi zorunludur.
-function defaultPasswordForPhone(phone) {
-  return String(phone || '').replace(/\D/g, '').slice(-6)
-}
-
-// bcryptjs is a pure-JS implementation with no libuv thread-pool offload, so
-// hashing/comparing blocks the Node.js event loop for the full duration —
-// cost 12 runs ~4x longer than cost 10 and directly hurts login throughput
-// under concurrent traffic. Old cost-12 hashes keep verifying correctly
-// (bcrypt encodes the cost used at hash time in the hash itself); use
-// needsPasswordRehash() to migrate them down to BCRYPT_COST on next login.
-const BCRYPT_COST = 10
-
-async function hashPassword(password) {
-  return bcrypt.hash(password, BCRYPT_COST)
-}
-
-async function verifyPassword(password, hash) {
-  return bcrypt.compare(password, hash)
-}
-
-function needsPasswordRehash(hash) {
-  const match = /^\$2[aby]\$(\d+)\$/.exec(String(hash || ''))
-  return Boolean(match) && Number(match[1]) > BCRYPT_COST
 }
 
 function generateOtpCode() {
@@ -84,13 +54,6 @@ function createSessionToken(user, options = {}) {
     email: user.email,
     fullName: user.fullName,
     role: user.role,
-  }
-
-  // Kendi (delege olmayan) oturumlarda başlangıç şifresi durumunu token'a gömüyoruz; böylece
-  // passwordGate her panel isteğinde DB'ye gitmeden karar verebiliyor. Claim'in hiç olmaması
-  // = bu özellikten önce üretilmiş eski token → gate DB fallback'ine düşer.
-  if (!options.actingParentId && !options.actingAdminId) {
-    payload.mustChangePassword = Boolean(user.mustChangePassword)
   }
 
   if (options.actingParentId) {
@@ -162,27 +125,27 @@ function verifyHandoffToken(token) {
   return payload
 }
 
-// Şifremi unuttum akışında OTP doğrulandıktan sonra, kullanıcıyı doğrudan oturum açmadan
-// önce "yeni şifre belirleme" ekranına taşımak için kısa ömürlü (60 sn) tek amaçlı token.
-// createHandoffToken ile aynı desen: purpose claim'i sayesinde normal oturum çerezi olarak
-// kullanılamaz (bkz. verifySessionToken).
-function createPasswordResetToken(userId) {
+// Kayıt akışında OTP ile telefon sahipliği doğrulandıktan sonra, formun geri kalanını
+// (ad/rol/branş/kupon/onay) doldurmak için kısa ömürlü (10 dk) tek amaçlı token — tam oturum
+// değil, sadece "bu telefonu doğruladın" kanıtı. createHandoffToken ile aynı desen: purpose
+// claim'i sayesinde normal oturum çerezi olarak kullanılamaz (bkz. verifySessionToken).
+function createPhoneVerifiedToken(phone) {
   const { jwtSecret } = getAuthConfig()
-  return jwt.sign({ sub: userId, purpose: 'password-reset' }, jwtSecret, {
-    expiresIn: 60,
+  return jwt.sign({ phone, purpose: 'phone-verified' }, jwtSecret, {
+    expiresIn: 10 * 60,
     issuer: 'techcoach-api',
     audience: 'techcoach-web',
   })
 }
 
-function verifyPasswordResetToken(token) {
+function verifyPhoneVerifiedToken(token) {
   const { jwtSecret } = getAuthConfig()
   const payload = jwt.verify(token, jwtSecret, {
     issuer: 'techcoach-api',
     audience: 'techcoach-web',
   })
-  if (payload.purpose !== 'password-reset' || !payload.sub) {
-    throw new jwt.JsonWebTokenError('invalid password reset token')
+  if (payload.purpose !== 'phone-verified' || !payload.phone) {
+    throw new jwt.JsonWebTokenError('invalid phone-verified token')
   }
   return payload
 }
@@ -198,18 +161,14 @@ module.exports = {
   createSessionToken,
   createHandoffToken,
   verifyHandoffToken,
-  createPasswordResetToken,
-  verifyPasswordResetToken,
-  defaultPasswordForPhone,
+  createPhoneVerifiedToken,
+  verifyPhoneVerifiedToken,
   generateOtpCode,
   hashOtpCode,
-  hashPassword,
   isSessionError,
-  needsPasswordRehash,
   normalizeEmail,
   normalizePhone,
   readSessionToken,
   verifyOtpCode,
-  verifyPassword,
   verifySessionToken,
 }

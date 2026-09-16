@@ -11,9 +11,9 @@ export default function GrantParentAccessDialog({ parent, onGranted, onClose }) 
     setSaving(true)
     setError('')
     try {
-      const data = await grantParentAccess(parent.id)
+      await grantParentAccess(parent.id)
       onGranted(parent.id)
-      setResult(data)
+      setResult(true)
     } catch (err) {
       setError(err.message || 'Panel erişimi verilemedi, tekrar deneyin.')
     } finally {
@@ -32,13 +32,10 @@ export default function GrantParentAccessDialog({ parent, onGranted, onClose }) 
 
           <div className="mt-3 flex flex-col gap-2 text-base text-panel-text-muted">
             <p>
-              <strong className="text-panel-text">{parent.fullName}</strong> için geçici şifre telefon
-              numarasının son 6 hanesidir:
+              <strong className="text-panel-text">{parent.fullName}</strong> artık panele erişebilir. Kendi
+              telefon numarasıyla giriş yapıp SMS ile gelecek kodu girmesi yeterli — iletmeniz gereken bir
+              şifre yok.
             </p>
-            <p className="rounded-xl bg-panel-blue-soft px-4 py-3 text-center text-xl font-bold tracking-widest text-panel-blue">
-              {result.temporaryPassword}
-            </p>
-            <p>Bu bilgiyi veliye iletin; veli telefon numarası ve bu şifre ile giriş yapabilir.</p>
           </div>
 
           <button

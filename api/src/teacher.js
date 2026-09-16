@@ -2,8 +2,6 @@ const { sql, withRequest, withTransaction } = require('./db')
 const { isConfigError } = require('./config')
 const { clearSessionHeaders, json } = require('./http')
 const {
-  defaultPasswordForPhone,
-  hashPassword,
   isSessionError,
   normalizePhone,
 } = require('./security')
@@ -589,7 +587,7 @@ const STUDENT_GENDERS = new Set(['kiz', 'erkek'])
 const PROFILE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 // createTeacherStudentHandler ile eklenen öğrencinin velisi hiçbir zaman panele giriş yapmamış
-// olabilir (password_hash yok) — bu durumda Temel Bilgiler adımındaki alanlar hiç doldurulamaz.
+// olabilir (has_panel_access=0) — bu durumda Temel Bilgiler adımındaki alanlar hiç doldurulamaz.
 // Bu uç, sadece öğretmenin bizzat eklediği (funded_by_teacher_id kendisi olan) öğrenciler için
 // bu alanların öğretmen panelinden düzenlenmesine izin verir.
 async function updateTeacherStudentProfileHandler(request) {
@@ -668,11 +666,10 @@ async function updateTeacherStudentProfileHandler(request) {
       return json(400, { error: geoValidation.error })
     }
 
-    // Öğrenci telefonu Users.phone_number'da da tutulur (liste/detay uçları buradan okur,
-    // giriş şifresi de telefonun son 6 hanesinden türetilir) — studentProfile.js'teki veli
-    // akışıyla aynı senkron burada da yapılır.
-    const passwordHash = phone ? await hashPassword(defaultPasswordForPhone(phone)) : null
-
+    // Öğrenci telefonu Users.phone_number'da da tutulur (liste/detay uçları buradan okur) —
+    // studentProfile.js'teki veli akışıyla aynı senkron burada da yapılır. Telefon yeni
+    // verildiğinde/değiştiğinde öğrenci artık bağımsız OTP ile girebilsin diye
+    // has_panel_access açılır (eskiden burada varsayılan şifre türetilip yazılıyordu).
     const updateDb = await withRequest({
       studentId: { type: sql.UniqueIdentifier, value: studentId },
       fullName: { type: sql.NVarChar(120), value: fullName },
@@ -680,7 +677,6 @@ async function updateTeacherStudentProfileHandler(request) {
       birthDate: { type: sql.Date, value: birthDate },
       gender: { type: sql.NVarChar(20), value: gender },
       phone: { type: sql.NVarChar(30), value: phone },
-      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       provinceId: { type: sql.UniqueIdentifier, value: provinceId },
       districtId: { type: sql.UniqueIdentifier, value: districtId },
       schoolId: { type: sql.UniqueIdentifier, value: schoolId },
@@ -691,9 +687,9 @@ async function updateTeacherStudentProfileHandler(request) {
       UPDATE dbo.Users
       SET full_name = @fullName,
           phone_number = @phone,
-          password_hash = CASE
-            WHEN @phone IS NOT NULL AND (phone_number IS NULL OR phone_number <> @phone) THEN @passwordHash
-            ELSE password_hash
+          has_panel_access = CASE
+            WHEN @phone IS NOT NULL AND (phone_number IS NULL OR phone_number <> @phone) THEN 1
+            ELSE has_panel_access
           END
       WHERE id = @studentId;
 
@@ -903,7 +899,7 @@ async function listTeacherParentsHandler(request) {
     const requestDb = await withRequest({ teacherUserId: { type: sql.UniqueIdentifier, value: teacherUserId } })
     const result = await requestDb.query(`
       SELECT p.id AS parent_id, p.full_name AS parent_full_name, p.phone_number AS parent_phone,
-             p.password_hash AS parent_password_hash,
+             p.has_panel_access AS parent_has_panel_access,
              u.id AS student_id, u.full_name AS student_full_name
       FROM dbo.StudentTeachers st
       INNER JOIN dbo.Users u ON u.id = st.student_id
@@ -924,7 +920,7 @@ async function listTeacherParentsHandler(request) {
           id: record.parent_id,
           fullName: record.parent_full_name,
           phone: record.parent_phone,
-          hasPanelAccess: Boolean(record.parent_password_hash),
+          hasPanelAccess: Boolean(record.parent_has_panel_access),
           students: [student],
         })
       }
@@ -937,8 +933,9 @@ async function listTeacherParentsHandler(request) {
 }
 
 // Bir öğretmenin bir öğrencisinin velisine ilk kez panel erişimi açar (veli şu ana kadar
-// hiç giriş yapamıyorsa, password_hash NULL'dır). Geçici şifre `defaultPasswordForPhone`
-// ile aynı desende üretilir — grantTeacherAccessHandler (students.js) ile simetrik bir akış.
+// hiç giriş yapamıyorsa, has_panel_access 0'dır). OTP-only girişte artık iletilecek bir
+// şifre yok — veli kendi telefonuna gelecek kodla giriş yapar; grantTeacherAccessHandler
+// (students.js) ile simetrik bir akış.
 async function grantParentAccessHandler(request) {
   try {
     const { error, teacherUserId } = await requireTeacherSession(request)
@@ -962,31 +959,27 @@ async function grantParentAccessHandler(request) {
 
     const parentDb = await withRequest({ parentId: { type: sql.UniqueIdentifier, value: parentId } })
     const parentResult = await parentDb.query(`
-      SELECT TOP 1 phone_number, password_hash FROM dbo.Users WHERE id = @parentId AND role = 'ebeveyn';
+      SELECT TOP 1 phone_number, has_panel_access FROM dbo.Users WHERE id = @parentId AND role = 'ebeveyn';
     `)
     const parent = parentResult.recordset[0]
     if (!parent) {
       return json(404, { error: 'Veli bulunamadı.' })
     }
-    if (parent.password_hash) {
+    if (parent.has_panel_access) {
       return json(409, { error: 'Bu veli zaten panel erişimine sahip.' })
     }
     if (!parent.phone_number) {
       return json(400, { error: 'Velinin geçerli bir cep telefonu numarası olmalı ki panele giriş yapabilsin.' })
     }
 
-    const temporaryPassword = defaultPasswordForPhone(parent.phone_number)
-    const passwordHash = await hashPassword(temporaryPassword)
-
     const updateDb = await withRequest({
       parentId: { type: sql.UniqueIdentifier, value: parentId },
-      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
     })
     await updateDb.query(`
-      UPDATE dbo.Users SET password_hash = @passwordHash WHERE id = @parentId;
+      UPDATE dbo.Users SET has_panel_access = 1 WHERE id = @parentId;
     `)
 
-    return json(200, { temporaryPassword })
+    return json(200, { ok: true })
   } catch (error) {
     return handleError(error, 'grantParentAccessHandler', 'Veliye panel erişimi verilemedi.')
   }
@@ -1097,31 +1090,30 @@ async function createTeacherStudentHandler(request) {
 
     const existingParentDb = await withRequest({ phone: { type: sql.NVarChar(20), value: parentPhone } })
     const existingParentResult = await existingParentDb.query(`
-      SELECT TOP 1 id, password_hash FROM dbo.Users WHERE role = 'ebeveyn' AND phone_number = @phone;
+      SELECT TOP 1 id, has_panel_access FROM dbo.Users WHERE role = 'ebeveyn' AND phone_number = @phone;
     `)
     const existingParent = existingParentResult.recordset[0]
 
     if (existingParent) {
       parentId = existingParent.id
-      parentHasPanelAccess = Boolean(existingParent.password_hash)
+      parentHasPanelAccess = Boolean(existingParent.has_panel_access)
       consumesQuota = !(await hasActiveParentEntitlement(parentId))
     } else {
       consumesQuota = true
       parentHasPanelAccess = true
-      // Öğretmenin eklediği veli de öğrenci gibi hemen panele girebilsin: varsayılan
-      // şifre (telefon numarasının son 6 hanesi) kayıt anında atanır.
-      const parentPasswordHash = await hashPassword(defaultPasswordForPhone(parentPhone))
+      // Öğretmenin eklediği veli de öğrenci gibi hemen panele girebilsin: OTP-only girişte
+      // buna gerek kalmadan doğrudan has_panel_access açılır (eskiden burada varsayılan
+      // şifre türetilip yazılıyordu).
       const insertParentDb = await withRequest({
         fullName: { type: sql.NVarChar(120), value: parentFullName },
         phone: { type: sql.NVarChar(20), value: parentPhone },
         role: { type: sql.NVarChar(20), value: 'ebeveyn' },
-        passwordHash: { type: sql.NVarChar(255), value: parentPasswordHash },
       })
       try {
         const insertParentResult = await insertParentDb.query(`
-          INSERT INTO dbo.Users (full_name, phone_number, role, password_hash)
+          INSERT INTO dbo.Users (full_name, phone_number, role, has_panel_access)
           OUTPUT inserted.id
-          VALUES (@fullName, @phone, @role, @passwordHash);
+          VALUES (@fullName, @phone, @role, 1);
         `)
         parentId = insertParentResult.recordset[0].id
       } catch (insertError) {
@@ -1129,12 +1121,12 @@ async function createTeacherStudentHandler(request) {
         if (insertError.number === 2601 || insertError.number === 2627) {
           const retryDb = await withRequest({ phone: { type: sql.NVarChar(20), value: parentPhone } })
           const retryResult = await retryDb.query(`
-            SELECT TOP 1 id, password_hash FROM dbo.Users WHERE phone_number = @phone;
+            SELECT TOP 1 id, has_panel_access FROM dbo.Users WHERE phone_number = @phone;
           `)
           const retryParent = retryResult.recordset[0]
           if (!retryParent) throw insertError
           parentId = retryParent.id
-          parentHasPanelAccess = Boolean(retryParent.password_hash)
+          parentHasPanelAccess = Boolean(retryParent.has_panel_access)
           consumesQuota = !(await hasActiveParentEntitlement(parentId))
         } else {
           throw insertError
@@ -1154,29 +1146,25 @@ async function createTeacherStudentHandler(request) {
     `)
     const parentConsent = parentConsentResult.recordset[0]
 
-    // Telefonu verilen öğrenci de veli gibi hemen giriş yapabilsin: varsayılan şifre
-    // (telefon numarasının son 6 hanesi) kayıt anında atanır. Telefon verilmemişse
-    // password_hash NULL kalır (öğrenci yalnızca veli oturumundan yönetilir).
-    const studentPasswordHash = studentPhone
-      ? await hashPassword(defaultPasswordForPhone(studentPhone))
-      : null
-
+    // Telefonu verilen öğrenci de veli gibi hemen giriş yapabilsin diye has_panel_access
+    // açılır. Telefon verilmemişse has_panel_access 0 kalır (öğrenci yalnızca veli
+    // oturumundan yönetilir, kendi başına OTP ile giremez).
     const insertStudentDb = await withRequest({
       fullName: { type: sql.NVarChar(120), value: studentFullName },
       role: { type: sql.NVarChar(20), value: 'ogrenci' },
       phone: { type: sql.NVarChar(30), value: studentPhone },
       parentId: { type: sql.UniqueIdentifier, value: parentId },
       fundedByTeacherId: { type: sql.UniqueIdentifier, value: consumesQuota ? teacherUserId : null },
-      passwordHash: { type: sql.NVarChar(255), value: studentPasswordHash },
+      hasPanelAccess: { type: sql.Bit, value: studentPhone ? 1 : 0 },
       aydinlatmaAcceptedAt: { type: sql.DateTime2, value: parentConsent?.aydinlatma_accepted_at || null },
       kvkkAcceptedAt: { type: sql.DateTime2, value: parentConsent?.kvkk_accepted_at || null },
     })
     let studentResult
     try {
       studentResult = await insertStudentDb.query(`
-        INSERT INTO dbo.Users (full_name, role, phone_number, parent_id, funded_by_teacher_id, password_hash, aydinlatma_accepted_at, kvkk_accepted_at)
+        INSERT INTO dbo.Users (full_name, role, phone_number, parent_id, funded_by_teacher_id, has_panel_access, aydinlatma_accepted_at, kvkk_accepted_at)
         OUTPUT inserted.id
-        VALUES (@fullName, @role, @phone, @parentId, @fundedByTeacherId, @passwordHash, @aydinlatmaAcceptedAt, @kvkkAcceptedAt);
+        VALUES (@fullName, @role, @phone, @parentId, @fundedByTeacherId, @hasPanelAccess, @aydinlatmaAcceptedAt, @kvkkAcceptedAt);
       `)
     } catch (insertError) {
       if (studentPhone && (insertError.number === 2601 || insertError.number === 2627)) {

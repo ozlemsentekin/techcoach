@@ -2,7 +2,7 @@ const crypto = require('crypto')
 const { sql, withRequest, withTransaction } = require('./db')
 const { isConfigError, getIyzicoConfig } = require('./config')
 const { createSessionHeaders, json } = require('./http')
-const { createSessionToken, createHandoffToken, defaultPasswordForPhone, hashPassword, isSessionError } = require('./security')
+const { createSessionToken, createHandoffToken, isSessionError } = require('./security')
 const { requireParentSession } = require('./students')
 const { requireTeacherSession } = require('./teacherScope')
 const {
@@ -371,7 +371,6 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
       }
     }
 
-    const passwordHash = await hashPassword(defaultPasswordForPhone(phone))
     const now = new Date()
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
 
@@ -379,7 +378,6 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
       fullName: { type: sql.NVarChar(120), value: fullName },
       phone: { type: sql.NVarChar(20), value: phone },
       email: { type: sql.NVarChar(320), value: fields.email },
-      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       parentType: { type: sql.NVarChar(10), value: parentType },
       aydinlatmaAt: { type: sql.DateTime2, value: now },
       kvkkAt: { type: sql.DateTime2, value: now },
@@ -387,9 +385,9 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
     })
     const insertResult = await insertDb.query(`
       INSERT INTO dbo.PendingParentRegistrations
-        (full_name, phone_number, email, password_hash, parent_type, aydinlatma_accepted_at, kvkk_accepted_at, expires_at)
+        (full_name, phone_number, email, parent_type, aydinlatma_accepted_at, kvkk_accepted_at, expires_at)
       OUTPUT inserted.id
-      VALUES (@fullName, @phone, @email, @passwordHash, @parentType, @aydinlatmaAt, @kvkkAt, @expiresAt);
+      VALUES (@fullName, @phone, @email, @parentType, @aydinlatmaAt, @kvkkAt, @expiresAt);
     `)
     const pendingId = insertResult.recordset[0].id
 
@@ -507,7 +505,7 @@ async function resolveCheckoutSession(token) {
 async function consumePendingParentRegistration(id) {
   const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: id } })
   const result = await requestDb.query(`
-    SELECT TOP 1 id, full_name, phone_number, email, password_hash, parent_type, aydinlatma_accepted_at, kvkk_accepted_at
+    SELECT TOP 1 id, full_name, phone_number, email, parent_type, aydinlatma_accepted_at, kvkk_accepted_at
     FROM dbo.PendingParentRegistrations
     WHERE id = @id AND consumed_at IS NULL AND expires_at > SYSUTCDATETIME();
   `)
@@ -522,17 +520,16 @@ async function createParentFromPendingRegistration(pending) {
       fullName: { type: sql.NVarChar(120), value: pending.full_name },
       phone: { type: sql.NVarChar(20), value: pending.phone_number },
       email: { type: sql.NVarChar(320), value: pending.email },
-      passwordHash: { type: sql.NVarChar(255), value: pending.password_hash },
       parentType: { type: sql.NVarChar(10), value: pending.parent_type },
       aydinlatmaAt: { type: sql.DateTime2, value: pending.aydinlatma_accepted_at },
       kvkkAt: { type: sql.DateTime2, value: pending.kvkk_accepted_at },
     })
     const result = await insertUserDb.query(`
-      INSERT INTO dbo.Users (full_name, phone_number, email, password_hash, role, parent_type, aydinlatma_accepted_at, kvkk_accepted_at)
+      INSERT INTO dbo.Users (full_name, phone_number, email, has_panel_access, role, parent_type, aydinlatma_accepted_at, kvkk_accepted_at)
       OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
              inserted.is_admin, inserted.can_manage_library, inserted.last_login_at, inserted.created_at,
              inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at, inserted.teacher_subject_ids_json, inserted.parent_type
-      VALUES (@fullName, @phone, @email, @passwordHash, 'ebeveyn', @parentType, @aydinlatmaAt, @kvkkAt);
+      VALUES (@fullName, @phone, @email, 1, 'ebeveyn', @parentType, @aydinlatmaAt, @kvkkAt);
     `)
     const insertedUser = sanitizeUser(result.recordset[0])
 
@@ -680,8 +677,6 @@ async function iyzicoCheckoutCallbackHandler(request) {
       }
       const newUser = await createParentFromPendingRegistration(pending)
       parentId = newUser.id
-      // Hesap başlangıç şifresiyle (telefonun son 6 hanesi) açılır — ilk panel girişinde değişmeli.
-      newUser.mustChangePassword = true
       const sessionToken = createSessionToken(newUser)
       sessionHeaders = createSessionHeaders(sessionToken)
       handoffToken = createHandoffToken(newUser.id)

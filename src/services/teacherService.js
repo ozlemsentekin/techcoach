@@ -64,7 +64,7 @@ export async function getTeacherParents() {
   return data.parents
 }
 
-/** Veliye ilk kez panel erişimi açar (henüz giriş yapamıyorsa). @returns {Promise<{temporaryPassword: string}>} */
+/** Veliye ilk kez panel erişimi açar (henüz giriş yapamıyorsa). @returns {Promise<{ok: boolean}>} */
 export async function grantParentAccess(parentId) {
   return authRequest(`/api/panel-teacher/parents/${parentId}/grant-access`, { method: 'POST' })
 }

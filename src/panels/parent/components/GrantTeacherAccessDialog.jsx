@@ -37,12 +37,9 @@ export default function GrantTeacherAccessDialog({ teacher, associationCount, on
             <div className="mt-3 flex flex-col gap-2 text-base text-panel-text-muted">
               <p>
                 <strong className="text-panel-text">{teacher.fullName}</strong> için yeni bir öğretmen hesabı
-                oluşturuldu. Geçici şifre telefon numarasının son 6 hanesidir:
+                oluşturuldu. Öğretmen kendi telefon numarasıyla giriş yapıp SMS ile gelecek kodu girebilir —
+                iletmeniz gereken bir şifre yok.
               </p>
-              <p className="rounded-xl bg-panel-blue-soft px-4 py-3 text-center text-xl font-bold tracking-widest text-panel-blue">
-                {result.temporaryPassword}
-              </p>
-              <p>Bu bilgiyi öğretmenle paylaşın; öğretmen telefon numarası ve bu şifre ile giriş yapabilir.</p>
             </div>
           ) : (
             <p className="mt-3 text-base text-panel-text-muted">

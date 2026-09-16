@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { authRequest, invalidateCache, setAccountDisabledHandler, setConsentRequiredHandler, setPasswordChangeRequiredHandler } from '../services/authClient'
+import { authRequest, invalidateCache, setAccountDisabledHandler, setConsentRequiredHandler } from '../services/authClient'
 import AuthContext from './authContextObject'
 
 export function AuthProvider({ children }) {
@@ -13,9 +13,6 @@ export function AuthProvider({ children }) {
     // Herhangi bir API çağrısı backend'den CONSENT_REQUIRED dönerse (ör. onay durumu
     // sunucu tarafında güncel değil), authUser.needsConsent'i işaretleyip RequireRole'ün
     // ConsentGate'i göstermesini sağlar — düz bir hata banner'ı yerine gerçek onay ekranı açılır.
-    setPasswordChangeRequiredHandler(() => {
-      setAuthUser((current) => current ? { ...current, mustChangePassword: true } : current)
-    })
     setConsentRequiredHandler(() => {
       setAuthUser((current) => (current && !current.needsConsent ? { ...current, needsConsent: true } : current))
     })
@@ -26,7 +23,6 @@ export function AuthProvider({ children }) {
       setAuthError('Hesabınız pasife alınmış. Erişim için site yöneticisiyle iletişime geçin.')
     })
     return () => {
-      setPasswordChangeRequiredHandler(null)
       setConsentRequiredHandler(null)
       setAccountDisabledHandler(null)
     }
@@ -64,20 +60,62 @@ export function AuthProvider({ children }) {
     setAuthMessage('')
   }
 
-  const login = async (payload) => {
+  // Giriş/kayıt akışının ilk adımı: telefona SMS kodu gönderir. purpose='login' mevcut bir
+  // kullanıcı için, purpose='register' henüz kayıtlı olmayan bir telefon için.
+  const requestOtp = async (purpose, phone, turnstileToken) => {
     setAuthLoading(true)
     setAuthError('')
     setAuthMessage('')
 
     try {
-      const data = await authRequest('/api/auth/login', {
+      return await authRequest('/api/auth/otp/request', {
         method: 'POST',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ purpose, phone, turnstileToken }),
+      })
+    } catch (error) {
+      setAuthError(error.message)
+      throw error
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  // Giriş kodunu doğrular ve başarılıysa doğrudan oturum açar.
+  const verifyLoginOtp = async (phone, code) => {
+    setAuthLoading(true)
+    setAuthError('')
+    setAuthMessage('')
+
+    try {
+      const data = await authRequest('/api/auth/otp/verify', {
+        method: 'POST',
+        body: JSON.stringify({ purpose: 'login', phone, code }),
       })
       invalidateCache()
       setAuthUser(data.user)
       setAuthMessage('Giriş başarılı.')
       return data.user
+    } catch (error) {
+      setAuthError(error.message)
+      throw error
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  // Kayıt kodunu doğrular — henüz hesap açmaz, sadece telefon sahipliğini kanıtlayan kısa
+  // ömürlü bir token döner. Kayıt formunun geri kalanı (ad/rol/branş/kupon/onay) bu token'la
+  // birlikte register()'a gönderilir.
+  const verifyRegisterOtp = async (phone, code) => {
+    setAuthLoading(true)
+    setAuthError('')
+    setAuthMessage('')
+
+    try {
+      return await authRequest('/api/auth/otp/verify', {
+        method: 'POST',
+        body: JSON.stringify({ purpose: 'register', phone, code }),
+      })
     } catch (error) {
       setAuthError(error.message)
       throw error
@@ -98,64 +136,6 @@ export function AuthProvider({ children }) {
       })
       setAuthUser(data.user)
       setAuthMessage('Üyelik oluşturuldu ve giriş yapıldı.')
-      return data.user
-    } catch (error) {
-      setAuthError(error.message)
-      throw error
-    } finally {
-      setAuthLoading(false)
-    }
-  }
-
-  const requestPasswordReset = async (phone, turnstileToken) => {
-    setAuthLoading(true)
-    setAuthError('')
-    setAuthMessage('')
-
-    try {
-      return await authRequest('/api/auth/password-reset/request', {
-        method: 'POST',
-        body: JSON.stringify({ phone, turnstileToken }),
-      })
-    } catch (error) {
-      setAuthError(error.message)
-      throw error
-    } finally {
-      setAuthLoading(false)
-    }
-  }
-
-  const verifyPasswordResetOtp = async (phone, code) => {
-    setAuthLoading(true)
-    setAuthError('')
-    setAuthMessage('')
-
-    try {
-      return await authRequest('/api/auth/password-reset/verify', {
-        method: 'POST',
-        body: JSON.stringify({ phone, code }),
-      })
-    } catch (error) {
-      setAuthError(error.message)
-      throw error
-    } finally {
-      setAuthLoading(false)
-    }
-  }
-
-  const confirmPasswordReset = async (resetToken, newPassword) => {
-    setAuthLoading(true)
-    setAuthError('')
-    setAuthMessage('')
-
-    try {
-      const data = await authRequest('/api/auth/password-reset/confirm', {
-        method: 'POST',
-        body: JSON.stringify({ resetToken, newPassword }),
-      })
-      invalidateCache()
-      setAuthUser(data.user)
-      setAuthMessage('Şifreniz güncellendi ve giriş yapıldı.')
       return data.user
     } catch (error) {
       setAuthError(error.message)
@@ -260,11 +240,10 @@ export function AuthProvider({ children }) {
       authLoading,
       authError,
       authMessage,
-      login,
+      requestOtp,
+      verifyLoginOtp,
+      verifyRegisterOtp,
       register,
-      requestPasswordReset,
-      verifyPasswordResetOtp,
-      confirmPasswordReset,
       logout,
       acceptConsent,
       refreshSession,

@@ -3,8 +3,6 @@ const { isConfigError } = require('./config')
 const { accountDisabledResponse, clearSessionHeaders, createSessionHeaders, json } = require('./http')
 const {
   createSessionToken,
-  defaultPasswordForPhone,
-  hashPassword,
   isSessionError,
   normalizeEmail,
   normalizePhone,
@@ -224,16 +222,11 @@ async function updateUserHandler(request) {
       teacherSubjectIds = subjectIdsResult.value
     }
 
-    // Telefon numarası (yeniden) girildiğinde, kullanıcının bağımsız giriş şifresini
-    // de (telefonun son 6 hanesi) günceller.
-    const passwordHash = phone ? await hashPassword(defaultPasswordForPhone(phone)) : null
-
     const requestDb = await withRequest({
       id: { type: sql.UniqueIdentifier, value: userId },
       fullName: { type: sql.NVarChar(120), value: fullName },
       email: { type: sql.NVarChar(320), value: email },
       phone: { type: sql.NVarChar(20), value: phone },
-      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       isAdmin: { type: sql.Bit, value: isAdmin },
       canManageLibraryProvided: { type: sql.Bit, value: canManageLibraryProvided },
       canManageLibrary: { type: sql.Bit, value: canManageLibrary },
@@ -248,7 +241,7 @@ async function updateUserHandler(request) {
       UPDATE dbo.Users
       SET full_name = @fullName, email = @email, phone_number = @phone, is_admin = @isAdmin,
           can_manage_library = CASE WHEN @canManageLibraryProvided = 1 THEN @canManageLibrary ELSE can_manage_library END,
-          password_hash = CASE WHEN @phone IS NOT NULL THEN @passwordHash ELSE password_hash END,
+          has_panel_access = CASE WHEN @phone IS NOT NULL THEN 1 ELSE has_panel_access END,
           teacher_subject_ids_json = CASE WHEN @subjectIdsProvided = 1 THEN @teacherSubjectIdsJson ELSE teacher_subject_ids_json END
       WHERE id = @id;
 

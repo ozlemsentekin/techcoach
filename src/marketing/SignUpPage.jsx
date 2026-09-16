@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CheckCircle2, GraduationCap, Loader2, UserPlus, Users, XCircle } from 'lucide-react'
+import { CheckCircle2, GraduationCap, Loader2, ShieldCheck, UserPlus, Users, XCircle } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { panelPathForRole } from '../utils/panelPath'
 import { authRequest } from '../services/authClient'
@@ -10,6 +10,12 @@ import TurnstileWidget from './TurnstileWidget'
 import './LandingPage.css'
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY
+const OTP_CODE_LENGTH = 6
+const RESEND_COOLDOWN_SECONDS = 60
+
+function normalizeCodeInput(value) {
+  return value.replace(/\D/g, '').slice(0, OTP_CODE_LENGTH)
+}
 
 const INITIAL_FORM = {
   firstName: '',
@@ -137,7 +143,7 @@ function PricingCard({ planKey, plan, billingCycle, onBillingChange, selected, o
 
 export default function SignUpPage() {
   const navigate = useNavigate()
-  const { authLoading, authError, authMessage, register, setAuthError, clearAuthFeedback } = useAuth()
+  const { authLoading, authError, authMessage, requestOtp, verifyRegisterOtp, register, setAuthError, clearAuthFeedback } = useAuth()
 
   const [selectedPlan, setSelectedPlan] = useState(null)
   const [role, setRole] = useState('ebeveyn')
@@ -151,6 +157,19 @@ export default function SignUpPage() {
   // Kupon kodu canlı doğrulama: 'idle' | 'checking' | 'valid' | 'invalid'
   const [couponCheck, setCouponCheck] = useState({ status: 'idle', code: '', message: '' })
   const turnstileRef = useRef(null)
+
+  // Ödemeye bağlı olmayan kayıt (öğretmen) artık iki adımlı: form doldurulur, telefona SMS
+  // kodu gönderilir, kod doğrulanınca hesap açılır. Veli kaydı (isPaymentBound) bu adıma hiç
+  // girmez — /odeme'ye yönlenir, telefon doğrulaması o akışta yok (bkz. plan karar #8).
+  const [signupStep, setSignupStep] = useState('form')
+  const [otpCode, setOtpCode] = useState('')
+  const [otpCooldown, setOtpCooldown] = useState(0)
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return undefined
+    const timer = setInterval(() => setOtpCooldown((value) => Math.max(0, value - 1)), 1000)
+    return () => clearInterval(timer)
+  }, [otpCooldown])
 
   const pricing = usePublicPricing()
   const plans = useMemo(() => buildPlans(pricing), [pricing])
@@ -225,7 +244,11 @@ export default function SignUpPage() {
     setShowRegisterModal(true)
   }
 
-  const closeRegisterModal = () => setShowRegisterModal(false)
+  const closeRegisterModal = () => {
+    setShowRegisterModal(false)
+    setSignupStep('form')
+    setOtpCode('')
+  }
 
   const handleInputChange = (event) => {
     const { name, type, value, checked } = event.target
@@ -298,28 +321,57 @@ export default function SignUpPage() {
       return
     }
 
+    // Öğretmen kaydı: önce telefona SMS kodu gönderilir, hesap kodun doğrulanmasından sonra
+    // açılır (bkz. handleVerifyAndRegister).
     try {
+      const data = await requestOtp('register', form.phone, turnstileToken || undefined)
+      setOtpCooldown(data?.expiresInSeconds || RESEND_COOLDOWN_SECONDS)
+      setOtpCode('')
+      setSignupStep('otp')
+    } catch {
+      setTurnstileToken('')
+      turnstileRef.current?.reset()
+    }
+  }
+
+  const handleVerifyAndRegister = async (event) => {
+    event.preventDefault()
+
+    if (otpCode.length !== OTP_CODE_LENGTH) {
+      setAuthError('6 haneli kodu girin.')
+      return
+    }
+
+    try {
+      const { phoneVerifiedToken } = await verifyRegisterOtp(form.phone, otpCode)
       const user = await register({
         fullName: combinedFullName(),
-        phone: form.phone,
+        phoneVerifiedToken,
         couponCode: form.couponCode.trim(),
         acceptAydinlatma: form.acceptAydinlatma,
         acceptKvkk: form.acceptKvkk,
         role,
-        turnstileToken: turnstileToken || undefined,
-        ...(role === 'ogretmen' ? { subjectIds } : {}),
+        subjectIds,
       })
       if (user?.role) {
         navigate(panelPathForRole(user.role))
       }
     } catch {
       // hata authError üzerinden gösteriliyor
-      setTurnstileToken('')
-      turnstileRef.current?.reset()
     }
   }
 
-  const defaultPasswordHint = form.phone.length >= 6 ? form.phone.slice(-6) : null
+  const handleResendRegisterOtp = async () => {
+    if (otpCooldown > 0) return
+    try {
+      const data = await requestOtp('register', form.phone, turnstileToken || undefined)
+      setOtpCooldown(data?.expiresInSeconds || RESEND_COOLDOWN_SECONDS)
+      setOtpCode('')
+    } catch {
+      // hata authError üzerinden gösteriliyor
+    }
+  }
+
   const PlanBadgeIcon = plan.badgeIcon
 
   return (
@@ -369,6 +421,8 @@ export default function SignUpPage() {
               <span>{plan.title} için üye oluyorsun</span>
             </div>
 
+            {signupStep === 'form' ? (
+              <>
             <h3>Üye Ol</h3>
             <p>Üyelik bilgilerini doldur, hemen başla.</p>
 
@@ -490,10 +544,7 @@ export default function SignUpPage() {
                 </div>
               ) : null}
 
-              <div className="auth-hint">
-                İlk giriş şifreniz telefon numaranızın son 6 hanesi olacaktır. Panele ilk girişte bu şifreyi değiştirmeniz istenir
-                {defaultPasswordHint ? ` (${defaultPasswordHint})` : ''}.
-              </div>
+              <div className="auth-hint">Devam etmek için telefonuna SMS ile bir doğrulama kodu göndereceğiz.</div>
 
               <label className="check-row">
                 <input
@@ -538,12 +589,56 @@ export default function SignUpPage() {
                 }
               >
                 <UserPlus size={18} aria-hidden="true" />
-                {authLoading ? 'Üye olunuyor...' : isPaymentBound ? 'Ödemeye Geç' : 'Üye Ol'}
+                {authLoading ? 'Kod gönderiliyor...' : isPaymentBound ? 'Ödemeye Geç' : 'Kod Gönder'}
               </button>
               <Link to="/login" className="btn btn-outline login-register">
                 Zaten Üyeyim
               </Link>
             </form>
+              </>
+            ) : null}
+
+            {signupStep === 'otp' ? (
+              <>
+                <h3>Doğrulama Kodu</h3>
+                <p>{form.phone} numarasına gönderilen 6 haneli kodu gir.</p>
+                <div className="auth-notice">Marka tescil sürecimiz henüz tamamlanmadığı için kod, şu an "Ugur Sisman" gönderici adıyla gelecek — TechCoach değil, endişelenmeyin, güvendesiniz.</div>
+
+                {authError ? <div className="auth-feedback auth-feedback-error">{authError}</div> : null}
+
+                <form className="login-form" onSubmit={handleVerifyAndRegister}>
+                  <label htmlFor="signup-otp-code">Doğrulama Kodu</label>
+                  <input
+                    id="signup-otp-code"
+                    name="code"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="123456"
+                    maxLength={OTP_CODE_LENGTH}
+                    autoComplete="one-time-code"
+                    className="otp-code-input"
+                    required
+                    autoFocus
+                    value={otpCode}
+                    onChange={(event) => setOtpCode(normalizeCodeInput(event.target.value))}
+                  />
+
+                  <button type="submit" className="btn btn-primary login-submit" disabled={authLoading}>
+                    <ShieldCheck size={18} aria-hidden="true" />
+                    {authLoading ? 'Üye olunuyor...' : 'Kodu Doğrula ve Üye Ol'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline login-register"
+                    disabled={authLoading || otpCooldown > 0}
+                    onClick={handleResendRegisterOtp}
+                  >
+                    {otpCooldown > 0 ? `Tekrar Gönder (${otpCooldown}sn)` : 'Kodu Tekrar Gönder'}
+                  </button>
+                </form>
+              </>
+            ) : null}
           </div>
         </div>
       )}
