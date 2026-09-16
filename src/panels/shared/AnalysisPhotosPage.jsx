@@ -17,6 +17,29 @@ const RANGE_FILTERS = [
   { id: 'all', label: 'Tümü' },
 ]
 
+// Yayınevi rozetleri: sabit bir yayınevi listesi olmadığından isim hash'lenip bu paletten
+// döngüsel bir renk seçilir — aynı yayınevi her zaman aynı rengi alır, tema değişse de
+// (panel-* tokenleri) uyumlu kalır.
+const PUBLISHER_TAG_PALETTE = [
+  { text: 'text-panel-blue', bg: 'bg-panel-blue-soft' },
+  { text: 'text-panel-sage', bg: 'bg-panel-sage-soft' },
+  { text: 'text-panel-lilac', bg: 'bg-panel-lilac-soft' },
+  { text: 'text-panel-slate', bg: 'bg-panel-slate-soft' },
+  { text: 'text-panel-accent', bg: 'bg-panel-accent-soft' },
+  { text: 'text-panel-warm', bg: 'bg-panel-warm-soft' },
+  { text: 'text-panel-yellow', bg: 'bg-panel-yellow-soft' },
+  { text: 'text-panel-green', bg: 'bg-panel-green-soft' },
+]
+
+function publisherTagStyle(name) {
+  if (!name) return { text: 'text-panel-text-muted', bg: 'bg-panel-surface-soft' }
+  let hash = 0
+  for (let i = 0; i < name.length; i += 1) {
+    hash = (hash * 31 + name.charCodeAt(i)) | 0
+  }
+  return PUBLISHER_TAG_PALETTE[Math.abs(hash) % PUBLISHER_TAG_PALETTE.length]
+}
+
 function formatAddedAt(value) {
   if (!value) return ''
   try {
@@ -59,34 +82,37 @@ function RangeFilter({ selectedRange, onSelect }) {
 }
 
 function SubjectTabs({ subjects, selectedSubject, onSelect }) {
-  if (subjects.length <= 1) return null
+  if (subjects.length === 0) return null
+  const totalCount = subjects.reduce((sum, subject) => sum + subject.count, 0)
   return (
-    <div className="flex flex-wrap gap-1.5 border-b border-panel-border pb-3">
+    <div className="flex gap-4 overflow-x-auto border-b border-panel-border" role="tablist" aria-label="Ders sekmeleri">
       <button
         type="button"
-        aria-pressed={selectedSubject === ALL_SUBJECTS}
+        role="tab"
+        aria-selected={selectedSubject === ALL_SUBJECTS}
         onClick={() => onSelect(ALL_SUBJECTS)}
-        className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+        className={`shrink-0 whitespace-nowrap border-b-2 px-1 pb-2.5 text-sm font-semibold transition-colors ${
           selectedSubject === ALL_SUBJECTS
-            ? 'bg-panel-blue text-white'
-            : 'bg-panel-surface-soft text-panel-text-muted hover:text-panel-text'
+            ? 'border-panel-blue text-panel-blue'
+            : 'border-transparent text-panel-text-muted hover:text-panel-text'
         }`}
       >
-        Tüm Dersler
+        Tüm Dersler <span className="opacity-60">({totalCount})</span>
       </button>
       {subjects.map((subject) => (
         <button
           key={subject.key}
           type="button"
-          aria-pressed={selectedSubject === subject.key}
+          role="tab"
+          aria-selected={selectedSubject === subject.key}
           onClick={() => onSelect(subject.key)}
-          className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+          className={`shrink-0 whitespace-nowrap border-b-2 px-1 pb-2.5 text-sm font-semibold transition-colors ${
             selectedSubject === subject.key
-              ? 'bg-panel-blue text-white'
-              : 'bg-panel-surface-soft text-panel-text-muted hover:text-panel-text'
+              ? 'border-panel-blue text-panel-blue'
+              : 'border-transparent text-panel-text-muted hover:text-panel-text'
           }`}
         >
-          {subject.label} <span className="opacity-70">({subject.count})</span>
+          {subject.label} <span className="opacity-60">({subject.count})</span>
         </button>
       ))}
     </div>
@@ -200,33 +226,60 @@ export default function AnalysisPhotosPage({
             />
           ) : (
             <div className="overflow-x-auto rounded-xl border border-panel-border bg-panel-surface">
-              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[640px] table-fixed border-collapse text-left text-xs">
+                <colgroup>
+                  {showStudentColumn ? <col className="w-[110px]" /> : null}
+                  <col className="w-[130px]" />
+                  <col className="w-[220px]" />
+                  <col className="w-[220px]" />
+                  <col className="w-[70px]" />
+                  <col className="w-[60px]" />
+                  <col className="w-[100px]" />
+                  <col className="w-[210px]" />
+                </colgroup>
                 <thead>
                   <tr className="border-b border-panel-border bg-panel-surface-soft text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">
-                    {showStudentColumn ? <th className="px-3 py-2.5">Öğrenci</th> : null}
-                    <th className="px-3 py-2.5">Ders</th>
-                    <th className="px-3 py-2.5">Yayın Evi</th>
-                    <th className="px-3 py-2.5">Kaynak</th>
-                    <th className="px-3 py-2.5">İçerik Adı</th>
-                    <th className="px-3 py-2.5">Test Adı</th>
-                    <th className="px-3 py-2.5">Soru No</th>
-                    <th className="px-3 py-2.5">Son Ekleme</th>
+                    {showStudentColumn ? <th className="whitespace-nowrap px-3 py-2.5">Öğrenci</th> : null}
+                    <th className="whitespace-nowrap px-3 py-2.5">Yayın Evi</th>
+                    <th className="whitespace-nowrap px-3 py-2.5">Kaynak</th>
+                    <th className="whitespace-nowrap px-3 py-2.5">İçerik Adı</th>
+                    <th className="whitespace-nowrap px-3 py-2.5">Test Adı</th>
+                    <th className="whitespace-nowrap px-3 py-2.5">Soru No</th>
+                    <th className="whitespace-nowrap px-3 py-2.5">Son Ekleme</th>
                     <th className="px-3 py-2.5" />
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleItems.map((item) => (
+                  {visibleItems.map((item) => {
+                    const tag = publisherTagStyle(item.publisherName)
+                    return (
                 <tr key={item.id} className="border-b border-panel-border last:border-0 hover:bg-panel-surface-soft">
                   {showStudentColumn ? (
-                    <td className="px-3 py-2.5 font-medium text-panel-text">{item.studentFullName || '—'}</td>
+                    <td className="truncate px-3 py-2.5 font-medium text-panel-text" title={item.studentFullName || ''}>
+                      {item.studentFullName || '—'}
+                    </td>
                   ) : null}
-                  <td className="px-3 py-2.5 text-panel-text">{item.subject || '—'}</td>
-                  <td className="px-3 py-2.5 text-panel-text-muted">{item.publisherName || '—'}</td>
-                  <td className="px-3 py-2.5 text-panel-text-muted">{item.bookName || '—'}</td>
-                  <td className="px-3 py-2.5 text-panel-text-muted">{item.topicName || item.topic || '—'}</td>
-                  <td className="px-3 py-2.5 text-panel-text-muted">{item.testName || '—'}</td>
-                  <td className="px-3 py-2.5 text-panel-text-muted">{item.questionNumber ?? '—'}</td>
-                  <td className="px-3 py-2.5 text-panel-text-muted">{formatAddedAt(item.analysisPhotoAddedAt)}</td>
+                  <td className="px-3 py-2.5">
+                    {item.publisherName ? (
+                      <span
+                        className={`inline-block max-w-full truncate rounded-full px-2.5 py-1 text-[11px] font-semibold ${tag.bg} ${tag.text}`}
+                        title={item.publisherName}
+                      >
+                        {item.publisherName}
+                      </span>
+                    ) : (
+                      <span className="text-panel-text-muted">—</span>
+                    )}
+                  </td>
+                  <td className="truncate px-3 py-2.5 text-panel-text-muted" title={item.bookName || ''}>
+                    {item.bookName || '—'}
+                  </td>
+                  <td className="truncate px-3 py-2.5 text-panel-text-muted" title={item.topicName || item.topic || ''}>
+                    {item.topicName || item.topic || '—'}
+                  </td>
+                  <td className="truncate px-3 py-2.5 text-panel-text-muted">{item.testName || '—'}</td>
+                  <td className="truncate px-3 py-2.5 text-panel-text-muted">{item.questionNumber ?? '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-panel-text-muted">{formatAddedAt(item.analysisPhotoAddedAt)}</td>
                   <td className="px-3 py-2.5">
                     <div className="flex flex-wrap items-center gap-2">
                       {fetchQuestionPhoto ? (
@@ -250,7 +303,8 @@ export default function AnalysisPhotosPage({
                     </div>
                   </td>
                 </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
