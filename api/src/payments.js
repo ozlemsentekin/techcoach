@@ -1,14 +1,14 @@
 const crypto = require('crypto')
 const { sql, withRequest, withTransaction } = require('./db')
 const { isConfigError, getIyzicoConfig } = require('./config')
-const { createSessionHeaders, json } = require('./http')
-const { createSessionToken, createHandoffToken, isSessionError } = require('./security')
+const { createSessionHeaders, getClientIp, json } = require('./http')
+const { createSessionToken, createHandoffToken, isSessionError, verifyPhoneVerifiedToken } = require('./security')
 const { requireParentSession } = require('./students')
 const { requireTeacherSession } = require('./teacherScope')
+const { consumeRateLimit } = require('./rate-limit')
 const {
   sanitizeUser,
   validateParentRegistrationPayload,
-  runRegistrationAntiAbuseChecks,
 } = require('./auth')
 const { resolveCoupon } = require('./coupons')
 const {
@@ -335,6 +335,17 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
       return json(400, { error: 'Geçersiz istek gövdesi.' })
     }
 
+    // Telefon auth/otp/verify (purpose=register) ile doğrulanmış token'dan gelir — auth.js
+    // registerHandler'la aynı desen (bkz. o dosyadaki yorum). Turnstile burada tekrar
+    // kontrol edilmiyor: token tek kullanımlık, OTP isteğinde zaten tüketildi.
+    let phoneClaims
+    try {
+      phoneClaims = verifyPhoneVerifiedToken(String(payload.phoneVerifiedToken || ''))
+    } catch {
+      return json(401, { error: 'Telefon doğrulamasının süresi dolmuş. Lütfen tekrar kod isteyin.' })
+    }
+    payload.phone = phoneClaims.phone
+
     const registration = validateParentRegistrationPayload(payload, { requireParentType: true })
     if (registration.error) {
       return json(400, { error: registration.error })
@@ -346,9 +357,8 @@ async function initiateIyzicoCheckoutForNewParentHandler(request) {
       return json(400, { error: fields.error })
     }
 
-    const antiAbuse = await runRegistrationAntiAbuseChecks(request, payload)
-    if (antiAbuse.error) {
-      return json(antiAbuse.status, { error: antiAbuse.error })
+    if (!(await consumeRateLimit(`register:${getClientIp(request)}`))) {
+      return json(429, { error: 'Çok fazla kayıt denemesi yapıldı. Lütfen daha sonra tekrar deneyin.' })
     }
 
     const existingDb = await withRequest({ phone: { type: sql.NVarChar(20), value: phone } })

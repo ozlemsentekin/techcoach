@@ -39,11 +39,11 @@ export async function initiateTeacherSeatCheckout({ billingCycle, email, identit
  */
 export async function initiateIyzicoCheckoutForNewParent({
   fullName,
-  phone,
+  phoneVerifiedToken,
+  parentType,
   couponCode,
   acceptAydinlatma,
   acceptKvkk,
-  turnstileToken,
   billingCycle,
   email,
   identityNumber,
@@ -53,11 +53,11 @@ export async function initiateIyzicoCheckoutForNewParent({
     method: 'POST',
     body: JSON.stringify({
       fullName,
-      phone,
+      phoneVerifiedToken,
+      parentType,
       couponCode,
       acceptAydinlatma,
       acceptKvkk,
-      turnstileToken,
       billingCycle,
       email,
       identityNumber,

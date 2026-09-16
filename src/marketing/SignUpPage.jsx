@@ -158,9 +158,10 @@ export default function SignUpPage() {
   const [couponCheck, setCouponCheck] = useState({ status: 'idle', code: '', message: '' })
   const turnstileRef = useRef(null)
 
-  // Ödemeye bağlı olmayan kayıt (öğretmen) artık iki adımlı: form doldurulur, telefona SMS
-  // kodu gönderilir, kod doğrulanınca hesap açılır. Veli kaydı (isPaymentBound) bu adıma hiç
-  // girmez — /odeme'ye yönlenir, telefon doğrulaması o akışta yok (bkz. plan karar #8).
+  // Her iki kayıt yolu da (öğretmen/veli) artık iki adımlı: form doldurulur, telefona SMS
+  // kodu gönderilir, kod doğrulanınca devam edilir. Öğretmende hesap doğrulamadan hemen
+  // sonra açılır; velide (isPaymentBound) telefon-doğrulandı token'ıyla /odeme'ye geçilir,
+  // gerçek hesap ödeme onaylanınca oluşur (bkz. handleVerifyAndRegister).
   const [signupStep, setSignupStep] = useState('form')
   const [otpCode, setOtpCode] = useState('')
   const [otpCooldown, setOtpCooldown] = useState(0)
@@ -305,24 +306,8 @@ export default function SignUpPage() {
       return
     }
 
-    if (isPaymentBound) {
-      navigate('/odeme', {
-        state: {
-          pendingRegistration: {
-            fullName: combinedFullName(),
-            phone: form.phone,
-            parentType: form.parentType,
-            acceptAydinlatma: form.acceptAydinlatma,
-            acceptKvkk: form.acceptKvkk,
-            turnstileToken: turnstileToken || undefined,
-          },
-        },
-      })
-      return
-    }
-
-    // Öğretmen kaydı: önce telefona SMS kodu gönderilir, hesap kodun doğrulanmasından sonra
-    // açılır (bkz. handleVerifyAndRegister).
+    // Önce telefona SMS kodu gönderilir; devamı (hesap açma ya da /odeme'ye geçiş) kodun
+    // doğrulanmasından sonra olur (bkz. handleVerifyAndRegister).
     try {
       const data = await requestOtp('register', form.phone, turnstileToken || undefined)
       setOtpCooldown(data?.expiresInSeconds || RESEND_COOLDOWN_SECONDS)
@@ -344,6 +329,24 @@ export default function SignUpPage() {
 
     try {
       const { phoneVerifiedToken } = await verifyRegisterOtp(form.phone, otpCode)
+
+      if (isPaymentBound) {
+        // Veli: hesap henüz açılmıyor, ödeme sayfasına telefon-doğrulandı token'ıyla geçiliyor
+        // — gerçek hesap yalnızca ödeme onaylanınca backend'de oluşuyor (bkz. PaymentPage.jsx).
+        navigate('/odeme', {
+          state: {
+            pendingRegistration: {
+              fullName: combinedFullName(),
+              phoneVerifiedToken,
+              parentType: form.parentType,
+              acceptAydinlatma: form.acceptAydinlatma,
+              acceptKvkk: form.acceptKvkk,
+            },
+          },
+        })
+        return
+      }
+
       const user = await register({
         fullName: combinedFullName(),
         phoneVerifiedToken,
@@ -589,7 +592,7 @@ export default function SignUpPage() {
                 }
               >
                 <UserPlus size={18} aria-hidden="true" />
-                {authLoading ? 'Kod gönderiliyor...' : isPaymentBound ? 'Ödemeye Geç' : 'Kod Gönder'}
+                {authLoading ? 'Kod gönderiliyor...' : 'Kod Gönder'}
               </button>
               <Link to="/login" className="btn btn-outline login-register">
                 Zaten Üyeyim
@@ -626,7 +629,13 @@ export default function SignUpPage() {
 
                   <button type="submit" className="btn btn-primary login-submit" disabled={authLoading}>
                     <ShieldCheck size={18} aria-hidden="true" />
-                    {authLoading ? 'Üye olunuyor...' : 'Kodu Doğrula ve Üye Ol'}
+                    {authLoading
+                      ? isPaymentBound
+                        ? 'Yönlendiriliyor...'
+                        : 'Üye olunuyor...'
+                      : isPaymentBound
+                        ? 'Kodu Doğrula ve Ödemeye Geç'
+                        : 'Kodu Doğrula ve Üye Ol'}
                   </button>
                   <button
                     type="button"

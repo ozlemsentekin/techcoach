@@ -53,17 +53,27 @@ export default function PaymentPage() {
       })
         .then((data) => {
           if (ignore) return
-          if (data?.valid) {
+          // /api/auth/validate-coupon hem öğretmenin "DENEME" (hesap anında ücretsiz açılır,
+          // yüzdelik indirim yok) hem velinin gerçek yüzdelik indirim kuponlarını (dbo.Coupons)
+          // aynı uçtan doğrular. Veli ödeme sayfasında sadece ikincisi anlamlı — discountPercent
+          // yoksa (DENEME gibi) "Uygulandı" demek yanıltıcı olur, çünkü bu kod veli ödemesinde
+          // hiçbir indirim/atlama sağlamaz (initiateIyzicoCheckoutForNewParentHandler yalnızca
+          // resolveCoupon'u tanır).
+          if (data?.valid && data.discountPercent != null) {
             setCouponCheck({
               status: 'valid',
               code: data.code || code,
               message: data.description || 'Kupon kodu uygulandı.',
-              discountPercent: data.discountPercent ?? null,
+              discountPercent: data.discountPercent,
               monthlyPrice: data.monthlyPrice ?? null,
               yearlyPrice: data.yearlyPrice ?? null,
             })
           } else {
-            setCouponCheck({ ...IDLE_COUPON_CHECK, status: 'invalid', message: data?.error || 'Kupon kodu geçersiz.' })
+            setCouponCheck({
+              ...IDLE_COUPON_CHECK,
+              status: 'invalid',
+              message: data?.valid ? 'Bu kupon veli paketi için geçerli değil.' : data?.error || 'Kupon kodu geçersiz.',
+            })
           }
         })
         .catch((error) => {
