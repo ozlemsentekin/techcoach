@@ -7,9 +7,11 @@ import App from './App.jsx'
 import ErrorBoundary from './panels/shared/ErrorBoundary.jsx'
 import { initNativeShell } from './native/initNative.js'
 import { initTelemetry } from './services/telemetry.js'
+import { initAnalyticsIfConsented } from './services/analytics.js'
 
 initNativeShell()
 initTelemetry()
+initAnalyticsIfConsented()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

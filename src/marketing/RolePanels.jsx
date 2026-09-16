@@ -31,9 +31,8 @@ export default function RolePanels() {
   return (
     <section className="section role-section" id="paneller" aria-labelledby="roles-title">
       <div className="container">
-        <p className="role-eyebrow">ÜÇ ROL, ORTAK GELİŞİM</p>
         <h2 className="section-title" id="roles-title">TechCoach’ta sizi neler bekliyor?</h2>
-        <p className="section-subtitle role-intro">Rolünüzü seçin, ilk adımdan gelişim takibine kadar neler yapabileceğinizi keşfedin.</p>
+        <p className="section-subtitle role-intro">Rolünüzü seçin, neler yapabileceğinizi keşfedin.</p>
         <div className="role-tabs" role="tablist" aria-label="Panelleri role göre keşfedin">
           {roles.map(({ id, name, icon }, index) => (
             <button key={id} type="button" role="tab" id={`role-tab-${id}`} aria-selected={active === index} aria-controls={`role-panel-${id}`} tabIndex={active === index ? 0 : -1} onClick={() => setActive(index)} onKeyDown={(event) => onTabKeyDown(event, index)}>

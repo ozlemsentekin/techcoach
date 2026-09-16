@@ -86,9 +86,9 @@ function getJourney(role) {
   const student = role === 'student'
   return {
     phases: student ? [
-      ['Planını Gör', 'Gününü ve haftanı düzenle.', [0, 1]],
-      ['Çalış ve Kaydet', 'Kitabından çalış, sonuçlarını paylaş.', [2]],
-      ['Tekrar Et', 'Kaynaklarını ve yanlışlarını incele.', [3, 4, 5]],
+      ['Planla', 'Gününü ve haftanı düzenle.', [0, 1]],
+      ['Çalış & Kaydet', 'Kitabından çalış, sonuçlarını paylaş.', [2]],
+      ['Hatalarından Öğren', 'Kaynaklarını ve yanlışlarını incele.', [3, 4, 5]],
       ['Gelişimini İzle', 'Denemelerini ve ilerlemeni gör.', [6, 7]],
     ] : [
       ['Planla', 'Kaynaklardan çalışma planı oluştur.', [0]],
@@ -117,7 +117,7 @@ export default function RolePreview({ role, name }) {
   return (
     <div className="marketing-journey" role="region" aria-label={`${name} kullanım yol haritası`}>
       <nav className="mj-phases" aria-label={`${name} süreçleri`}>
-        {phases.map(([label, detail, indices], index) => <button type="button" key={label} aria-current={phaseIndex === index ? 'step' : undefined} onClick={() => setSelected(indices[0])}><span className="mj-number">{index + 1}</span><span><strong>{label}</strong><small>{detail}</small></span></button>)}
+        {phases.map(([label, detail, indices], index) => <button type="button" key={label} aria-current={phaseIndex === index ? 'step' : undefined} onClick={() => setSelected(indices[0])}><span className="mj-number">{index + 1}</span><span><strong>{label}</strong>{role !== 'student' && <small>{detail}</small>}</span></button>)}
       </nav>
       <nav className="mj-steps" aria-label={`${name} alt adımları`}>
         {phases[phaseIndex][2].map(index => <button type="button" key={steps[index][0]} aria-current={selected === index ? 'step' : undefined} onClick={() => setSelected(index)}>{steps[index][0]}</button>)}

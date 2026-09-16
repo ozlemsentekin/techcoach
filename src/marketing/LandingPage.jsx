@@ -142,59 +142,73 @@ export default function LandingPage() {
         <section className="section" id="nasil">
           <div className="container">
             <div className="about-shell">
-              <p className="about-kicker">8. Sınıf • LGS Hazırlık Platformu</p>
+              <p className="about-kicker">8. SINIF • LGS HAZIRLIK VE TAKİP PLATFORMU</p>
               <h2 className="section-title">
-                LGS Hazırlığını Planlı, Ölçülebilir ve Birlikte Yönetin
+                LGS Hazırlığını Ölçün, Görün ve Doğru Adımı Planlayın
               </h2>
               <p className="section-subtitle about-subtitle">
-                TechCoach; 8. sınıf öğrencisinin günlük çalışmalarını LGS hedeflerine göre
-                planlayan, konu ve soru bazlı gelişimini görünür hâle getiren; öğrenci, veli ve
-                öğretmeni aynı hazırlık sürecinde buluşturan akademik gelişim platformudur.
+                TechCoach; öğrencinin kendi soru bankaları, testleri ve denemelerindeki
+                çalışmalarını ölçülebilir veriye dönüştürür. Konu, kaynak ve soru bazında
+                gelişimi görünür hâle getirir; hataları dijital hata defterine taşır ve bir
+                sonraki çalışma adımını belirlemeyi kolaylaştırır.
+                <br />
+                Öğrenci, veli ve öğretmen aynı süreci aynı veriler üzerinden takip eder.
               </p>
               <div className="about-highlights">
-                <span>LGS’ye özel çalışma planı</span>
-                <span>Konu ve soru bazlı gelişim takibi</span>
-                <span>Öğrenci • Veli • Öğretmen iş birliği</span>
+                <span>Kendi kaynaklarınla ölçülebilir takip</span>
+                <span>Hata analizi &amp; dijital hata defteri</span>
+                <span>Öğrenci • Veli • Öğretmen aynı veride</span>
               </div>
             </div>
 
             <div className="steps about-steps">
               <article className="step">
                 <div className="step-head">
-                  <div className="step-num">1</div>
-                  <h3>Amacı</h3>
+                  <div className="step-num">01</div>
+                  <h3>Kendi Kaynaklarınla Çalış</h3>
                 </div>
                 <p>
-                  Her öğrencinin LGS hazırlığını kendi gelişimine, ihtiyaçlarına ve öğrenme hızına
-                  göre planlamak; öğrenciyi başkalarıyla değil, kendi ilerlemesiyle değerlendirerek
-                  potansiyelini en yüksek seviyede ortaya çıkarmasına yardımcı olmak.
+                  TechCoach öğrencinin çalışma düzenini değiştirmesini istemez. Öğrenci
+                  kullandığı soru bankalarından testlerini çözer, denemelerine girer ve
+                  çalışmalarına devam eder.
+                </p>
+                <p>
+                  Amaç daha fazla kaynak sunmak değil; <strong>zaten yapılan çalışmayı
+                  anlamlı ve takip edilebilir hâle getirmektir.</strong>
                 </p>
               </article>
 
               <article className="step">
                 <div className="step-head">
-                  <div className="step-num">2</div>
-                  <h3>Vizyonu</h3>
+                  <div className="step-num">02</div>
+                  <h3>Çalışmanı Veriye Dönüştür</h3>
                 </div>
                 <p>
-                  Her öğrencinin LGS hazırlığını kendi gelişimine uygun bir planla sürdürebildiği;
-                  ilerlemenin düzenli olarak takip edildiği, eksiklerin zamanında fark edildiği ve
-                  doğru yönlendirmeyle desteklendiği bir eğitim süreci oluşturmak.
+                  Çözülen testler ve denemeler sisteme işlendiğinde; kaynak, konu ve soru
+                  bazındaki sonuçlar görünür hâle gelir.
+                </p>
+                <p>
+                  Başarı ve tamamlanma oranları takip edilir, yanlış yapılan sorular{' '}
+                  <strong>dijital hata defterinde</strong> toplanır ve öğrencinin hangi
+                  konularda ilerlediği, hangi noktalarda tekrar ihtiyacı olduğu daha kolay
+                  fark edilir.
                 </p>
               </article>
 
               <article className="step">
                 <div className="step-head">
-                  <div className="step-num">3</div>
-                  <h3>Çalışma Modeli</h3>
+                  <div className="step-num">03</div>
+                  <h3>Sonraki Adımını Belirle</h3>
                 </div>
                 <p>
-                  TechCoach; öğrencinin tamamladığı görevleri, çalışma sürelerini, çözdüğü
-                  soruları, konu bazlı başarı durumunu ve verdiği geri bildirimleri bir araya
-                  getirerek gelişim sürecini görünür hâle getirir. Bu veriler doğrultusunda
-                  öğrencinin ihtiyaçlarına ve öğrenme hızına uygun bir yol haritası oluşturulur;
-                  öğrenci planını uygular, veli süreci takip eder, öğretmen ise ihtiyaç duyulan
-                  noktada yönlendirme yapar.
+                  Ölçülen çalışmalar yalnızca bir rapor olarak kalmaz;{' '}
+                  <strong>bir sonraki çalışma adımını belirlemeye yardımcı olur.</strong>
+                </p>
+                <p>
+                  Öğrenci kendi gelişimini ve eksiklerini görerek sürecini yönetebilir.
+                  Veli ilerlemeyi takip edip planlamaya destek olabilir. Özel öğretmeni
+                  varsa öğretmen de aynı veriler üzerinden öğrenciyi değerlendirebilir
+                  ve yönlendirebilir.
                 </p>
               </article>
             </div>

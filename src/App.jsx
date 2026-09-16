@@ -5,6 +5,7 @@ import { useAuth } from './context/useAuth'
 import LoadingState from './panels/shared/LoadingState'
 import FirstLoginPasswordGate from './panels/shared/FirstLoginPasswordGate'
 import ConsentGate from './panels/shared/ConsentGate'
+import CookieConsentBanner from './panels/shared/CookieConsentBanner'
 import { panelPathForRole } from './utils/panelPath'
 
 const LandingPage = lazy(() => import('./marketing/LandingPage'))
@@ -71,8 +72,9 @@ function RequireRole({ role, children }) {
 
 export default function App() {
   return (
-    <Suspense fallback={<LoadingState label="Sayfa yükleniyor..." fullScreen />}>
-      <Routes>
+    <>
+      <Suspense fallback={<LoadingState label="Sayfa yükleniyor..." fullScreen />}>
+        <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path="/login" element={<AuthPage />} />
         <Route path="/sifremi-unuttum" element={<ForgotPasswordPage />} />
@@ -109,7 +111,9 @@ export default function App() {
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+        </Routes>
+      </Suspense>
+      <CookieConsentBanner />
+    </>
   )
 }

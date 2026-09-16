@@ -3567,6 +3567,8 @@ body {
 
 .about-subtitle {
   max-width: 920px;
+  margin-inline: auto;
+  text-align: center;
   margin-bottom: 18px;
   font-size: clamp(16px, 1.35vw, 19px);
   line-height: 1.6;
@@ -3614,9 +3616,24 @@ body {
 }
 
 .about-steps .step h3 {
-  font-size: 34px;
-  line-height: 1.1;
-  letter-spacing: -0.7px;
+  min-width: 0;
+  font-size: 26px;
+  line-height: 1.25;
+  letter-spacing: -0.4px;
+}
+
+.about-steps .step p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.about-steps .step p + p {
+  margin-top: 14px;
+}
+
+.about-steps .step strong {
+  color: var(--indigo);
+  font-weight: 700;
 }
 
 .steps {
@@ -6282,7 +6299,7 @@ footer {
   }
 
   .about-steps .step h3 {
-    font-size: 30px;
+    font-size: 24px;
   }
 
   .how-intro p {
@@ -6443,9 +6460,9 @@ footer {
 
   .about-steps .step h3 {
     flex: 1 1 auto;
-    font-size: 26px;
-    line-height: 1;
-    white-space: nowrap;
+    font-size: 22px;
+    line-height: 1.25;
+    white-space: normal;
   }
 
   .about-steps .step p {
@@ -7130,7 +7147,7 @@ footer {
 .role-section .role-tabs { margin-bottom: 20px; border-radius: 12px; }
 .marketing-journey { min-width: 0; text-align: left; }
 .mj-phases { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.mj-phases button { display: flex; align-items: flex-start; gap: 12px; min-width: 0; padding: 16px; border: 1px solid #e2e6f5; border-radius: 18px; background: white; color: #303477; font: inherit; text-align: left; cursor: pointer; }
+.mj-phases button { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 16px; border: 1px solid #e2e6f5; border-radius: 18px; background: white; color: #303477; font: inherit; text-align: left; cursor: pointer; }
 .mj-phases button[aria-current="step"] { background: #c6681b; border-color: #c6681b; color: white; }
 .mj-number { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; border-radius: 11px; background: #e2e6f5; font-size: 16px; font-weight: 700; }
 .mj-phases button[aria-current="step"] .mj-number { background: #ffffff30; }
@@ -7175,10 +7192,9 @@ footer {
 
 /* Masaüstünde yol haritası ve gezinme, örnek panelden bağımsız görünür kalır. */
 @media (min-width: 901px) {
-  .role-section { padding-block: 32px; }
+  .role-section { padding-top: 16px; padding-bottom: 32px; }
   .role-section > .container { max-width: 1180px; }
-  .role-section .role-eyebrow { margin-bottom: 6px; }
-  .role-section .section-title { margin-bottom: 8px; font-size: 32px; line-height: 1.2; }
+  .role-section .section-title { margin-bottom: 8px; line-height: 1.2; }
   .role-section .role-intro { margin-top: 0; margin-bottom: 12px; font-size: 15px; line-height: 1.5; }
   .role-section .role-tabs { margin-top: 12px; margin-bottom: 12px; }
   .mj-phases button { padding: 10px 12px; gap: 10px; border-radius: 14px; }
