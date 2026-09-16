@@ -6,8 +6,10 @@ import { AuthProvider } from './context/AuthContext.jsx'
 import App from './App.jsx'
 import ErrorBoundary from './panels/shared/ErrorBoundary.jsx'
 import { initNativeShell } from './native/initNative.js'
+import { initTelemetry } from './services/telemetry.js'
 
 initNativeShell()
+initTelemetry()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

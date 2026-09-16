@@ -19,6 +19,7 @@
     "@capacitor/share": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.2",
     "@capacitor/status-bar": "^8.0.3",
+    "@microsoft/applicationinsights-web": "^3.4.4",
     "clsx": "^2.1.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.577.0",

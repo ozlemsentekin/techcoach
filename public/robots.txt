@@ -1,4 +1,5 @@
 User-agent: *
 Disallow: /parent/
 Disallow: /student/
+Disallow: /teacher/
 Allow: /

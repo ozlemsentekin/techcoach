@@ -1,4 +1,5 @@
 import { Component } from 'react'
+import { trackException } from '../../services/telemetry.js'
 
 // Admin<->panel geçişleri (impersonate/returnToAdmin) gibi authUser değişince yeniden render
 // eden yerlerde yakalanmamış bir hata olursa React 18 varsayılanı tüm ağacı unmount edip #root'u
@@ -12,6 +13,9 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error('Yakalanmamış render hatası:', error, info)
+    // React render hataları window.onerror'a düşmez (React kendi içinde tüketir), App
+    // Insights'ın otomatik yakalaması bunu göremez — elle bildirilir (bkz. telemetry.js).
+    trackException(error, { componentStack: info?.componentStack })
   }
 
   render() {
