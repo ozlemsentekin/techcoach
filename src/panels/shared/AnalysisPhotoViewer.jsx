@@ -25,6 +25,7 @@ export default function AnalysisPhotoViewer({
   const [deletingPhoto, setDeletingPhoto] = useState(null)
   const [busy, setBusy] = useState(false)
   const [printing, setPrinting] = useState(false)
+  const [printError, setPrintError] = useState('')
 
   useEffect(() => {
     let ignore = false
@@ -87,6 +88,7 @@ export default function AnalysisPhotoViewer({
   const handlePrint = async () => {
     if (!photos?.length || printing) return
     setPrinting(true)
+    setPrintError('')
     // Popup engelleyiciden kaçınmak için pencere PDF üretimi (await'ler) başlamadan, tıklama
     // jestiyle senkron açılır — bkz. printPdfDocument'taki `printWindow` yorumu.
     const printWindow = window.open('', '_blank')
@@ -101,6 +103,13 @@ export default function AnalysisPhotoViewer({
         buildAnalysisPhotosPdfFileName(contextLabel || title, pdfFileNamePrefix),
         printWindow,
       )
+    } catch (err) {
+      // Yarım kalan üretim (ör. bir fotoğraf yüklenemedi) senkron açılan sekmeyi boş
+      // bırakmasın — kapatıp kullanıcıya nedenini gösteriyoruz. Genel `error` state'i
+      // kullanılmıyor çünkü o görüntülenen fotoğrafın yerini tamamen alıyor; yazdırma
+      // hatası sadece küçük bir bildirim olmalı, o an bakılan görseli gizlememeli.
+      printWindow?.close()
+      setPrintError(err.message || 'Yazdırma için PDF oluşturulamadı.')
     } finally {
       setPrinting(false)
     }
@@ -156,6 +165,15 @@ export default function AnalysisPhotoViewer({
           </button>
         </div>
       </div>
+
+      {printError ? (
+        <div className="mx-4 mb-2 flex shrink-0 items-center justify-between gap-2 rounded-lg bg-white/15 px-3 py-2 text-xs text-white">
+          <span>{printError}</span>
+          <button type="button" onClick={() => setPrintError('')} aria-label="Kapat" className="shrink-0">
+            <X size={14} aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
 
       <div className="relative flex flex-1 min-h-0 items-center justify-center px-3 py-2">
         {hasMultiple ? (

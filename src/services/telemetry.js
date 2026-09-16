@@ -20,6 +20,12 @@ export function initTelemetry() {
       // Varsayılan: window.onerror + unhandledrejection otomatik yakalanır (aşağıdaki
       // trackException, React render hataları gibi bunun kaçırdığı durumlar için).
       disableExceptionTracking: false,
+      // CookieConsentBanner'ın kapsadığı opt-in karardan önce (ve karar ne olursa olsun)
+      // çalışır — hata izleme kullanıcı deneyimi için gerekli, pazarlama çerezi değil.
+      // SDK varsayılanı ai_user/ai_session çerezleri yazar; bunu kapatıp izlemeyi
+      // çerezsiz (bellek içi) tutuyoruz, aksi halde onay bandı henüz gösterilmeden
+      // her ziyaretçiye izleme çerezi yazılmış olurdu.
+      disableCookiesUsage: true,
     },
   })
   appInsights.loadAppInsights()

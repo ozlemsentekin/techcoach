@@ -52,9 +52,31 @@ export async function printPdfDocument(doc, fileName, printWindow) {
 
   doc.autoPrint()
   const blobUrl = doc.output('bloburl')
+  let targetWindow
   if (printWindow && !printWindow.closed) {
     printWindow.location.href = blobUrl
+    targetWindow = printWindow
   } else {
-    window.open(blobUrl, '_blank')
+    targetWindow = window.open(blobUrl, '_blank')
   }
+
+  // savePdfDocument'ın indirme linkindeki gibi hemen revoke edemeyiz — PDF görüntüleyici
+  // bu URL'i sekme açıkken kullanmaya devam ediyor. Sekme kapanınca serbest bırakıyoruz;
+  // hiç algılanamazsa (ör. popup engellendi, targetWindow null) belleği süresiz tutmamak
+  // için üst sınır da var.
+  if (!targetWindow) {
+    URL.revokeObjectURL(blobUrl)
+    return
+  }
+  const revoke = () => URL.revokeObjectURL(blobUrl)
+  const pollId = setInterval(() => {
+    if (targetWindow.closed) {
+      clearInterval(pollId)
+      revoke()
+    }
+  }, 2000)
+  setTimeout(() => {
+    clearInterval(pollId)
+    revoke()
+  }, 10 * 60 * 1000)
 }
