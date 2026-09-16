@@ -139,7 +139,10 @@ async function registerHandler(request) {
 
   const passwordHash = await hashPassword(defaultPasswordForPhone(phone))
   const now = new Date()
-  const hasTrialCoupon = String(payload.couponCode || '').trim() === TRIAL_COUPON_CODE
+  // validateCouponHandler ile aynı büyük/küçük harf duyarsız karşılaştırma (aşağıda) —
+  // eskiden burası duyarlıydı, kullanıcı formda küçük harf yazınca doğrulama ekranı
+  // kuponu geçerli gösterip kayıt sessizce normal (kuponsuz) hesap açıyordu.
+  const hasTrialCoupon = String(payload.couponCode || '').trim().toUpperCase() === TRIAL_COUPON_CODE
 
   let teacherSubjectIds = []
   if (role === 'ogretmen') {
@@ -604,7 +607,17 @@ async function acceptConsentHandler(request) {
     const requestDb = await withRequest({
       id: { type: sql.UniqueIdentifier, value: session.sub },
     })
-    await requestDb.query(`
+    // Dosyadaki diğer tüm yazma uçları (meHandler, changePasswordHandler,
+    // sessionFromHandoffHandler) pasif hesabı burada engelliyordu, bu handler unutulmuştu.
+    const activeResult = await requestDb.query(`SELECT TOP 1 is_active FROM dbo.Users WHERE id = @id;`)
+    if (activeResult.recordset[0]?.is_active === false) {
+      return accountDisabledResponse()
+    }
+
+    const updateDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: session.sub },
+    })
+    await updateDb.query(`
       UPDATE dbo.Users
       SET aydinlatma_accepted_at = SYSUTCDATETIME(), kvkk_accepted_at = SYSUTCDATETIME()
       WHERE (id = @id OR (parent_id = @id AND aydinlatma_accepted_at IS NULL))

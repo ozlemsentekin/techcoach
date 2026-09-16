@@ -461,7 +461,7 @@ async function findExistingParent(id) {
   const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: id } })
   const result = await requestDb.query(`
     SELECT TOP 1 id, full_name, email, phone_number, role, is_admin, can_manage_library, last_login_at,
-           created_at, aydinlatma_accepted_at, kvkk_accepted_at, teacher_subject_ids_json
+           created_at, aydinlatma_accepted_at, kvkk_accepted_at, teacher_subject_ids_json, is_active
     FROM dbo.Users WHERE id = @id;
   `)
   return result.recordset[0] || null
@@ -470,7 +470,7 @@ async function findExistingParent(id) {
 async function findExistingTeacher(id) {
   const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: id } })
   const result = await requestDb.query(`
-    SELECT TOP 1 id FROM dbo.Users WHERE id = @id AND role = 'ogretmen';
+    SELECT TOP 1 id, is_active FROM dbo.Users WHERE id = @id AND role = 'ogretmen';
   `)
   return result.recordset[0] || null
 }
@@ -609,7 +609,7 @@ async function iyzicoCheckoutCallbackHandler(request) {
     // Ek çocuk (çocuk-koltuğu) paketi — conversationId her zaman mevcut bir velinin Users.id'sidir.
     if (session?.plan_kind === 'childSeat' || isChildSeatPlanRef(config, data.pricingPlanReferenceCode)) {
       const childSeatParent = await findExistingParent(conversationId)
-      if (!childSeatParent) {
+      if (!childSeatParent || childSeatParent.is_active === false) {
         return redirectTo(failureUrl)
       }
       const isNewChildSeatEvent = await recordEntitlementEvent({
@@ -634,7 +634,7 @@ async function iyzicoCheckoutCallbackHandler(request) {
     // Öğretmen ek öğrenci koltuğu — conversationId her zaman mevcut bir öğretmenin Users.id'sidir.
     if (session?.plan_kind === 'teacherSeat' || isTeacherSeatPlanRef(config, data.pricingPlanReferenceCode)) {
       const seatTeacher = await findExistingTeacher(conversationId)
-      if (!seatTeacher) {
+      if (!seatTeacher || seatTeacher.is_active === false) {
         return redirectTo(failureUrl)
       }
       const isNewTeacherSeatEvent = await recordEntitlementEvent({
@@ -660,6 +660,11 @@ async function iyzicoCheckoutCallbackHandler(request) {
     // olmayan yeni bir velinin dbo.PendingParentRegistrations.id'sidir — hangisi olduğunu burada
     // ayırt ediyoruz. İkinci durumda gerçek hesap ancak bu noktada, ödeme onaylandıktan sonra oluşur.
     const existingParent = await findExistingParent(conversationId)
+    if (existingParent?.is_active === false) {
+      // Pasife alınmış bir velinin (ör. yenileme) ödemesi entitlement'ı sessizce yeniden
+      // aktive etmesin — admin'in pasife alma kararı atlanmış olurdu.
+      return redirectTo(failureUrl)
+    }
     let parentId = existingParent?.id
     let sessionHeaders = {}
     // Yeni açılan veli hesabı için: tarayıcı çapraz-site yönlendirme zincirinde SameSite=Strict
@@ -711,9 +716,17 @@ async function iyzicoCheckoutCallbackHandler(request) {
 }
 
 function verifyWebhookSignature(request, rawBody) {
-  const { secretKey } = getIyzicoConfig()
+  const { secretKey, merchantId } = getIyzicoConfig()
   const signature = request.headers.get('x-iyz-signature-v3')
   if (!signature) {
+    return false
+  }
+  // merchantId henüz IYZICO_MERCHANT_ID app setting'i eklenmediyse null döner — imzayı
+  // asla doğrulayamayacağımızdan (yanlış anahtar üretilir) sessizce yanlış pozitif/negatif
+  // yerine kapalı (false) döneriz; diğer iyzico akışları (checkout vb.) bu ayardan bağımsız
+  // çalışmaya devam eder (bkz. config.js merchantId yorumu).
+  if (!merchantId) {
+    console.error('iyzicoWebhookHandler: IYZICO_MERCHANT_ID ayarlı değil, imza doğrulanamıyor.')
     return false
   }
 
@@ -724,9 +737,15 @@ function verifyWebhookSignature(request, rawBody) {
     return false
   }
 
+  // iyzico'nun resmi formülü (docs.iyzico.com/en/advanced/webhook): merchantId + secretKey +
+  // eventType + subscriptionReferenceCode + orderReferenceCode + customerReferenceCode.
+  // Önceki sürüm merchantId'yi hiç içermiyordu ve onun yerine (yanlışlıkla) iyziReferenceCode
+  // kullanıyordu — bu yüzden gerçek iyzico webhook'larının imzası asla eşleşmiyor, tüm
+  // abonelik yenileme/iptal/başarısız-ödeme senkronizasyonu sessizce reddediliyordu.
   const message = [
+    merchantId,
+    secretKey,
     payload.iyziEventType,
-    payload.iyziReferenceCode,
     payload.subscriptionReferenceCode,
     payload.orderReferenceCode,
     payload.customerReferenceCode,
@@ -825,6 +844,11 @@ async function iyzicoWebhookHandler(request) {
       })
     } else if (iyziEventType === 'subscription.order.failure') {
       await updateParentEntitlementStatus(parentId, 'grace_period')
+    } else if (iyziEventType === 'subscription.cancelled' || iyziEventType === 'subscription.expired') {
+      // teacherSeat/childSeat dalları bu iki olayı zaten işliyordu, taban veli planı
+      // dalı unutulmuştu — iptal/süre dolan abonelikler entitlement'ı 'active'de bırakıp
+      // süresiz tam erişim vermeye devam ediyordu.
+      await updateParentEntitlementStatus(parentId, 'cancelled')
     }
 
     return json(200, { ok: true })

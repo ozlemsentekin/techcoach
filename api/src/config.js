@@ -161,6 +161,11 @@ function getIyzicoConfig() {
     secretKey: getRequiredEnv('IYZICO_SECRET_KEY', {
       placeholders: ['replace-with-iyzico-secret-key'],
     }),
+    // Sadece webhook imza doğrulamasında (bkz. payments.js verifyWebhookSignature)
+    // kullanılıyor; opsiyonel tutuluyor ki henüz ayarlanmamışsa checkout/callback
+    // akışları (aynı getIyzicoConfig()'i kullanıyor) etkilenmesin — webhook doğrulaması
+    // merchantId eksikse kendi içinde kapalı (false) döner.
+    merchantId: getOptionalEnv('IYZICO_MERCHANT_ID'),
     baseUrl: getRequiredEnv('IYZICO_BASE_URL'),
     parentMonthlyPlanRef: getRequiredEnv('IYZICO_PARENT_MONTHLY_PLAN_REF', {
       placeholders: ['replace-with-iyzico-parent-monthly-plan-ref'],

@@ -13,8 +13,10 @@ const MAX_REQUESTS = 10
 // hot path (fire-and-forget, sampled) since it's just housekeeping, not correctness
 // — the window filter on created_at already makes counts correct regardless.
 async function consumeRateLimit(key, options = {}) {
-  const windowMs = options.windowMs || WINDOW_MS
-  const maxRequests = options.maxRequests || MAX_REQUESTS
+  // `||` burada 0'ı da varsayılana düşürürdü — bir çağıran ileride bir key'i tamamen
+  // kapatmak için { maxRequests: 0 } geçirirse sessizce varsayılana (10/15dk) düşmesin.
+  const windowMs = options.windowMs ?? WINDOW_MS
+  const maxRequests = options.maxRequests ?? MAX_REQUESTS
   const windowStart = new Date(Date.now() - windowMs)
 
   const request = await withRequest({

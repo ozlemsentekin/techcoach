@@ -51,7 +51,7 @@ async function findUserByPhone(phone) {
     phone: { type: sql.NVarChar(20), value: phone },
   })
   const result = await requestDb.query(`
-    SELECT TOP 1 id, full_name, email, phone_number, role, is_admin, can_manage_library, last_login_at, created_at
+    SELECT TOP 1 id, full_name, email, phone_number, role, is_admin, can_manage_library, last_login_at, created_at, is_active
     FROM dbo.Users
     WHERE phone_number = @phone;
   `)
@@ -304,7 +304,10 @@ async function requestPasswordResetOtpHandler(request) {
 
   try {
     const existingUser = await findUserByPhone(phone)
-    if (!existingUser) {
+    // Pasif hesap için de "bulunamadı" ile aynı yanıt — hem gereksiz SMS masrafını
+    // (confirmPasswordResetHandler zaten asıl şifre değişimini engelliyordu, ama buraya
+    // kadar SMS gönderiliyordu) hem de numara-var-mı enumeration'ını önler.
+    if (!existingUser || existingUser.is_active === false) {
       return json(404, { error: 'Bu numara ile kayıtlı bir üyelik bulunamadı.' })
     }
 
@@ -397,7 +400,7 @@ async function verifyPasswordResetOtpHandler(request) {
     `)
 
     const userRecord = await findUserByPhone(phone)
-    if (!userRecord) {
+    if (!userRecord || userRecord.is_active === false) {
       return json(404, { error: 'Bu numara ile kayıtlı bir üyelik bulunamadı.' })
     }
 

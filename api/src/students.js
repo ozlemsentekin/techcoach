@@ -1,6 +1,6 @@
 const { sql, withRequest, withTransaction } = require('./db')
 const { isConfigError } = require('./config')
-const { clearSessionHeaders, createSessionHeaders, json } = require('./http')
+const { accountDisabledResponse, clearSessionHeaders, createSessionHeaders, json } = require('./http')
 const {
   createSessionToken,
   defaultPasswordForPhone,
@@ -297,7 +297,7 @@ async function requireParentSession(request) {
     id: { type: sql.UniqueIdentifier, value: session.sub },
   })
   const result = await requestDb.query(`
-    SELECT TOP 1 role, aydinlatma_accepted_at, kvkk_accepted_at, is_admin FROM dbo.Users WHERE id = @id;
+    SELECT TOP 1 role, aydinlatma_accepted_at, kvkk_accepted_at, is_admin, is_active FROM dbo.Users WHERE id = @id;
   `)
   const record = result.recordset[0]
 
@@ -307,6 +307,14 @@ async function requireParentSession(request) {
 
   if (record.role !== 'ebeveyn') {
     return { error: json(403, { error: 'Bu alana erişim yetkiniz yok.' }) }
+  }
+
+  // studentScope.js/teacherScope.js ile aynı desen — veli tarafında eksikti, yani
+  // admin'in "Pasife Al" kararı veli rolünde hiç uygulanmıyordu (oturum çerezi geçerli
+  // olduğu sürece pasif veli tüm paneli ve ödeme başlatma uçlarını kullanmaya devam
+  // edebiliyordu). Admin delege oturumu (actingAdminId) pasif hesapta da işlem yapabilir.
+  if (record.is_active === false && !session.actingAdminId) {
+    return { error: accountDisabledResponse() }
   }
 
   if (!record.aydinlatma_accepted_at || !record.kvkk_accepted_at) {
