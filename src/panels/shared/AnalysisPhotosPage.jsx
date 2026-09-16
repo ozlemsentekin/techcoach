@@ -43,7 +43,13 @@ function publisherTagStyle(name) {
 function formatAddedAt(value) {
   if (!value) return ''
   try {
-    return new Date(value).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })
+    return new Date(value).toLocaleString('tr-TR', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
   } catch {
     return ''
   }
@@ -226,16 +232,15 @@ export default function AnalysisPhotosPage({
             />
           ) : (
             <div className="overflow-x-auto rounded-xl border border-panel-border bg-panel-surface">
-              <table className="w-full min-w-[640px] table-fixed border-collapse text-left text-xs">
+              <table className="w-full min-w-[920px] table-fixed border-collapse text-left text-xs">
                 <colgroup>
                   {showStudentColumn ? <col className="w-[110px]" /> : null}
                   <col className="w-[130px]" />
-                  <col className="w-[220px]" />
-                  <col className="w-[220px]" />
-                  <col className="w-[70px]" />
-                  <col className="w-[60px]" />
-                  <col className="w-[100px]" />
                   <col className="w-[210px]" />
+                  <col className="w-[210px]" />
+                  <col className="w-[130px]" />
+                  <col className="w-[150px]" />
+                  <col className="w-[280px]" />
                 </colgroup>
                 <thead>
                   <tr className="border-b border-panel-border bg-panel-surface-soft text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">
@@ -243,8 +248,7 @@ export default function AnalysisPhotosPage({
                     <th className="whitespace-nowrap px-3 py-2.5">Yayın Evi</th>
                     <th className="whitespace-nowrap px-3 py-2.5">Kaynak</th>
                     <th className="whitespace-nowrap px-3 py-2.5">İçerik Adı</th>
-                    <th className="whitespace-nowrap px-3 py-2.5">Test Adı</th>
-                    <th className="whitespace-nowrap px-3 py-2.5">Soru No</th>
+                    <th className="whitespace-nowrap px-3 py-2.5">Test / Soru</th>
                     <th className="whitespace-nowrap px-3 py-2.5">Son Ekleme</th>
                     <th className="px-3 py-2.5" />
                   </tr>
@@ -277,11 +281,14 @@ export default function AnalysisPhotosPage({
                   <td className="truncate px-3 py-2.5 text-panel-text-muted" title={item.topicName || item.topic || ''}>
                     {item.topicName || item.topic || '—'}
                   </td>
-                  <td className="truncate px-3 py-2.5 text-panel-text-muted">{item.testName || '—'}</td>
-                  <td className="truncate px-3 py-2.5 text-panel-text-muted">{item.questionNumber ?? '—'}</td>
+                  <td className="truncate px-3 py-2.5 text-panel-text-muted">
+                    {[item.testName, item.questionNumber != null ? `Soru ${item.questionNumber}` : null]
+                      .filter(Boolean)
+                      .join(' · ') || '—'}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-panel-text-muted">{formatAddedAt(item.analysisPhotoAddedAt)}</td>
                   <td className="px-3 py-2.5">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2 whitespace-nowrap">
                       {fetchQuestionPhoto ? (
                         <button
                           type="button"
