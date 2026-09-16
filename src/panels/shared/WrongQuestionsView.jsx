@@ -802,7 +802,7 @@ export default function WrongQuestionsView({
   const [selectedTopicKeys, setSelectedTopicKeys] = useState(() => new Set())
   const [replacingPhotoItem, setReplacingPhotoItem] = useState(null)
   const [analysisFilter, setAnalysisFilter] = useState('tumu')
-  const [dateFilter, setDateFilter] = useState('last30')
+  const [dateFilter, setDateFilter] = useState('last7')
   const today = todayISODate()
 
   useEffect(() => {
