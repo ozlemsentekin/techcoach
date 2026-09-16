@@ -46,11 +46,11 @@ GO
 MERGE dbo.PricingPlans AS target
 USING (VALUES
     ('parent', N'Veli Takip Paketi', 2999, 24000, N'%20 indirim',
-        N'["2 öğrenciye kadar tam erişim","Günlük çalışma planı ve ders ajandası görünürlüğü","Hata defteri ile konu bazlı tekrar takibi","Haftalık ilerleme raporu ve risk uyarıları","Sınav takvimini fotoğrafla saniyeler içinde içe aktarma","Öğretmenle paylaşımlı görünüm ve bildirimler"]',
+        N'["2 öğrenciye kadar tam erişim","Haftalık plan ve günlük görev takibi","Kaynak ilerleme ve başarı oranları","Test, deneme ve konu bazlı gelişim analizi","Dijital hata defteri ve PDF çıktısı","Veli hesabından sonuç ve görev yönetimi","Varsa özel öğretmenle ortak takip"]',
         NULL, 1),
     ('teacher', N'Öğretmen İş Paketi', 2999, NULL, NULL,
-        N'["4 öğrenciye kadar dahil, ek öğrenci 299 TL / ay","Sınıf geneli hata yoğunluğu ve öncelik alanları analizi","Öğrenci bazlı haftalık performans raporları","Ödev ve sınav atama, teslim takibi","Velilerle otomatik paylaşım ve bildirim akışı","Öncelikli destek hattı"]',
-        N'Kart tahsilatı yakında aktif olacak; üye olduğunuzda hesabınız deneme durumunda hemen açılır.', 2),
+        N'["4 öğrenciye kadar tam erişim — ek öğrenci 299 TL / ay","Kaynak ve ilerleme takibi","Test, deneme ve konu bazlı gelişim analizi","Dijital hata defteri ve yanlış soru takibi","Görev oluşturma ve tamamlanma takibi","Öğrenci–kaynak eşleştirme","Veli ve öğrenciyle ortak gelişim takibi"]',
+        NULL, 2),
     ('teacher_seat', N'Öğretmen Ek Öğrenci Paketi', 299, 4990, N'2 ay bedava', NULL, NULL, 3),
     ('child_seat', N'Ek Çocuk Paketi', 1999, 14999, N'2 ay bedava', NULL, NULL, 4)
 ) AS source (plan_key, title, monthly_price, yearly_price, yearly_badge, features_json, note, sort_order)

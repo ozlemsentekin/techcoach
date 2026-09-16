@@ -25,7 +25,10 @@ const INITIAL_FORM = {
 // (usePublicPricing). Burada yalnızca role'e özel sabit görsel meta tutulur.
 const PLAN_META = {
   ebeveyn: { badgeLabel: 'Veliyim', badgeIcon: Users, cta: 'Veli Planını Seç', pricingKey: 'parent' },
-  ogretmen: { badgeLabel: 'Öğretmenim', badgeIcon: GraduationCap, cta: 'Öğretmen Planını Seç', pricingKey: 'teacher' },
+  ogretmen: {
+    badgeLabel: 'Öğretmenim', badgeIcon: GraduationCap, cta: 'Öğretmen Planını Seç', pricingKey: 'teacher',
+    subtitle: 'Takip ettiğiniz öğrencinin ne çalıştığını, nerede ilerlediğini ve nerede desteğe ihtiyaç duyduğunu tek ekranda görün.',
+  },
 }
 
 function buildBilling(source) {
@@ -50,6 +53,7 @@ function buildPlans(pricing) {
           badgeLabel: meta.badgeLabel,
           badgeIcon: meta.badgeIcon,
           cta: meta.cta,
+          subtitle: meta.subtitle,
           title: source.title,
           features: source.features,
           note: source.note,
@@ -80,6 +84,7 @@ function PricingCard({ planKey, plan, billingCycle, onBillingChange, selected, o
       </div>
 
       <h3>{plan.title}</h3>
+      {plan.subtitle ? <p className="pricing-card-v2-subtitle">{plan.subtitle}</p> : null}
       <div className="pricing-card-v2-divider" />
 
       <div className="pricing-card-v2-services-head">
