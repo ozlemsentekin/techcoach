@@ -30,7 +30,17 @@ function blurActiveControl() {
 
 export default function AuthPage() {
   const navigate = useNavigate()
-  const { authUser, sessionLoading, authLoading, authError, authMessage, requestOtp, verifyLoginOtp, setAuthError } = useAuth()
+  const {
+    authUser,
+    sessionLoading,
+    authLoading,
+    authError,
+    authMessage,
+    requestOtp,
+    verifyLoginOtp,
+    setAuthError,
+    clearAuthFeedback,
+  } = useAuth()
 
   const [step, setStep] = useState('phone')
   const [phone, setPhone] = useState('')
@@ -38,6 +48,14 @@ export default function AuthPage() {
   const [cooldown, setCooldown] = useState(0)
   const [turnstileToken, setTurnstileToken] = useState('')
   const turnstileRef = useRef(null)
+
+  // authError/authMessage AuthContext'te tek, paylaşılan state — başka bir sayfadan (ör.
+  // /uye-ol'daki "bu numara zaten kayıtlı" hatası) buraya "Zaten Üyeyim"/"Giriş yapın" ile
+  // geçildiğinde eski mesaj temizlenmeden kalmasın diye mount'ta sıfırlanıyor.
+  useEffect(() => {
+    clearAuthFeedback()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (!sessionLoading && authUser?.role) {
