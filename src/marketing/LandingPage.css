@@ -7160,19 +7160,11 @@ footer {
 .mj-card { border: 1px solid #e2e6f5; border-radius: 22px; overflow: hidden; background: white; }
 .mj-content { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 32px; align-items: center; padding: 28px; }
 .mj-copy { min-width: 0; }
-.mj-count { color: #b45812; font-size: 13px; font-weight: 700; }
 .mj-copy h3 { margin: 12px 0 16px; font-size: clamp(23px, 2.3vw, 32px); line-height: 1.3; color: #303477; }
 .mj-copy p { font-size: 16px; line-height: 1.85; color: #646a89; margin: 0; }
-.mj-example-note { display: block; font-size: 12px; color: #646a89; margin-top: 22px; }
 .marketing-journey .role-preview { min-width: 0; width: 100%; max-width: 520px; margin: 0 auto; box-shadow: none; background: #fcfcff; }
 .marketing-journey .rp-slide-visual { min-height: 0; padding-top: 12px; }
-.mj-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #1c2b5e; padding: 12px 24px; color: white; }
-.mj-controls button { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 16px; font-weight: 700; color: white; cursor: pointer; }
-.mj-controls button:disabled { cursor: not-allowed; }
-.mj-controls button:enabled:hover { background: #ffffff18; }
-.mj-controls > span { font-size: 15px; font-weight: 600; }
 .marketing-journey button:focus-visible { outline: 3px solid #c6681b; outline-offset: 3px; }
-.mj-controls button:focus-visible { outline-color: white; }
 @media (max-width: 900px) {
   .mj-phases { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mj-content { grid-template-columns: minmax(0, 1fr); gap: 22px; }
@@ -7187,8 +7179,6 @@ footer {
   .mj-steps button { padding: 9px 16px; font-size: 13px; }
   .mj-content { padding: 18px 12px; }
   .marketing-journey .role-preview { padding: 14px 10px; }
-  .mj-controls { padding: 10px 12px; }
-  .mj-controls > span { display: none; }
 }
 
 /* Masaüstünde yol haritası ve gezinme, örnek panelden bağımsız görünür kalır. */
@@ -7207,7 +7197,6 @@ footer {
   .mj-content { padding: 16px 20px; gap: 24px; }
   .mj-copy h3 { margin-block: 8px 12px; font-size: 25px; }
   .mj-copy p { font-size: 15px; line-height: 1.65; }
-  .mj-example-note { margin-top: 12px; }
   .marketing-journey .role-preview { padding: 14px; max-width: none; max-height: clamp(260px, calc(100dvh - 430px), 380px); overflow-y: auto; scrollbar-gutter: stable; }
   .marketing-journey .role-preview-top { margin-bottom: 10px; }
   .marketing-journey .rp-slide-visual { padding-top: 4px; }
@@ -7217,5 +7206,4 @@ footer {
   .marketing-journey .rp-callout, .marketing-journey .rp-assignment { margin-top: 8px; padding: 8px 10px; }
   .marketing-journey .rp-profile-fields { gap: 6px; margin-block: 8px; }
   .marketing-journey .rp-profile-fields > div { padding: 6px 10px; }
-  .mj-controls { padding: 4px 16px; }
 }

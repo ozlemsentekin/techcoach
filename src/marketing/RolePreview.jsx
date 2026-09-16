@@ -1,6 +1,6 @@
 import { ChildProfilePreview, ParentBooksPreview, PastResultsPreview, ParentBookMetricsPreview, ParentAssignmentPreview, ParentTeachersPreview, ParentFollowupPreview } from './ParentSetupPreview'
 import { useState } from 'react'
-import { ArrowLeft, ArrowRight, BookOpen, Download, NotebookPen, Check, TrendingUp, CalendarDays, ClipboardCheck, Camera } from 'lucide-react'
+import { ArrowRight, BookOpen, Download, NotebookPen, Check, TrendingUp, CalendarDays, ClipboardCheck, Camera } from 'lucide-react'
 
 const books = [['Matematik', 'Üslü ifadeler', 75, 60], ['Türkçe', 'Paragraf', 90, 80], ['Fen bilimleri', 'DNA ve genetik kod', 65, 40]]
 
@@ -122,17 +122,14 @@ export default function RolePreview({ role, name }) {
       <div className="mj-card">
         <div className="mj-content">
           <div className="mj-copy" aria-live="polite" aria-atomic="true">
-            <span className="mj-count">Adım {selected + 1} / {steps.length}</span>
             <h3>{title}</h3>
             <p>{description}</p>
             {phases[phaseIndex][2].length > 1 && <nav className="mj-steps" aria-label={`${name} alt adımları`}>
               {phases[phaseIndex][2].map(index => <button type="button" key={steps[index][0]} aria-current={selected === index ? 'step' : undefined} onClick={() => setSelected(index)}>{steps[index][0]}</button>)}
             </nav>}
-            <span className="mj-example-note">Temsili verilerle örnek {name.toLocaleLowerCase('tr')} paneli.</span>
           </div>
           <div key={selected} className="role-preview" tabIndex={0} role="region" aria-label={`${name} örnek ekranı; uzun içerik kaydırılabilir`}><div className="role-preview-top"><span className="role-preview-brand">Tech<span>Coach</span></span><span className="role-example">{name} · Örnek</span></div><div className="rp-slide-visual"><Visual role={role} /></div></div>
         </div>
-        <div className="mj-controls"><button type="button" disabled={selected === 0} onClick={() => setSelected(selected - 1)}><ArrowLeft size={18} aria-hidden="true" />Önceki</button><span>Adımları sırayla keşfet</span><button type="button" disabled={selected === steps.length - 1} onClick={() => setSelected(selected + 1)}>Sonraki<ArrowRight size={18} aria-hidden="true" /></button></div>
       </div>
     </div>
   )
