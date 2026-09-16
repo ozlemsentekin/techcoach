@@ -1,3 +1,28 @@
+import { WifiOff } from 'lucide-react'
+import useDelayedFlag from '../../hooks/useDelayedFlag'
+
+// Yükleme (ya da beklenen bir işlem) beklenenden uzun sürerse (yavaş internet ihtimali)
+// kullanıcıyı bilgilendiren ipucu. `active` eşik süresinden önce false olursa hiç görünmez —
+// bu sayede tek bir kart değil, bir bütün olarak "ekran/bölüm" yavaş yükleniyorsa tetiklenir.
+const SLOW_LOAD_HINT_DELAY_MS = 6000
+
+export function SlowLoadHint({ active, delayMs = SLOW_LOAD_HINT_DELAY_MS, className = '' }) {
+  const slow = useDelayedFlag(active, delayMs)
+  if (!slow) return null
+
+  return (
+    <div
+      className={`flex items-start gap-2 rounded-xl bg-panel-accent-soft px-3 py-2 text-xs text-panel-warm ${className}`}
+    >
+      <WifiOff size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
+      <span>
+        İnternet bağlantınızda yavaşlık var, bu sebeple ekranlarınız biraz yavaş yüklenmektedir. Bağlantınızı
+        kontrol etmenizi öneririz.
+      </span>
+    </div>
+  )
+}
+
 function TeeShape(props) {
   // Tek bir "T": sırtı (kolun dış kenarı) y=0 hizasında, gövdesi (dikey çubuk)
   // sırtın tersine, dışa doğru uzanır. Kalın çizgiler, geniş sırt.
@@ -44,6 +69,8 @@ export default function LoadingState({ label = 'Yükleniyor...', fullScreen = fa
       <LogoLoader size={fullScreen ? 112 : 100} />
 
       <p className="text-sm font-medium text-panel-text-muted">{label}</p>
+
+      <SlowLoadHint active className="max-w-sm" />
 
       {fullScreen ? (
         <div className="mt-2 w-full max-w-md space-y-3" aria-hidden="true">

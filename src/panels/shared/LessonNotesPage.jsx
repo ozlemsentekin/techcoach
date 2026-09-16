@@ -103,9 +103,11 @@ function LessonNotesContent({ admin }) {
       const [grade, subjectId] = selection.split(':')
       const data = await authRequest(`${endpoint}?grade=${grade}&subjectId=${subjectId}&noteId=${note.id}`, { timeoutMs: 90000 })
       if (requestId !== detailRequest.current) return
-      imageCache.set(cacheKey, data.notes[0])
-      if (edit) setForm(data.notes[0])
-      else setView(data.notes[0])
+      const detail = data.notes?.[0]
+      if (!detail) throw new Error('Ders notu yüklenemedi. Lütfen tekrar deneyin.')
+      imageCache.set(cacheKey, detail)
+      if (edit) setForm(detail)
+      else setView(detail)
     } catch (e) { if (requestId === detailRequest.current) setError(e.message) }
     finally { if (requestId === detailRequest.current) setOpening(false) }
   }

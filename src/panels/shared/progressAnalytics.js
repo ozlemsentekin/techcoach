@@ -89,6 +89,8 @@ export function dateInRange(dateKey, rangeId, today) {
     return dateKey >= weekStart && dateKey <= today
   }
   if (rangeId === 'month') return dateKey.slice(0, 7) === today.slice(0, 7)
+  if (rangeId === 'last7') return dateKey >= addDaysISO(today, -6) && dateKey <= today
+  if (rangeId === 'last30') return dateKey >= addDaysISO(today, -29) && dateKey <= today
   return true
 }
 

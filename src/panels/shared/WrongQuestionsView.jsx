@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
   ArrowLeft,
@@ -14,7 +14,7 @@ import {
   Tag,
 } from 'lucide-react'
 import PageHeader from '../layout/PageHeader'
-import LoadingState from './LoadingState'
+import LoadingState, { SlowLoadHint } from './LoadingState'
 import EmptyState from './EmptyState'
 import Button from '../ui/Button'
 import Badge from '../ui/Badge'
@@ -30,17 +30,17 @@ import { analysisFilterOptions, applyAnalysisFilter, pendingAnalysisCount } from
 import { dateInRange, toDateKey } from './progressAnalytics'
 import { todayISODate } from '../../utils/time'
 
-// Hata kaydedilme tarihine (WrongQuestions.created_at) göre daraltma seçenekleri — Gelişim
-// Analizi'ndeki (StudentProgressView.jsx) RANGE_FILTERS ile aynı id/etiket seti ve aynı
-// dateInRange yardımcısı kullanılır, tutarlılık için. Not: burada filtrelenen yalnızca
-// fotoğraflanmış yanlış soru KAYITLARI (galeriler, kartlardaki liste); test sonuçlarından
-// hesaplanan backend istatistikleri (subjectStatsMap vb. — bkz. computeWrongQuestionTopicStats)
-// her zaman tüm zamanları kapsar, bu yüzden bir kaynağın "yanlış" rozeti bazen bu filtreden
-// bağımsız görünebilir (stats mevcutsa fotoğraf sayısına değil ona öncelik verilir).
+// Hata kaydedilme tarihine (WrongQuestions.created_at) göre daraltma seçenekleri —
+// dateInRange yardımcısı Gelişim Analizi'ndeki (StudentProgressView.jsx) RANGE_FILTERS
+// ile paylaşılır. Not: burada filtrelenen yalnızca fotoğraflanmış yanlış soru KAYITLARI
+// (galeriler, kartlardaki liste); test sonuçlarından hesaplanan backend istatistikleri
+// (subjectStatsMap vb. — bkz. computeWrongQuestionTopicStats) her zaman tüm zamanları
+// kapsar, bu yüzden bir kaynağın "yanlış" rozeti bazen bu filtreden bağımsız görünebilir
+// (stats mevcutsa fotoğraf sayısına değil ona öncelik verilir).
 const MISTAKE_DATE_FILTERS = [
   { value: 'today', label: 'Bugün' },
-  { value: 'week', label: 'Bu Hafta' },
-  { value: 'month', label: 'Bu Ay' },
+  { value: 'last7', label: 'Son 7 Gün' },
+  { value: 'last30', label: 'Son 30 Gün' },
   { value: 'all', label: 'Tümü' },
 ]
 
@@ -448,7 +448,7 @@ function TopicAccordionHeader({ topic, wrongCount, stats, isOpen, onToggle }) {
 // bileşen mount olduğunda (yani içerik grubu açıldığında) tembel çekilir; kapalı gruplar hiç
 // mount edilmediği için fotoğraf istemez — WrongQuestionGalleryModal'daki tembel yükleme deseniyle
 // aynı fikir, tek farkı burada tüm grup için paralel çalışır.
-function WrongQuestionThumbnail({ item, fetchPhoto, onClick, viewerRole }) {
+function WrongQuestionThumbnail({ item, fetchPhoto, onClick, viewerRole, onLoadingChange }) {
   const [fetchedPhotoUrl, setFetchedPhotoUrl] = useState(null)
   const [error, setError] = useState('')
   // Hata Defteri'nden fotoğraf değiştirildiğinde üst bileşen item'a taze `photoUrl` yazar; o
@@ -469,6 +469,13 @@ function WrongQuestionThumbnail({ item, fetchPhoto, onClick, viewerRole }) {
       ignore = true
     }
   }, [item.id, item.photoUrl, fetchPhoto])
+
+  // Board seviyesinde tüm ızgaradaki bekleyen fotoğrafları sayıp tek bir "yavaş internet" ipucu
+  // göstermek için (her kartta ayrı mesaj yerine) yüklenme durumunu üst bileşene bildirir.
+  useEffect(() => {
+    onLoadingChange?.(item.id, !photoUrl && !error)
+    return () => onLoadingChange?.(item.id, false)
+  }, [item.id, photoUrl, error, onLoadingChange])
 
   // topic (içerik grubu) zaten akordeon başlığında gösteriliyor; burada tekrar etmemek için
   // başlıkta sadece test adı ve soru numarası yer alır (bkz. kullanıcı isteği).
@@ -523,6 +530,18 @@ function WrongQuestionThumbnail({ item, fetchPhoto, onClick, viewerRole }) {
 function SourceQuestionBoard({ subject, topics, statsForTopic, fetchPhoto, onSelectItem, viewerRole }) {
   const [query, setQuery] = useState('')
   const [expandedKeys, setExpandedKeys] = useState(() => new Set())
+  const [pendingPhotoIds, setPendingPhotoIds] = useState(() => new Set())
+
+  const handleThumbnailLoadingChange = useCallback((id, isLoading) => {
+    setPendingPhotoIds((prev) => {
+      const has = prev.has(id)
+      if (isLoading === has) return prev
+      const next = new Set(prev)
+      if (isLoading) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }, [])
 
   const normalizedQuery = query.trim().toLocaleLowerCase('tr')
 
@@ -566,6 +585,8 @@ function SourceQuestionBoard({ subject, topics, statsForTopic, fetchPhoto, onSel
         />
       </div>
 
+      <SlowLoadHint active={pendingPhotoIds.size > 0} />
+
       {filteredTopics.length === 0 ? (
         <p className="rounded-xl border border-dashed border-panel-border px-4 py-6 text-center text-sm text-panel-text-muted">
           Aramayla eşleşen soru bulunamadı.
@@ -592,6 +613,7 @@ function SourceQuestionBoard({ subject, topics, statsForTopic, fetchPhoto, onSel
                       fetchPhoto={fetchPhoto}
                       viewerRole={viewerRole}
                       onClick={() => onSelectItem(topicGroup.items, itemIndex)}
+                      onLoadingChange={handleThumbnailLoadingChange}
                     />
                   ))}
                 </div>
@@ -780,7 +802,7 @@ export default function WrongQuestionsView({
   const [selectedTopicKeys, setSelectedTopicKeys] = useState(() => new Set())
   const [replacingPhotoItem, setReplacingPhotoItem] = useState(null)
   const [analysisFilter, setAnalysisFilter] = useState('tumu')
-  const [dateFilter, setDateFilter] = useState('all')
+  const [dateFilter, setDateFilter] = useState('last30')
   const today = todayISODate()
 
   useEffect(() => {
