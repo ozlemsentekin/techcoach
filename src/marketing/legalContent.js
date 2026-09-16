@@ -31,14 +31,84 @@ export const LEGAL_CONTENT = {
   },
   hakkimizda: {
     title: 'Hakkımızda',
-    intro:
-      'TechCoach; öğrencinin ödevlerini plana dönüştüren, ilerlemesini görünür hâle getiren ve öğrenci, veli ile öğretmeni aynı gelişim sürecinde buluşturan bir akademik gelişim platformudur.',
-    body: [
-      'Uğur Şişman (Şahıs Firması), TechCoach markası altında öğrenci, veli ve öğretmenlere yönelik dijital bir eğitim takip ve planlama hizmeti sunar. Platform; günlük çalışma planı, hata defteri, sınav takvimi ve performans raporlama gibi araçları tek bir sistemde birleştirir.',
-      'Amacımız, sınava hazırlık sürecini ezbere ve baskıyla değil; ölçüm, analiz ve kişiselleştirilmiş yönlendirme ile yönetilen bir standarda dönüştürmektir.',
-      'İşletme Sahibi: Uğur Şişman · Vergi Dairesi: Küçükyalı Vergi Dairesi Müdürlüğü · Vergi No: 8140280077',
-      'Adres: Bağlarbaşı Mah. Bağdat Caddesi Ercan İşhanı No:350 C, Maltepe/İstanbul · E-posta: admin@techcoach.com.tr',
+    hero: 'Her şey öğrencinin ne kadar çalıştığını değil, çalışmasının ne anlattığını görebilme ihtiyacıyla başladı.',
+    sections: [
+      {
+        heading: 'TechCoach neden doğdu?',
+        blocks: [
+          { type: 'p', text: 'LGS hazırlığında öğrenciler zaten çalışıyor. Soru bankalarından testler çözüyor, denemelere giriyor, yanlışlarını tekrar etmeye çalışıyor.' },
+          { type: 'p', text: 'Ama çoğu zaman bütün bu çalışma farklı kitapların, defterlerin, sonuçların ve günlük planların arasında dağınık kalıyor.' },
+          { type: 'list', items: ['Ne kadar çalışıldı?', 'Hangi kaynak ne kadar tamamlandı?', 'Hangi konularda ilerleme var?', 'Aynı yanlışlar tekrar ediyor mu?', 'Bugün gerçekten neye dönmek gerekiyor?'] },
+          { type: 'p', text: 'Bu soruların cevapları görünür olmadığında, çok çalışmak her zaman doğru çalışmak anlamına gelmiyor.' },
+          { type: 'p', text: 'TechCoach tam olarak bu noktadaki ihtiyacı çözmek için geliştirildi.' },
+        ],
+      },
+      {
+        heading: 'Ölçemediğiniz şeyi geliştiremezsiniz.',
+        blocks: [
+          { type: 'p', text: 'TechCoach’ın çıkış noktası basit bir fikir:' },
+          { type: 'quote', text: 'Öğrencinin yaptığı gerçek çalışmayı görünür hâle getirmek.' },
+          { type: 'p', text: 'TechCoach yeni bir soru bankası ya da konu anlatım platformu değildir. Öğrenci zaten kullandığı kaynaklardan çalışmaya devam eder.' },
+          { type: 'p', text: 'Çözdüğü testleri, denemeleri ve çalışma sonuçlarını TechCoach’a kaydeder. Sistem bu çalışmaları kaynak, konu ve soru bazında ölçülebilir veriye dönüştürür.' },
+          { type: 'p', text: 'Böylece öğrenci yalnızca “bugün 80 soru çözdüm” demez; nerede ilerlediğini, nerede zorlandığını ve hangi noktaya tekrar dönmesi gerektiğini de görebilir.' },
+        ],
+      },
+      {
+        heading: 'Hatalar yalnızca yanlış cevap değildir.',
+        blocks: [
+          { type: 'p', text: 'TechCoach’ta yanlış yapılan bir soru kaybolup gitmez.' },
+          { type: 'p', text: 'Yanlışlar dijital hata defterinde toplanabilir, tekrar incelenebilir ve öğrencinin öğrenme sürecinin bir parçasına dönüşebilir.' },
+          { type: 'p', text: 'Çünkü bizim için önemli olan yalnızca kaç sorunun doğru yapıldığı değil; öğrencinin yaptığı hatadan ne öğrendiğidir.' },
+        ],
+      },
+      {
+        heading: 'Öğrenci kendi sürecinin içinde kalır.',
+        blocks: [
+          { type: 'p', text: 'TechCoach öğrencinin yerine çalışan bir sistem değildir.' },
+          { type: 'p', text: 'Plan yapabilir, gelişimi gösterebilir, eksikleri görünür hâle getirebilir ve sonraki adımı belirlemeyi kolaylaştırabilir.' },
+          { type: 'p', text: 'Ama çalışmayı yapan yine öğrencidir.' },
+          { type: 'p', text: 'Öğrenci kendi gelişimini takip edebilir, veli sürece destek olabilir. Özel öğretmeni varsa öğretmen de aynı veriler üzerinden öğrenciyi değerlendirebilir ve yönlendirebilir.' },
+        ],
+      },
+      {
+        heading: 'Özel öğretmen zorunlu değildir.',
+        blocks: [
+          { type: 'p', text: 'TechCoach’ın amacı öğrenci, veli ve öğretmeni birbirine bağımlı hâle getirmek değil; ihtiyaç olduğunda aynı doğru bilgi üzerinden buluşturmaktır.' },
+        ],
+      },
+      {
+        heading: 'Bir öğrenciyi başkalarıyla değil, kendi gelişimiyle karşılaştırıyoruz.',
+        blocks: [
+          { type: 'p', text: 'LGS doğası gereği rekabetçi bir sınav.' },
+          { type: 'p', text: 'Ama öğrencinin günlük çalışma sürecinde en anlamlı karşılaştırmanın kendi önceki performansıyla olduğuna inanıyoruz.' },
+          { type: 'list', items: ['Bir kaynakta yüzde kaç ilerledi?', 'Bir konuda başarı oranı nasıl değişti?', 'Daha önce yaptığı yanlışlar azalıyor mu?', 'Deneme sonuçlarında hangi alanlar gelişiyor?'] },
+          { type: 'p', text: 'TechCoach öğrencinin yolculuğunu bu sorular üzerinden görünür hâle getirir.' },
+        ],
+      },
+      {
+        heading: 'Mucize değil, daha bilinçli bir süreç.',
+        blocks: [
+          { type: 'p', text: 'Hiçbir uygulama tek başına sınav başarısı yaratmaz.' },
+          { type: 'p', text: 'TechCoach da böyle bir vaat sunmaz.' },
+          { type: 'p', text: 'Öğrenci çalışır, ailesi destekler, öğretmeni varsa yönlendirir. TechCoach ise yapılan çalışmanın ölçülmesine, anlaşılmasına ve doğru sonraki adımın belirlenmesine yardımcı olur.' },
+          { type: 'p', text: 'Sonuç elbette birçok etkene bağlıdır.' },
+          { type: 'p', text: 'Bizim yapmaya çalıştığımız şey, öğrencinin elinden geleni yaparken yolunu daha net görebilmesini sağlamaktır.' },
+        ],
+      },
     ],
+    closing: {
+      brand: 'TechCoach',
+      lines: ['Çalışmanı görünür kıl.', 'Hatalarından öğren.', 'Sonraki adımını bil.'],
+      note: 'Çünkü ölçemediğiniz şeyi geliştiremezsiniz.',
+    },
+    corporate: {
+      heading: 'Kurumsal Bilgiler',
+      paragraphs: [
+        'TechCoach, Uğur Şişman Şahıs Firması tarafından sunulan dijital eğitim takip ve planlama hizmetidir.',
+        'İşletme Sahibi: Uğur Şişman · Vergi Dairesi: Küçükyalı Vergi Dairesi Müdürlüğü · Vergi No: 8140280077',
+        'Adres: Bağlarbaşı Mah. Bağdat Caddesi Ercan İşhanı No:350 C, Maltepe/İstanbul · E-posta: admin@techcoach.com.tr',
+      ],
+    },
   },
   gizlilik: {
     title: 'Gizlilik Sözleşmesi',

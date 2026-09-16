@@ -1,6 +1,14 @@
 import { useState } from 'react'
 import RolePreview from './RolePreview'
-import { GraduationCap, HeartHandshake, BookOpen, ChartNoAxesCombined } from 'lucide-react'
+import { GraduationCap, HeartHandshake, BookOpen, ArrowRight } from 'lucide-react'
+
+const cycleSteps = [
+  ['Kaynağını ekle', 'Kullandığın kitapları oluştur.'],
+  ['Planla', 'Görevlerini ve çalışma zamanını belirle.'],
+  ['Çalış', 'Kendi kitabından testini çöz.'],
+  ['Kaydet & Öğren', 'Sonucunu ve yanlışlarını sisteme aktar.'],
+  ['Gelişimini izle', 'İlerlemeni aynı veriler üzerinden takip et.'],
+]
 
 const roles = [
   {
@@ -43,7 +51,18 @@ export default function RolePanels() {
         <div className="role-detail" role="tabpanel" id={`role-panel-${role.id}`} aria-labelledby={`role-tab-${role.id}`} tabIndex={0} key={role.id}>
           <RolePreview key={role.id} role={role.id} name={role.name} />
         </div>
-        <div className="role-cycle"><div className="role-cycle-heading"><ChartNoAxesCombined size={24} aria-hidden="true" /><div><h3>Bir çalışma, herkes için anlamlı bilgi.</h3><p>Sonuçları öğrenci veya veli kaydeder; öğrenci, veli ve öğretmen gelişimi birlikte takip eder.</p></div></div><ol>{['Kaynak ekle', 'Görev planla', 'Kitaptan çalış', 'Sonucu ve yanlışları kaydet', 'Gelişimi birlikte takip et'].map((step, index) => <li key={step}><span>{index + 1}</span>{step}</li>)}</ol></div>
+        <div className="role-cycle">
+          <h3>Bir çalışma, herkes için anlamlı bilgiye dönüşür.</h3>
+          <ol className="role-cycle-flow">
+            {cycleSteps.map(([title, description], index) => (
+              <li key={title}>
+                <div className="role-cycle-card"><span>{index + 1}</span><strong>{title}</strong><p>{description}</p></div>
+                {index < cycleSteps.length - 1 && <ArrowRight className="role-cycle-arrow" size={20} aria-hidden="true" />}
+              </li>
+            ))}
+          </ol>
+          <p className="role-cycle-tagline">Daha bilinçli çalışma, daha görünür gelişim.</p>
+        </div>
       </div>
     </section>
   )

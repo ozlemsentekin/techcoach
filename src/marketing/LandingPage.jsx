@@ -272,10 +272,11 @@ export default function LandingPage() {
           <div className="container">
             <div className="cta-strip">
               <div>
-                <h2>Hedefler netleşsin, gelişim görünür olsun.</h2>
+                <h2>Çalışmanı görünür kıl, sonraki adımını netleştir.</h2>
                 <p>
-                  TechCoach; öğrencinin çalışma sürecini planlayan, ilerlemesini ölçen ve öğrenci,
-                  veli ve öğretmen arasındaki iletişimi güçlendiren akademik gelişim platformudur.
+                  TechCoach, öğrencinin kendi kaynaklarındaki çalışmalarını ölçülebilir veriye
+                  dönüştürür; ilerlemesini ve hatalarını görünür hâle getirir. Öğrenci sürecini
+                  yönetir, veli takip eder; varsa özel öğretmen aynı veriler üzerinden destek olur.
                 </p>
               </div>
               <a className="btn btn-primary cta-action" href="#" onClick={handlePrimaryCta}>

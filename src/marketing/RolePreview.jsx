@@ -100,7 +100,7 @@ function getJourney(role) {
       ['Haftalık görünüm', 'Haftanı planla, bugünü netleştir', 'Haftalık görünümle okulunu, derslerini ve bireysel çalışmalarını tek planda gör. Hazırladığın görevleri zamanı geldiğinde Bugün akışında kolayca takip et.', WeeklyPlan],
       ['Bugünün akışı', student ? 'Bugün ne çalışacağını bil' : 'Verilen çalışmanın durumunu gör', 'Günlük görevlerde kaynak, konu ve test bilgilerine ulaşın; tamamlanan çalışmaları takip edin.', DailyTasks],
       ['Sonuç girişi', 'Çalışmanı kaydet, gelişimini görünür kıl', 'Kendi kaynağından testini çöz, sonucunu TechCoach’a kaydet. Doğru, yanlış ve boşların işlendiğinde çalışman gelişim verisine dönüşür. Dijital ürün kullanmıyorsan velin senin adına kaydedebilir; özel öğretmenin varsa o da aynı sonuçları takip edebilir.', OpticalResults],
-      ['Kaynak başarısı', 'Çözülen testlerin başarısını gör', 'Doğru, yanlış ve boş sayılarını inceleyerek hangi konularda desteğe ihtiyaç olduğunu belirleyin.', BookSuccess],
+      ['Kaynak başarısı', 'Sonuçlarını gör, hatalarından öğren', 'Kaynaklarındaki gelişimini takip et, yanlışlarını hata defterinde biriktir. Tekrar etmen gereken konuları fark ederek sonraki çalışmanı daha bilinçli planla.', BookSuccess],
       ['Kaynak ilerlemesi', 'Kaynakta ne kadar ilerlediğini gör', 'Tamamlanan ve kalan testleri takip edin. Başarı oranıyla tamamlanma oranını birlikte değerlendirin.', Completion],
       ['Hata defteri', 'Yanlış sorulardan tekrar planına', 'Yanlış soruların fotoğraflarını ve hata notlarını saklayın; sonraki çalışmada bu sorulara dönün.', Mistakes],
       ['Deneme Sınavları', 'Sınav sonuçlarını takip et', 'Branş İzleme, Genel Deneme ve Etüt sonuçlarını doğru, yanlış, boş ve net bilgileriyle değerlendirin.', MockExamPreview],

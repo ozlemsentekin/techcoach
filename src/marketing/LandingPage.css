@@ -5175,6 +5175,32 @@ footer {
   font-size: 26px;
 }
 
+.about-page-card { max-width: min(820px, calc(100vw - 32px)); padding: 40px 36px 36px; }
+.about-page-eyebrow { margin: 0 0 14px; color: #a74c16; font-size: 12px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; }
+.about-page-hero { margin: 0; color: var(--indigo); font-size: clamp(28px, 3.4vw, 40px); line-height: 1.3; letter-spacing: -1px; font-weight: 800; }
+.about-section { margin-top: 36px; padding-top: 28px; border-top: 1px solid var(--line); }
+.about-section h3 { margin: 0 0 14px; color: var(--indigo); font-size: 21px; line-height: 1.35; letter-spacing: -0.4px; }
+.about-section p { margin: 0 0 14px; color: #4f5984; font-size: 15.5px; line-height: 1.75; }
+.about-section p:last-child { margin-bottom: 0; }
+.about-quote { margin: 18px 0; padding: 16px 20px; border-left: 3px solid #c6681b; background: #fff7f0; color: var(--indigo); font-weight: 700; font-size: 17px; line-height: 1.5; }
+.about-list { display: grid; gap: 10px; margin: 0 0 14px; padding: 0; list-style: none; }
+.about-list li { position: relative; padding-left: 22px; color: #4f5984; font-size: 15.5px; line-height: 1.6; }
+.about-list li::before { content: '→'; position: absolute; left: 0; color: #c6681b; font-weight: 700; }
+.about-closing { margin-top: 40px; padding: 32px 28px; border-radius: 20px; background: linear-gradient(160deg, #232a66, #2b2f77 62%, #323b95); color: #fff; text-align: center; }
+.about-closing strong { display: block; margin-bottom: 14px; font-size: 22px; font-weight: 800; }
+.about-closing ul { display: grid; gap: 6px; margin: 0 0 16px; padding: 0; list-style: none; }
+.about-closing li { font-size: 17px; font-weight: 700; }
+.about-closing p { margin: 0; color: #c9cdf0; font-size: 13px; }
+.about-corporate { margin-top: 32px; padding-top: 24px; border-top: 1px dashed var(--line); }
+.about-corporate h4 { margin: 0 0 10px; color: #8890b5; font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+.about-corporate p { margin: 0 0 6px; color: #8890b5; font-size: 12.5px; line-height: 1.6; }
+.about-corporate p:last-child { margin-bottom: 0; }
+@media (max-width: 560px) {
+  .about-page-card { padding: 28px 20px 24px; }
+  .about-section { margin-top: 28px; padding-top: 20px; }
+  .about-closing { padding: 24px 18px; }
+}
+
 .signup-page {
   padding-top: 0;
 }
@@ -6754,13 +6780,23 @@ footer {
 .role-preview-note strong { display: block; font-size: 12px; }
 .role-preview-note p { margin: 5px 0 0; font-size: 11px; line-height: 1.65; color: #5e6587; }
 .role-preview-caption { text-align: center; color: #626885; font-size: 11px; margin: 13px 0 0; }
-.role-cycle { margin-top: 24px; padding: 26px 30px; border: 1px solid var(--line); border-radius: 18px; background: #fff; }
-.role-cycle-heading { display: flex; gap: 12px; align-items: center; color: var(--indigo); }
-.role-cycle h3 { margin: 0 0 5px; font-size: 17px; }
-.role-cycle p { margin: 0; color: #5e6587; font-size: 13px; line-height: 1.6; }
-.role-cycle ol { display: flex; flex-wrap: wrap; gap: 12px 24px; list-style: none; margin: 22px 0 0; padding: 0; }
-.role-cycle li { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 12px; }
-.role-cycle li > span { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #fff0e5; color: #a74c16; font-weight: 700; }
+.role-cycle { margin-top: 40px; padding: 40px 32px; border: 1px solid var(--line); border-radius: 24px; background: linear-gradient(180deg, #fbfbff, #f4f5fc); text-align: center; }
+.role-cycle h3 { margin: 0 0 40px; color: var(--indigo); font-size: clamp(26px, 2.8vw, 36px); font-weight: 800; line-height: 1.3; letter-spacing: -0.8px; }
+.role-cycle-flow { display: flex; flex-direction: column; align-items: center; gap: 16px; list-style: none; margin: 0; padding: 0; }
+.role-cycle-flow li { display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
+.role-cycle-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; width: 100%; max-width: 320px; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: #fff; text-align: left; }
+.role-cycle-card span { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 50%; background: #fde7d7; color: #c6681b; font-weight: 800; font-size: 16px; }
+.role-cycle-card strong { color: var(--indigo); font-size: 17px; }
+.role-cycle-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.role-cycle-arrow { flex-shrink: 0; color: #c7cbe0; transform: rotate(90deg); }
+.role-cycle-tagline { display: flex; align-items: center; gap: 16px; margin: 36px 0 0; color: var(--indigo); font-weight: 700; font-size: 15px; }
+.role-cycle-tagline::before, .role-cycle-tagline::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+@media (min-width: 901px) {
+  .role-cycle-flow { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 0; }
+  .role-cycle-flow li { flex-direction: row; width: auto; gap: 16px; }
+  .role-cycle-card { width: 190px; }
+  .role-cycle-arrow { transform: none; }
+}
 @media (max-width: 900px) {
   .role-detail { padding: 26px; gap: 26px; grid-template-columns: 1fr; }
   .role-preview-wrap { width: 100%; max-width: 520px; margin-inline: auto; }
@@ -6776,10 +6812,7 @@ footer {
   .role-copy h3 { font-size: 26px; }
   .role-preview-wrap { padding: 14px 10px 12px; }
   .role-preview { padding: 16px; }
-  .role-cycle { padding: 22px 18px; }
-  .role-cycle-heading { align-items: flex-start; }
-  .role-cycle-heading > svg { flex-shrink: 0; }
-  .role-cycle ol { flex-direction: column; gap: 12px; }
+  .role-cycle { padding: 28px 18px; }
 }
 
 .rp-carousel { align-self: start; padding: 18px; }
@@ -7159,7 +7192,7 @@ footer {
 .mj-steps button[aria-current="step"] { background: #fbe3cb; border-color: #f0b978; color: #b45812; }
 .mj-card { border: 1px solid #e2e6f5; border-radius: 22px; overflow: hidden; background: white; }
 .mj-content { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 32px; align-items: center; padding: 28px; }
-.mj-copy { min-width: 0; }
+.mj-copy { min-width: 0; display: flex; flex-direction: column; justify-content: center; overflow-y: auto; scrollbar-gutter: stable; }
 .mj-copy h3 { margin: 12px 0 16px; font-size: clamp(23px, 2.3vw, 32px); line-height: 1.3; color: #303477; }
 .mj-copy p { font-size: 16px; line-height: 1.85; color: #646a89; margin: 0; }
 .marketing-journey .role-preview { min-width: 0; width: 100%; max-width: 520px; margin: 0 auto; box-shadow: none; background: #fcfcff; }
@@ -7168,6 +7201,8 @@ footer {
 @media (max-width: 900px) {
   .mj-phases { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mj-content { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+  .mj-copy { height: 330px; }
+  .marketing-journey .role-preview { height: 480px; overflow-y: auto; scrollbar-gutter: stable; }
 }
 @media (max-width: 480px) {
   .mj-phases { gap: 8px; }
@@ -7178,7 +7213,8 @@ footer {
   .mj-steps { gap: 8px; margin-top: 18px; }
   .mj-steps button { padding: 9px 16px; font-size: 13px; }
   .mj-content { padding: 18px 12px; }
-  .marketing-journey .role-preview { padding: 14px 10px; }
+  .mj-copy { height: 300px; }
+  .marketing-journey .role-preview { padding: 14px 10px; height: 420px; }
 }
 
 /* Masaüstünde yol haritası ve gezinme, örnek panelden bağımsız görünür kalır. */
@@ -7197,7 +7233,8 @@ footer {
   .mj-content { padding: 16px 20px; gap: 24px; }
   .mj-copy h3 { margin-block: 8px 12px; font-size: 25px; }
   .mj-copy p { font-size: 15px; line-height: 1.65; }
-  .marketing-journey .role-preview { padding: 14px; max-width: none; max-height: clamp(260px, calc(100dvh - 430px), 380px); overflow-y: auto; scrollbar-gutter: stable; }
+  .marketing-journey .role-preview { padding: 14px; max-width: none; height: clamp(260px, calc(100dvh - 430px), 380px); overflow-y: auto; scrollbar-gutter: stable; }
+  .mj-copy { height: clamp(260px, calc(100dvh - 430px), 380px); }
   .marketing-journey .role-preview-top { margin-bottom: 10px; }
   .marketing-journey .rp-slide-visual { padding-top: 4px; }
   .marketing-journey .rp-library-picks { margin-top: 8px; }
