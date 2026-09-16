@@ -97,9 +97,9 @@ function getJourney(role) {
       ['Değerlendir', 'Deneme ve gelişim verilerini yorumla.', [6, 7]],
     ],
     steps: [
-      ['Haftalık plan', student ? 'Haftanı bir bakışta gör' : 'Öğrencinin sonraki çalışmasını planla', 'Okul, ders ve bireysel çalışma zamanlarını aynı planda takip edin.', WeeklyPlan],
-      ['Günlük görevler', student ? 'Bugün ne çalışacağını bil' : 'Verilen çalışmanın durumunu gör', 'Günlük görevlerde kaynak, konu ve test bilgilerine ulaşın; tamamlanan çalışmaları takip edin.', DailyTasks],
-      ['Sonuç girişi', 'Paylaşımlı kullanım, ortak takip', 'Sonuçları öğrenci veya veli kaydedebilir. Çocuk cihaz kullanmıyorsa veli kendi profilinden öğrenciye geçerek görevi tamamlayabilir. Öğretmen kaydedilen sonuçları inceleyebilir.', OpticalResults],
+      ['Haftalık görünüm', 'Haftanı planla, bugünü netleştir', 'Haftalık görünümle okulunu, derslerini ve bireysel çalışmalarını tek planda gör. Hazırladığın görevleri zamanı geldiğinde Bugün akışında kolayca takip et.', WeeklyPlan],
+      ['Bugünün akışı', student ? 'Bugün ne çalışacağını bil' : 'Verilen çalışmanın durumunu gör', 'Günlük görevlerde kaynak, konu ve test bilgilerine ulaşın; tamamlanan çalışmaları takip edin.', DailyTasks],
+      ['Sonuç girişi', 'Çalışmanı kaydet, gelişimini görünür kıl', 'Kendi kaynağından testini çöz, sonucunu TechCoach’a kaydet. Doğru, yanlış ve boşların işlendiğinde çalışman gelişim verisine dönüşür. Dijital ürün kullanmıyorsan velin senin adına kaydedebilir; özel öğretmenin varsa o da aynı sonuçları takip edebilir.', OpticalResults],
       ['Kaynak başarısı', 'Çözülen testlerin başarısını gör', 'Doğru, yanlış ve boş sayılarını inceleyerek hangi konularda desteğe ihtiyaç olduğunu belirleyin.', BookSuccess],
       ['Kaynak ilerlemesi', 'Kaynakta ne kadar ilerlediğini gör', 'Tamamlanan ve kalan testleri takip edin. Başarı oranıyla tamamlanma oranını birlikte değerlendirin.', Completion],
       ['Hata defteri', 'Yanlış sorulardan tekrar planına', 'Yanlış soruların fotoğraflarını ve hata notlarını saklayın; sonraki çalışmada bu sorulara dönün.', Mistakes],
@@ -119,12 +119,17 @@ export default function RolePreview({ role, name }) {
       <nav className="mj-phases" aria-label={`${name} süreçleri`}>
         {phases.map(([label, detail, indices], index) => <button type="button" key={label} aria-current={phaseIndex === index ? 'step' : undefined} onClick={() => setSelected(indices[0])}><span className="mj-number">{index + 1}</span><span><strong>{label}</strong>{role !== 'student' && <small>{detail}</small>}</span></button>)}
       </nav>
-      <nav className="mj-steps" aria-label={`${name} alt adımları`}>
-        {phases[phaseIndex][2].map(index => <button type="button" key={steps[index][0]} aria-current={selected === index ? 'step' : undefined} onClick={() => setSelected(index)}>{steps[index][0]}</button>)}
-      </nav>
       <div className="mj-card">
         <div className="mj-content">
-          <div className="mj-copy" aria-live="polite" aria-atomic="true"><span className="mj-count">Adım {selected + 1} / {steps.length}</span><h3>{title}</h3><p>{description}</p><span className="mj-example-note">Temsili verilerle örnek {name.toLocaleLowerCase('tr')} paneli.</span></div>
+          <div className="mj-copy" aria-live="polite" aria-atomic="true">
+            <span className="mj-count">Adım {selected + 1} / {steps.length}</span>
+            <h3>{title}</h3>
+            <p>{description}</p>
+            {phases[phaseIndex][2].length > 1 && <nav className="mj-steps" aria-label={`${name} alt adımları`}>
+              {phases[phaseIndex][2].map(index => <button type="button" key={steps[index][0]} aria-current={selected === index ? 'step' : undefined} onClick={() => setSelected(index)}>{steps[index][0]}</button>)}
+            </nav>}
+            <span className="mj-example-note">Temsili verilerle örnek {name.toLocaleLowerCase('tr')} paneli.</span>
+          </div>
           <div key={selected} className="role-preview" tabIndex={0} role="region" aria-label={`${name} örnek ekranı; uzun içerik kaydırılabilir`}><div className="role-preview-top"><span className="role-preview-brand">Tech<span>Coach</span></span><span className="role-example">{name} · Örnek</span></div><div className="rp-slide-visual"><Visual role={role} /></div></div>
         </div>
         <div className="mj-controls"><button type="button" disabled={selected === 0} onClick={() => setSelected(selected - 1)}><ArrowLeft size={18} aria-hidden="true" />Önceki</button><span>Adımları sırayla keşfet</span><button type="button" disabled={selected === steps.length - 1} onClick={() => setSelected(selected + 1)}>Sonraki<ArrowRight size={18} aria-hidden="true" /></button></div>

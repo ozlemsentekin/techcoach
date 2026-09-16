@@ -7153,9 +7153,10 @@ footer {
 .mj-phases button[aria-current="step"] .mj-number { background: #ffffff30; }
 .mj-phases strong { display: block; font-size: 15px; line-height: 1.5; }
 .mj-phases small { display: block; margin-top: 5px; font-size: 12px; line-height: 1.6; }
-.mj-steps { display: flex; flex-wrap: wrap; gap: 0 20px; margin: 14px 4px; }
-.mj-steps button { min-height: 44px; padding: 8px 0; background: transparent; border: 0; border-bottom: 2px solid transparent; font: inherit; font-size: 14px; color: #646a89; cursor: pointer; }
-.mj-steps button[aria-current="step"] { border-color: #c6681b; color: #b45812; font-weight: 700; }
+.mj-steps { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.mj-steps button { min-height: 46px; padding: 11px 22px; border: 1px solid #e2e6f5; border-radius: 999px; background: white; font: inherit; font-size: 15px; font-weight: 600; color: #303477; cursor: pointer; }
+.mj-steps button:hover { border-color: #c6681b; }
+.mj-steps button[aria-current="step"] { background: #fbe3cb; border-color: #f0b978; color: #b45812; }
 .mj-card { border: 1px solid #e2e6f5; border-radius: 22px; overflow: hidden; background: white; }
 .mj-content { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 32px; align-items: center; padding: 28px; }
 .mj-copy { min-width: 0; }
@@ -7182,8 +7183,8 @@ footer {
   .mj-number { width: 28px; height: 32px; font-size: 14px; }
   .mj-phases strong { font-size: 13px; overflow-wrap: anywhere; }
   .mj-phases small { display: none; }
-  .mj-steps { gap: 0 14px; }
-  .mj-steps button { font-size: 13px; }
+  .mj-steps { gap: 8px; margin-top: 18px; }
+  .mj-steps button { padding: 9px 16px; font-size: 13px; }
   .mj-content { padding: 18px 12px; }
   .marketing-journey .role-preview { padding: 14px 10px; }
   .mj-controls { padding: 10px 12px; }
@@ -7201,7 +7202,8 @@ footer {
   .mj-phases strong { font-size: 14px; line-height: 1.35; }
   .mj-phases small { margin-top: 3px; line-height: 1.4; }
   .mj-number { width: 32px; height: 32px; }
-  .mj-steps { margin-block: 4px; }
+  .mj-steps { margin-top: 16px; gap: 10px; }
+  .mj-steps button { min-height: 40px; padding: 9px 16px; font-size: 14px; }
   .mj-content { padding: 16px 20px; gap: 24px; }
   .mj-copy h3 { margin-block: 8px 12px; font-size: 25px; }
   .mj-copy p { font-size: 15px; line-height: 1.65; }
