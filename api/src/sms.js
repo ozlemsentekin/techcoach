@@ -1,10 +1,10 @@
 const { getSmsConfig, isConfigError } = require('./config')
 
-const NETGSM_SEND_URL = 'https://api.netgsm.com.tr/sms/rest/v2/send'
+// OTP paketi/kredisi normal SMS gönderim ("send") ürününden ayrı bir havuzdur; OTP
+// mesajları bu ayrı uç noktadan gönderilmezse normal SMS kredisi (0 olabilir)
+// kullanılmaya çalışılır ve "krediniz yetersiz" hatası alınır.
+const NETGSM_OTP_URL = 'https://api.netgsm.com.tr/sms/rest/v2/otp'
 
-// Netgsm REST v2 gönderim uç noktası; OTP ürünü aynı uç noktayı kullanır (IYS filtresi
-// olmadan). Gerçek Netgsm hesap bilgileri tanımlandığında panel/dokümantasyondaki alan
-// adları (msgheader, encoding vb.) ile burası teyit edilmeli.
 async function sendOtpSms(phoneE164, code) {
   let config
   try {
@@ -22,7 +22,7 @@ async function sendOtpSms(phoneE164, code) {
   const gsmNo = phoneE164.replace('+', '')
   const message = `TechCoach doğrulama kodunuz: ${code}. Kod 60 saniye geçerlidir.`
 
-  const response = await fetch(NETGSM_SEND_URL, {
+  const response = await fetch(NETGSM_OTP_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -31,8 +31,8 @@ async function sendOtpSms(phoneE164, code) {
     body: JSON.stringify({
       msgheader: config.netgsmHeader,
       encoding: 'TR',
-      iysfilter: '',
-      messages: [{ msg: message, no: gsmNo }],
+      msg: message,
+      no: gsmNo,
     }),
   })
 
