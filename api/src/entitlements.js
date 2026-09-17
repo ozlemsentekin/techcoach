@@ -2,6 +2,7 @@ const crypto = require('crypto')
 const { sql, withRequest } = require('./db')
 const { isConfigError, getBillingConfig } = require('./config')
 const { json } = require('./http')
+const { cancelSubscription } = require('./iyzicoClient')
 
 const ACTIVE_EVENT_TYPES = new Set(['INITIAL_PURCHASE', 'RENEWAL', 'UNCANCELLATION'])
 const CANCEL_EVENT_TYPES = new Set(['CANCELLATION'])
@@ -597,8 +598,95 @@ async function updateTeacherSeatSubscriptionFromIyzico({ subscriptionReferenceCo
   `)
 }
 
+// "Üyelik Bilgilerim" self-service sayfası için velinin taban planı + ek çocuk koltuklarının
+// ham DB satırlarını döner (fiyat/başlık bilgisi yok — o PricingPlans'tan ayrıca okunur).
+async function getParentMembershipOverview(parentId) {
+  const requestDb = await withRequest({ parentId: { type: sql.UniqueIdentifier, value: parentId } })
+  const result = await requestDb.query(`
+    SELECT TOP 1 status, source, period, subscription_reference_code, current_period_end
+    FROM dbo.Entitlements WHERE parent_id = @parentId;
+
+    SELECT id, status, period, subscription_reference_code, current_period_end
+    FROM dbo.ChildSeatSubscriptions WHERE parent_id = @parentId ORDER BY created_at ASC;
+  `)
+  const [baseRecordset, childSeatsRecordset] = result.recordsets
+  return {
+    base: baseRecordset[0] || null,
+    childSeats: childSeatsRecordset,
+  }
+}
+
+// Aynısının öğretmen karşılığı: taban plan (TeacherEntitlements) + ek öğrenci koltukları.
+async function getTeacherMembershipOverview(teacherId) {
+  const requestDb = await withRequest({ teacherId: { type: sql.UniqueIdentifier, value: teacherId } })
+  const result = await requestDb.query(`
+    SELECT TOP 1 status, source, current_period_end, base_seats, purchased_seats
+    FROM dbo.TeacherEntitlements WHERE teacher_id = @teacherId;
+
+    SELECT id, status, period, subscription_reference_code, current_period_end
+    FROM dbo.TeacherSeatSubscriptions WHERE teacher_id = @teacherId ORDER BY created_at ASC;
+  `)
+  const [baseRecordset, seatsRecordset] = result.recordsets
+  return {
+    base: baseRecordset[0] || null,
+    seats: seatsRecordset,
+  }
+}
+
+// Bir kullanıcının (veli veya öğretmen) hâlâ ödeme alan tüm iyzico abonelik referanslarını
+// toplar: kendi taban planı (Entitlements, sadece source='iyzico' olanlar; 'comp'/'coupon'
+// kaynaklı haklarda gerçek bir iyzico aboneliği yoktur) + ek çocuk koltukları + ek öğretmen
+// koltukları. Kullanıcı silinirken/pasife alınırken bunlar iptal edilmezse iyzico kayıtlı
+// karttan tahsilata devam eder.
+async function findCancellableSubscriptionReferenceCodes(userId) {
+  const requestDb = await withRequest({
+    userId: { type: sql.UniqueIdentifier, value: userId },
+  })
+  const result = await requestDb.query(`
+    SELECT subscription_reference_code FROM dbo.Entitlements
+      WHERE parent_id = @userId AND source = 'iyzico'
+        AND status IN ('active', 'trial', 'grace_period')
+        AND subscription_reference_code IS NOT NULL
+    UNION
+    SELECT subscription_reference_code FROM dbo.ChildSeatSubscriptions
+      WHERE parent_id = @userId
+        AND status IN ('active', 'grace_period')
+        AND subscription_reference_code IS NOT NULL
+    UNION
+    SELECT subscription_reference_code FROM dbo.TeacherSeatSubscriptions
+      WHERE teacher_id = @userId
+        AND status IN ('active', 'grace_period')
+        AND subscription_reference_code IS NOT NULL;
+  `)
+  return result.recordset.map((row) => row.subscription_reference_code)
+}
+
+// Kullanıcı silinirken/pasife alınırken çağrılır. iyzico'da zaten iptal/süresi dolmuş bir
+// aboneliği tekrar iptal etmeye çalışmak hata verebilir; bu ve ağ hataları burada yutulup
+// admin işlemine (silme/pasife alma) engel olmaz — hangi referans kodların iptal
+// edilemediği çağırana döndürülür ki admin panelinde uyarı olarak gösterilebilsin.
+async function cancelSubscriptionsForUser(userId) {
+  const referenceCodes = await findCancellableSubscriptionReferenceCodes(userId)
+  const failedReferenceCodes = []
+
+  for (const subscriptionReferenceCode of referenceCodes) {
+    try {
+      await cancelSubscription({ subscriptionReferenceCode })
+    } catch (error) {
+      console.error('cancelSubscriptionsForUser: iyzico iptali başarısız', subscriptionReferenceCode, error)
+      failedReferenceCodes.push(subscriptionReferenceCode)
+    }
+  }
+
+  return { cancelledCount: referenceCodes.length - failedReferenceCodes.length, failedReferenceCodes }
+}
+
 module.exports = {
   revenuecatWebhookHandler,
+  cancelSubscriptionsForUser,
+  findCancellableSubscriptionReferenceCodes,
+  getParentMembershipOverview,
+  getTeacherMembershipOverview,
   getTeacherQuota,
   insertTeacherSeatSubscription,
   findTeacherIdByTeacherSeatSubscriptionReferenceCode,

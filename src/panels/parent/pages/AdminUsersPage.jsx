@@ -667,9 +667,10 @@ export default function AdminUsersPage() {
     setDeletingUserLoading(true)
     setDeletingUserError('')
     try {
-      await authRequest(`/api/panel-admin/users/${deletingUser.id}`, { method: 'DELETE' })
+      const data = await authRequest(`/api/panel-admin/users/${deletingUser.id}`, { method: 'DELETE' })
       setUsers((current) => (current || []).filter((item) => item.id !== deletingUser.id))
       setDeletingUser(null)
+      if (data?.subscriptionWarning) setActionError(data.subscriptionWarning)
     } catch (err) {
       setDeletingUserError(err.message)
     } finally {
@@ -691,6 +692,7 @@ export default function AdminUsersPage() {
         (current || []).map((item) => (item.id === data.user.id ? { ...item, ...data.user } : item)),
       )
       setTogglingUser(null)
+      if (data?.subscriptionWarning) setActionError(data.subscriptionWarning)
     } catch (err) {
       setTogglingUserError(err.message)
     } finally {

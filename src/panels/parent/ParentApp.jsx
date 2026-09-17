@@ -15,6 +15,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const WeeklyPlanPage = lazy(() => import('./pages/WeeklyPlanPage'))
 const ProgressPage = lazy(() => import('./pages/ProgressPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const MembershipPage = lazy(() => import('./pages/MembershipPage'))
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'))
 const AdminSubjectsPage = lazy(() => import('./pages/AdminSubjectsPage'))
 const AdminPublishersPage = lazy(() => import('./pages/AdminPublishersPage'))
@@ -153,6 +154,7 @@ export default function ParentApp() {
               element={<RequireStudents>{pageElement(BookshelfPage)}</RequireStudents>}
             />
             <Route path="settings" element={pageElement(SettingsPage)} />
+            <Route path="membership" element={pageElement(MembershipPage)} />
             <Route path="requests" element={pageElement(RequestsPage)} />
             <Route
               path="admin/book-requests"

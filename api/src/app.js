@@ -290,6 +290,12 @@ const {
 } = require('./motivation')
 const { revenuecatWebhookHandler } = require('./entitlements')
 const {
+  getParentMembershipHandler,
+  cancelParentMembershipHandler,
+  getTeacherMembershipHandler,
+  cancelTeacherMembershipHandler,
+} = require('./membership')
+const {
   initiateIyzicoCheckoutHandler,
   initiateChildSeatCheckoutHandler,
   initiateTeacherSeatCheckoutHandler,
@@ -431,6 +437,34 @@ registerHttp('payments-iyzico-webhook', {
   methods: ['POST'],
   route: 'payments/iyzico/webhook',
   handler: iyzicoWebhookHandler,
+})
+
+registerHttp('parent-membership', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'parent/membership',
+  handler: getParentMembershipHandler,
+})
+
+registerHttp('parent-membership-cancel', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'parent/membership/cancel',
+  handler: cancelParentMembershipHandler,
+})
+
+registerHttp('panel-teacher-membership', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/membership',
+  handler: getTeacherMembershipHandler,
+})
+
+registerHttp('panel-teacher-membership-cancel', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/membership/cancel',
+  handler: cancelTeacherMembershipHandler,
 })
 
 registerHttp('panel-admin-users', {

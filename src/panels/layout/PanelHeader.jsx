@@ -4,6 +4,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  CreditCard,
   GraduationCap,
   LogOut,
   RefreshCw,
@@ -379,6 +380,23 @@ export default function PanelHeader() {
                     <GraduationCap size={16} aria-hidden="true" />
                   </span>
                   <span className="min-w-0 flex-1 truncate text-sm font-bold">Branşlarım</span>
+                </button>
+              ) : null}
+
+              {isParent || isTeacher ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false)
+                    navigate(isParent ? '/parent/membership' : '/teacher/membership')
+                  }}
+                  className="flex min-h-11 w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-panel-text transition-colors hover:bg-panel-surface-soft"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-panel-sage-soft text-panel-sage">
+                    <CreditCard size={16} aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-bold">Üyelik Bilgilerim</span>
+                  <ChevronRight size={16} className="shrink-0 text-panel-text-muted" aria-hidden="true" />
                 </button>
               ) : null}
 

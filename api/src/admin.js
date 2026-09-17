@@ -11,6 +11,7 @@ const {
 } = require('./security')
 const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
 const { sanitizeUser: sanitizeSessionUser } = require('./auth')
+const { cancelSubscriptionsForUser } = require('./entitlements')
 
 async function requireAdmin(request) {
   const token = readSessionToken(request)
@@ -311,6 +312,13 @@ async function setUserActiveHandler(request) {
       return json(400, { error: 'Kendi hesabınızı pasife alamazsınız.' })
     }
 
+    // Pasife alınan kullanıcının hâlâ ödeme alan bir iyzico aboneliği varsa (taban plan,
+    // ek çocuk/öğretmen koltuğu) burada iptal edilmezse iyzico kayıtlı karttan tahsilata
+    // devam eder — hesap artık kullanılamasa bile.
+    const subscriptionCancellation = payload.isActive === false
+      ? await cancelSubscriptionsForUser(userId)
+      : null
+
     const requestDb = await withRequest({
       id: { type: sql.UniqueIdentifier, value: userId },
       isActive: { type: sql.Bit, value: payload.isActive },
@@ -336,7 +344,12 @@ async function setUserActiveHandler(request) {
       return json(404, { error: 'Kullanıcı bulunamadı.' })
     }
 
-    return json(200, { user: sanitizeUser(updated) })
+    return json(200, {
+      user: sanitizeUser(updated),
+      ...(subscriptionCancellation?.failedReferenceCodes.length
+        ? { subscriptionWarning: 'Kullanıcı pasife alındı ancak bazı iyzico abonelikleri iptal edilemedi, iyzico panelinden elle kontrol edin.' }
+        : {}),
+    })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -364,6 +377,11 @@ async function deleteUserHandler(request) {
       return json(400, { error: 'Kendi hesabınızı silemezsiniz.' })
     }
 
+    // Entitlements satırları aşağıda silinmeden ÖNCE hâlâ ödeme alan iyzico aboneliği varsa
+    // iptal ediyoruz — aksi halde kullanıcı DB'den kalksa bile iyzico kayıtlı karttan
+    // tahsilata devam eder.
+    const subscriptionCancellation = await cancelSubscriptionsForUser(userId)
+
     // Entitlements/TeacherEntitlements satırları kullanıcının kendi hesap hakkı durumudur (1:1,
     // PK = kullanıcı id'si) — gerçek bir bağımlılık değil, o yüzden kullanıcıyla birlikte silinir.
     // Bunun dışında kalan FK'lar (öğrenci verisi, ödev, ders programı vb.) hâlâ silmeyi engeller.
@@ -384,7 +402,12 @@ async function deleteUserHandler(request) {
       return json(404, { error: 'Kullanıcı bulunamadı.' })
     }
 
-    return json(200, { success: true })
+    return json(200, {
+      success: true,
+      ...(subscriptionCancellation.failedReferenceCodes.length
+        ? { subscriptionWarning: 'Kullanıcı silindi ancak bazı iyzico abonelikleri iptal edilemedi, iyzico panelinden elle kontrol edin.' }
+        : {}),
+    })
   } catch (error) {
     if (error.number === 547) {
       return json(409, {
