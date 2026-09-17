@@ -11,6 +11,7 @@ const {
   validateParentRegistrationPayload,
 } = require('./auth')
 const { resolveCoupon } = require('./coupons')
+const { notifyAdminsOfNewParentMembership } = require('./adminNotifications')
 const {
   hasActiveParentEntitlement,
   upsertParentEntitlementFromIyzico,
@@ -679,17 +680,18 @@ async function iyzicoCheckoutCallbackHandler(request) {
     // taşıyıp frontend'de aynı-origin bir istekle gerçek çereze çeviriyoruz (bkz.
     // sessionFromHandoffHandler + PaymentResultPage).
     let handoffToken = null
+    let newParent = null
 
     if (!existingParent) {
       const pending = await consumePendingParentRegistration(conversationId)
       if (!pending) {
         return redirectTo(failureUrl)
       }
-      const newUser = await createParentFromPendingRegistration(pending)
-      parentId = newUser.id
-      const sessionToken = createSessionToken(newUser)
+      newParent = await createParentFromPendingRegistration(pending)
+      parentId = newParent.id
+      const sessionToken = createSessionToken(newParent)
       sessionHeaders = createSessionHeaders(sessionToken)
-      handoffToken = createHandoffToken(newUser.id)
+      handoffToken = createHandoffToken(newParent.id)
     }
 
     const isNew = await recordEntitlementEvent({
@@ -699,15 +701,23 @@ async function iyzicoCheckoutCallbackHandler(request) {
       rawPayload: data,
     })
 
+    const billingCycle = data.pricingPlanReferenceCode === config.parentYearlyPlanRef ? 'yearly' : 'monthly'
+
     if (isNew) {
       await upsertParentEntitlementFromIyzico({
         parentId,
         status: 'active',
         pricingPlanReferenceCode: data.pricingPlanReferenceCode,
-        billingCycle: data.pricingPlanReferenceCode === config.parentYearlyPlanRef ? 'yearly' : 'monthly',
+        billingCycle,
         subscriptionReferenceCode: data.referenceCode,
         currentPeriodEnd: data.endDate ? new Date(data.endDate) : null,
       })
+
+      // Sadece BURADA (yepyeni bir veli hesabı, ilk üyelik ödemesi) admin'e SMS gider —
+      // mevcut bir velinin aylık/yıllık otomatik yenilemesinde bilinçli olarak gönderilmiyor.
+      if (newParent) {
+        notifyAdminsOfNewParentMembership({ fullName: newParent.fullName, phone: newParent.phone, billingCycle })
+      }
     }
 
     const successUrl = handoffToken
