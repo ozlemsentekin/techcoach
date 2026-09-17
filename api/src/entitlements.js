@@ -3,6 +3,7 @@ const { sql, withRequest } = require('./db')
 const { isConfigError, getBillingConfig } = require('./config')
 const { json } = require('./http')
 const { cancelSubscription } = require('./iyzicoClient')
+const { notifyAdminsOfMembershipCancellation } = require('./adminNotifications')
 
 const ACTIVE_EVENT_TYPES = new Set(['INITIAL_PURCHASE', 'RENEWAL', 'UNCANCELLATION'])
 const CANCEL_EVENT_TYPES = new Set(['CANCELLATION'])
@@ -661,10 +662,11 @@ async function findCancellableSubscriptionReferenceCodes(userId) {
   return result.recordset.map((row) => row.subscription_reference_code)
 }
 
-// Kullanıcı silinirken/pasife alınırken çağrılır. iyzico'da zaten iptal/süresi dolmuş bir
-// aboneliği tekrar iptal etmeye çalışmak hata verebilir; bu ve ağ hataları burada yutulup
-// admin işlemine (silme/pasife alma) engel olmaz — hangi referans kodların iptal
-// edilemediği çağırana döndürülür ki admin panelinde uyarı olarak gösterilebilsin.
+// Kullanıcı silinirken/pasife alınırken (admin) veya kendi isteğiyle (self-service "Üyeliği
+// Durdur") çağrılır. iyzico'da zaten iptal/süresi dolmuş bir aboneliği tekrar iptal etmeye
+// çalışmak hata verebilir; bu ve ağ hataları burada yutulup çağıran işleme (silme/pasife
+// alma/self-service iptal) engel olmaz — hangi referans kodların iptal edilemediği çağırana
+// döndürülür ki uygun ekranda uyarı olarak gösterilebilsin.
 async function cancelSubscriptionsForUser(userId) {
   const referenceCodes = await findCancellableSubscriptionReferenceCodes(userId)
   const failedReferenceCodes = []
@@ -678,7 +680,28 @@ async function cancelSubscriptionsForUser(userId) {
     }
   }
 
-  return { cancelledCount: referenceCodes.length - failedReferenceCodes.length, failedReferenceCodes }
+  const cancelledCount = referenceCodes.length - failedReferenceCodes.length
+
+  // Gerçekten bir şey iptal edildiyse (admin'in "Pasife Al"/"Sil"i tetiklediği ya da velinin/
+  // öğretmenin kendi "Üyeliği Durdur"u) admin'e SMS gider. Hiç ödeme alan abonelik yoksa
+  // (ör. hiç üye olmamış bir hesap pasife alınıyor) bildirim gönderilmez.
+  if (cancelledCount > 0) {
+    const userDb = await withRequest({ userId: { type: sql.UniqueIdentifier, value: userId } })
+    const userResult = await userDb.query(`
+      SELECT full_name, phone_number, role FROM dbo.Users WHERE id = @userId;
+    `)
+    const user = userResult.recordset[0]
+    if (user) {
+      await notifyAdminsOfMembershipCancellation({
+        fullName: user.full_name,
+        phone: user.phone_number,
+        role: user.role,
+        cancelledCount,
+      })
+    }
+  }
+
+  return { cancelledCount, failedReferenceCodes }
 }
 
 module.exports = {

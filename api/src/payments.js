@@ -715,8 +715,10 @@ async function iyzicoCheckoutCallbackHandler(request) {
 
       // Sadece BURADA (yepyeni bir veli hesabı, ilk üyelik ödemesi) admin'e SMS gider —
       // mevcut bir velinin aylık/yıllık otomatik yenilemesinde bilinçli olarak gönderilmiyor.
+      // await ediliyor: serverless fonksiyon yanıt döner dönmez süreç donabilir, fire-and-forget
+      // bir istek gönderilmeden yarıda kesilebilir.
       if (newParent) {
-        notifyAdminsOfNewParentMembership({ fullName: newParent.fullName, phone: newParent.phone, billingCycle })
+        await notifyAdminsOfNewParentMembership({ fullName: newParent.fullName, phone: newParent.phone, billingCycle })
       }
     }
 

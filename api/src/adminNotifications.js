@@ -51,4 +51,35 @@ async function notifyAdminsOfNewParentMembership({ fullName, phone, billingCycle
   }
 }
 
-module.exports = { notifyAdminsOfNewParentMembership }
+const ROLE_LABELS = {
+  ebeveyn: 'veli',
+  ogretmen: 'öğretmen',
+}
+
+// Bir kullanıcının aboneliği (admin'in "Pasife Al"/"Sil"i veya kendi "Üyeliği Durdur"u ile)
+// gerçekten iyzico'da iptal edildiğinde admin'e SMS gider. Hata burada da yutulur — çağıran
+// yer (entitlements.js cancelSubscriptionsForUser) sonucu beklemez.
+async function notifyAdminsOfMembershipCancellation({ fullName, phone, role, cancelledCount }) {
+  try {
+    const adminPhones = await getAdminPhoneNumbers()
+    if (!adminPhones.length) {
+      return
+    }
+
+    const roleLabel = ROLE_LABELS[role] || 'kullanıcı'
+    const seatWord = cancelledCount > 1 ? `${cancelledCount} abonelik` : 'aboneliği'
+    const message = `TechCoach: Üyelik iptal edildi! ${fullName || 'Bir ' + roleLabel} (${phone || '-'}) ${roleLabel} ${seatWord} iptal etti.`
+
+    await Promise.all(
+      adminPhones.map((adminPhone) =>
+        sendPlainSms(adminPhone, message).catch((error) => {
+          console.error('notifyAdminsOfMembershipCancellation: SMS gönderilemedi', adminPhone, error)
+        }),
+      ),
+    )
+  } catch (error) {
+    console.error('notifyAdminsOfMembershipCancellation failed', error)
+  }
+}
+
+module.exports = { notifyAdminsOfNewParentMembership, notifyAdminsOfMembershipCancellation }
