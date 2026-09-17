@@ -21,7 +21,7 @@ function groupBySubject(resourceBooks) {
     }
     groups.get(key).books.push(book)
   })
-  return Array.from(groups.values())
+  return Array.from(groups.values()).sort((a, b) => b.books.length - a.books.length)
 }
 
 function groupByPublisher(resourceBooks) {
@@ -206,7 +206,13 @@ export default function StudentResourcePicker({ studentId, onReady, hasResourceR
   return (
     <div className="flex flex-col gap-4">
         {requestStatus}
-      <Button type="button" variant="secondary" size="md" onClick={() => setShowRequest(true)}>
+      <Button
+        type="button"
+        variant="secondary"
+        size="md"
+        className="border-panel-blue bg-panel-blue text-white hover:bg-panel-blue hover:brightness-110"
+        onClick={() => setShowRequest(true)}
+      >
         <FilePlus2 size={16} aria-hidden="true" />
         Kitabım listede yok — Kitap Ekleme Talebi Oluştur
       </Button>

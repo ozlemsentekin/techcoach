@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { BookOpen, Camera, FileCheck2, GraduationCap, LineChart, ListChecks, School, Users } from 'lucide-react'
 import { useAuth } from '../../../context/useAuth'
 import { cachedGet } from '../../../services/authClient'
 import LoadingState from '../../shared/LoadingState'
 import Button from '../../ui/Button'
 import GuideFlow from '../../shared/GuideFlow'
-
-const LINK_CLASS = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-4 py-2 text-sm font-semibold text-panel-blue hover:bg-panel-blue-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-panel-blue'
 
 export default function GettingStartedPage() {
   const { authUser } = useAuth()
@@ -80,26 +77,6 @@ export default function GettingStartedPage() {
           cta: !student && stage.id !== 'profile' ? 'Önce çocuk profilini oluştur' : stage.cta,
           secondary: student ? stage.secondary : undefined,
         }))} />
-        <details className="panel-card p-5 sm:p-6">
-          <summary className="cursor-pointer font-semibold text-panel-text">Kim, hangi hesapla giriş yapacak?</summary>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-xl bg-panel-surface-soft p-4"><h3 className="font-bold text-panel-text">Siz: veli hesabı</h3><p className="mt-2 text-sm leading-7 text-panel-text-muted">Kayıt olurken verdiğiniz kendi telefon numaranızla giriş yapın. İlk giriş şifresi bu numaranın son 6 hanesidir. Sistem, panele geçmeden önce yeni şifre belirlemenizi ister. Sonraki girişlerde kendi belirlediğiniz şifreyi kullanın.</p></div>
-            <div className="rounded-xl bg-panel-surface-soft p-4"><h3 className="font-bold text-panel-text">Çocuğunuz: öğrenci hesabı</h3><p className="mt-2 text-sm leading-7 text-panel-text-muted">Çocuk profilini oluştururken girdiğiniz çocuğa ait telefon numarası, onun giriş numarasıdır. Başlangıç şifresi bu numaranın son 6 hanesidir. Çocuğunuz ilk bağımsız girişinde kendi yeni şifresini belirler; daha sonra öğrenci paneline bu şifreyle girer.</p></div>
-          </div>
-          <p className="mt-4 text-sm leading-7 text-panel-text"><strong>Giriş adresi herkes için aynı:</strong> Giriş Yap ekranına telefon numarası ve şifre yazılır; sistem hesabın veli, öğrenci veya öğretmen panelini açar.</p>
-          <p className="mt-3 text-sm leading-7 text-panel-text-muted"><strong>Çocuğunuzun ekranını siz görmek isterseniz:</strong> Kendi veli hesabınızda sağ üstteki hesap menüsünden “Öğrenciye geç” seçeneğini kullanın. Çocuğunuzun şifresini girmeniz gerekmez. Bu geçiş çocuğunuzun bağımsız girişi sayılmaz ve onun şifresini değiştirmez.</p>
-          <p className="mt-3 text-sm leading-7 text-panel-text-muted">Panel erişimi verdiğiniz yeni öğretmen de kendi telefon numarası ve başlangıç şifresiyle giriş yapar; ilk girişte yeni şifresini belirler. Her hesap kendi şifresini kullanır.</p>
-        </details>
-        <details className="panel-card p-5 sm:p-6">
-          <summary className="cursor-pointer font-semibold text-panel-text">Çalışma kayıtları, denemeler ve destek</summary>
-          <p className="mt-3 text-sm leading-7 text-panel-text-muted">Çalışma Geçmişi’nde tamamlanan görevleri ve sonuçlarını inceleyin. Deneme Sınavları’nda deneme kayıtlarını ve ders sonuçlarını takip edin. Sistemle ilgili soru ve önerilerinizi Taleplerim’den iletin; yanıtları aynı ekranda okuyabilirsiniz.</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link to={route('/parent/study-history')} className={LINK_CLASS}>Çalışma geçmişini aç</Link>
-            <Link to={route('/parent/mock-exams')} className={LINK_CLASS}>Deneme sınavlarını aç</Link>
-            <Link to="/parent/requests" className={LINK_CLASS}>Taleplerimi aç</Link>
-          </div>
-        </details>
-        <details className="panel-card p-5 sm:p-6"><summary className="cursor-pointer font-semibold text-panel-text">Günlük kullanım alışkanlığınız</summary><p className="mt-3 text-sm leading-7 text-panel-text-muted">Bugün ekranında görevleri gözden geçirin. Çalışma sonrası sonuçları siz veya çocuğunuz kaydedebilir. Aynı sonucu tekrar girmeden, yanlışları birlikte değerlendirin. Haftalık Plan’da sonraki çalışmaları düzenleyin; Gelişim Analizi’nde hangi alanlarda desteğe ihtiyaç olduğunu inceleyin.</p></details>
       </>}
     </div>
   )
