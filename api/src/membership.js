@@ -36,10 +36,10 @@ async function getPlanPrices(planKeys) {
 }
 
 // iyzico'nun subscription/retrieve yanıtındaki `orders` dizisini "hesap hareketleri" tablosu
-// için sadeleştirir. Alan adları iyzico'nun genel ödeme/sipariş sözlüğüyle tutarlı
-// (price/paidPrice/createdDate) ama resmi olarak sadece orderStatus+endPeriod bu kod tabanında
-// daha önce doğrulanmıştı (bkz. payments.js:557 currentPeriodEndFromSubscription) — bu yüzden
-// tutar/tarih alanları eksik gelirse arayüz "-" gösterecek şekilde toleranslı okunuyor.
+// için sadeleştirir. Gerçek prod verisiyle doğrulandı (2026-09-17): orderStatus, price/paidPrice,
+// startPeriod/endPeriod dolu geliyor; orderReferenceCode ve createdDate bu uç noktada hiç
+// gelmiyor (her ikisi de null) — bu yüzden "tarih" olarak dönemin başlangıcı (startPeriod)
+// kullanılıyor, referenceCode sadece varsa (ileride) kullanılmak üzere toleranslı okunuyor.
 function normalizeOrders(orders, sourceLabel) {
   if (!Array.isArray(orders)) {
     return []
@@ -49,13 +49,15 @@ function normalizeOrders(orders, sourceLabel) {
     const createdAtMs = Number(order.createdDate)
     const startMs = Number(order.startPeriod)
     const endMs = Number(order.endPeriod)
+    const startIso = Number.isFinite(startMs) ? new Date(startMs).toISOString() : null
     return {
       source: sourceLabel,
-      referenceCode: order.orderReferenceCode || null,
+      referenceCode: order.orderReferenceCode || order.referenceCode || order.id || null,
       status: order.orderStatus || null,
       amount: amount !== null ? Number(amount) : null,
-      createdAt: Number.isFinite(createdAtMs) ? new Date(createdAtMs).toISOString() : null,
-      periodStart: Number.isFinite(startMs) ? new Date(startMs).toISOString() : null,
+      // iyzico bu uç noktada createdDate döndürmüyor; dönem başlangıcı en yakın gerçek tarih.
+      createdAt: Number.isFinite(createdAtMs) ? new Date(createdAtMs).toISOString() : startIso,
+      periodStart: startIso,
       periodEnd: Number.isFinite(endMs) ? new Date(endMs).toISOString() : null,
     }
   })

@@ -36,7 +36,18 @@ const ORDER_STATUS_LABELS = {
   SUCCESS: 'Ödeme Alındı',
   PAID: 'Ödeme Alındı',
   FAILED: 'Ödeme Başarısız',
+  FAILURE: 'Ödeme Başarısız',
   PENDING: 'Bekliyor',
+  WAITING: 'Bekliyor',
+}
+
+const ORDER_STATUS_TONES = {
+  SUCCESS: 'sage',
+  PAID: 'sage',
+  FAILED: 'red',
+  FAILURE: 'red',
+  PENDING: 'yellow',
+  WAITING: 'yellow',
 }
 
 function StatusBadge({ status }) {
@@ -222,7 +233,7 @@ export default function MembershipView({ role }) {
                     <td className="py-2 pr-3 text-panel-text">{tx.createdAt ? formatRequestDate(tx.createdAt) : '-'}</td>
                     <td className="py-2 pr-3 text-panel-text">{tx.source}</td>
                     <td className="py-2 pr-3">
-                      <Badge tone={tx.status === 'SUCCESS' || tx.status === 'PAID' ? 'sage' : tx.status === 'FAILED' ? 'red' : 'neutral'}>
+                      <Badge tone={ORDER_STATUS_TONES[tx.status] || 'neutral'}>
                         {ORDER_STATUS_LABELS[tx.status] || tx.status || 'Bilinmiyor'}
                       </Badge>
                     </td>
