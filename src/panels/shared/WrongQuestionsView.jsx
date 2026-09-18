@@ -502,7 +502,7 @@ function WrongQuestionThumbnail({ item, fetchPhoto, onClick, viewerRole, onLoadi
               <ImageIcon size={11} aria-hidden="true" />
             </span>
           ) : null}
-          <MistakeAnalysisBadges analyses={item.analyses} viewerRole={viewerRole} />
+          <MistakeAnalysisBadges comments={item.analysisComments} viewerRole={viewerRole} />
         </span>
       </div>
       <div className="flex aspect-square w-full items-center justify-center overflow-hidden bg-panel-surface-soft">
@@ -1024,14 +1024,16 @@ export default function WrongQuestionsView({
     await savePdfDocument(doc, buildWrongQuestionsPdfFileName(`${effectiveSelectedSubject}-icerik-gruplari`))
   }
 
-  // Hata nedeni ve/veya not izleyicinin kendi analiz kulvarına yazılır; dönen `analyses`
-  // haritası (üç kulvar birden) ilgili satıra işlenir.
+  // İzleyicinin rolünden yeni bir analiz yorumu eklenir; dönen `analysisComments` dizisi (o
+  // sorunun TÜM yorumları, üç rolden de) ilgili satıra işlenir.
   const handleUpdateMistakeAnalysis = async (wrongQuestionId, analysis) => {
     const updated = await updateMistakeAnalysis(wrongQuestionId, analysis)
     setWrongQuestions((prev) =>
       prev
         ? prev.map((item) =>
-            item.id === wrongQuestionId ? { ...item, analyses: updated.analyses || item.analyses } : item,
+            item.id === wrongQuestionId
+              ? { ...item, analysisComments: updated.analysisComments || item.analysisComments }
+              : item,
           )
         : prev,
     )
@@ -1188,8 +1190,8 @@ export default function WrongQuestionsView({
 
       {allPhotoQuestions.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3 py-2">
-          {/* Analiz durumu filtresi ve "eksik analiz" rozeti sadece öğretmende kalır — veli/öğrenci
-              kulvarları kaldırıldı (bkz. mistakeAnalysis.js ANALYSIS_LANES yorumu). */}
+          {/* Analiz durumu filtresi ve "eksik analiz" rozeti sadece öğretmende gösterilir — öğrenci/veli
+              görünümünde bu iş yükü takibi anlamlı değil (kendi tek soru kümesini zaten görüyorlar). */}
           {viewerRole === 'ogretmen' ? (
             <>
               <label htmlFor="mistake-analysis-filter" className="text-xs font-semibold text-panel-text-muted">

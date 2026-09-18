@@ -7,13 +7,13 @@ import {
   ChevronRight,
   FileText,
   Hash,
-  HelpCircle,
   Image as ImageIcon,
   Loader2,
+  Send,
   X,
 } from 'lucide-react'
 import { cn } from '../ui/utils'
-import { ANALYSIS_LANES, MISTAKE_REASON_LABELS, laneLabel } from './mistakeAnalysis'
+import AnalysisCommentFeed from './AnalysisCommentFeed'
 import AnalysisPhotoViewer from './AnalysisPhotoViewer'
 
 const MISTAKE_REASON_OPTIONS = [
@@ -22,7 +22,7 @@ const MISTAKE_REASON_OPTIONS = [
   { value: 'soruyu-anlamadim', label: 'Soruyu Anlamadım' },
 ]
 
-// Analiz kulvarı editörünün başlığı izleyicinin rolüne göre değişir.
+// Yorum kutusunun placeholder'ı izleyicinin rolüne göre değişir.
 const ANALYSIS_PROMPT_BY_ROLE = {
   ogrenci: 'Bu soruyu neden yanlış yaptın?',
   ebeveyn: 'Sence çocuğun bu soruyu neden yanlış yaptı?',
@@ -45,9 +45,9 @@ function InfoField({ icon, label, value }) {
   )
 }
 
-// Hata Defterim'de bir içeriğe (konuya) ait tüm fotoğrafları gezip her soruyu "Dikkat Hatası" /
-// "Bilgi Eksikliği" olarak etiketlemeyi sağlayan tam ekran galeri. Tek fotoğraflık eski
-// PhotoLightbox'ın yerine geçer. `items` gelirken fotoğrafları içermez (sadece hasPhoto bayrağı,
+// Hata Defterim'de bir içeriğe (konuya) ait tüm fotoğrafları gezip her soruya öğrenci/veli/öğretmen
+// yorumu (hata nedeni + not) eklemeyi sağlayan tam ekran galeri — bkz. Analiz Yorumları bölümü.
+// Tek fotoğraflık eski PhotoLightbox'ın yerine geçer. `items` gelirken fotoğrafları içermez (sadece hasPhoto bayrağı,
 // bkz. WrongQuestionsView) — her fotoğraf sadece görüntülendiği an fetchPhoto ile tembel çekilir,
 // onlarca fotoğrafı tek seferde indirmenin getirdiği yavaşlığı önlemek için (bkz. progress.js'deki
 // getWrongQuestionPhotoHandler). Bir item `photoUrl` taşıyorsa (ör. cevap kağıdında yeni çekilen
@@ -70,7 +70,6 @@ export default function WrongQuestionGalleryModal({
   onRemoveAnalysisPhoto,
 }) {
   const [index, setIndex] = useState(initialIndex)
-  const [savingReason, setSavingReason] = useState(false)
   const [photosById, setPhotosById] = useState({})
   const [photoError, setPhotoError] = useState('')
   const [zoomed, setZoomed] = useState(false)
@@ -78,21 +77,23 @@ export default function WrongQuestionGalleryModal({
   // fazla görsel olabildiği için ana soru fotoğrafından bağımsız, kendi slayt/ekleme/silme/yazdırma
   // mantığı orada.
   const [analysisViewerOpen, setAnalysisViewerOpen] = useState(false)
-  // Konu/Not alanları: item değişince testin içerik adıyla ön-dolu gelir, alandan çıkınca (blur)
-  // yalnızca değişmişse kaydedilir. savedMeta son kaydedilen/başlangıç değerini tutar. `note`
-  // izleyicinin kendi analiz kulvarının notudur (onUpdateMistakeAnalysis), `topic` ise soruya
-  // aittir (onUpdateMistakeMeta).
-  const [meta, setMeta] = useState({ topic: '', note: '' })
-  const [savedMeta, setSavedMeta] = useState({ topic: '', note: '' })
+  // Konu alanı: item değişince testin içerik adıyla ön-dolu gelir, alandan çıkınca (blur) yalnızca
+  // değişmişse kaydedilir (onUpdateMistakeMeta). Analiz yorumları artık ayrı bir composer'la
+  // (draftReason/draftNote) eklenir — bkz. aşağısı.
+  const [meta, setMeta] = useState({ topic: '' })
+  const [savedMeta, setSavedMeta] = useState({ topic: '' })
   const [metaStatus, setMetaStatus] = useState('idle') // idle | saving | saved | error
+
+  // Yeni yorum composer'ı: her item için sıfırdan başlar (draft, gönderilmiş bir alanı düzenlemez).
+  const [draftReason, setDraftReason] = useState('')
+  const [draftNote, setDraftNote] = useState('')
+  const [submittingComment, setSubmittingComment] = useState(false)
+  const [commentError, setCommentError] = useState('')
 
   const item = items[index]
   const hasMultiple = items.length > 1
   const currentPhotoUrl = item ? item.photoUrl || photosById[item.id] : undefined
-  const viewerAnalysis = item?.analyses?.[viewerRole]
-  const otherLaneAnalyses = ANALYSIS_LANES.filter(
-    (lane) => lane.role !== viewerRole && item?.analyses?.[lane.role]?.mistakeReason,
-  )
+  const comments = item?.analysisComments || []
 
   const goTo = (nextIndex) => {
     setZoomed(false)
@@ -148,38 +149,46 @@ export default function WrongQuestionGalleryModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, items, hasMultiple])
 
-  const handleSelectReason = async (reason) => {
-    if (!item || savingReason) return
-    setSavingReason(true)
+  // Yeni item'a geçince composer sıfırlanır — draft, gönderilmiş bir yorumu düzenlemez.
+  useEffect(() => {
+    setDraftReason('')
+    setDraftNote('')
+    setCommentError('')
+  }, [item?.id])
+
+  const handleSubmitComment = async () => {
+    if (!item || submittingComment) return
+    const note = draftNote.trim()
+    if (!note && !draftReason) return
+    setSubmittingComment(true)
+    setCommentError('')
     try {
-      await onUpdateMistakeAnalysis(item.id, { mistakeReason: reason })
+      await onUpdateMistakeAnalysis(item.id, { mistakeReason: draftReason || undefined, note: note || undefined })
+      setDraftReason('')
+      setDraftNote('')
+    } catch (err) {
+      setCommentError(err.message || 'Yorum eklenemedi.')
     } finally {
-      setSavingReason(false)
+      setSubmittingComment(false)
     }
   }
 
   // Konu alanı için varsayılan: kayıtlı konu yoksa testin içerik/test adı otomatik dolar.
-  // Not alanı izleyicinin kendi analiz kulvarından gelir.
   useEffect(() => {
-    const initial = {
-      topic: item ? item.topic || item.testName || title || '' : '',
-      note: item?.analyses?.[viewerRole]?.note || '',
-    }
+    const initial = { topic: item ? item.topic || item.testName || title || '' : '' }
     setMeta(initial)
     setSavedMeta(initial)
     setMetaStatus('idle')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item?.id, viewerRole])
+  }, [item?.id])
 
   const commitMetaField = async (field) => {
-    if (!item) return
+    if (!item || !onUpdateMistakeMeta) return
     const value = meta[field].trim()
     if (value === (savedMeta[field] || '').trim()) return
-    const persist = field === 'note' ? onUpdateMistakeAnalysis : onUpdateMistakeMeta
-    if (!persist) return
     setMetaStatus('saving')
     try {
-      await persist(item.id, field === 'note' ? { note: value } : { topic: value })
+      await onUpdateMistakeMeta(item.id, { topic: value })
       setSavedMeta((prev) => ({ ...prev, [field]: value }))
       setMeta((prev) => ({ ...prev, [field]: value }))
       setMetaStatus('saved')
@@ -236,100 +245,40 @@ export default function WrongQuestionGalleryModal({
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-col items-center gap-2 px-3 pb-2">
+      <div className="flex shrink-0 flex-col items-center gap-2 overflow-y-auto px-3 pb-2" style={{ maxHeight: '46vh' }}>
         <div className="w-full max-w-2xl rounded-2xl border-2 border-panel-accent bg-panel-surface px-4 py-3 shadow-panel-2">
-          {/* Hata nedeni chip'leri + kulvar notu sadece öğretmende kaldı — veli/öğrenci metin
-              tabanlı analiz akışı kaldırıldı, yerine aşağıdaki "Hata Analiz" görseli geldi. */}
-          {viewerRole === 'ogretmen' && onUpdateMistakeAnalysis ? (
-            <div className="flex flex-col items-center gap-2">
-              <span className="flex items-center gap-2 text-center text-base font-extrabold uppercase tracking-wide text-panel-warm sm:text-lg">
-                <HelpCircle size={22} className="shrink-0" aria-hidden="true" />
-                {ANALYSIS_PROMPT_BY_ROLE[viewerRole] || ANALYSIS_PROMPT_BY_ROLE.ogrenci}
-              </span>
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
-                {MISTAKE_REASON_OPTIONS.map((option) => {
-                  const selected = viewerAnalysis?.mistakeReason === option.value
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      aria-pressed={selected}
-                      disabled={savingReason}
-                      onClick={() => handleSelectReason(option.value)}
-                      className={cn(
-                        'rounded-full border-2 px-4 py-2 text-center text-sm font-bold transition-colors disabled:opacity-50',
-                        selected
-                          ? 'border-panel-blue bg-panel-blue text-white'
-                          : 'border-panel-border text-panel-text hover:border-panel-blue hover:text-panel-blue',
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+          {onUpdateMistakeMeta ? (
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">Konu</span>
+              <input
+                type="text"
+                value={meta.topic}
+                onChange={(event) => setMeta((prev) => ({ ...prev, topic: event.target.value }))}
+                onBlur={() => commitMetaField('topic')}
+                placeholder="Konu"
+                className="w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-1.5 text-sm text-panel-text focus:border-panel-blue focus:outline-none"
+              />
+              {metaStatus === 'saving' ? (
+                <span className="flex items-center gap-1 text-[11px] text-panel-text-muted">
+                  <Loader2 size={12} className="animate-spin" aria-hidden="true" /> Kaydediliyor...
+                </span>
+              ) : metaStatus === 'saved' ? (
+                <span className="flex items-center gap-1 text-[11px] text-emerald-600">
+                  <Check size={12} aria-hidden="true" /> Kaydedildi
+                </span>
+              ) : metaStatus === 'error' ? (
+                <span className="text-[11px] text-panel-red">Kaydedilemedi, tekrar dene.</span>
+              ) : null}
+            </label>
           ) : null}
 
-          {onUpdateMistakeMeta || (viewerRole === 'ogretmen' && onUpdateMistakeAnalysis) ? (
-            <div
-              className={cn(
-                'mt-3 grid grid-cols-1 gap-2 pt-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]',
-                viewerRole === 'ogretmen' && onUpdateMistakeAnalysis ? 'border-t border-panel-border' : '',
-              )}
-            >
-              {onUpdateMistakeMeta ? (
-                <label className="flex flex-col gap-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">Konu</span>
-                  <input
-                    type="text"
-                    value={meta.topic}
-                    onChange={(event) => setMeta((prev) => ({ ...prev, topic: event.target.value }))}
-                    onBlur={() => commitMetaField('topic')}
-                    placeholder="Konu"
-                    className="w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-1.5 text-sm text-panel-text focus:border-panel-blue focus:outline-none"
-                  />
-                </label>
-              ) : null}
-              {viewerRole === 'ogretmen' && onUpdateMistakeAnalysis ? (
-                <label className={cn('flex flex-col gap-1', onUpdateMistakeMeta ? '' : 'sm:col-span-2')}>
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">
-                    {laneLabel(viewerRole)} notu <span className="font-normal normal-case">(isteğe bağlı)</span>
-                  </span>
-                  <textarea
-                    rows={2}
-                    value={meta.note}
-                    onChange={(event) => setMeta((prev) => ({ ...prev, note: event.target.value }))}
-                    onBlur={() => commitMetaField('note')}
-                    placeholder="Bu hataya dair bir not ekleyebilirsin"
-                    className="w-full resize-none rounded-lg border border-panel-border bg-panel-surface px-3 py-1.5 text-sm text-panel-text focus:border-panel-blue focus:outline-none"
-                  />
-                </label>
-              ) : null}
-              <div className="sm:col-span-2">
-                {metaStatus === 'saving' ? (
-                  <span className="flex items-center gap-1 text-[11px] text-panel-text-muted">
-                    <Loader2 size={12} className="animate-spin" aria-hidden="true" /> Kaydediliyor...
-                  </span>
-                ) : metaStatus === 'saved' ? (
-                  <span className="flex items-center gap-1 text-[11px] text-emerald-600">
-                    <Check size={12} aria-hidden="true" /> Kaydedildi
-                  </span>
-                ) : metaStatus === 'error' ? (
-                  <span className="text-[11px] text-panel-red">Kaydedilemedi, tekrar dene.</span>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          {/* Hata Analiz: veli görsel(ler) ekler/kaldırır (onAddAnalysisPhoto/onRemoveAnalysisPhoto),
+          {/* Hata Analiz Görseli: veli ekler/kaldırır (onAddAnalysisPhoto/onRemoveAnalysisPhoto),
               herkes görüntüler (item.hasAnalysisPhoto + fetchAnalysisPhotos). Birden fazla görsel
-              olabilir — slayt gibi gezinme + yazdırma AnalysisPhotoViewer içinde. Eski üç kulvarlı
-              metin analizinin yerine geçti (bkz. yukarısındaki yorum). */}
+              olabilir — slayt gibi gezinme + yazdırma AnalysisPhotoViewer içinde. */}
           {item.hasAnalysisPhoto || onAddAnalysisPhoto ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-panel-border pt-3">
+            <div className={cn('flex flex-wrap items-center gap-2 pt-3', onUpdateMistakeMeta ? 'mt-3 border-t border-panel-border' : '')}>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">
-                Hata Analiz
+                Hata Analiz Görseli
               </span>
               {item.hasAnalysisPhoto ? (
                 <button
@@ -338,10 +287,10 @@ export default function WrongQuestionGalleryModal({
                   className="flex items-center gap-1.5 rounded-full border-2 border-panel-blue px-3 py-1.5 text-xs font-bold text-panel-blue hover:bg-panel-blue-soft"
                 >
                   <ImageIcon size={14} aria-hidden="true" />
-                  Analizi Göster{item.analysisPhotoCount > 1 ? ` (${item.analysisPhotoCount})` : ''}
+                  Görseli Göster{item.analysisPhotoCount > 1 ? ` (${item.analysisPhotoCount})` : ''}
                 </button>
               ) : (
-                <span className="text-xs text-panel-text-muted">Henüz hata analizi eklenmedi.</span>
+                <span className="text-xs text-panel-text-muted">Henüz görsel eklenmedi.</span>
               )}
               {onAddAnalysisPhoto ? (
                 <button
@@ -350,35 +299,74 @@ export default function WrongQuestionGalleryModal({
                   className="flex items-center gap-1.5 rounded-full border border-panel-border px-3 py-1.5 text-xs font-semibold text-panel-text hover:bg-panel-surface-soft"
                 >
                   <Camera size={14} aria-hidden="true" />
-                  Hata Analiz Ekle
+                  Görsel Ekle
                 </button>
               ) : null}
             </div>
           ) : null}
 
-          {otherLaneAnalyses.length > 0 ? (
-            <div className="mt-3 flex flex-col gap-2 border-t border-panel-border pt-3">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">
-                Diğer analizler
+          {/* Analiz Yorumları: öğrenci/veli/öğretmen aynı soruya istediği kadar yorum bırakabilir
+              (bkz. mistakeAnalysis.js dosya başı yorumu) — herkes tüm yorumları görür, composer
+              sadece onUpdateMistakeAnalysis verilen (yazma yetkisi olan) izleyicide çıkar. */}
+          {onUpdateMistakeAnalysis || comments.length > 0 ? (
+            <div className={cn('pt-3', onUpdateMistakeMeta || item.hasAnalysisPhoto || onAddAnalysisPhoto ? 'mt-3 border-t border-panel-border' : '')}>
+              <span className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">
+                Analiz Yorumları{comments.length ? ` (${comments.length})` : ''}
               </span>
-              {otherLaneAnalyses.map((lane) => {
-                const laneData = item.analyses[lane.role]
-                return (
-                  <div
-                    key={lane.role}
-                    className="rounded-lg border border-panel-border bg-panel-surface-soft px-3 py-2 text-sm text-panel-text"
-                  >
-                    <span className="font-semibold">
-                      {laneData.analyzedByName ? `${lane.label} · ${laneData.analyzedByName}` : lane.label}
-                    </span>
-                    <span className="text-panel-text-muted">
-                      {' — '}
-                      {MISTAKE_REASON_LABELS[laneData.mistakeReason] || laneData.mistakeReason}
-                    </span>
-                    {laneData.note ? <p className="mt-0.5 text-panel-text-muted">“{laneData.note}”</p> : null}
+
+              {comments.length > 0 ? (
+                <div className="mb-3 max-h-40 overflow-y-auto pr-1">
+                  <AnalysisCommentFeed comments={comments} />
+                </div>
+              ) : (
+                <p className="mb-3 text-xs text-panel-text-muted">Henüz yorum yok.</p>
+              )}
+
+              {onUpdateMistakeAnalysis ? (
+                <div className="flex flex-col gap-2 rounded-lg border border-panel-border bg-panel-surface-soft p-2.5">
+                  <div className="flex flex-wrap gap-1.5">
+                    {MISTAKE_REASON_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={draftReason === option.value}
+                        onClick={() => setDraftReason((prev) => (prev === option.value ? '' : option.value))}
+                        className={cn(
+                          'rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors',
+                          draftReason === option.value
+                            ? 'border-panel-blue bg-panel-blue text-white'
+                            : 'border-panel-border text-panel-text-muted hover:border-panel-blue hover:text-panel-blue',
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                   </div>
-                )
-              })}
+                  <textarea
+                    rows={2}
+                    value={draftNote}
+                    onChange={(event) => setDraftNote(event.target.value)}
+                    placeholder={ANALYSIS_PROMPT_BY_ROLE[viewerRole] || 'Bir yorum ekle'}
+                    className="w-full resize-none rounded-lg border border-panel-border bg-panel-surface px-3 py-1.5 text-sm text-panel-text focus:border-panel-blue focus:outline-none"
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-panel-red">{commentError}</span>
+                    <button
+                      type="button"
+                      disabled={submittingComment || (!draftNote.trim() && !draftReason)}
+                      onClick={handleSubmitComment}
+                      className="flex shrink-0 items-center gap-1.5 rounded-full bg-panel-blue px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-panel-blue/90 disabled:opacity-50"
+                    >
+                      {submittingComment ? (
+                        <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Send size={14} aria-hidden="true" />
+                      )}
+                      Yorum Ekle
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>

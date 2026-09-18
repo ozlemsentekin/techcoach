@@ -11,7 +11,7 @@ export default function StudentAnalysisPhotosPage() {
       fetchItems={getWrongQuestionAnalysisPhotos}
       fetchPhotos={getWrongQuestionAnalysisPhotoRecords}
       fetchQuestionPhoto={getWrongQuestionPhoto}
-      subtitle="Velinin eklediği hata analiz görsellerine buradan ulaşabilirsin."
+      subtitle="Öğretmeninin analizine, kendi notuna ve velinin eklediği hata analiz görsellerine buradan ulaşabilirsin."
     />
   )
 }

@@ -15,7 +15,7 @@ export default function TeacherAnalysisPhotosPage() {
       fetchPhotos={getTeacherWrongQuestionAnalysisPhotoRecords}
       fetchQuestionPhoto={getTeacherWrongQuestionPhotoRecord}
       showStudentColumn
-      subtitle="Öğrencilerinin Hata Defteri'nde eklenen hata analiz görselleri (sadece kendi derslerin)."
+      subtitle="Öğrencilerinin Hata Defteri'ndeki notlar, analizler ve hata analiz görselleri (sadece kendi derslerin)."
     />
   )
 }

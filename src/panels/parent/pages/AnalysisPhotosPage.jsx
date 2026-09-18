@@ -84,7 +84,7 @@ export default function ParentAnalysisPhotosPage() {
       fetchPhotos={(id) => getWrongQuestionAnalysisPhotoRecords(id, selectedStudent.id)}
       fetchQuestionPhoto={(id) => getWrongQuestionPhoto(id, selectedStudent.id)}
       title="Hata Analizlerim"
-      subtitle={`${selectedStudent.fullName} için eklenen hata analiz görselleri.`}
+      subtitle={`${selectedStudent.fullName} için eklenen hata analizleri.`}
       headerActions={headerActions}
       backSlot={
         <Button

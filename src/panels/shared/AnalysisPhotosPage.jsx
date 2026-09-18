@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FileText, Image as ImageIcon } from 'lucide-react'
+import { FileText, GraduationCap, Image as ImageIcon, User, Users } from 'lucide-react'
 import PageHeader from '../layout/PageHeader'
 import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
 import AnalysisPhotoViewer from './AnalysisPhotoViewer'
+import AnalysisDetailModal from './AnalysisDetailModal'
 import { addDaysISO, todayISODate } from '../../utils/time'
 import { toDateKey } from './progressAnalytics'
-
-const collator = new Intl.Collator('tr-TR')
-const ALL_SUBJECTS = '__tum-dersler__'
 
 const RANGE_FILTERS = [
   { id: 'today', label: 'Bugün' },
@@ -87,24 +85,13 @@ function RangeFilter({ selectedRange, onSelect }) {
   )
 }
 
+// Sekmeler en çok analiz biriken dersten en aza doğru sıralanır (bkz. AnalysisPhotosPage'deki
+// `subjects` useMemo) — "Tüm Dersler" sekmesi kasıtlı olarak yok: hiç analizi olmayan bir ders zaten
+// listeye hiç girmiyor, bu yüzden ekstra bir "hepsi" görünümü katma değer taşımıyordu.
 function SubjectTabs({ subjects, selectedSubject, onSelect }) {
   if (subjects.length === 0) return null
-  const totalCount = subjects.reduce((sum, subject) => sum + subject.count, 0)
   return (
     <div className="flex gap-4 overflow-x-auto border-b border-panel-border" role="tablist" aria-label="Ders sekmeleri">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={selectedSubject === ALL_SUBJECTS}
-        onClick={() => onSelect(ALL_SUBJECTS)}
-        className={`shrink-0 whitespace-nowrap border-b-2 px-1 pb-2.5 text-sm font-semibold transition-colors ${
-          selectedSubject === ALL_SUBJECTS
-            ? 'border-panel-blue text-panel-blue'
-            : 'border-transparent text-panel-text-muted hover:text-panel-text'
-        }`}
-      >
-        Tüm Dersler <span className="opacity-60">({totalCount})</span>
-      </button>
       {subjects.map((subject) => (
         <button
           key={subject.key}
@@ -125,18 +112,110 @@ function SubjectTabs({ subjects, selectedSubject, onSelect }) {
   )
 }
 
-// "Hata Analizlerim" menüsü: veli tarafından eklenmiş Hata Analiz görsellerini YayınEvi/Kaynak/
-// İçerik/Test/Soru No tablosunda listeler; "Analizi Göster" AnalysisPhotoViewer'ı açar (slayt gibi
-// gezinme + yazdırma — bkz. o dosyadaki yorum). Ekleme/kaldırma burada değil, Hata Defteri'nden
-// yapılır (bu sayfa salt-görüntüleme). Öğrenci ve veli panelinde tek öğrenci bağlamında, öğretmen
-// panelinde kendi kapsamındaki tüm öğrenciler için (bu yüzden showStudentColumn) kullanılır.
+function IndicatorBadge({ icon: Icon, label, tone }) {
+  const toneClasses = {
+    sage: 'bg-panel-sage-soft text-panel-sage',
+    blue: 'bg-panel-blue-soft text-panel-blue',
+    lilac: 'bg-panel-lilac-soft text-panel-lilac',
+    warm: 'bg-panel-warm-soft text-panel-warm',
+  }
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold ${toneClasses[tone]}`}>
+      {Icon ? <Icon size={12} aria-hidden="true" /> : null}
+      {label}
+    </span>
+  )
+}
+
+function AnalysisRow({ item, showStudentColumn, fetchQuestionPhoto, onShowQuestion, onShowDetail }) {
+  const tag = publisherTagStyle(item.publisherName)
+  const commentRoles = new Set((item.analysisComments || []).map((comment) => comment.role))
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-panel-border bg-panel-surface p-3.5 transition-colors hover:border-panel-blue/40 sm:flex-row sm:items-center sm:gap-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {showStudentColumn && item.studentFullName ? (
+            <span className="truncate text-xs font-semibold text-panel-text">{item.studentFullName}</span>
+          ) : null}
+          {item.publisherName ? (
+            <span
+              className={`inline-block max-w-full truncate rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${tag.bg} ${tag.text}`}
+              title={item.publisherName}
+            >
+              {item.publisherName}
+            </span>
+          ) : null}
+          {item.bookName ? (
+            <span className="truncate text-xs text-panel-text-muted" title={item.bookName}>
+              {item.bookName}
+            </span>
+          ) : null}
+        </div>
+        <div className="truncate text-sm font-semibold text-panel-text" title={item.topicName || item.topic || ''}>
+          {item.topicName || item.topic || 'Genel'}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-panel-text-muted">
+          <span>
+            {[item.testName, item.questionNumber != null ? `Soru ${item.questionNumber}` : null].filter(Boolean).join(' · ') || '—'}
+          </span>
+          {item.lastActivityAt ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <span>{formatAddedAt(item.lastActivityAt)}</span>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:shrink-0 sm:justify-end sm:gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {commentRoles.has('ogrenci') ? <IndicatorBadge icon={User} label="Öğrenci" tone="sage" /> : null}
+          {commentRoles.has('ebeveyn') ? <IndicatorBadge icon={Users} label="Veli" tone="warm" /> : null}
+          {commentRoles.has('ogretmen') ? <IndicatorBadge icon={GraduationCap} label="Öğretmen" tone="blue" /> : null}
+          {item.analysisPhotoCount > 0 ? (
+            <IndicatorBadge icon={ImageIcon} label={String(item.analysisPhotoCount)} tone="lilac" />
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          {fetchQuestionPhoto ? (
+            <button
+              type="button"
+              onClick={onShowQuestion}
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-panel-border px-3 py-1.5 text-xs font-semibold text-panel-text hover:bg-panel-surface-soft"
+            >
+              <FileText size={14} aria-hidden="true" />
+              Soruyu Göster
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onShowDetail}
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-full border-2 border-panel-blue px-3 py-1.5 text-xs font-bold text-panel-blue hover:bg-panel-blue-soft"
+          >
+            Analizi Gör
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// "Hata Analizlerim" menüsü: bir sorunun üzerinde biriken analiz yorumlarını (öğrenci/veli/öğretmen,
+// N adet olabilir — bkz. mistakeAnalysis.js dosya başı yorumu) ve veli tarafından eklenen Hata
+// Analiz görselini YayınEvi/Kaynak/İçerik/Test/Soru No kırılımıyla listeler. "Analizi Gör"
+// AnalysisDetailModal'ı açar (doluysa yorum akışını + görseli gösterir, görsel için "Görseli
+// Büyüt" AnalysisPhotoViewer'a devreder — slayt gibi gezinme + yazdırma, bkz. o dosya). Ekleme
+// burada değil, Hata Defteri'nden yapılır (bu sayfa salt-görüntüleme). Öğrenci ve veli panelinde
+// tek öğrenci bağlamında, öğretmen panelinde kendi kapsamındaki tüm öğrenciler için (bu yüzden
+// showStudentColumn) kullanılır.
 export default function AnalysisPhotosPage({
   fetchItems,
   fetchPhotos,
   fetchQuestionPhoto,
   showStudentColumn = false,
   title = 'Hata Analizlerim',
-  subtitle = 'Eklenen hata analiz görsellerine buradan ulaşabilirsin.',
+  subtitle = 'Öğrenci, veli ve öğretmen yorumlarına, eklenen hata analiz görsellerine buradan ulaşabilirsin.',
   headerActions,
   backSlot = null,
 }) {
@@ -144,12 +223,13 @@ export default function AnalysisPhotosPage({
   const [error, setError] = useState('')
   const [openItem, setOpenItem] = useState(null)
   const [openQuestionItem, setOpenQuestionItem] = useState(null)
+  const [openDetailItem, setOpenDetailItem] = useState(null)
   const [selectedRange, setSelectedRange] = useState('week7')
-  const [selectedSubject, setSelectedSubject] = useState(ALL_SUBJECTS)
+  const [selectedSubject, setSelectedSubject] = useState('')
 
   // AnalysisPhotoViewer birden fazla görsel bekliyor (slayt gibi gezinme için); asıl soru
   // fotoğrafı tek görsel olduğundan tek elemanlı bir dizi olarak sarmalanır — aynı bileşen hem
-  // "Analizi Göster" hem "Soruyu Göster" için (slayt/yazdırma dahil) yeniden kullanılır.
+  // "Görseli Büyüt" hem "Soruyu Göster" için (slayt/yazdırma dahil) yeniden kullanılır.
   const fetchQuestionPhotos = fetchQuestionPhoto
     ? async (id) => {
         const url = await fetchQuestionPhoto(id)
@@ -177,7 +257,7 @@ export default function AnalysisPhotosPage({
 
   const dateFilteredItems = useMemo(() => {
     if (!items) return []
-    return items.filter((item) => inDateRange(toDateKey(item.analysisPhotoAddedAt), selectedRange, today))
+    return items.filter((item) => inDateRange(toDateKey(item.lastActivityAt), selectedRange, today))
   }, [items, selectedRange, today])
 
   const subjects = useMemo(() => {
@@ -188,13 +268,21 @@ export default function AnalysisPhotosPage({
     })
     return Array.from(counts.entries())
       .map(([label, count]) => ({ key: label, label, count }))
-      .sort((a, b) => collator.compare(a.label, b.label))
+      .sort((a, b) => b.count - a.count)
   }, [dateFilteredItems])
 
+  // Seçili sekme tarih filtresi değişince listeden düşebilir (ör. "Bugün"e geçince o dersin hiç
+  // kaydı kalmayabilir) — bu durumda geçerli bir seçim yokmuş gibi davranıp en çok analizi olan
+  // derse (subjects zaten sayıya göre azalan sıralı) geri dönülür. Bir effect yerine türetilmiş bir
+  // değer kullanmak, "geçersiz seçim" durumunun render sırasında ekstra bir render turu beklemeden
+  // çözülmesini sağlar.
+  const effectiveSubject = subjects.some((subject) => subject.key === selectedSubject)
+    ? selectedSubject
+    : subjects[0]?.key || ''
+
   const visibleItems = useMemo(() => {
-    if (selectedSubject === ALL_SUBJECTS) return dateFilteredItems
-    return dateFilteredItems.filter((item) => (item.subject || 'Genel') === selectedSubject)
-  }, [dateFilteredItems, selectedSubject])
+    return dateFilteredItems.filter((item) => (item.subject || 'Genel') === effectiveSubject)
+  }, [dateFilteredItems, effectiveSubject])
 
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
@@ -218,106 +306,42 @@ export default function AnalysisPhotosPage({
         <EmptyState
           icon={ImageIcon}
           title="Henüz hata analizi yok"
-          description="Hata Defteri'nde bir soruya Hata Analiz görseli eklendiğinde burada listelenecek."
+          description="Hata Defteri'nde bir soruya öğrenci notu, öğretmen analizi ya da Hata Analiz görseli eklendiğinde burada listelenecek."
         />
       ) : (
         <div className="flex flex-col gap-3">
-          <SubjectTabs subjects={subjects} selectedSubject={selectedSubject} onSelect={setSelectedSubject} />
+          <SubjectTabs subjects={subjects} selectedSubject={effectiveSubject} onSelect={setSelectedSubject} />
 
           {visibleItems.length === 0 ? (
             <EmptyState
               icon={ImageIcon}
               title="Bu filtrede hata analizi yok"
-              description="Seçili tarih aralığında veya derste eklenmiş hata analiz görseli bulunamadı."
+              description="Seçili tarih aralığında veya derste bir analiz bulunamadı."
             />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-panel-border bg-panel-surface">
-              <table className="w-full min-w-[920px] table-fixed border-collapse text-left text-xs">
-                <colgroup>
-                  {showStudentColumn ? <col className="w-[110px]" /> : null}
-                  <col className="w-[130px]" />
-                  <col className="w-[210px]" />
-                  <col className="w-[210px]" />
-                  <col className="w-[130px]" />
-                  <col className="w-[150px]" />
-                  <col className="w-[280px]" />
-                </colgroup>
-                <thead>
-                  <tr className="border-b border-panel-border bg-panel-surface-soft text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">
-                    {showStudentColumn ? <th className="whitespace-nowrap px-3 py-2.5">Öğrenci</th> : null}
-                    <th className="whitespace-nowrap px-3 py-2.5">Yayın Evi</th>
-                    <th className="whitespace-nowrap px-3 py-2.5">Kaynak</th>
-                    <th className="whitespace-nowrap px-3 py-2.5">İçerik Adı</th>
-                    <th className="whitespace-nowrap px-3 py-2.5">Test / Soru</th>
-                    <th className="whitespace-nowrap px-3 py-2.5">Son Ekleme</th>
-                    <th className="px-3 py-2.5" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleItems.map((item) => {
-                    const tag = publisherTagStyle(item.publisherName)
-                    return (
-                <tr key={item.id} className="border-b border-panel-border last:border-0 hover:bg-panel-surface-soft">
-                  {showStudentColumn ? (
-                    <td className="truncate px-3 py-2.5 font-medium text-panel-text" title={item.studentFullName || ''}>
-                      {item.studentFullName || '—'}
-                    </td>
-                  ) : null}
-                  <td className="px-3 py-2.5">
-                    {item.publisherName ? (
-                      <span
-                        className={`inline-block max-w-full truncate rounded-full px-2.5 py-1 text-[11px] font-semibold ${tag.bg} ${tag.text}`}
-                        title={item.publisherName}
-                      >
-                        {item.publisherName}
-                      </span>
-                    ) : (
-                      <span className="text-panel-text-muted">—</span>
-                    )}
-                  </td>
-                  <td className="truncate px-3 py-2.5 text-panel-text-muted" title={item.bookName || ''}>
-                    {item.bookName || '—'}
-                  </td>
-                  <td className="truncate px-3 py-2.5 text-panel-text-muted" title={item.topicName || item.topic || ''}>
-                    {item.topicName || item.topic || '—'}
-                  </td>
-                  <td className="truncate px-3 py-2.5 text-panel-text-muted">
-                    {[item.testName, item.questionNumber != null ? `Soru ${item.questionNumber}` : null]
-                      .filter(Boolean)
-                      .join(' · ') || '—'}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-panel-text-muted">{formatAddedAt(item.analysisPhotoAddedAt)}</td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-2 whitespace-nowrap">
-                      {fetchQuestionPhoto ? (
-                        <button
-                          type="button"
-                          onClick={() => setOpenQuestionItem(item)}
-                          className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-panel-border px-3 py-1.5 text-xs font-semibold text-panel-text hover:bg-panel-surface-soft"
-                        >
-                          <FileText size={14} aria-hidden="true" />
-                          Soruyu Göster
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => setOpenItem(item)}
-                        className="flex items-center gap-1.5 whitespace-nowrap rounded-full border-2 border-panel-blue px-3 py-1.5 text-xs font-bold text-panel-blue hover:bg-panel-blue-soft"
-                      >
-                        <ImageIcon size={14} aria-hidden="true" />
-                        Analizi Göster{item.analysisPhotoCount > 1 ? ` (${item.analysisPhotoCount})` : ''}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+            <div className="flex flex-col gap-2">
+              {visibleItems.map((item) => (
+                <AnalysisRow
+                  key={item.id}
+                  item={item}
+                  showStudentColumn={showStudentColumn}
+                  fetchQuestionPhoto={fetchQuestionPhoto}
+                  onShowQuestion={() => setOpenQuestionItem(item)}
+                  onShowDetail={() => setOpenDetailItem(item)}
+                />
+              ))}
             </div>
           )}
         </div>
       )}
+
+      {openDetailItem ? (
+        <AnalysisDetailModal
+          item={openDetailItem}
+          onClose={() => setOpenDetailItem(null)}
+          onShowPhotos={() => setOpenItem(openDetailItem)}
+        />
+      ) : null}
 
       {openItem ? (
         <AnalysisPhotoViewer

@@ -1028,13 +1028,13 @@ async function fetchTaskAnswerSheetData(taskId, studentId) {
   const photos = {}
   photosResult.recordset.forEach((row) => {
     if (!row.test_id) return
-    const analyses = analysesMap.get(row.id) || {}
+    const analysisComments = analysesMap.get(row.id) || []
     photos[row.test_id] = photos[row.test_id] || {}
     photos[row.test_id][row.question_number] = {
       id: row.id,
       hasPhoto: Boolean(row.has_photo),
       topic: row.topic || undefined,
-      analyses,
+      analysisComments,
     }
   })
 

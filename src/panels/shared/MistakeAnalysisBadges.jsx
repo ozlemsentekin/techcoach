@@ -1,25 +1,25 @@
 import { cn } from '../ui/utils'
-import { ANALYSIS_LANES, MISTAKE_REASON_LABELS, isLaneAnalyzed } from './mistakeAnalysis'
+import { ANALYSIS_ROLES, MISTAKE_REASON_LABELS, ROLE_SHORT_LABELS, hasRoleAnalysis, latestCommentByRole, roleLabel } from './mistakeAnalysis'
 
-// Bir yanlış sorunun üç analiz kulvarının (öğrenci / veli / öğretmen) durumunu gösteren küçük
-// rozet dizisi. Dolu = o kulvarda hata nedeni seçilmiş. İzleyicinin kendi kulvarı boşsa amber
-// vurgulanır ("senin analizin bekliyor").
-export default function MistakeAnalysisBadges({ analyses, viewerRole, className }) {
-  const item = { analyses }
+// Bir yanlış sorunun üç analiz rolünün (öğrenci / veli / öğretmen) durumunu gösteren küçük rozet
+// dizisi. Dolu = o rolden en az bir yorumda hata nedeni seçilmiş. İzleyicinin kendi rolü boşsa
+// amber vurgulanır ("senin analizin bekliyor").
+export default function MistakeAnalysisBadges({ comments, viewerRole, className }) {
+  const item = { analysisComments: comments }
   return (
     <div className={cn('flex items-center gap-1', className)}>
-      {ANALYSIS_LANES.map((lane) => {
-        const analyzed = isLaneAnalyzed(item, lane.role)
-        const isSelf = lane.role === viewerRole
-        const reason = analyses?.[lane.role]?.mistakeReason
+      {ANALYSIS_ROLES.map((role) => {
+        const analyzed = hasRoleAnalysis(item, role)
+        const isSelf = role === viewerRole
+        const latest = latestCommentByRole(comments, role)
         const title = analyzed
-          ? `${lane.label} analizi: ${MISTAKE_REASON_LABELS[reason] || 'yapıldı'}`
+          ? `${roleLabel(role)} analizi: ${MISTAKE_REASON_LABELS[latest?.mistakeReason] || 'yapıldı'}`
           : isSelf
-            ? `${lane.label} analizi bekliyor (sen)`
-            : `${lane.label} analizi bekliyor`
+            ? `${roleLabel(role)} analizi bekliyor (sen)`
+            : `${roleLabel(role)} analizi bekliyor`
         return (
           <span
-            key={lane.role}
+            key={role}
             title={title}
             className={cn(
               'inline-flex h-5 min-w-5 items-center justify-center rounded-full border px-1 text-[10px] font-bold leading-none',
@@ -30,7 +30,7 @@ export default function MistakeAnalysisBadges({ analyses, viewerRole, className 
                   : 'border-panel-border bg-panel-surface text-panel-text-muted',
             )}
           >
-            {lane.short}
+            {ROLE_SHORT_LABELS[role]}
           </span>
         )
       })}

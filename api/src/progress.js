@@ -7,76 +7,109 @@ const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mista
 
 const MISTAKE_REASONS = ['dikkat-hatasi', 'bilgi-eksikligi', 'soruyu-anlamadim']
 
-// Hata Defteri analiz kulvarları: her yanlış soruda rol başına bağımsız analiz tutulur
-// (bkz. dbo.WrongQuestionAnalyses / create-wrong-question-analyses-schema.sql). 'ebeveyn'
-// studentScope.actorRole ile aynı yazımdır (veli); 'koc' ayrı bir kulvar olarak ele alınmaz.
+// Hata Defteri analiz akışı: her yanlış soruya öğrenci, veli ve öğretmen istediği kadar yorum
+// bırakabilir (append-only thread — bkz. dbo.WrongQuestionAnalyses /
+// wrong-question-analyses-thread-schema.sql). 'ebeveyn' studentScope.actorRole ile aynı
+// yazımdır (veli); 'koc' ayrı bir rol olarak ele alınmaz.
 const ANALYSIS_ROLES = ['ogrenci', 'ebeveyn', 'ogretmen']
 
-// Verilen öğrencinin tüm yanlış sorularına ait analiz kulvarlarını tek sorguda çekip
-// wrong_question_id -> { ogrenci?, ebeveyn?, ogretmen? } haritasına dönüştürür. Her kulvar
-// { mistakeReason, note, analyzedByName } taşır. subject verilirse (öğretmen ucu) sadece o
-// derse ait yanlışların analizleri döner.
+function mapAnalysisRows(rows) {
+  const map = new Map()
+  rows.forEach((row) => {
+    if (!ANALYSIS_ROLES.includes(row.role)) return
+    const list = map.get(row.wrong_question_id) || []
+    list.push({
+      id: row.id,
+      role: row.role,
+      mistakeReason: row.mistake_reason || undefined,
+      note: row.note || undefined,
+      analyzedByName: row.analyzed_by_name || undefined,
+      createdAt: row.created_at,
+    })
+    map.set(row.wrong_question_id, list)
+  })
+  return map
+}
+
+// Verilen öğrencinin tüm yanlış sorularına ait analiz yorumlarını tek sorguda çekip
+// wrong_question_id -> [{ id, role, mistakeReason, note, analyzedByName, createdAt }, ...]
+// haritasına dönüştürür (eskiden en yeniye). subject verilirse (öğretmen ucu) sadece o derse ait
+// yanlışların yorumları döner.
 async function fetchWrongQuestionAnalyses(studentId, { subject } = {}) {
   const requestDb = await withRequest({
     studentId: { type: sql.UniqueIdentifier, value: studentId },
     ...(subject ? { subject: { type: sql.NVarChar(100), value: subject } } : {}),
   })
   const result = await requestDb.query(`
-    SELECT a.wrong_question_id, a.role, a.mistake_reason, a.note, u.full_name AS analyzed_by_name
+    SELECT a.id, a.wrong_question_id, a.role, a.mistake_reason, a.note, a.created_at,
+           u.full_name AS analyzed_by_name
     FROM dbo.WrongQuestionAnalyses a
     LEFT JOIN dbo.Users u ON u.id = a.analyzed_by_user_id
     WHERE a.wrong_question_id IN (
       SELECT id FROM dbo.WrongQuestions
       WHERE student_id = @studentId ${subject ? 'AND subject = @subject' : ''}
-    );
+    )
+    ORDER BY a.created_at ASC;
   `)
-
-  const map = new Map()
-  result.recordset.forEach((row) => {
-    if (!ANALYSIS_ROLES.includes(row.role)) return
-    const entry = map.get(row.wrong_question_id) || {}
-    entry[row.role] = {
-      mistakeReason: row.mistake_reason || undefined,
-      note: row.note || undefined,
-      analyzedByName: row.analyzed_by_name || undefined,
-    }
-    map.set(row.wrong_question_id, entry)
-  })
-  return map
+  return mapAnalysisRows(result.recordset)
 }
 
-// Tek bir yanlış sorunun analiz kulvarını upsert eder (rol başına tek kayıt). mistakeReason
-// verilmişse çağıran katman MISTAKE_REASONS ile doğrulamalıdır.
-async function upsertWrongQuestionAnalysis(wrongQuestionId, role, { mistakeReason, note }, analyzedByUserId) {
-  const bindings = {
+// Öğretmenin çapraz-öğrenci listelerinde (bkz. teacher.js listTeacherWrongQuestionAnalysisPhotosHandler)
+// tek bir studentId'ye bağlı kalamadığımız için, verilen wrong_question_id kümesine ait tüm analiz
+// yorumlarını tek sorguda çeker. IN listesi güvenli şekilde parametreleştirilir.
+async function fetchAnalysesByQuestionIds(wrongQuestionIds) {
+  if (!wrongQuestionIds.length) return new Map()
+  const bindings = {}
+  const placeholders = wrongQuestionIds.map((id, index) => {
+    const key = `qid${index}`
+    bindings[key] = { type: sql.UniqueIdentifier, value: id }
+    return `@${key}`
+  })
+  const requestDb = await withRequest(bindings)
+  const result = await requestDb.query(`
+    SELECT a.id, a.wrong_question_id, a.role, a.mistake_reason, a.note, a.created_at,
+           u.full_name AS analyzed_by_name
+    FROM dbo.WrongQuestionAnalyses a
+    LEFT JOIN dbo.Users u ON u.id = a.analyzed_by_user_id
+    WHERE a.wrong_question_id IN (${placeholders.join(', ')})
+    ORDER BY a.created_at ASC;
+  `)
+  return mapAnalysisRows(result.recordset)
+}
+
+// Bir yanlış soruya YENİ bir analiz yorumu ekler (artık rol başına tek satır değil — her çağrı bir
+// satır ekler, bkz. yukarıdaki dosya başı yorumu). mistakeReason verilmişse çağıran katman
+// MISTAKE_REASONS ile doğrulamalıdır. Eklenen yorumu (analyzedByName dahil) döner.
+async function addWrongQuestionAnalysisComment(wrongQuestionId, role, { mistakeReason, note }, analyzedByUserId) {
+  const requestDb = await withRequest({
     wrongQuestionId: { type: sql.UniqueIdentifier, value: wrongQuestionId },
     role: { type: sql.NVarChar(20), value: role },
+    mistakeReason: { type: sql.NVarChar(30), value: mistakeReason || null },
+    note: { type: sql.NVarChar(1000), value: note || null },
     analyzedByUserId: { type: sql.UniqueIdentifier, value: analyzedByUserId || null },
-  }
-  const setClauses = ['updated_at = SYSUTCDATETIME()', 'analyzed_by_user_id = @analyzedByUserId']
-  const insertCols = ['wrong_question_id', 'role', 'analyzed_by_user_id']
-  const insertVals = ['@wrongQuestionId', '@role', '@analyzedByUserId']
-  if (mistakeReason !== undefined) {
-    bindings.mistakeReason = { type: sql.NVarChar(30), value: mistakeReason || null }
-    setClauses.push('mistake_reason = @mistakeReason')
-    insertCols.push('mistake_reason')
-    insertVals.push('@mistakeReason')
-  }
-  if (note !== undefined) {
-    bindings.note = { type: sql.NVarChar(1000), value: note || null }
-    setClauses.push('note = @note')
-    insertCols.push('note')
-    insertVals.push('@note')
+  })
+  const result = await requestDb.query(`
+    INSERT INTO dbo.WrongQuestionAnalyses (wrong_question_id, role, mistake_reason, note, analyzed_by_user_id)
+    OUTPUT inserted.id, inserted.role, inserted.mistake_reason, inserted.note, inserted.created_at
+    VALUES (@wrongQuestionId, @role, @mistakeReason, @note, @analyzedByUserId);
+  `)
+  const inserted = result.recordset[0]
+
+  let authorName
+  if (analyzedByUserId) {
+    const userDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: analyzedByUserId } })
+    const userResult = await userDb.query(`SELECT full_name FROM dbo.Users WHERE id = @id;`)
+    authorName = userResult.recordset[0]?.full_name || undefined
   }
 
-  const requestDb = await withRequest(bindings)
-  await requestDb.query(`
-    UPDATE dbo.WrongQuestionAnalyses SET ${setClauses.join(', ')}
-    WHERE wrong_question_id = @wrongQuestionId AND role = @role;
-    IF @@ROWCOUNT = 0
-      INSERT INTO dbo.WrongQuestionAnalyses (${insertCols.join(', ')})
-      VALUES (${insertVals.join(', ')});
-  `)
+  return {
+    id: inserted.id,
+    role: inserted.role,
+    mistakeReason: inserted.mistake_reason || undefined,
+    note: inserted.note || undefined,
+    analyzedByName: authorName,
+    createdAt: inserted.created_at,
+  }
 }
 
 function toISODate(value) {
@@ -462,7 +495,7 @@ async function listWrongQuestionsHandler(request) {
     return json(200, {
       wrongQuestions: result.recordset.map((row) => ({
         ...sanitizeWrongQuestion(row),
-        analyses: analysesMap.get(row.id) || {},
+        analysisComments: analysesMap.get(row.id) || [],
       })),
       bookImages: Object.fromEntries(bookImageByName),
     })
@@ -613,8 +646,8 @@ async function listWrongQuestionAnalysisPhotoRecordsHandler(request) {
 }
 
 // Bir soruya yeni bir Hata Analiz görseli ekler (mevcutları değiştirmez — birden fazla görsel
-// desteklenir). Sadece veli ekleyebilir — öğrenci/öğretmen akışı kaldırıldı, bkz.
-// mistakeAnalysis.js'deki ANALYSIS_LANES yorumu.
+// desteklenir). Sadece veli ekleyebilir; metin yorumları (dbo.WrongQuestionAnalyses) üç rolden de
+// gelebilir ama görsel eklemek veliye özel kaldı (bkz. addWrongQuestionAnalysisComment).
 async function addWrongQuestionAnalysisPhotoHandler(request) {
   try {
     const wrongQuestionId = request.params.wrongQuestionId
@@ -720,9 +753,13 @@ async function deleteWrongQuestionAnalysisPhotoHandler(request) {
   }
 }
 
-// "Hata Analizlerim" menüsü: bu öğrencinin (veli seçtiği çocuk ya da öğrencinin kendisi) en az bir
-// Hata Analiz görseli eklenmiş tüm sorularını, YayınEvi/Kaynak/İçerik/Test/Soru No kırılımıyla
-// listeler. Görsellerin kendisini taşımaz (bkz. listWrongQuestionAnalysisPhotoRecordsHandler).
+// "Hata Analizlerim" menüsü: bu öğrencinin (veli seçtiği çocuk ya da öğrencinin kendisi) üzerinde
+// EN AZ BİRİ dolu olan tüm sorularını listeler — öğrenci/veli/öğretmenden en az bir analiz yorumu
+// (dbo.WrongQuestionAnalyses, artık rol başına N yorum) veya veli tarafından eklenmiş bir Hata
+// Analiz görseli. Görsellerin/yorumların kendisini taşımaz, sadece özet (bkz.
+// listWrongQuestionAnalysisPhotoRecordsHandler + fetchWrongQuestionAnalyses); filtreleme/sıralama
+// (en az biri dolu mu, en son ne zaman güncellendi) JS tarafında yapılır — SQL'de N-yorum modelini
+// tek satıra sığdırmaya çalışmak (JOIN + agregasyon) gereksiz karmaşıklık katardı.
 async function listWrongQuestionAnalysisPhotosHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
@@ -733,43 +770,58 @@ async function listWrongQuestionAnalysisPhotosHandler(request) {
     const requestDb = await withRequest({
       studentId: { type: sql.UniqueIdentifier, value: studentId },
     })
-    const result = await requestDb.query(`
-      SELECT wq.id, wq.subject, wq.question_number,
-             photos.photo_count, photos.last_added_at,
-             COALESCE(tp.name, wq.topic) AS topic,
-             COALESCE(rb.name, rb2.name, wq.book_name) AS book_name,
-             COALESCE(pub.name, pub2.name, wq.publisher_name) AS publisher_name,
-             t.topic_name, wq.test_name
-      FROM dbo.WrongQuestions wq
-      INNER JOIN (
-        SELECT wrong_question_id, COUNT(*) AS photo_count, MAX(created_at) AS last_added_at
-        FROM dbo.WrongQuestionAnalysisPhotos
-        GROUP BY wrong_question_id
-      ) photos ON photos.wrong_question_id = wq.id
-      LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
-      LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
-      LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
-      LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
-      LEFT JOIN dbo.ResourceBooks rb2 ON rb2.id = wq.resource_book_id
-      LEFT JOIN dbo.Publishers pub2 ON pub2.id = rb2.publisher_id
-      WHERE wq.student_id = @studentId
-      ORDER BY photos.last_added_at DESC;
-    `)
+    const [result, analysesMap] = await Promise.all([
+      requestDb.query(`
+        SELECT wq.id, wq.subject, wq.question_number,
+               photos.photo_count, photos.last_added_at,
+               COALESCE(tp.name, wq.topic) AS topic,
+               COALESCE(rb.name, rb2.name, wq.book_name) AS book_name,
+               COALESCE(pub.name, pub2.name, wq.publisher_name) AS publisher_name,
+               t.topic_name, wq.test_name
+        FROM dbo.WrongQuestions wq
+        LEFT JOIN (
+          SELECT wrong_question_id, COUNT(*) AS photo_count, MAX(created_at) AS last_added_at
+          FROM dbo.WrongQuestionAnalysisPhotos
+          GROUP BY wrong_question_id
+        ) photos ON photos.wrong_question_id = wq.id
+        LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
+        LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
+        LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
+        LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
+        LEFT JOIN dbo.ResourceBooks rb2 ON rb2.id = wq.resource_book_id
+        LEFT JOIN dbo.Publishers pub2 ON pub2.id = rb2.publisher_id
+        WHERE wq.student_id = @studentId;
+      `),
+      fetchWrongQuestionAnalyses(studentId),
+    ])
 
-    return json(200, {
-      items: result.recordset.map((row) => ({
-        id: row.id,
-        subject: row.subject,
-        topic: row.topic || undefined,
-        topicName: row.topic_name || undefined,
-        testName: row.test_name || undefined,
-        bookName: row.book_name || undefined,
-        publisherName: row.publisher_name || undefined,
-        questionNumber: row.question_number || undefined,
-        analysisPhotoCount: row.photo_count,
-        analysisPhotoAddedAt: row.last_added_at,
-      })),
-    })
+    const items = result.recordset
+      .map((row) => {
+        const analysisComments = analysesMap.get(row.id) || []
+        const activityDates = [row.last_added_at, ...analysisComments.map((comment) => comment.createdAt)].filter(
+          Boolean,
+        )
+        if (!row.photo_count && analysisComments.length === 0) return null
+        return {
+          id: row.id,
+          subject: row.subject,
+          topic: row.topic || undefined,
+          topicName: row.topic_name || undefined,
+          testName: row.test_name || undefined,
+          bookName: row.book_name || undefined,
+          publisherName: row.publisher_name || undefined,
+          questionNumber: row.question_number || undefined,
+          analysisPhotoCount: row.photo_count || 0,
+          analysisComments,
+          lastActivityAt: activityDates.length
+            ? new Date(Math.max(...activityDates.map((date) => new Date(date).getTime())))
+            : undefined,
+        }
+      })
+      .filter(Boolean)
+      .sort((a, b) => new Date(b.lastActivityAt) - new Date(a.lastActivityAt))
+
+    return json(200, { items })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -881,6 +933,9 @@ async function updateWrongQuestionHandler(request) {
         return json(400, { error: 'Geçersiz hata nedeni.' })
       }
     }
+    if (analysis && !analysis.mistakeReason && !analysis.note?.trim()) {
+      return json(400, { error: 'Yorum boş olamaz.' })
+    }
 
     const setClauses = []
     const bindings = {
@@ -925,7 +980,7 @@ async function updateWrongQuestionHandler(request) {
     }
 
     if (analysis) {
-      await upsertWrongQuestionAnalysis(
+      await addWrongQuestionAnalysisComment(
         wrongQuestionId,
         analysisRole,
         { mistakeReason: analysis.mistakeReason, note: analysis.note },
@@ -947,7 +1002,7 @@ async function updateWrongQuestionHandler(request) {
     return json(200, {
       wrongQuestion: {
         ...sanitizeWrongQuestion(fetchResult.recordset[0]),
-        analyses: analysesMap.get(wrongQuestionId) || {},
+        analysisComments: analysesMap.get(wrongQuestionId) || [],
       },
     })
   } catch (error) {
@@ -1845,7 +1900,8 @@ module.exports = {
   getWrongQuestionTopicStatsHandler,
   computeWrongQuestionTopicStats,
   fetchWrongQuestionAnalyses,
-  upsertWrongQuestionAnalysis,
+  fetchAnalysesByQuestionIds,
+  addWrongQuestionAnalysisComment,
   MISTAKE_REASONS,
   ANALYSIS_ROLES,
   listStudySessionsHandler,

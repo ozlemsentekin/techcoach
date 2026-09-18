@@ -29,9 +29,7 @@ function buildGalleryItems(test, photosMap, result) {
       topicName: test.topicName,
       topic: entry.topic || test.topicName || test.name || '',
       correctAnswer: result?.correctLabels?.[String(orderNo)] || undefined,
-      studentNote: entry.studentNote,
-      mistakeReason: entry.mistakeReason,
-      analyses: entry.analyses || { ogrenci: { mistakeReason: entry.mistakeReason, note: entry.studentNote } },
+      analysisComments: entry.analysisComments || [],
       photoUrl: entry.photoUrl,
     })
   }
@@ -374,12 +372,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
 
   const handleUpdateMistakeAnalysis = async (wrongQuestionId, analysis) => {
     const updated = await updateWrongQuestion(wrongQuestionId, { analysis }, studentId)
-    const lane = updated.analyses?.ogrenci || {}
-    applyWrongQuestionUpdate(wrongQuestionId, {
-      analyses: updated.analyses,
-      mistakeReason: lane.mistakeReason,
-      studentNote: lane.note,
-    })
+    applyWrongQuestionUpdate(wrongQuestionId, { analysisComments: updated.analysisComments })
     return updated
   }
 

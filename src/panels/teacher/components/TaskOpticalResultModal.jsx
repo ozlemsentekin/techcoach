@@ -38,9 +38,7 @@ function buildGalleryItems(test, photos) {
       topicName: test.topicName,
       topic: entry.topic || test.topicName || test.name || '',
       correctAnswer: test.result?.correctLabels?.[String(orderNo)] || undefined,
-      studentNote: entry.studentNote,
-      mistakeReason: entry.mistakeReason,
-      analyses: entry.analyses || { ogretmen: { mistakeReason: entry.mistakeReason, note: entry.studentNote } },
+      analysisComments: entry.analysisComments || [],
     })
   }
   return items
@@ -215,12 +213,7 @@ export default function TaskOpticalResultModal({ task, studentTeacherId, onToggl
 
   const handleUpdateMistakeAnalysis = async (wrongQuestionId, analysis) => {
     const updated = await updateTeacherStudentWrongQuestion(studentTeacherId, wrongQuestionId, { analysis })
-    const lane = updated.analyses?.ogretmen || {}
-    applyWrongQuestionUpdate(wrongQuestionId, {
-      analyses: updated.analyses,
-      mistakeReason: lane.mistakeReason,
-      studentNote: lane.note,
-    })
+    applyWrongQuestionUpdate(wrongQuestionId, { analysisComments: updated.analysisComments })
     return updated
   }
 
