@@ -2,6 +2,8 @@ const { sql, withRequest, withTransaction } = require('./db')
 const { isConfigError } = require('./config')
 const { clearSessionHeaders, json } = require('./http')
 const {
+  defaultPasswordForPhone,
+  hashPassword,
   isSessionError,
   normalizePhone,
 } = require('./security')
@@ -58,7 +60,8 @@ const {
   computeWrongQuestionTopicStats,
   fetchWrongQuestionBookImagesByName,
   fetchWrongQuestionAnalyses,
-  upsertWrongQuestionAnalysis,
+  fetchAnalysesByQuestionIds,
+  addWrongQuestionAnalysisComment,
   fetchResourceBookImagesByIds,
   MISTAKE_REASONS,
 } = require('./progress')
@@ -933,9 +936,10 @@ async function listTeacherParentsHandler(request) {
 }
 
 // Bir öğretmenin bir öğrencisinin velisine ilk kez panel erişimi açar (veli şu ana kadar
-// hiç giriş yapamıyorsa, has_panel_access 0'dır). OTP-only girişte artık iletilecek bir
-// şifre yok — veli kendi telefonuna gelecek kodla giriş yapar; grantTeacherAccessHandler
-// (students.js) ile simetrik bir akış.
+// hiç giriş yapamıyorsa, has_panel_access 0'dır). Başlangıç şifresi telefonun son 6 hanesi
+// olarak atanır — veli ilk girişte SMS kodu + zorunlu şifre değiştirme akışına yönlendirilir
+// (bkz. auth.js loginHandler/requiresPasswordChange); grantTeacherAccessHandler (students.js)
+// ile simetrik bir akış.
 async function grantParentAccessHandler(request) {
   try {
     const { error, teacherUserId } = await requireTeacherSession(request)
@@ -972,11 +976,13 @@ async function grantParentAccessHandler(request) {
       return json(400, { error: 'Velinin geçerli bir cep telefonu numarası olmalı ki panele giriş yapabilsin.' })
     }
 
+    const passwordHash = await hashPassword(defaultPasswordForPhone(parent.phone_number))
     const updateDb = await withRequest({
       parentId: { type: sql.UniqueIdentifier, value: parentId },
+      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
     })
     await updateDb.query(`
-      UPDATE dbo.Users SET has_panel_access = 1 WHERE id = @parentId;
+      UPDATE dbo.Users SET has_panel_access = 1, password_hash = @passwordHash WHERE id = @parentId;
     `)
 
     return json(200, { ok: true })
@@ -1101,19 +1107,21 @@ async function createTeacherStudentHandler(request) {
     } else {
       consumesQuota = true
       parentHasPanelAccess = true
-      // Öğretmenin eklediği veli de öğrenci gibi hemen panele girebilsin: OTP-only girişte
-      // buna gerek kalmadan doğrudan has_panel_access açılır (eskiden burada varsayılan
-      // şifre türetilip yazılıyordu).
+      // Öğretmenin eklediği veli de öğrenci gibi hemen panele girebilsin: başlangıç şifresi
+      // telefonun son 6 hanesi olarak atanır, ilk girişte SMS kodu + zorunlu şifre değiştirme
+      // akışına yönlendirilir (bkz. auth.js loginHandler/requiresPasswordChange).
+      const parentPasswordHash = await hashPassword(defaultPasswordForPhone(parentPhone))
       const insertParentDb = await withRequest({
         fullName: { type: sql.NVarChar(120), value: parentFullName },
         phone: { type: sql.NVarChar(20), value: parentPhone },
+        passwordHash: { type: sql.NVarChar(255), value: parentPasswordHash },
         role: { type: sql.NVarChar(20), value: 'ebeveyn' },
       })
       try {
         const insertParentResult = await insertParentDb.query(`
-          INSERT INTO dbo.Users (full_name, phone_number, role, has_panel_access)
+          INSERT INTO dbo.Users (full_name, phone_number, password_hash, role, has_panel_access)
           OUTPUT inserted.id
-          VALUES (@fullName, @phone, @role, 1);
+          VALUES (@fullName, @phone, @passwordHash, @role, 1);
         `)
         parentId = insertParentResult.recordset[0].id
       } catch (insertError) {
@@ -1147,12 +1155,15 @@ async function createTeacherStudentHandler(request) {
     const parentConsent = parentConsentResult.recordset[0]
 
     // Telefonu verilen öğrenci de veli gibi hemen giriş yapabilsin diye has_panel_access
-    // açılır. Telefon verilmemişse has_panel_access 0 kalır (öğrenci yalnızca veli
-    // oturumundan yönetilir, kendi başına OTP ile giremez).
+    // açılır ve başlangıç şifresi telefonun son 6 hanesi olur. Telefon verilmemişse
+    // has_panel_access 0 kalır (öğrenci yalnızca veli oturumundan yönetilir, kendi
+    // başına giremez).
+    const studentPasswordHash = studentPhone ? await hashPassword(defaultPasswordForPhone(studentPhone)) : null
     const insertStudentDb = await withRequest({
       fullName: { type: sql.NVarChar(120), value: studentFullName },
       role: { type: sql.NVarChar(20), value: 'ogrenci' },
       phone: { type: sql.NVarChar(30), value: studentPhone },
+      passwordHash: { type: sql.NVarChar(255), value: studentPasswordHash },
       parentId: { type: sql.UniqueIdentifier, value: parentId },
       fundedByTeacherId: { type: sql.UniqueIdentifier, value: consumesQuota ? teacherUserId : null },
       hasPanelAccess: { type: sql.Bit, value: studentPhone ? 1 : 0 },
@@ -1162,9 +1173,9 @@ async function createTeacherStudentHandler(request) {
     let studentResult
     try {
       studentResult = await insertStudentDb.query(`
-        INSERT INTO dbo.Users (full_name, role, phone_number, parent_id, funded_by_teacher_id, has_panel_access, aydinlatma_accepted_at, kvkk_accepted_at)
+        INSERT INTO dbo.Users (full_name, role, phone_number, password_hash, parent_id, funded_by_teacher_id, has_panel_access, aydinlatma_accepted_at, kvkk_accepted_at)
         OUTPUT inserted.id
-        VALUES (@fullName, @role, @phone, @parentId, @fundedByTeacherId, @hasPanelAccess, @aydinlatmaAcceptedAt, @kvkkAcceptedAt);
+        VALUES (@fullName, @role, @phone, @passwordHash, @parentId, @fundedByTeacherId, @hasPanelAccess, @aydinlatmaAcceptedAt, @kvkkAcceptedAt);
       `)
     } catch (insertError) {
       if (studentPhone && (insertError.number === 2601 || insertError.number === 2627)) {
@@ -3376,7 +3387,7 @@ async function listTeacherStudentWrongQuestionsHandler(request) {
     return json(200, {
       wrongQuestions: result.recordset.map((row) => ({
         ...sanitizeWrongQuestion(row),
-        analyses: analysesMap.get(row.id) || {},
+        analysisComments: analysesMap.get(row.id) || [],
       })),
       bookImages: Object.fromEntries(bookImageByName),
     })
@@ -3452,10 +3463,14 @@ async function listTeacherStudentWrongQuestionAnalysisPhotosHandler(request) {
 }
 
 // "Hata Analizlerim" menüsü (öğretmen): tek bir öğrenciyle sınırlı değil — öğretmenin kendi
-// kapsamındaki (dbo.StudentTeachers) TÜM aktif öğrenci/ders ilişkilerinde, veli tarafından Hata
-// Analiz görseli eklenmiş soruları tek listede toplar. Diğer iki (öğrenci/veli) uçtan farklı olarak
-// studentTeacherId gerekmez (requireTeacherSession yeterli); kapsam SQL'de teacher_user_id ile
-// sağlanır. Çapraz öğrenci listesi olduğu için satırlar studentFullName de taşır.
+// kapsamındaki (dbo.StudentTeachers) TÜM aktif öğrenci/ders ilişkilerinde, en az bir analiz yorumu
+// (öğrenci/veli/öğretmen) veya veli tarafından eklenmiş Hata Analiz görseli olan soruları tek
+// listede toplar (bkz. progress.js listWrongQuestionAnalysisPhotosHandler'daki aynı gerekçe —
+// filtre/sıralama burada da JS tarafında). Çapraz öğrenci listesi olduğundan analizler
+// fetchWrongQuestionAnalyses (tek studentId) yerine fetchAnalysesByQuestionIds ile çekilir. Diğer
+// iki (öğrenci/veli) uçtan farklı olarak studentTeacherId gerekmez (requireTeacherSession yeterli);
+// kapsam SQL'de teacher_user_id ile sağlanır. Çapraz öğrenci listesi olduğu için satırlar
+// studentFullName de taşır.
 async function listTeacherWrongQuestionAnalysisPhotosHandler(request) {
   try {
     const { error, teacherUserId } = await requireTeacherSession(request)
@@ -3476,7 +3491,7 @@ async function listTeacherWrongQuestionAnalysisPhotosHandler(request) {
       INNER JOIN dbo.Users u ON u.id = st.student_id
       INNER JOIN dbo.Subjects s ON s.id = st.subject_id
       INNER JOIN dbo.WrongQuestions wq ON wq.student_id = st.student_id AND wq.subject = s.name
-      INNER JOIN (
+      LEFT JOIN (
         SELECT wrong_question_id, COUNT(*) AS photo_count, MAX(created_at) AS last_added_at
         FROM dbo.WrongQuestionAnalysisPhotos
         GROUP BY wrong_question_id
@@ -3487,25 +3502,39 @@ async function listTeacherWrongQuestionAnalysisPhotosHandler(request) {
       LEFT JOIN dbo.Publishers pub ON pub.id = rb.publisher_id
       LEFT JOIN dbo.ResourceBooks rb2 ON rb2.id = wq.resource_book_id
       LEFT JOIN dbo.Publishers pub2 ON pub2.id = rb2.publisher_id
-      WHERE st.teacher_user_id = @teacherUserId AND st.is_active = 1
-      ORDER BY photos.last_added_at DESC;
+      WHERE st.teacher_user_id = @teacherUserId AND st.is_active = 1;
     `)
 
-    return json(200, {
-      items: result.recordset.map((row) => ({
-        id: row.id,
-        subject: row.subject,
-        studentFullName: row.student_full_name,
-        topic: row.topic || undefined,
-        topicName: row.topic_name || undefined,
-        testName: row.test_name || undefined,
-        bookName: row.book_name || undefined,
-        publisherName: row.publisher_name || undefined,
-        questionNumber: row.question_number || undefined,
-        analysisPhotoCount: row.photo_count,
-        analysisPhotoAddedAt: row.last_added_at,
-      })),
-    })
+    const analysesMap = await fetchAnalysesByQuestionIds(result.recordset.map((row) => row.id))
+
+    const items = result.recordset
+      .map((row) => {
+        const analysisComments = analysesMap.get(row.id) || []
+        const activityDates = [row.last_added_at, ...analysisComments.map((comment) => comment.createdAt)].filter(
+          Boolean,
+        )
+        if (!row.photo_count && analysisComments.length === 0) return null
+        return {
+          id: row.id,
+          subject: row.subject,
+          studentFullName: row.student_full_name,
+          topic: row.topic || undefined,
+          topicName: row.topic_name || undefined,
+          testName: row.test_name || undefined,
+          bookName: row.book_name || undefined,
+          publisherName: row.publisher_name || undefined,
+          questionNumber: row.question_number || undefined,
+          analysisPhotoCount: row.photo_count || 0,
+          analysisComments,
+          lastActivityAt: activityDates.length
+            ? new Date(Math.max(...activityDates.map((date) => new Date(date).getTime())))
+            : undefined,
+        }
+      })
+      .filter(Boolean)
+      .sort((a, b) => new Date(b.lastActivityAt) - new Date(a.lastActivityAt))
+
+    return json(200, { items })
   } catch (error) {
     return handleError(error, 'listTeacherWrongQuestionAnalysisPhotosHandler', 'Hata analizleri yüklenemedi.')
   }
@@ -3622,6 +3651,9 @@ async function updateTeacherStudentWrongQuestionHandler(request) {
         return json(400, { error: 'Geçersiz hata nedeni.' })
       }
     }
+    if (analysis && !analysis.mistakeReason && !analysis.note?.trim()) {
+      return json(400, { error: 'Yorum boş olamaz.' })
+    }
 
     const setClauses = []
     const bindings = {
@@ -3630,8 +3662,8 @@ async function updateTeacherStudentWrongQuestionHandler(request) {
       subject: { type: sql.NVarChar(100), value: subjectName },
     }
 
-    // topic soruya aittir (kulvara değil) → WrongQuestions'ta kalır. Hata nedeni / not
-    // öğretmen kulvarına (dbo.WrongQuestionAnalyses role='ogretmen') yazılır.
+    // topic soruya aittir (role'e değil) → WrongQuestions'ta kalır. Öğretmenin hata nedeni / notu
+    // yeni bir yorum olarak dbo.WrongQuestionAnalyses'e (role='ogretmen') eklenir.
     if (payload?.topic !== undefined) {
       setClauses.push('topic = @topic')
       bindings.topic = { type: sql.NVarChar(200), value: payload.topic || null }
@@ -3663,7 +3695,7 @@ async function updateTeacherStudentWrongQuestionHandler(request) {
     }
 
     if (analysis) {
-      await upsertWrongQuestionAnalysis(
+      await addWrongQuestionAnalysisComment(
         wrongQuestionId,
         'ogretmen',
         { mistakeReason: analysis.mistakeReason, note: analysis.note },
@@ -3685,7 +3717,7 @@ async function updateTeacherStudentWrongQuestionHandler(request) {
     return json(200, {
       wrongQuestion: {
         ...sanitizeWrongQuestion(fetchResult.recordset[0]),
-        analyses: analysesMap.get(wrongQuestionId) || {},
+        analysisComments: analysesMap.get(wrongQuestionId) || [],
       },
     })
   } catch (error) {

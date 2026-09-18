@@ -11,16 +11,23 @@ import './LandingPage.css'
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY
 const OTP_CODE_LENGTH = 6
+const PASSWORD_LENGTH = 6
 const RESEND_COOLDOWN_SECONDS = 60
 
 function normalizeCodeInput(value) {
   return value.replace(/\D/g, '').slice(0, OTP_CODE_LENGTH)
 }
 
+function normalizePasswordInput(value) {
+  return value.replace(/\D/g, '').slice(0, PASSWORD_LENGTH)
+}
+
 const INITIAL_FORM = {
   firstName: '',
   lastName: '',
   phone: '',
+  password: '',
+  passwordConfirm: '',
   couponCode: '',
   parentType: '',
   acceptAydinlatma: false,
@@ -258,7 +265,14 @@ export default function SignUpPage() {
     }
     setForm((current) => ({
       ...current,
-      [name]: type === 'checkbox' ? checked : name === 'phone' ? normalizePhoneInput(value) : value,
+      [name]:
+        type === 'checkbox'
+          ? checked
+          : name === 'phone'
+            ? normalizePhoneInput(value)
+            : name === 'password' || name === 'passwordConfirm'
+              ? normalizePasswordInput(value)
+              : value,
     }))
   }
 
@@ -273,6 +287,16 @@ export default function SignUpPage() {
     }
     if (!/^0?5\d{9}$/.test(form.phone)) {
       return 'Geçerli bir telefon numarası girin (05XXXXXXXXX).'
+    }
+    // Veli için şifre burada toplanmaz: hesap ödeme sayfasında açılır ve başlangıç şifresi
+    // (telefonun son 6 hanesi) otomatik atanır (bkz. payments.js createParentFromPendingRegistration).
+    if (role === 'ogretmen') {
+      if (!/^\d{6}$/.test(form.password)) {
+        return 'Şifre tam olarak 6 rakamdan oluşmalı.'
+      }
+      if (form.password !== form.passwordConfirm) {
+        return 'Şifreler eşleşmiyor.'
+      }
     }
     if (!form.acceptAydinlatma || !form.acceptKvkk) {
       return 'Devam etmek için aydınlatma ve KVKK onaylarını vermelisiniz.'
@@ -350,6 +374,8 @@ export default function SignUpPage() {
       const user = await register({
         fullName: combinedFullName(),
         phoneVerifiedToken,
+        password: form.password,
+        passwordConfirm: form.passwordConfirm,
         couponCode: form.couponCode.trim(),
         acceptAydinlatma: form.acceptAydinlatma,
         acceptKvkk: form.acceptKvkk,
@@ -490,6 +516,37 @@ export default function SignUpPage() {
                       Baba
                     </button>
                   </div>
+                </div>
+              ) : null}
+
+              {role === 'ogretmen' ? (
+                <div className="signup-name-row">
+                  <input
+                    name="password"
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="Şifre (6 haneli)"
+                    aria-label="Şifre"
+                    maxLength={PASSWORD_LENGTH}
+                    autoComplete="new-password"
+                    required
+                    value={form.password}
+                    onChange={handleInputChange}
+                  />
+                  <input
+                    name="passwordConfirm"
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="Şifre (tekrar)"
+                    aria-label="Şifre (tekrar)"
+                    maxLength={PASSWORD_LENGTH}
+                    autoComplete="new-password"
+                    required
+                    value={form.passwordConfirm}
+                    onChange={handleInputChange}
+                  />
                 </div>
               ) : null}
 

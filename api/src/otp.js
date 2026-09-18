@@ -6,13 +6,18 @@ const { sendOtpSms } = require('./sms')
 const { verifyTurnstileToken } = require('./turnstile')
 const { sanitizeUser } = require('./auth')
 const { buildSessionEntitlement } = require('./entitlements')
+const { passwordChangeError } = require('./passwordPolicy')
 const {
+  createPasswordResetToken,
   createPhoneVerifiedToken,
   createSessionToken,
   generateOtpCode,
   hashOtpCode,
+  hashPassword,
+  isSessionError,
   normalizePhone,
   verifyOtpCode,
+  verifyPasswordResetToken,
 } = require('./security')
 
 const OTP_CODE_RULE = /^\d{6}$/
@@ -44,32 +49,18 @@ function otpServiceErrorResponse(error, fallbackMessage) {
   return json(500, { error: 'Kimlik doğrulama servisi şu anda kullanılamıyor.' })
 }
 
-// Girişte kullanılan zengin SELECT (StudentProfiles + Entitlements dahil) — loginHandler'ın
-// eskiden yaptığıyla aynı, böylece OTP ile giriş de aynı zengin `user` nesnesini (grade,
-// entitlement vb.) döner. Kayıt/çakışma kontrolü gibi sadece varlık kontrolü gereken
-// yerlerde bunun yerine hafif findUserByPhoneBasic kullanılır.
-async function findUserForLogin(phone) {
-  const requestDb = await withRequest({ phone: { type: sql.NVarChar(20), value: phone } })
-  const result = await requestDb.query(`
-    SELECT TOP 1
-      u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library,
-      u.is_active, u.has_panel_access, u.last_login_at, u.created_at,
-      u.aydinlatma_accepted_at, u.kvkk_accepted_at, u.teacher_subject_ids_json, u.parent_type,
-      sp.theme_id, sp.grade,
-      e.status AS entitlement_status, e.source AS entitlement_source,
-      e.current_period_end AS entitlement_current_period_end
-    FROM dbo.Users u
-    LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
-    LEFT JOIN dbo.Entitlements e ON e.parent_id = COALESCE(u.parent_id, u.id)
-    WHERE u.phone_number = @phone;
-  `)
-  return result.recordset[0] || null
-}
-
 async function findUserByPhoneBasic(phone) {
   const requestDb = await withRequest({ phone: { type: sql.NVarChar(20), value: phone } })
   const result = await requestDb.query(`
     SELECT TOP 1 id FROM dbo.Users WHERE phone_number = @phone;
+  `)
+  return result.recordset[0] || null
+}
+
+async function findUserByPhone(phone) {
+  const requestDb = await withRequest({ phone: { type: sql.NVarChar(20), value: phone } })
+  const result = await requestDb.query(`
+    SELECT TOP 1 id, is_active FROM dbo.Users WHERE phone_number = @phone;
   `)
   return result.recordset[0] || null
 }
@@ -192,9 +183,11 @@ async function verifyOtpCodeOrRespond(otpRecord, code) {
   return null
 }
 
-// Kodu doğrular; purpose='login' ise doğrudan gerçek oturum açar, purpose='register' ise
-// (henüz hesap yok, sadece telefon sahipliği kanıtlandı) auth/register'a geçirilecek kısa
-// ömürlü bir token döner — kayıt formunun geri kalanı (ad/rol/branş/kupon/onay) orada toplanır.
+// Kodu doğrular ve her iki purpose için de aynı kısa ömürlü "telefon doğrulandı" token'ını
+// döner: purpose='register' için auth/register'a geçirilir (kayıt formunun geri kalanı orada
+// toplanır); purpose='login' için ise sadece varsayılan (telefonun son 6 hanesi) şifredeki
+// hesaplarda auth/login'in ikinci faktör kanıtı olarak kullanılır (bkz. auth.js loginHandler) —
+// gerçek şifresini belirlemiş kullanıcılar bu OTP adımına hiç girmez.
 async function verifyOtpHandler(request) {
   const payload = await request.json().catch(() => null)
   if (!payload) {
@@ -227,31 +220,198 @@ async function verifyOtpHandler(request) {
       return failureResponse
     }
 
-    if (purpose === 'register') {
-      const phoneVerifiedToken = createPhoneVerifiedToken(phone)
-      return json(200, { ok: true, phoneVerifiedToken, expiresInSeconds: 10 * 60 })
+    const phoneVerifiedToken = createPhoneVerifiedToken(phone)
+    return json(200, { ok: true, phoneVerifiedToken, expiresInSeconds: 10 * 60 })
+  } catch (error) {
+    return otpServiceErrorResponse(error, 'verifyOtpHandler failed')
+  }
+}
+
+const PASSWORD_RESET_PURPOSE = 'password_reset'
+
+// Test/geliştirme sırasında sık şifre sıfırlama denemesi yapılan bu numara için
+// password-reset rate limit kontrolleri atlanır (bkz. auth.js LOGIN_RATE_LIMIT_EXEMPT_PHONES).
+const PASSWORD_RESET_RATE_LIMIT_EXEMPT_PHONES = new Set(['+905353816943'])
+
+async function requestPasswordResetOtpHandler(request) {
+  const payload = await request.json().catch(() => null)
+  if (!payload) {
+    return json(400, { error: 'Geçersiz istek gövdesi.' })
+  }
+
+  const phone = normalizePhone(payload.phone)
+  if (!phone) {
+    return json(400, { error: 'Geçerli bir telefon numarası girin.' })
+  }
+
+  const ip = getClientIp(request)
+  const isRateLimitExempt = PASSWORD_RESET_RATE_LIMIT_EXEMPT_PHONES.has(phone)
+
+  if (isCaptchaConfigured()) {
+    const turnstileResult = await verifyTurnstileToken(payload.turnstileToken, ip)
+    if (!turnstileResult.success) {
+      return json(403, { error: 'Doğrulama başarısız. Lütfen sayfayı yenileyip tekrar deneyin.' })
+    }
+  } else {
+    console.warn('[otp] TURNSTILE_SECRET_KEY yapılandırılmadı, Turnstile doğrulaması atlanıyor.')
+  }
+
+  if (!isRateLimitExempt) {
+    if (!(await consumeRateLimit(`password-reset-request-ip:${ip}`))) {
+      return json(429, { error: 'Çok fazla istek yapıldı. Lütfen 15 dakika sonra tekrar deneyin.' })
+    }
+    if (!(await consumeRateLimit(`password-reset-request:${phone}`, { windowMs: 10 * 60 * 1000, maxRequests: 3 }))) {
+      return json(429, { error: 'Bu numaraya çok fazla kod istendi. Lütfen 10 dakika sonra tekrar deneyin.' })
+    }
+  }
+
+  try {
+    const existingUser = await findUserByPhone(phone)
+    // Pasif hesap için de "bulunamadı" ile aynı yanıt — hem gereksiz SMS masrafını hem de
+    // numara-var-mı enumeration'ını önler.
+    if (!existingUser || existingUser.is_active === false) {
+      return json(404, { error: 'Bu numara ile kayıtlı bir üyelik bulunamadı.' })
     }
 
-    const record = await findUserForLogin(phone)
-    if (!record) {
+    const code = codeForPhone(phone)
+    const codeHash = hashOtpCode(code)
+    const expiresAt = new Date(Date.now() + OTP_TTL_MS)
+
+    const insertDb = await withRequest({
+      phone: { type: sql.NVarChar(20), value: phone },
+      purpose: { type: sql.NVarChar(20), value: PASSWORD_RESET_PURPOSE },
+      codeHash: { type: sql.NVarChar(128), value: codeHash },
+      expiresAt: { type: sql.DateTime2, value: expiresAt },
+    })
+    await insertDb.query(`
+      INSERT INTO dbo.OtpCodes (phone_number, purpose, code_hash, expires_at)
+      VALUES (@phone, @purpose, @codeHash, @expiresAt);
+    `)
+
+    if (SMS_ENABLED) {
+      await sendOtpSms(phone, code)
+    } else {
+      console.warn(`[otp] SMS gönderimi kapalı: ${phone} için kod telefonun son 6 hanesi (${code}).`)
+    }
+
+    return json(200, { ok: true, expiresInSeconds: OTP_TTL_MS / 1000 })
+  } catch (error) {
+    return otpServiceErrorResponse(error, 'requestPasswordResetOtpHandler failed')
+  }
+}
+
+async function verifyPasswordResetOtpHandler(request) {
+  const payload = await request.json().catch(() => null)
+  if (!payload) {
+    return json(400, { error: 'Geçersiz istek gövdesi.' })
+  }
+
+  const phone = normalizePhone(payload.phone)
+  const code = String(payload.code || '').trim()
+  if (!phone || !OTP_CODE_RULE.test(code)) {
+    return json(400, { error: 'Geçerli bir telefon numarası ve 6 haneli kod girin.' })
+  }
+
+  const ip = getClientIp(request)
+  if (
+    !PASSWORD_RESET_RATE_LIMIT_EXEMPT_PHONES.has(phone) &&
+    !(await consumeRateLimit(`password-reset-verify:${phone}:${ip}`, { windowMs: 10 * 60 * 1000, maxRequests: 15 }))
+  ) {
+    return json(429, { error: 'Çok fazla deneme yapıldı. Lütfen 10 dakika sonra tekrar deneyin.' })
+  }
+
+  try {
+    const otpRecord = await consumeOtp(phone, PASSWORD_RESET_PURPOSE)
+    const failureResponse = await verifyOtpCodeOrRespond(otpRecord, code)
+    if (failureResponse) {
+      return failureResponse
+    }
+
+    const userRecord = await findUserByPhone(phone)
+    if (!userRecord || userRecord.is_active === false) {
       return json(404, { error: 'Bu numara ile kayıtlı bir üyelik bulunamadı.' })
+    }
+
+    const resetToken = createPasswordResetToken(userRecord.id)
+    return json(200, { ok: true, resetToken, expiresInSeconds: 60 })
+  } catch (error) {
+    return otpServiceErrorResponse(error, 'verifyPasswordResetOtpHandler failed')
+  }
+}
+
+async function confirmPasswordResetHandler(request) {
+  const payload = await request.json().catch(() => null)
+  if (!payload) {
+    return json(400, { error: 'Geçersiz istek gövdesi.' })
+  }
+
+  const resetToken = String(payload.resetToken || '')
+  const newPassword = String(payload.newPassword || '')
+  if (!resetToken || !newPassword) {
+    return json(400, { error: 'Geçersiz istek.' })
+  }
+
+  let claims
+  try {
+    claims = verifyPasswordResetToken(resetToken)
+  } catch (error) {
+    if (isSessionError(error)) {
+      return json(401, { error: 'Bağlantının süresi doldu, lütfen tekrar deneyin.' })
+    }
+    return otpServiceErrorResponse(error, 'confirmPasswordResetHandler token verify failed')
+  }
+
+  if (!(await consumeRateLimit(`password-reset-confirm:${claims.sub}`))) {
+    return json(429, { error: 'Çok fazla deneme yapıldı. Lütfen 15 dakika sonra tekrar deneyin.' })
+  }
+
+  try {
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: claims.sub },
+    })
+    const result = await requestDb.query(`
+      SELECT TOP 1
+        u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active,
+        u.last_login_at, u.created_at, u.teacher_subject_ids_json, u.parent_type,
+        u.aydinlatma_accepted_at, u.kvkk_accepted_at,
+        sp.theme_id, sp.grade,
+        e.status AS entitlement_status, e.source AS entitlement_source,
+        e.current_period_end AS entitlement_current_period_end
+      FROM dbo.Users u
+      LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
+      LEFT JOIN dbo.Entitlements e ON e.parent_id = COALESCE(u.parent_id, u.id)
+      WHERE u.id = @id;
+    `)
+    const record = result.recordset[0]
+    if (!record) {
+      return json(401, { error: 'Bağlantının süresi doldu, lütfen tekrar deneyin.' })
     }
     if (record.is_active === false) {
       return accountDisabledResponse()
     }
-    if (!record.has_panel_access) {
-      return json(403, {
-        error: 'Bu telefon numarasına panel erişimi henüz tanımlanmamış. Öğretmeninizle iletişime geçin.',
-        code: 'PANEL_ACCESS_NOT_GRANTED',
-      })
+
+    const validationError = passwordChangeError(null, newPassword, record.phone_number)
+    if (validationError) {
+      return json(400, { error: validationError })
     }
 
-    const touchDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: record.id } })
-    await touchDb.query(`
-      UPDATE dbo.Users SET last_login_at = SYSUTCDATETIME(), last_seen_at = SYSUTCDATETIME() WHERE id = @id;
+    const newPasswordHash = await hashPassword(newPassword)
+    const updateDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: record.id },
+      passwordHash: { type: sql.NVarChar(255), value: newPasswordHash },
+    })
+    await updateDb.query(`
+      UPDATE dbo.Users
+      SET password_hash = @passwordHash,
+          failed_login_count = 0,
+          lockout_until = NULL,
+          last_login_at = SYSUTCDATETIME(),
+          last_seen_at = SYSUTCDATETIME()
+      WHERE id = @id;
     `)
 
     const user = sanitizeUser({ ...record, last_login_at: new Date().toISOString() })
+    user.mustChangePassword = false
     user.entitlement = await buildSessionEntitlement({
       userId: record.id,
       role: record.role,
@@ -263,11 +423,14 @@ async function verifyOtpHandler(request) {
 
     return json(200, { user }, createSessionHeaders(token))
   } catch (error) {
-    return otpServiceErrorResponse(error, 'verifyOtpHandler failed')
+    return otpServiceErrorResponse(error, 'confirmPasswordResetHandler failed')
   }
 }
 
 module.exports = {
   requestOtpHandler,
   verifyOtpHandler,
+  requestPasswordResetOtpHandler,
+  verifyPasswordResetOtpHandler,
+  confirmPasswordResetHandler,
 }

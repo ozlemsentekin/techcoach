@@ -3,12 +3,14 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from './context/useAuth'
 import LoadingState from './panels/shared/LoadingState'
+import FirstLoginPasswordGate from './panels/shared/FirstLoginPasswordGate'
 import ConsentGate from './panels/shared/ConsentGate'
 import CookieConsentBanner from './panels/shared/CookieConsentBanner'
 import { panelPathForRole } from './utils/panelPath'
 
 const LandingPage = lazy(() => import('./marketing/LandingPage'))
 const AuthPage = lazy(() => import('./marketing/AuthPage'))
+const ForgotPasswordPage = lazy(() => import('./marketing/ForgotPasswordPage'))
 const SignUpPage = lazy(() => import('./marketing/SignUpPage'))
 const PaywallPage = lazy(() => import('./marketing/PaywallPage'))
 const PaymentPage = lazy(() => import('./marketing/PaymentPage'))
@@ -49,6 +51,10 @@ function RequireRole({ role, children }) {
     return <Navigate to="/" replace />
   }
 
+  if (authUser.mustChangePassword && !authUser.actingParent && !authUser.actingAdmin) {
+    return <FirstLoginPasswordGate />
+  }
+
   // Öğretmen tarafından oluşturulan veli/öğrenci hesapları "onay bekliyor" durumunda açılır;
   // KVKK/aydınlatma onayı verilmeden panelin geri kalanına erişilemez.
   if (authUser.needsConsent) {
@@ -71,6 +77,7 @@ export default function App() {
         <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path="/login" element={<AuthPage />} />
+        <Route path="/sifremi-unuttum" element={<ForgotPasswordPage />} />
         <Route path="/uye-ol" element={<SignUpPage />} />
         <Route path="/paywall" element={<PaywallPage />} />
         <Route path="/odeme" element={<PaymentPage />} />

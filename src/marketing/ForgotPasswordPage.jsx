@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { KeyRound, LogIn, ShieldCheck } from 'lucide-react'
+import { KeyRound, Loader2, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { panelPathForRole } from '../utils/panelPath'
 import TurnstileWidget from './TurnstileWidget'
@@ -29,45 +29,19 @@ function blurActiveControl() {
   }
 }
 
-export default function AuthPage() {
+export default function ForgotPasswordPage() {
   const navigate = useNavigate()
-  const {
-    authUser,
-    sessionLoading,
-    authLoading,
-    authError,
-    authMessage,
-    login,
-    requestOtp,
-    verifyLoginOtp,
-    setAuthError,
-    clearAuthFeedback,
-  } = useAuth()
+  const { authLoading, authError, authMessage, setAuthError, requestPasswordReset, verifyPasswordResetOtp, confirmPasswordReset } = useAuth()
 
-  // 'credentials': telefon+şifre; 'otp': hesap hâlâ varsayılan şifredeyse (login()
-  // { requiresOtp: true } dönünce) devreye giren ikinci faktör — SMS kodu.
-  const [step, setStep] = useState('credentials')
+  const [step, setStep] = useState('phone')
   const [phone, setPhone] = useState('')
-  const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
+  const [resetToken, setResetToken] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [cooldown, setCooldown] = useState(0)
   const [turnstileToken, setTurnstileToken] = useState('')
   const turnstileRef = useRef(null)
-
-  // authError/authMessage AuthContext'te tek, paylaşılan state — başka bir sayfadan (ör.
-  // /uye-ol'daki "bu numara zaten kayıtlı" hatası) buraya "Zaten Üyeyim"/"Giriş yapın" ile
-  // geçildiğinde eski mesaj temizlenmeden kalmasın diye mount'ta sıfırlanıyor.
-  useEffect(() => {
-    clearAuthFeedback()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    if (!sessionLoading && authUser?.role) {
-      blurActiveControl()
-      navigate(panelPathForRole(authUser.role), { replace: true })
-    }
-  }, [authUser, sessionLoading, navigate])
 
   useEffect(() => {
     if (cooldown <= 0) return undefined
@@ -75,32 +49,21 @@ export default function AuthPage() {
     return () => clearInterval(timer)
   }, [cooldown])
 
-  const handleLogin = async (event) => {
+  const handleRequestOtp = async (event) => {
     event.preventDefault()
 
     if (!/^0?5\d{9}$/.test(phone)) {
       setAuthError('Geçerli bir telefon numarası girin (05XXXXXXXXX).')
       return
     }
-    if (password.length !== PASSWORD_LENGTH) {
-      setAuthError('6 haneli şifreni gir.')
-      return
-    }
 
     blurActiveControl()
 
     try {
-      const data = await login(phone, password)
-      if (data?.requiresOtp) {
-        // Hesap hâlâ varsayılan (telefonun son 6 hanesi) şifrede — şifreyi tahmin edip
-        // gerçek sahibinden önce girmeye çalışan biri, telefona gelen SMS kodunu da
-        // doğrulamak zorunda kalır. Kod otomatik istenir.
-        const otpData = await requestOtp('login', phone, turnstileToken || undefined)
-        setCooldown(otpData?.expiresInSeconds || RESEND_COOLDOWN_SECONDS)
-        setCode('')
-        setStep('otp')
-      }
-      // Başarılı normal giriş: authUser güncellenir, üstteki effect panele yönlendirir.
+      const data = await requestPasswordReset(phone, turnstileToken || undefined)
+      setCooldown(data?.expiresInSeconds || RESEND_COOLDOWN_SECONDS)
+      setCode('')
+      setStep('otp')
     } catch {
       setTurnstileToken('')
       turnstileRef.current?.reset()
@@ -118,9 +81,9 @@ export default function AuthPage() {
     blurActiveControl()
 
     try {
-      const { phoneVerifiedToken } = await verifyLoginOtp(phone, code)
-      await login(phone, password, phoneVerifiedToken)
-      // Başarı: authUser güncellenir, üstteki effect panele yönlendirir.
+      const data = await verifyPasswordResetOtp(phone, code)
+      setResetToken(data.resetToken)
+      setStep('password')
     } catch {
       // hata authError üzerinden gösteriliyor
     }
@@ -129,9 +92,34 @@ export default function AuthPage() {
   const handleResendOtp = async () => {
     if (cooldown > 0) return
     try {
-      const data = await requestOtp('login', phone, turnstileToken || undefined)
+      const data = await requestPasswordReset(phone, turnstileToken || undefined)
       setCooldown(data?.expiresInSeconds || RESEND_COOLDOWN_SECONDS)
       setCode('')
+    } catch {
+      // hata authError üzerinden gösteriliyor
+    }
+  }
+
+  const handleConfirmReset = async (event) => {
+    event.preventDefault()
+
+    if (newPassword.length !== PASSWORD_LENGTH) {
+      setAuthError('Yeni şifre tam olarak 6 rakamdan oluşmalı.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setAuthError('Yeni şifre ile tekrarı aynı olmalı.')
+      return
+    }
+
+    blurActiveControl()
+
+    try {
+      const user = await confirmPasswordReset(resetToken, newPassword)
+      if (user?.role) {
+        blurActiveControl()
+        navigate(panelPathForRole(user.role))
+      }
     } catch {
       // hata authError üzerinden gösteriliyor
     }
@@ -155,18 +143,18 @@ export default function AuthPage() {
       <main className="auth-page">
         <div className="container auth-page-shell">
           <div className="login-card auth-page-card">
-            {step === 'credentials' ? (
+            {step === 'phone' ? (
               <>
-                <h3>Giriş Yap</h3>
-                <p>Telefon numaranı ve şifreni gir.</p>
+                <h3>Şifremi Unuttum</h3>
+                <p>Telefon numaranı gir, sana doğrulama kodu gönderelim.</p>
 
                 {authMessage ? <div className="auth-feedback auth-feedback-success">{authMessage}</div> : null}
                 {authError ? <div className="auth-feedback auth-feedback-error">{authError}</div> : null}
 
-                <form className="login-form" onSubmit={handleLogin}>
-                  <label htmlFor="auth-phone">Telefon</label>
+                <form className="login-form" onSubmit={handleRequestOtp}>
+                  <label htmlFor="reset-phone">Telefon</label>
                   <input
-                    id="auth-phone"
+                    id="reset-phone"
                     name="phone"
                     type="tel"
                     inputMode="numeric"
@@ -178,21 +166,6 @@ export default function AuthPage() {
                     onChange={(event) => setPhone(normalizePhoneInput(event.target.value))}
                   />
 
-                  <label htmlFor="auth-password">Şifre</label>
-                  <input
-                    id="auth-password"
-                    name="password"
-                    type="password"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    placeholder="••••••"
-                    maxLength={PASSWORD_LENGTH}
-                    autoComplete="current-password"
-                    required
-                    value={password}
-                    onChange={(event) => setPassword(normalizeDigitsInput(event.target.value, PASSWORD_LENGTH))}
-                  />
-
                   <TurnstileWidget
                     ref={turnstileRef}
                     onToken={setTurnstileToken}
@@ -200,15 +173,16 @@ export default function AuthPage() {
                     onError={() => setTurnstileToken('')}
                   />
 
-                  <button type="submit" className="btn btn-primary login-submit" disabled={authLoading}>
-                    <LogIn size={18} aria-hidden="true" />
-                    {authLoading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
+                  <button
+                    type="submit"
+                    className="btn btn-primary login-submit"
+                    disabled={authLoading || (Boolean(TURNSTILE_SITE_KEY) && !turnstileToken)}
+                  >
+                    <KeyRound size={18} aria-hidden="true" />
+                    {authLoading ? 'Kod gönderiliyor...' : 'Kod Gönder'}
                   </button>
-                  <Link to="/sifremi-unuttum" className="auth-forgot-link">
-                    Şifremi Unuttum
-                  </Link>
-                  <Link to="/uye-ol" className="btn btn-outline login-register">
-                    Üye Olmak İstiyorum
+                  <Link to="/login" className="btn btn-outline login-register">
+                    Girişe Dön
                   </Link>
                 </form>
               </>
@@ -224,9 +198,9 @@ export default function AuthPage() {
                 {authError ? <div className="auth-feedback auth-feedback-error">{authError}</div> : null}
 
                 <form className="login-form" onSubmit={handleVerifyOtp}>
-                  <label htmlFor="auth-code">Doğrulama Kodu</label>
+                  <label htmlFor="reset-code">Doğrulama Kodu</label>
                   <input
-                    id="auth-code"
+                    id="reset-code"
                     name="code"
                     type="text"
                     inputMode="numeric"
@@ -243,7 +217,7 @@ export default function AuthPage() {
 
                   <button type="submit" className="btn btn-primary login-submit" disabled={authLoading}>
                     <ShieldCheck size={18} aria-hidden="true" />
-                    {authLoading ? 'Doğrulanıyor...' : 'Giriş Yap'}
+                    {authLoading ? 'Doğrulanıyor...' : 'Kodu Doğrula'}
                   </button>
                   <button
                     type="button"
@@ -251,8 +225,54 @@ export default function AuthPage() {
                     disabled={authLoading || cooldown > 0}
                     onClick={handleResendOtp}
                   >
-                    <KeyRound size={16} aria-hidden="true" />
                     {cooldown > 0 ? `Tekrar Gönder (${cooldown}sn)` : 'Kodu Tekrar Gönder'}
+                  </button>
+                </form>
+              </>
+            ) : null}
+
+            {step === 'password' ? (
+              <>
+                <h3>Yeni Şifre Belirle</h3>
+                <p>Hesabına giriş yapmak için kullanacağın yeni 6 haneli şifreni belirle.</p>
+
+                {authError ? <div className="auth-feedback auth-feedback-error">{authError}</div> : null}
+
+                <form className="login-form" onSubmit={handleConfirmReset}>
+                  <label htmlFor="reset-new-password">Yeni Şifre</label>
+                  <input
+                    id="reset-new-password"
+                    name="newPassword"
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="••••••"
+                    maxLength={PASSWORD_LENGTH}
+                    autoComplete="new-password"
+                    required
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(normalizeDigitsInput(event.target.value, PASSWORD_LENGTH))}
+                  />
+
+                  <label htmlFor="reset-confirm-password">Yeni Şifre (Tekrar)</label>
+                  <input
+                    id="reset-confirm-password"
+                    name="confirmPassword"
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="••••••"
+                    maxLength={PASSWORD_LENGTH}
+                    autoComplete="new-password"
+                    required
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(normalizeDigitsInput(event.target.value, PASSWORD_LENGTH))}
+                  />
+                  <div className="auth-hint">Yeni şifreniz tam olarak 6 rakamdan oluşmalı.</div>
+
+                  <button type="submit" className="btn btn-primary login-submit" disabled={authLoading}>
+                    {authLoading ? <Loader2 size={18} className="spin" aria-hidden="true" /> : <KeyRound size={18} aria-hidden="true" />}
+                    {authLoading ? 'Kaydediliyor...' : 'Şifreyi Kaydet ve Giriş Yap'}
                   </button>
                 </form>
               </>

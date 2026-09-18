@@ -3,6 +3,8 @@ const { isConfigError } = require('./config')
 const { accountDisabledResponse, clearSessionHeaders, createSessionHeaders, json } = require('./http')
 const {
   createSessionToken,
+  defaultPasswordForPhone,
+  hashPassword,
   isSessionError,
   normalizeEmail,
   normalizePhone,
@@ -676,11 +678,15 @@ async function createStudentHandler(request) {
     }
 
     const now = new Date()
+    // Başlangıç şifresi telefonun son 6 hanesi — girişte auth/login (bkz. requiresPasswordChange)
+    // bunu tespit edip SMS ile gelen kodu da isteyecek, sonra zorunlu şifre değiştirmeye yönlendirecek.
+    const passwordHash = await hashPassword(defaultPasswordForPhone(phone))
 
     const insertDb = await withRequest({
       fullName: { type: sql.NVarChar(120), value: fullName },
       email: { type: sql.NVarChar(320), value: email },
       phone: { type: sql.NVarChar(30), value: phone },
+      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       role: { type: sql.NVarChar(20), value: 'ogrenci' },
       parentId: { type: sql.UniqueIdentifier, value: parentId },
       consentAt: { type: sql.DateTime2, value: now },
@@ -689,10 +695,10 @@ async function createStudentHandler(request) {
     let insertResult
     try {
       insertResult = await insertDb.query(`
-        INSERT INTO dbo.Users (full_name, email, phone_number, has_panel_access, role, parent_id, aydinlatma_accepted_at, kvkk_accepted_at)
+        INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, has_panel_access, role, parent_id, aydinlatma_accepted_at, kvkk_accepted_at)
         OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.role, inserted.created_at,
                0 AS resource_count, 0 AS teacher_count
-        VALUES (@fullName, @email, @phone, 1, @role, @parentId, @consentAt, @consentAt);
+        VALUES (@fullName, @email, @phone, @passwordHash, 1, @role, @parentId, @consentAt, @consentAt);
       `)
     } catch (insertError) {
       if (insertError.number === 2601 || insertError.number === 2627) {
@@ -1093,18 +1099,20 @@ async function ensureTeacherPanelUser({ requestFactory = withRequest, fullName, 
   }
 
   const now = new Date()
+  const passwordHash = await hashPassword(defaultPasswordForPhone(normalizedPhone))
   const insertDb = await requestFactory({
     fullName: { type: sql.NVarChar(120), value: fullName },
     phone: { type: sql.NVarChar(20), value: normalizedPhone },
+    passwordHash: { type: sql.NVarChar(255), value: passwordHash },
     role: { type: sql.NVarChar(20), value: 'ogretmen' },
     consentAt: { type: sql.DateTime2, value: now },
   })
 
   try {
     const insertResult = await insertDb.query(`
-      INSERT INTO dbo.Users (full_name, phone_number, has_panel_access, role, aydinlatma_accepted_at, kvkk_accepted_at)
+      INSERT INTO dbo.Users (full_name, phone_number, password_hash, has_panel_access, role, aydinlatma_accepted_at, kvkk_accepted_at)
       OUTPUT inserted.id
-      VALUES (@fullName, @phone, 1, @role, @consentAt, @consentAt);
+      VALUES (@fullName, @phone, @passwordHash, 1, @role, @consentAt, @consentAt);
     `)
 
     return {

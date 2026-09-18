@@ -4,6 +4,9 @@ const MAX_CACHE_ENTRIES = 100
 
 const getCache = new Map() // path -> { pending, expiresAt, promise }
 
+let passwordChangeRequiredHandler = null
+export function setPasswordChangeRequiredHandler(handler) { passwordChangeRequiredHandler = handler }
+
 let consentRequiredHandler = null
 let accountDisabledHandler = null
 
@@ -91,6 +94,11 @@ export async function authRequest(path, options = {}) {
         response.status >= 500 && !contentType.includes('application/json')
           ? 'Kimlik doğrulama servisine ulaşılamadı. API sunucusunun çalıştığını kontrol edin.'
           : 'İşlem tamamlanamadı.'
+
+      if (data.code === 'PASSWORD_CHANGE_REQUIRED') {
+        invalidateCache()
+        passwordChangeRequiredHandler?.()
+      }
 
       if (data.code === 'CONSENT_REQUIRED') {
         consentRequiredHandler?.()

@@ -1,50 +1,28 @@
 const { app } = require('@azure/functions')
-const { sql, withRequest } = require('./db')
-const { readSessionToken, verifySessionToken, isSessionError } = require('./security')
-
-const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
-
-// Kullanıcının "son işlem" (last_seen_at) zamanını günceller. Her yazma isteğinde çağrılır
-// ama DB'yi yormamak için kullanıcı başına 10 dakikada bir yazar (WHERE koşulu). Impersonate
-// durumunda gerçek kişiye (veli/admin) yazılır. Hata bastırılır — asıl isteği etkilemez.
-// (Eskiden passwordGate.js'in bir parçasıydı; mustChangePassword kavramı OTP-only girişle
-// kalktığı için o dosya silindi, bu yan etki tek başına buraya taşındı.)
-async function touchLastSeen(session) {
-  try {
-    const userId = session.actingAdminId || session.actingParentId || session.sub
-    if (!userId) return
-    const db = await withRequest({ id: { type: sql.UniqueIdentifier, value: userId } })
-    await db.query(`
-      UPDATE dbo.Users
-      SET last_seen_at = SYSUTCDATETIME()
-      WHERE id = @id
-        AND (last_seen_at IS NULL OR last_seen_at < DATEADD(MINUTE, -10, SYSUTCDATETIME()));
-    `)
-  } catch {
-    // yut
-  }
-}
+const { withPasswordGate } = require('./passwordGate')
 
 function registerHttp(name, options) {
   app.http(name, {
     ...options,
-    handler: async (request, context) => {
-      const token = readSessionToken(request)
-      if (token && MUTATING_METHODS.has((request.method || '').toUpperCase())) {
-        try {
-          touchLastSeen(verifySessionToken(token))
-        } catch (error) {
-          if (!isSessionError(error)) context.error('touchLastSeen session parse failed', error)
-        }
-      }
-      return options.handler(request, context)
-    },
+    handler: withPasswordGate(options.route, options.handler),
   })
 }
-const { logoutHandler, meHandler, sessionFromHandoffHandler, registerHandler, acceptConsentHandler, validateCouponHandler } = require('./auth')
+const {
+  loginHandler,
+  changePasswordHandler,
+  logoutHandler,
+  meHandler,
+  sessionFromHandoffHandler,
+  registerHandler,
+  acceptConsentHandler,
+  validateCouponHandler,
+} = require('./auth')
 const {
   requestOtpHandler,
   verifyOtpHandler,
+  requestPasswordResetOtpHandler,
+  verifyPasswordResetOtpHandler,
+  confirmPasswordResetHandler,
 } = require('./otp')
 const {
   listUsersHandler,
@@ -332,6 +310,41 @@ registerHttp('auth-register', {
   methods: ['POST'],
   route: 'auth/register',
   handler: registerHandler,
+})
+
+registerHttp('auth-login', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'auth/login',
+  handler: loginHandler,
+})
+
+registerHttp('auth-change-password', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'auth/change-password',
+  handler: changePasswordHandler,
+})
+
+registerHttp('auth-password-reset-request', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'auth/password-reset/request',
+  handler: requestPasswordResetOtpHandler,
+})
+
+registerHttp('auth-password-reset-verify', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'auth/password-reset/verify',
+  handler: verifyPasswordResetOtpHandler,
+})
+
+registerHttp('auth-password-reset-confirm', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'auth/password-reset/confirm',
+  handler: confirmPasswordResetHandler,
 })
 
 registerHttp('auth-subjects', {

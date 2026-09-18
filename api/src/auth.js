@@ -6,10 +6,14 @@ const { verifyTurnstileToken } = require('./turnstile')
 const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
 const { buildSessionEntitlement } = require('./entitlements')
 const { resolveCoupon } = require('./coupons')
+const { requiresPasswordChange, passwordChangeError } = require('./passwordPolicy')
 const {
   createSessionToken,
   verifyHandoffToken,
   verifyPhoneVerifiedToken,
+  hashPassword,
+  verifyPassword,
+  needsPasswordRehash,
   isSessionError,
   normalizePhone,
   readSessionToken,
@@ -17,6 +21,9 @@ const {
 } = require('./security')
 
 const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// Test/geliştirme sırasında sık giriş denemesi yapılan bu numara için giriş rate limit kontrolü atlanır.
+const LOGIN_RATE_LIMIT_EXEMPT_PHONES = new Set(['+905353816943'])
 
 // "DENEME" kupon kodu (yalnızca büyük harf, tam eşleşme): öğretmene ücretsiz + 10 öğrenci
 // hakkı tanır (öğretmenin kart tahsilatı henüz iyzico'ya bağlı değil). Veli için artık kuponla
@@ -136,6 +143,20 @@ async function registerHandler(request) {
   }
   const { fullName, phone, email, parentType } = validation
 
+  // Kullanıcı kendi 6 haneli numerik şifresini belirler (OTP sadece telefon sahipliğini
+  // kanıtladı, hesabın kalıcı şifresi değil) — bkz. plan Context: bu yüzden mustChangePassword
+  // burada hiç true olmaz, sadece backfill/öğretmen-oluşturdu senaryolarında.
+  const password = String(payload.password || '')
+  const passwordConfirm = String(payload.passwordConfirm || '')
+  if (password !== passwordConfirm) {
+    return json(400, { error: 'Şifreler eşleşmiyor.' })
+  }
+  const passwordValidationError = passwordChangeError(null, password, phone)
+  if (passwordValidationError) {
+    return json(400, { error: passwordValidationError })
+  }
+  const passwordHash = await hashPassword(password)
+
   // Turnstile burada tekrar kontrol edilmiyor: token tek kullanımlık, auth/otp/request'te
   // (purpose=register) zaten tüketildi — telefon sahipliği OTP ile kanıtlandığı için bu adım
   // zaten Turnstile'ın vermek istediği bot korumasını aşıyor. Yine de rate limit uygulanır.
@@ -167,6 +188,7 @@ async function registerHandler(request) {
         fullName: { type: sql.NVarChar(120), value: fullName },
         email: { type: sql.NVarChar(320), value: email },
         phone: { type: sql.NVarChar(20), value: phone },
+        passwordHash: { type: sql.NVarChar(255), value: passwordHash },
         role: { type: sql.NVarChar(20), value: role },
         parentType: { type: sql.NVarChar(10), value: role === 'ebeveyn' ? parentType : null },
         consentAt: { type: sql.DateTime2, value: now },
@@ -177,11 +199,11 @@ async function registerHandler(request) {
       })
 
       const result = await insertUserDb.query(`
-        INSERT INTO dbo.Users (full_name, email, phone_number, has_panel_access, role, parent_type, aydinlatma_accepted_at, kvkk_accepted_at, teacher_subject_ids_json)
+        INSERT INTO dbo.Users (full_name, email, phone_number, password_hash, has_panel_access, role, parent_type, aydinlatma_accepted_at, kvkk_accepted_at, teacher_subject_ids_json)
         OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
                inserted.is_admin, inserted.can_manage_library, inserted.last_login_at, inserted.created_at,
                inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at, inserted.teacher_subject_ids_json, inserted.parent_type
-        VALUES (@fullName, @email, @phone, 1, @role, @parentType, @consentAt, @consentAt, @teacherSubjectIdsJson);
+        VALUES (@fullName, @email, @phone, @passwordHash, 1, @role, @parentType, @consentAt, @consentAt, @teacherSubjectIdsJson);
       `)
 
       const insertedUser = sanitizeUser(result.recordset[0])
@@ -223,6 +245,8 @@ async function registerHandler(request) {
     // route guard (App.jsx) taze kaydolan kullanıcıyı bir sonraki /me çağrısına kadar
     // entitlement bilgisi eksik zannedip paywall'a yönlendirebilir.
     user.entitlement = entitlement
+    // Kullanıcı kendi şifresini az önce belirledi — zorunlu değiştirme akışına hiç girmez.
+    user.mustChangePassword = false
     const token = createSessionToken(user)
 
     return json(201, { user }, createSessionHeaders(token))
@@ -232,6 +256,155 @@ async function registerHandler(request) {
     }
 
     return createAuthServiceErrorResponse(error, 'registerHandler failed')
+  }
+}
+
+async function loginHandler(request) {
+  const payload = await request.json().catch(() => null)
+  if (!payload) {
+    return json(400, { error: 'Geçersiz istek gövdesi.' })
+  }
+
+  const phone = normalizePhone(payload.phone)
+  const password = String(payload.password || '')
+  if (!phone || !password) {
+    return json(400, { error: 'Telefon numarası ve şifre girin.' })
+  }
+
+  const ip = getClientIp(request)
+
+  if (
+    !LOGIN_RATE_LIMIT_EXEMPT_PHONES.has(phone) &&
+    !(await consumeRateLimit(`login:${ip}:${phone}`))
+  ) {
+    return json(429, { error: 'Çok fazla giriş denemesi yapıldı. Lütfen 15 dakika sonra tekrar deneyin.' })
+  }
+
+  try {
+    const requestDb = await withRequest({
+      phone: { type: sql.NVarChar(20), value: phone },
+    })
+
+    const result = await requestDb.query(`
+      SELECT TOP 1
+        u.id,
+        u.full_name,
+        u.email,
+        u.phone_number,
+        u.role,
+        u.is_admin,
+        u.can_manage_library,
+        u.is_active,
+        u.password_hash,
+        u.failed_login_count,
+        u.lockout_until,
+        u.last_login_at,
+        u.created_at,
+        u.aydinlatma_accepted_at,
+        u.kvkk_accepted_at,
+        u.teacher_subject_ids_json,
+        sp.theme_id,
+        sp.grade,
+        e.status AS entitlement_status, e.source AS entitlement_source,
+        e.current_period_end AS entitlement_current_period_end
+      FROM dbo.Users u
+      LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
+      LEFT JOIN dbo.Entitlements e ON e.parent_id = COALESCE(u.parent_id, u.id)
+      WHERE u.phone_number = @phone;
+    `)
+
+    const record = result.recordset[0]
+    if (!record || !record.password_hash) {
+      return json(401, { error: 'Telefon numarası veya şifre hatalı.' })
+    }
+
+    if (record.is_active === false) {
+      return json(403, { error: 'Bu hesap pasife alınmış. Giriş yapılamaz.' })
+    }
+
+    if (record.lockout_until && new Date(record.lockout_until) > new Date()) {
+      return json(423, { error: 'Hesap geçici olarak kilitlendi. Lütfen daha sonra tekrar deneyin.' })
+    }
+
+    const isPasswordValid = await verifyPassword(password, record.password_hash)
+    if (!isPasswordValid) {
+      const failedCount = record.failed_login_count + 1
+      const lockoutUntil = failedCount >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null
+      const failedRequest = await withRequest({
+        id: { type: sql.UniqueIdentifier, value: record.id },
+        failedLoginCount: { type: sql.Int, value: failedCount >= 5 ? 5 : failedCount },
+        lockoutUntil: { type: sql.DateTime2, value: lockoutUntil },
+      })
+
+      await failedRequest.query(`
+        UPDATE dbo.Users
+        SET failed_login_count = @failedLoginCount,
+            lockout_until = @lockoutUntil
+        WHERE id = @id;
+      `)
+
+      return json(401, { error: 'Telefon numarası veya şifre hatalı.' })
+    }
+
+    // Hesap hâlâ varsayılan (telefonun son 6 hanesi) şifredeyse tek başına şifre yeterli
+    // değil — bu şifreyi tahmin edip gerçek sahibinden önce girmeye çalışan biri, gerçek
+    // telefona SMS ile gelen kodu (auth/otp/request + verify, purpose=login) da doğrulamak
+    // zorunda. Şifre bir kez değiştirilince bu adım o hesap için bir daha hiç sorulmaz.
+    const onDefaultPassword = await requiresPasswordChange(record)
+    if (onDefaultPassword) {
+      const phoneVerifiedToken = String(payload.phoneVerifiedToken || '')
+      if (!phoneVerifiedToken) {
+        return json(200, { requiresOtp: true })
+      }
+      let phoneClaims
+      try {
+        phoneClaims = verifyPhoneVerifiedToken(phoneVerifiedToken)
+      } catch {
+        return json(401, { error: 'SMS kodu doğrulamasının süresi dolmuş. Lütfen tekrar kod isteyin.' })
+      }
+      if (phoneClaims.phone !== phone) {
+        return json(401, { error: 'Doğrulama telefon numarasıyla eşleşmiyor.' })
+      }
+    }
+
+    const rehashedPassword = needsPasswordRehash(record.password_hash)
+      ? await hashPassword(password)
+      : null
+
+    const successRequest = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: record.id },
+      ...(rehashedPassword
+        ? { passwordHash: { type: sql.NVarChar(255), value: rehashedPassword } }
+        : {}),
+    })
+
+    await successRequest.query(`
+      UPDATE dbo.Users
+      SET failed_login_count = 0,
+          lockout_until = NULL,
+          last_login_at = SYSUTCDATETIME(),
+          last_seen_at = SYSUTCDATETIME()
+          ${rehashedPassword ? ', password_hash = @passwordHash' : ''}
+      WHERE id = @id;
+    `)
+
+    const user = sanitizeUser({
+      ...record,
+      last_login_at: new Date().toISOString(),
+    })
+    user.mustChangePassword = onDefaultPassword
+    user.entitlement = await buildSessionEntitlement({
+      userId: record.id,
+      role: record.role,
+      status: record.entitlement_status,
+      source: record.entitlement_source,
+      currentPeriodEnd: record.entitlement_current_period_end,
+    })
+    const token = createSessionToken(user)
+
+    return json(200, { user }, createSessionHeaders(token))
+  } catch (error) {
+    return createAuthServiceErrorResponse(error, 'loginHandler failed')
   }
 }
 
@@ -248,7 +421,7 @@ async function meHandler(request) {
     })
     const result = await requestDb.query(`
       SELECT TOP 1
-        u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active, u.last_login_at, u.created_at,
+        u.id, u.full_name, u.email, u.phone_number, u.password_hash, u.role, u.is_admin, u.can_manage_library, u.is_active, u.last_login_at, u.created_at,
         u.aydinlatma_accepted_at, u.kvkk_accepted_at, u.funded_by_teacher_id, u.teacher_subject_ids_json,
         sp.theme_id,
         sp.grade,
@@ -272,6 +445,8 @@ async function meHandler(request) {
     }
 
     const user = sanitizeUser(record)
+    user.mustChangePassword = await requiresPasswordChange(record)
+    if (session.actingParentId || session.actingAdminId) user.mustChangePassword = false
     if (session.actingParentId) {
       user.actingParent = { id: session.actingParentId, fullName: session.actingParentName }
     }
@@ -286,7 +461,22 @@ async function meHandler(request) {
       currentPeriodEnd: record.entitlement_current_period_end,
     })
 
-    return json(200, { user })
+    // Bu özellikten önce üretilmiş oturum token'ları mustChangePassword claim'i taşımaz; kendi
+    // (delege olmayan) oturumsa çerezi burada tazeleyip passwordGate'in DB fallback'inden çıkarıyoruz.
+    const headers =
+      session.mustChangePassword === undefined && !session.actingParentId && !session.actingAdminId
+        ? createSessionHeaders(
+            createSessionToken({
+              id: record.id,
+              email: record.email,
+              fullName: record.full_name,
+              role: record.role,
+              mustChangePassword: user.mustChangePassword,
+            }),
+          )
+        : undefined
+
+    return json(200, { user }, headers)
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -316,7 +506,7 @@ async function sessionFromHandoffHandler(request) {
     const requestDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: claims.sub } })
     const result = await requestDb.query(`
       SELECT TOP 1
-        u.id, u.full_name, u.email, u.phone_number, u.role, u.is_admin, u.can_manage_library, u.is_active,
+        u.id, u.full_name, u.email, u.phone_number, u.password_hash, u.role, u.is_admin, u.can_manage_library, u.is_active,
         u.last_login_at, u.created_at, u.aydinlatma_accepted_at, u.kvkk_accepted_at, u.funded_by_teacher_id,
         u.teacher_subject_ids_json,
         sp.theme_id, sp.grade,
@@ -336,6 +526,7 @@ async function sessionFromHandoffHandler(request) {
     }
 
     const user = sanitizeUser(record)
+    user.mustChangePassword = await requiresPasswordChange(record)
     user.entitlement = await buildSessionEntitlement({
       userId: record.id,
       role: record.role,
@@ -355,6 +546,82 @@ async function sessionFromHandoffHandler(request) {
     }
     console.error('sessionFromHandoffHandler failed', error)
     return json(500, { error: 'Oturum oluşturulamadı.' })
+  }
+}
+
+async function changePasswordHandler(request) {
+  try {
+    const token = readSessionToken(request)
+    if (!token) {
+      return json(401, { error: 'Oturum bulunamadı.' })
+    }
+
+    const session = verifySessionToken(token)
+    if (session.actingParentId || session.actingAdminId) return json(403, { error: 'Şifre değiştirmek için kendi hesabınızla giriş yapın.' })
+    const payload = await request.json().catch(() => null)
+    if (!payload) {
+      return json(400, { error: 'Geçersiz istek gövdesi.' })
+    }
+
+    const currentPassword = String(payload.currentPassword || '')
+    const newPassword = String(payload.newPassword || '')
+    if (!currentPassword || !newPassword) {
+      return json(400, { error: 'Mevcut ve yeni şifreyi girin.' })
+    }
+
+    if (!(await consumeRateLimit(`change-password:${session.sub}`))) {
+      return json(429, { error: 'Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.' })
+    }
+
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: session.sub },
+    })
+    const result = await requestDb.query(`
+      SELECT TOP 1 id, full_name, email, role, password_hash, phone_number, is_active FROM dbo.Users WHERE id = @id;
+    `)
+    const record = result.recordset[0]
+    if (!record) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+
+    if (record.is_active === false) return accountDisabledResponse()
+    const validationError = passwordChangeError(currentPassword, newPassword, record.phone_number)
+    if (validationError) return json(400, { error: validationError })
+
+    const isPasswordValid = await verifyPassword(currentPassword, record.password_hash)
+    if (!isPasswordValid) {
+      return json(401, { error: 'Mevcut şifre hatalı.' })
+    }
+
+    const newPasswordHash = await hashPassword(newPassword)
+    const updateDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: session.sub },
+      passwordHash: { type: sql.NVarChar(255), value: newPasswordHash },
+    })
+    await updateDb.query(`
+      UPDATE dbo.Users
+      SET password_hash = @passwordHash,
+          failed_login_count = 0,
+          lockout_until = NULL
+      WHERE id = @id;
+    `)
+
+    // Şifre artık başlangıç şifresi değil — oturum çerezini "mustChangePassword: false" claim'iyle
+    // yeniden basıyoruz ki passwordGate kullanıcıyı bir sonraki istekte içeri alsın.
+    const refreshedToken = createSessionToken({
+      id: record.id,
+      email: record.email,
+      fullName: record.full_name,
+      role: record.role,
+      mustChangePassword: false,
+    })
+
+    return json(200, { ok: true }, createSessionHeaders(refreshedToken))
+  } catch (error) {
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' }, clearSessionHeaders())
+    }
+    return createAuthServiceErrorResponse(error, 'changePasswordHandler failed')
   }
 }
 
@@ -449,6 +716,8 @@ async function validateCouponHandler(request) {
 
 module.exports = {
   validateCouponHandler,
+  loginHandler,
+  changePasswordHandler,
   logoutHandler,
   meHandler,
   sessionFromHandoffHandler,

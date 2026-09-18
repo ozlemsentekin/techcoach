@@ -6,6 +6,7 @@ import {
   ChevronRight,
   CreditCard,
   GraduationCap,
+  KeyRound,
   LogOut,
   RefreshCw,
   ShieldCheck,
@@ -17,6 +18,7 @@ import { cachedGet } from '../../services/authClient'
 import ThemeContext from '../../theme/themeContextObject'
 import { THEMES } from '../../theme/themes'
 import ParentTourContext from '../parent/onboarding/parentTourContext'
+import ChangePasswordDialog from './ChangePasswordDialog'
 import NotificationBell from './NotificationBell'
 import TeacherSubjectsDialog from '../teacher/components/TeacherSubjectsDialog'
 
@@ -36,6 +38,7 @@ export default function PanelHeader() {
   const [switching, setSwitching] = useState(false)
   const [switchError, setSwitchError] = useState('')
   const [subjectsDialogOpen, setSubjectsDialogOpen] = useState(false)
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const menuRef = useRef(null)
   const themeMenuRef = useRef(null)
   const initial = authUser?.fullName?.trim()?.[0]?.toUpperCase() || '?'
@@ -404,6 +407,20 @@ export default function PanelHeader() {
                 type="button"
                 onClick={() => {
                   setOpen(false)
+                  setChangePasswordOpen(true)
+                }}
+                className="flex min-h-11 w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-panel-text transition-colors hover:bg-panel-surface-soft"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
+                  <KeyRound size={16} aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-bold">Şifremi Değiştir</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false)
                   logout().catch(() => {})
                 }}
                 className="flex min-h-11 w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-panel-red transition-colors hover:bg-panel-red-soft"
@@ -420,6 +437,7 @@ export default function PanelHeader() {
 
       </div>
 
+      {changePasswordOpen ? <ChangePasswordDialog onClose={() => setChangePasswordOpen(false)} /> : null}
       {subjectsDialogOpen ? <TeacherSubjectsDialog onClose={() => setSubjectsDialogOpen(false)} /> : null}
     </header>
   )

@@ -1,8 +1,36 @@
 const crypto = require('crypto')
+const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const { getAuthConfig, getRuntimeConfig } = require('./config')
 
 const TR_MOBILE_RULE = /^5\d{9}$/
+
+// Başlangıç şifresi: telefon numarasının son 6 hanesi. Yeni hesap oluşturulurken
+// (kayıt, öğretmenin veli/öğrenci eklemesi) ve mevcut hesapların backfill'inde kullanılır;
+// requiresPasswordChange (passwordPolicy.js) hâlâ bu şifrede olan hesapları tespit eder.
+function defaultPasswordForPhone(phone) {
+  return String(phone || '').replace(/\D/g, '').slice(-6)
+}
+
+// bcryptjs saf JS implementasyonu, libuv thread-pool offload'u yok — hashleme/karşılaştırma
+// Node.js event loop'unu süresince bloklar; cost 12, cost 10'dan ~4x uzun sürer ve eşzamanlı
+// trafik altında login throughput'unu doğrudan etkiler. Eski cost-12 hash'ler doğrulanmaya
+// devam eder (bcrypt cost'u hash'in içinde saklar); needsPasswordRehash bunları bir sonraki
+// girişte BCRYPT_COST'a indirmek için kullanılır.
+const BCRYPT_COST = 10
+
+async function hashPassword(password) {
+  return bcrypt.hash(password, BCRYPT_COST)
+}
+
+async function verifyPassword(password, hash) {
+  return bcrypt.compare(password, hash)
+}
+
+function needsPasswordRehash(hash) {
+  const match = /^\$2[aby]\$(\d+)\$/.exec(String(hash || ''))
+  return Boolean(match) && Number(match[1]) > BCRYPT_COST
+}
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase()
@@ -54,6 +82,13 @@ function createSessionToken(user, options = {}) {
     email: user.email,
     fullName: user.fullName,
     role: user.role,
+  }
+
+  // Kendi (delege olmayan) oturumlarda başlangıç şifresi durumunu token'a gömüyoruz; böylece
+  // passwordGate her panel isteğinde DB'ye gitmeden karar verebiliyor. Claim'in hiç olmaması
+  // = bu özellikten önce üretilmiş eski token → gate DB fallback'ine düşer.
+  if (!options.actingParentId && !options.actingAdminId) {
+    payload.mustChangePassword = Boolean(user.mustChangePassword)
   }
 
   if (options.actingParentId) {
@@ -150,6 +185,31 @@ function verifyPhoneVerifiedToken(token) {
   return payload
 }
 
+// Şifremi unuttum akışında OTP doğrulandıktan sonra, kullanıcıyı doğrudan oturum açmadan
+// önce "yeni şifre belirleme" ekranına taşımak için kısa ömürlü (60 sn) tek amaçlı token.
+// createHandoffToken ile aynı desen: purpose claim'i sayesinde normal oturum çerezi olarak
+// kullanılamaz (bkz. verifySessionToken).
+function createPasswordResetToken(userId) {
+  const { jwtSecret } = getAuthConfig()
+  return jwt.sign({ sub: userId, purpose: 'password-reset' }, jwtSecret, {
+    expiresIn: 60,
+    issuer: 'techcoach-api',
+    audience: 'techcoach-web',
+  })
+}
+
+function verifyPasswordResetToken(token) {
+  const { jwtSecret } = getAuthConfig()
+  const payload = jwt.verify(token, jwtSecret, {
+    issuer: 'techcoach-api',
+    audience: 'techcoach-web',
+  })
+  if (payload.purpose !== 'password-reset' || !payload.sub) {
+    throw new jwt.JsonWebTokenError('invalid password reset token')
+  }
+  return payload
+}
+
 // True for a rejected/expired/malformed JWT (jsonwebtoken's own error types) — i.e. an
 // actually invalid session, as opposed to an unrelated failure (DB error, etc.) that
 // happened to occur while handling an otherwise-valid session.
@@ -163,6 +223,12 @@ module.exports = {
   verifyHandoffToken,
   createPhoneVerifiedToken,
   verifyPhoneVerifiedToken,
+  createPasswordResetToken,
+  verifyPasswordResetToken,
+  defaultPasswordForPhone,
+  hashPassword,
+  verifyPassword,
+  needsPasswordRehash,
   generateOtpCode,
   hashOtpCode,
   isSessionError,

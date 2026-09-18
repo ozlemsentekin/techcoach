@@ -2,7 +2,14 @@ const crypto = require('crypto')
 const { sql, withRequest, withTransaction } = require('./db')
 const { isConfigError, getIyzicoConfig } = require('./config')
 const { createSessionHeaders, getClientIp, json } = require('./http')
-const { createSessionToken, createHandoffToken, isSessionError, verifyPhoneVerifiedToken } = require('./security')
+const {
+  createSessionToken,
+  createHandoffToken,
+  defaultPasswordForPhone,
+  hashPassword,
+  isSessionError,
+  verifyPhoneVerifiedToken,
+} = require('./security')
 const { requireParentSession } = require('./students')
 const { requireTeacherSession } = require('./teacherScope')
 const { consumeRateLimit } = require('./rate-limit')
@@ -526,21 +533,26 @@ async function consumePendingParentRegistration(id) {
 // Bekleyen kaydı gerçek dbo.Users satırına dönüştürür ve pending satırı tüketildi olarak işaretler
 // — tek transaction, ödeme onaylandıktan sonra iyzicoCheckoutCallbackHandler'dan çağrılır.
 async function createParentFromPendingRegistration(pending) {
+  // Bu akışta (doğrudan ödemeye giden yeni veli kaydı) kullanıcı henüz kendi şifresini
+  // belirlemedi — başlangıç şifresi telefonun son 6 hanesi olur, ilk girişte SMS kodu +
+  // zorunlu şifre değiştirme akışına yönlendirilir (bkz. auth.js loginHandler).
+  const passwordHash = await hashPassword(defaultPasswordForPhone(pending.phone_number))
   return withTransaction(async (requestInTransaction) => {
     const insertUserDb = requestInTransaction({
       fullName: { type: sql.NVarChar(120), value: pending.full_name },
       phone: { type: sql.NVarChar(20), value: pending.phone_number },
+      passwordHash: { type: sql.NVarChar(255), value: passwordHash },
       email: { type: sql.NVarChar(320), value: pending.email },
       parentType: { type: sql.NVarChar(10), value: pending.parent_type },
       aydinlatmaAt: { type: sql.DateTime2, value: pending.aydinlatma_accepted_at },
       kvkkAt: { type: sql.DateTime2, value: pending.kvkk_accepted_at },
     })
     const result = await insertUserDb.query(`
-      INSERT INTO dbo.Users (full_name, phone_number, email, has_panel_access, role, parent_type, aydinlatma_accepted_at, kvkk_accepted_at)
+      INSERT INTO dbo.Users (full_name, phone_number, password_hash, email, has_panel_access, role, parent_type, aydinlatma_accepted_at, kvkk_accepted_at)
       OUTPUT inserted.id, inserted.full_name, inserted.email, inserted.phone_number, inserted.role,
              inserted.is_admin, inserted.can_manage_library, inserted.last_login_at, inserted.created_at,
              inserted.aydinlatma_accepted_at, inserted.kvkk_accepted_at, inserted.teacher_subject_ids_json, inserted.parent_type
-      VALUES (@fullName, @phone, @email, 1, 'ebeveyn', @parentType, @aydinlatmaAt, @kvkkAt);
+      VALUES (@fullName, @phone, @passwordHash, @email, 1, 'ebeveyn', @parentType, @aydinlatmaAt, @kvkkAt);
     `)
     const insertedUser = sanitizeUser(result.recordset[0])
 
@@ -689,6 +701,9 @@ async function iyzicoCheckoutCallbackHandler(request) {
       }
       newParent = await createParentFromPendingRegistration(pending)
       parentId = newParent.id
+      // Hesap az önce varsayılan (telefonun son 6 hanesi) şifreyle açıldı — ilk gerçek
+      // girişte auth/login SMS kodunu da isteyip zorunlu şifre değiştirmeye yönlendirecek.
+      newParent.mustChangePassword = true
       const sessionToken = createSessionToken(newParent)
       sessionHeaders = createSessionHeaders(sessionToken)
       handoffToken = createHandoffToken(newParent.id)
