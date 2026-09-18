@@ -478,6 +478,7 @@ export default function StudentDetailPage() {
             fetchMockExam={mockExamFetchers.fetchMockExam}
             fetchPhoto={mockExamFetchers.fetchPhoto}
             fetchTopicStats={mockExamFetchers.fetchTopicStats}
+            fetchGrowthSummary={mockExamFetchers.fetchGrowthSummary}
           />
         )}
 

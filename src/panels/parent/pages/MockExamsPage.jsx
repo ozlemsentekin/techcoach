@@ -18,6 +18,7 @@ import {
   deleteMockExamPhoto,
   getMockExamTopicSuggestions,
   getMockExamTopicStats,
+  getMockExamGrowthSummary,
 } from '../../../services/mockExamService'
 
 export default function MockExamsPage() {
@@ -100,6 +101,7 @@ export default function MockExamsPage() {
         deletePhoto={deleteMockExamPhoto}
         fetchTopicSuggestions={getMockExamTopicSuggestions}
         fetchTopicStats={getMockExamTopicStats}
+        fetchGrowthSummary={getMockExamGrowthSummary}
       />
     </div>
   )

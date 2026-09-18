@@ -3,7 +3,14 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
-const { validateMockExamPayload, GENEL_DENEME_TEMPLATE, computeNet, examVisibleToTeacher } = require('../api/src/mockExams.js')
+const {
+  validateMockExamPayload,
+  GENEL_DENEME_TEMPLATE,
+  computeNet,
+  examVisibleToTeacher,
+  normalizeExperiencePayload,
+  pickEligiblePreviousExam,
+} = require('../api/src/mockExams.js')
 
 const PHOTO = `data:image/png;base64,${'A'.repeat(40)}`
 
@@ -214,4 +221,80 @@ test('Soru bazlı giriş: Etüt soru sayısını kendi belirler', () => {
   assert.equal(result.value.subjects[0].totalQuestions, 7)
   assert.equal(result.value.subjects[0].correct, 5)
   assert.equal(result.value.subjects[0].wrong, 2)
+})
+
+test('normalizeExperiencePayload: mood zorunlu', () => {
+  assert.match(normalizeExperiencePayload({}).error || '', /Sınav duygusu/)
+  assert.match(normalizeExperiencePayload({ mood: 'gecersiz' }).error || '', /Sınav duygusu/)
+  const result = normalizeExperiencePayload({ mood: 'rahat' })
+  assert.equal(result.error, undefined)
+  assert.equal(result.value.mood, 'rahat')
+  assert.deepEqual(result.value.tags, [])
+  assert.equal(result.value.learningNote, null)
+  assert.equal(result.value.nextAction, null)
+  assert.equal(result.value.previousActionReview, null)
+})
+
+test('normalizeExperiencePayload: tags allow-list dışı reddedilir, dedupe edilir', () => {
+  assert.match(
+    normalizeExperiencePayload({ mood: 'iyi', tags: ['gecersiz_kod'] }).error || '',
+    /Geçersiz deneyim etiketi/,
+  )
+  const result = normalizeExperiencePayload({
+    mood: 'iyi',
+    tags: ['sure_yetismedi', 'dikkat_dagildi', 'sure_yetismedi'],
+  })
+  assert.equal(result.error, undefined)
+  assert.deepEqual(result.value.tags, ['sure_yetismedi', 'dikkat_dagildi'])
+})
+
+test('normalizeExperiencePayload: learningNote/nextAction karakter sınırına kesilir', () => {
+  const result = normalizeExperiencePayload({
+    mood: 'karisik',
+    learningNote: 'a'.repeat(600),
+    nextAction: 'b'.repeat(400),
+  })
+  assert.equal(result.error, undefined)
+  assert.equal(result.value.learningNote.length, 500)
+  assert.equal(result.value.nextAction.length, 300)
+})
+
+test('normalizeExperiencePayload: previousActionReview yalnızca evet/kismen/hayir kabul eder', () => {
+  assert.match(
+    normalizeExperiencePayload({ mood: 'iyi', previousActionReview: 'belki' }).error || '',
+    /Geçersiz değerlendirme/,
+  )
+  const result = normalizeExperiencePayload({ mood: 'iyi', previousActionReview: 'kismen' })
+  assert.equal(result.error, undefined)
+  assert.equal(result.value.previousActionReview, 'kismen')
+})
+
+test('pickEligiblePreviousExam: kronolojik olarak önceki, nextAction dolu en yakın kaydı bulur', () => {
+  const examList = [
+    { id: 'e1', sortDate: '2026-09-01', createdAt: '2026-09-01T10:00:00.000Z', nextAction: 'İlk hedef' },
+    { id: 'e2', sortDate: '2026-09-05', createdAt: '2026-09-05T10:00:00.000Z', nextAction: null },
+    { id: 'e3', sortDate: '2026-09-10', createdAt: '2026-09-10T10:00:00.000Z', nextAction: 'İkinci hedef' },
+  ]
+  // e3'ten önceki en yakın nextAction'lı kayıt e2 değil (boş), e1'dir.
+  const result = pickEligiblePreviousExam(examList, 'e3')
+  assert.equal(result.id, 'e1')
+})
+
+test('pickEligiblePreviousExam: araya sonradan eklenen deneme doğru şekilde bulunur', () => {
+  const examList = [
+    { id: 'e1', sortDate: '2026-09-01', createdAt: '2026-09-01T10:00:00.000Z', nextAction: 'İlk hedef' },
+    { id: 'e2', sortDate: '2026-09-10', createdAt: '2026-09-10T10:00:00.000Z', nextAction: 'İkinci hedef' },
+  ]
+  // e1-e2 arasına, e1'den sonra ama e2'den önce bir kayıt eklendi.
+  const withInserted = [
+    ...examList,
+    { id: 'e1b', sortDate: '2026-09-05', createdAt: '2026-09-05T10:00:00.000Z', nextAction: 'Ara hedef' },
+  ]
+  assert.equal(pickEligiblePreviousExam(withInserted, 'e2').id, 'e1b')
+})
+
+test('pickEligiblePreviousExam: uygun kayıt yoksa veya mevcut denemeyse null döner', () => {
+  const examList = [{ id: 'e1', sortDate: '2026-09-01', createdAt: '2026-09-01T10:00:00.000Z', nextAction: null }]
+  assert.equal(pickEligiblePreviousExam(examList, 'e1'), null)
+  assert.equal(pickEligiblePreviousExam(examList, 'not-in-list'), null)
 })

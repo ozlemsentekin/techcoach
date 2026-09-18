@@ -81,6 +81,22 @@ export async function updateMockExam(id, updates, studentId) {
   return data.mockExam
 }
 
+/**
+ * Sınav Deneyimi Analizi: sonuç güncellemeden (updateMockExam) ayrı bir uç — yalnızca
+ * öğrenci yazabilir, mevcut sonuç giriş akışını etkilemez.
+ * @param {{ mood, tags?: string[], learningNote?, nextAction?, previousActionReview? }} payload
+ * @returns {Promise<MockExam>}
+ */
+export async function updateMockExamExperience(mockExamId, payload, studentId) {
+  const body = studentId ? { ...payload, studentId } : payload
+  const data = await authRequest(`/api/panel/mock-exams/${mockExamId}/experience`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+  invalidateCache('/api/panel/mock-exams')
+  return data.mockExam
+}
+
 export async function deleteMockExam(id, studentId) {
   const body = studentId ? { studentId } : {}
   await authRequest(`/api/panel/mock-exams/${id}`, { method: 'DELETE', body: JSON.stringify(body) })
@@ -149,4 +165,18 @@ export async function getMockExamPhoto(wrongQuestionId, studentId) {
     { method: 'GET' },
   )
   return data.photoUrl
+}
+
+/**
+ * @typedef {Object} MockExamGrowthSummary
+ * @property {number} examCount Pencere içindeki (son 5) analiz edilmiş deneme sayısı.
+ * @property {number} minExams Cümlelerin gösterilmesi için gereken minimum deneme sayısı.
+ * @property {Object.<string, number>} moodCounts
+ * @property {{ code: string, count: number }[]} tagCounts
+ * @property {{ evet: number, kismen: number, hayir: number }} previousActionReviewCounts
+ */
+
+/** "Deneme Gelişimi" — son denemelerdeki deneyim verisinin ham sayımı (AI yorumu yok). */
+export async function getMockExamGrowthSummary(studentId) {
+  return cachedGet(withStudent('/api/panel/mock-exams/growth-summary', studentId))
 }

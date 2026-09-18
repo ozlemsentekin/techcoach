@@ -24,15 +24,24 @@ import { cachedGet } from '../../services/authClient'
 import { todayISODate } from '../../utils/time'
 import MistakePhotoCaptureModal from '../student/components/MistakePhotoCaptureModal'
 import MockExamTopicAnalysis from './MockExamTopicAnalysis'
+import MockExamGrowthSummary from './MockExamGrowthSummary'
 import {
   BRANS_QUESTION_COUNT,
+  EXAM_MOODS,
+  EXPERIENCE_TAGS,
   GENEL_DENEME_TEMPLATE,
   MAX_ETUT_QUESTIONS,
+  MOCK_EXAM_EXPERIENCE_LEARNING_NOTE_MAX,
+  MOCK_EXAM_EXPERIENCE_NEXT_ACTION_MAX,
   MOCK_EXAM_KINDS,
+  PREVIOUS_ACTION_REVIEW_OPTIONS,
   computeNet,
+  examMoodMeta,
+  experienceTagLabel,
   gradeEightSubjects,
   matchSubjectId,
   mockExamKindLabel,
+  previousActionReviewLabel,
   subjectTone,
 } from './mockExamConfig'
 
@@ -1425,9 +1434,305 @@ function TopicComparisonChart({ exam }) {
   )
 }
 
+/* ------------------------------------------------------------------ Sınav Deneyimi Analizi */
+
+// Deneme sonucunun yanında: sınav duygusu (tek seçim), deneyim etiketleri (çoklu seçim),
+// "ne öğrendim" notu ve bir sonraki deneme hedefi. Mevcut sonuç formundan (ExamDrawer) tamamen
+// bağımsız, kendi "Kaydet"i olan hafif bir alt-form — 1-2 dakikada doldurulacak şekilde sade
+// tutulur (uzun form/psikolojik değerlendirme hissi vermemesi için puan/rozet/gamification yok).
+function ExperienceReadOnlySummary({ exam }) {
+  const meta = examMoodMeta(exam.experienceMood)
+  if (!exam.experienceMood) {
+    return (
+      <p className="rounded-xl bg-panel-surface-soft px-3 py-2.5 text-xs text-panel-text-muted">
+        Bu deneme için henüz sınav deneyimi değerlendirmesi yapılmadı.
+      </p>
+    )
+  }
+  return (
+    <div className="rounded-xl border border-panel-border bg-white p-3">
+      <p className="text-sm font-semibold text-panel-text">
+        {meta ? `${meta.emoji} ${meta.label}` : exam.experienceMood}
+      </p>
+      {exam.experienceTags?.length ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {exam.experienceTags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-lg bg-panel-surface-soft px-2 py-0.5 text-xs font-medium text-panel-text-muted"
+            >
+              {experienceTagLabel(tag)}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {exam.experienceLearningNote ? (
+        <p className="mt-2 text-sm leading-snug text-panel-text">
+          <span className="font-semibold text-panel-text-muted">Öğrendiği: </span>
+          {exam.experienceLearningNote}
+        </p>
+      ) : null}
+      {exam.experienceNextAction ? (
+        <p className="mt-1 text-sm leading-snug text-panel-text">
+          <span className="font-semibold text-panel-text-muted">Sonraki hedefi: </span>
+          {exam.experienceNextAction}
+        </p>
+      ) : null}
+      {exam.experiencePreviousActionReview ? (
+        <p className="mt-1.5 text-xs text-panel-text-muted">
+          Önceki hedefini &ldquo;{previousActionReviewLabel(exam.experiencePreviousActionReview)}&rdquo; uyguladığını
+          belirtti.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function ExperienceForm({ exam, studentId, updateExperience, onSaved, onCancel, showCancel }) {
+  const [mood, setMood] = useState(exam.experienceMood || '')
+  const [tags, setTags] = useState(exam.experienceTags || [])
+  const [learningNote, setLearningNote] = useState(exam.experienceLearningNote || '')
+  const [nextAction, setNextAction] = useState(exam.experienceNextAction || '')
+  const [previousReview, setPreviousReview] = useState(exam.experiencePreviousActionReview || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const toggleTag = (value) => {
+    setTags((prev) => (prev.includes(value) ? prev.filter((t) => t !== value) : [...prev, value]))
+  }
+
+  const handleSave = async () => {
+    if (!mood) {
+      setError('Sınav duygusunu seçmelisin.')
+      return
+    }
+    setError('')
+    setSaving(true)
+    try {
+      await updateExperience(
+        exam.id,
+        {
+          mood,
+          tags,
+          learningNote: learningNote.trim() || undefined,
+          nextAction: nextAction.trim() || undefined,
+          previousActionReview: previousReview || undefined,
+        },
+        studentId,
+      )
+      onSaved()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const pendingGoal = exam.previousGoalReview?.status === 'pending' ? exam.previousGoalReview : null
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-panel-border bg-white p-3">
+      <div>
+        <p className="mb-1.5 text-xs font-semibold text-panel-text-muted">
+          Sınav sırasında genel olarak nasıl hissettin?
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {EXAM_MOODS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={mood === option.value}
+              onClick={() => setMood(option.value)}
+              className={cn(
+                'flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-colors',
+                mood === option.value
+                  ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
+                  : 'border-panel-border text-panel-text-muted hover:bg-panel-surface-soft',
+              )}
+            >
+              <span aria-hidden="true">{option.emoji}</span> {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-xs font-semibold text-panel-text-muted">
+          Bu denemede neler yaşadın? (birden fazla seçebilirsin, isteğe bağlı)
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {EXPERIENCE_TAGS.map((tag) => (
+            <button
+              key={tag.value}
+              type="button"
+              aria-pressed={tags.includes(tag.value)}
+              onClick={() => toggleTag(tag.value)}
+              className={cn(
+                'rounded-lg border px-2 py-1 text-xs font-medium transition-colors',
+                tags.includes(tag.value)
+                  ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
+                  : 'border-panel-border text-panel-text-muted hover:bg-panel-surface-soft',
+              )}
+            >
+              {tag.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-semibold text-panel-text-muted">Bu sınavdan ne öğrendim? (isteğe bağlı)</span>
+        <textarea
+          value={learningNote}
+          maxLength={MOCK_EXAM_EXPERIENCE_LEARNING_NOTE_MAX}
+          onChange={(event) => setLearningNote(event.target.value)}
+          placeholder="Matematikte uzun sorularda fazla zaman harcadım."
+          rows={2}
+          className={cn(FIELD_CLASS, 'resize-none p-2 text-sm')}
+        />
+        <span className="self-end text-[10px] text-panel-text-muted">
+          {learningNote.length}/{MOCK_EXAM_EXPERIENCE_LEARNING_NOTE_MAX}
+        </span>
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-semibold text-panel-text-muted">
+          Bir sonraki deneme için (isteğe bağlı)
+        </span>
+        <input
+          type="text"
+          value={nextAction}
+          maxLength={MOCK_EXAM_EXPERIENCE_NEXT_ACTION_MAX}
+          onChange={(event) => setNextAction(event.target.value)}
+          placeholder="Son 10 dakikayı kontrole ayıracağım."
+          className={cn(FIELD_CLASS, 'p-2 text-sm')}
+        />
+      </label>
+
+      {pendingGoal ? (
+        <div className="rounded-lg bg-panel-surface-soft p-2.5">
+          <p className="text-xs font-medium text-panel-text-muted">Geçen denemede kendine şunu söylemiştin:</p>
+          <p className="mt-0.5 text-sm font-medium text-panel-text">&ldquo;{pendingGoal.previousNextAction}&rdquo;</p>
+          <p className="mt-1.5 text-xs font-semibold text-panel-text-muted">Bunu uygulayabildin mi?</p>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {PREVIOUS_ACTION_REVIEW_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={previousReview === option.value}
+                onClick={() => setPreviousReview(option.value)}
+                className={cn(
+                  'rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors',
+                  previousReview === option.value
+                    ? 'border-panel-blue bg-panel-blue-soft text-panel-blue'
+                    : 'border-panel-border text-panel-text-muted hover:bg-panel-surface-soft',
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {error ? <p className="text-xs font-medium text-panel-red">{error}</p> : null}
+
+      <div className="flex justify-end gap-2">
+        {showCancel ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="rounded-lg px-3 py-1.5 text-xs font-semibold text-panel-text-muted hover:bg-panel-surface-soft disabled:opacity-60"
+          >
+            Vazgeç
+          </button>
+        ) : null}
+        <Button size="sm" onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : null}
+          Kaydet
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function ExperienceSection({ exam, canEdit, updateExperience, studentId, onChanged }) {
+  const [editing, setEditing] = useState(false)
+
+  if (!canEdit) {
+    return <ExperienceReadOnlySummary exam={exam} />
+  }
+
+  if (!exam.experienceMood || editing) {
+    return (
+      <ExperienceForm
+        exam={exam}
+        studentId={studentId}
+        updateExperience={updateExperience}
+        showCancel={Boolean(exam.experienceMood)}
+        onCancel={() => setEditing(false)}
+        onSaved={() => {
+          setEditing(false)
+          onChanged?.()
+        }}
+      />
+    )
+  }
+
+  const meta = examMoodMeta(exam.experienceMood)
+  return (
+    <div className="rounded-xl border border-panel-border bg-white p-3">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-semibold text-panel-text">
+          {meta ? `${meta.emoji} ${meta.label}` : exam.experienceMood}
+        </p>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-panel-blue hover:bg-panel-blue-soft"
+        >
+          Düzenle
+        </button>
+      </div>
+      {exam.experienceTags?.length ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {exam.experienceTags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-lg bg-panel-surface-soft px-2 py-0.5 text-xs font-medium text-panel-text-muted"
+            >
+              {experienceTagLabel(tag)}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {exam.experienceLearningNote ? (
+        <p className="mt-2 text-sm leading-snug text-panel-text">
+          <span className="font-semibold text-panel-text-muted">Öğrendiğim: </span>
+          {exam.experienceLearningNote}
+        </p>
+      ) : null}
+      {exam.experienceNextAction ? (
+        <p className="mt-1 text-sm leading-snug text-panel-text">
+          <span className="font-semibold text-panel-text-muted">Sonraki hedefim: </span>
+          {exam.experienceNextAction}
+        </p>
+      ) : null}
+      {exam.experiencePreviousActionReview ? (
+        <p className="mt-1.5 text-xs text-panel-text-muted">
+          Önceki hedefimi &ldquo;{previousActionReviewLabel(exam.experiencePreviousActionReview)}&rdquo; uyguladım.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function ExamCard({
   exam: summary,
   readOnly,
+  canEditExperience,
+  updateExperience,
   studentId,
   bare = false,
   fetchMockExam,
@@ -1491,9 +1796,20 @@ function ExamCard({
               {exam.kind === 'genel' ? `${exam.subjects.length} ders` : `${exam.totalQuestions} soru`}
             </span>
           </div>
-          <span className="mt-0.5 inline-flex items-center gap-1 text-xs text-panel-text-muted">
-            <CalendarDays size={12} aria-hidden="true" /> {formatExamDate(exam.examDate)}
-          </span>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="inline-flex items-center gap-1 text-xs text-panel-text-muted">
+              <CalendarDays size={12} aria-hidden="true" /> {formatExamDate(exam.examDate)}
+            </span>
+            {exam.experienceMood ? (
+              <span className="rounded-lg bg-panel-sage-soft px-1.5 py-0.5 text-[10px] font-semibold text-panel-sage">
+                Analiz tamamlandı
+              </span>
+            ) : canEditExperience ? (
+              <span className="rounded-lg bg-panel-yellow-soft px-1.5 py-0.5 text-[10px] font-semibold text-panel-yellow">
+                Denemeni değerlendir
+              </span>
+            ) : null}
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <StatPill label="D" value={exam.totalCorrect} tone="bg-panel-green-soft text-panel-green" />
@@ -1530,6 +1846,21 @@ function ExamCard({
             <ExamComparisonChart exam={exam} />
             <TopicComparisonChart exam={exam} />
           </div>
+          {detail ? (
+            <div className="mt-3 border-t border-panel-border/60 pt-3">
+              <p className="mb-1.5 text-xs font-semibold text-panel-text-muted">Sınav Deneyimi</p>
+              <ExperienceSection
+                exam={detail}
+                canEdit={Boolean(canEditExperience)}
+                updateExperience={updateExperience}
+                studentId={studentId}
+                onChanged={() => {
+                  loadDetail()
+                  onChanged?.()
+                }}
+              />
+            </div>
+          ) : null}
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-panel-border/60 pt-3 text-xs text-panel-text-muted">
             <span>
               Toplam {exam.totalCorrect}D · {exam.totalWrong}Y · {exam.totalBlank}B
@@ -1616,6 +1947,7 @@ function ExamCard({
 
 export default function MockExamsView({
   readOnly = false,
+  canEditExperience = false,
   studentId,
   embedded = false,
   fetchMockExams,
@@ -1623,12 +1955,14 @@ export default function MockExamsView({
   fetchPhoto,
   createMockExam,
   updateMockExam,
+  updateExperience,
   deleteMockExam,
   addPhoto,
   addQuestionPhoto,
   deletePhoto,
   fetchTopicSuggestions,
   fetchTopicStats,
+  fetchGrowthSummary,
 }) {
   const [exams, setExams] = useState(null)
   const [error, setError] = useState('')
@@ -1636,7 +1970,7 @@ export default function MockExamsView({
   const [submitting, setSubmitting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [activeKind, setActiveKind] = useState(MOCK_EXAM_KINDS[0].value)
-  const [view, setView] = useState('list') // 'list' | 'topics'
+  const [view, setView] = useState('list') // 'list' | 'topics' | 'growth'
 
   // Sekme başına: o türdeki denemeler + adet + (Genel Deneme'de) ortalama başarı %.
   const kindGroups = useMemo(() => {
@@ -1686,6 +2020,7 @@ export default function MockExamsView({
   }, [fetchMockExams, studentId])
 
   const loadTopicStats = useCallback(() => fetchTopicStats(studentId), [fetchTopicStats, studentId])
+  const loadGrowthSummary = useCallback(() => fetchGrowthSummary(studentId), [fetchGrowthSummary, studentId])
 
   useEffect(() => {
     load()
@@ -1797,6 +2132,8 @@ export default function MockExamsView({
       key: exam.id,
       exam,
       readOnly,
+      canEditExperience,
+      updateExperience,
       studentId,
       fetchMockExam,
       fetchPhoto,
@@ -1857,12 +2194,15 @@ export default function MockExamsView({
     )
   })()
 
-  const viewToggle = fetchTopicStats ? (
-    <div className="flex gap-1.5 rounded-xl bg-panel-surface-soft p-1">
-      {[
-        { value: 'list', label: 'Denemeler' },
-        { value: 'topics', label: 'Konu Analizi' },
-      ].map((opt) => (
+  const viewOptions = [
+    { value: 'list', label: 'Denemeler' },
+    fetchTopicStats ? { value: 'topics', label: 'Konu Analizi' } : null,
+    fetchGrowthSummary ? { value: 'growth', label: 'Deneme Gelişimi' } : null,
+  ].filter(Boolean)
+
+  const viewToggle = viewOptions.length > 1 ? (
+    <div className="flex flex-wrap gap-1.5 rounded-xl bg-panel-surface-soft p-1">
+      {viewOptions.map((opt) => (
         <button
           key={opt.value}
           type="button"
@@ -1902,6 +2242,8 @@ export default function MockExamsView({
 
       {view === 'topics' ? (
         <MockExamTopicAnalysis fetchTopicStats={loadTopicStats} />
+      ) : view === 'growth' ? (
+        <MockExamGrowthSummary fetchGrowthSummary={loadGrowthSummary} canEditExperience={canEditExperience} />
       ) : (
         <>
           {tabs}

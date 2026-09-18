@@ -484,6 +484,9 @@ export function makeTeacherMockExamFetchers(studentTeacherId) {
       )
       return data.subjects || []
     },
+    /** @returns {Promise<import('./mockExamService').MockExamGrowthSummary>} */
+    fetchGrowthSummary: async () =>
+      authRequest(`/api/panel-teacher/students/${studentTeacherId}/mock-exams/growth-summary`, { method: 'GET' }),
   }
 }
 

@@ -85,3 +85,54 @@ export function subjectTone(name) {
   for (let i = 0; i < key.length; i += 1) hash = (hash * 31 + key.charCodeAt(i)) >>> 0
   return SUBJECT_TONES[hash % SUBJECT_TONES.length]
 }
+
+// Sınav Deneyimi Analizi — istemci tarafı sabitleri. Sunucu kopyası: api/src/mockExams.js
+// (EXPERIENCE_MOODS / EXPERIENCE_TAG_CODES). Yeni bir seçenek eklemek yalnızca bu iki listeyi
+// (elle) senkron tutmak demektir, migration gerekmez.
+export const EXAM_MOODS = [
+  { value: 'rahat', emoji: '😌', label: 'Rahattım' },
+  { value: 'iyi', emoji: '🙂', label: 'İyi hissediyordum' },
+  { value: 'karisik', emoji: '😐', label: 'Karışıktı' },
+  { value: 'zorlandim', emoji: '😟', label: 'Zorlandım' },
+  { value: 'stresli', emoji: '😣', label: 'Çok stresliydim' },
+]
+
+const EXAM_MOODS_BY_VALUE = new Map(EXAM_MOODS.map((m) => [m.value, m]))
+
+export function examMoodMeta(mood) {
+  return EXAM_MOODS_BY_VALUE.get(mood)
+}
+
+export const EXPERIENCE_TAGS = [
+  { value: 'sure_iyi_yonettim', label: 'Süreyi iyi yönettim' },
+  { value: 'sure_yetismedi', label: 'Süre yetişmedi' },
+  { value: 'fazla_zaman_harcadim', label: 'Bazı sorularda fazla zaman harcadım' },
+  { value: 'dikkat_dagildi', label: 'Dikkatim dağıldı' },
+  { value: 'acele_ettim', label: 'Acele ettim' },
+  { value: 'yanlis_okudum', label: 'Soruları yanlış okuduğum oldu' },
+  { value: 'optik_kaydirdim', label: 'Optik formda kaydırdım' },
+  { value: 'optige_aktarirken_zorlandim', label: 'Cevapları optiğe aktarırken zorlandım' },
+  { value: 'son_kontrol_yapabildim', label: 'Son kontrol için zamanım kaldı' },
+  { value: 'son_kontrol_yapamadim', label: 'Son kontrol yapamadım' },
+  { value: 'bir_derste_zorlandim', label: 'Bir derste beklediğimden fazla zorlandım' },
+  { value: 'odagimi_koruyabildim', label: 'Sınav boyunca odağımı koruyabildim' },
+]
+
+const EXPERIENCE_TAGS_BY_VALUE = new Map(EXPERIENCE_TAGS.map((t) => [t.value, t]))
+
+export function experienceTagLabel(tag) {
+  return EXPERIENCE_TAGS_BY_VALUE.get(tag)?.label || tag
+}
+
+export const PREVIOUS_ACTION_REVIEW_OPTIONS = [
+  { value: 'evet', label: 'Evet' },
+  { value: 'kismen', label: 'Kısmen' },
+  { value: 'hayir', label: 'Hayır' },
+]
+
+export function previousActionReviewLabel(value) {
+  return PREVIOUS_ACTION_REVIEW_OPTIONS.find((o) => o.value === value)?.label || value
+}
+
+export const MOCK_EXAM_EXPERIENCE_LEARNING_NOTE_MAX = 500
+export const MOCK_EXAM_EXPERIENCE_NEXT_ACTION_MAX = 300

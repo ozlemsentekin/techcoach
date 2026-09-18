@@ -128,16 +128,19 @@ const {
   getMockExamHandler,
   createMockExamHandler,
   updateMockExamHandler,
+  updateMockExamExperienceHandler,
   deleteMockExamHandler,
   addMockExamPhotoHandler,
   addMockExamQuestionPhotoHandler,
   deleteMockExamPhotoHandler,
   getMockExamTopicSuggestionsHandler,
   getMockExamTopicStatsHandler,
+  getMockExamGrowthSummaryHandler,
   listTeacherMockExamsHandler,
   getTeacherMockExamHandler,
   getTeacherMockExamPhotoHandler,
   getTeacherMockExamTopicStatsHandler,
+  getTeacherMockExamGrowthSummaryHandler,
   getTeacherClassMockExamAnalysisHandler,
 } = require('./mockExams')
 const { listProvincesHandler, listDistrictsHandler, listSchoolsHandler } = require('./geo')
@@ -744,6 +747,13 @@ registerHttp('panel-teacher-student-mock-exam-topic-stats', {
   methods: ['GET'],
   route: 'panel-teacher/students/{studentTeacherId}/mock-exams/topic-stats',
   handler: getTeacherMockExamTopicStatsHandler,
+})
+
+registerHttp('panel-teacher-student-mock-exam-growth-summary', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/mock-exams/growth-summary',
+  handler: getTeacherMockExamGrowthSummaryHandler,
 })
 
 registerHttp('panel-teacher-profile-update', {
@@ -1943,6 +1953,13 @@ registerHttp('panel-mock-exams-topic-stats', {
   handler: getMockExamTopicStatsHandler,
 })
 
+registerHttp('panel-mock-exams-growth-summary', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/mock-exams/growth-summary',
+  handler: getMockExamGrowthSummaryHandler,
+})
+
 registerHttp('panel-mock-exams-create', {
   authLevel: 'anonymous',
   methods: ['POST'],
@@ -1962,6 +1979,13 @@ registerHttp('panel-mock-exam-update', {
   methods: ['PATCH'],
   route: 'panel/mock-exams/{mockExamId}',
   handler: updateMockExamHandler,
+})
+
+registerHttp('panel-mock-exam-experience-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel/mock-exams/{mockExamId}/experience',
+  handler: updateMockExamExperienceHandler,
 })
 
 registerHttp('panel-mock-exam-delete', {

@@ -25,6 +25,29 @@ const GENEL_DENEME_TEMPLATE = [
   { name: 'İngilizce', total: 10 },
 ]
 
+// Sınav Deneyimi Analizi — öğrencinin denemeden sonraki duygu durumu, deneyim etiketleri,
+// öğrenme notu ve bir sonraki hedefi. Kodlar (değer stringleri) DB'de CHECK constraint'siz
+// tutulur; yeni bir seçenek eklemek sadece bu listeye ekleme (+ mockExamConfig.js'teki
+// istemci kopyası) demektir, migration gerekmez.
+const EXPERIENCE_MOODS = ['rahat', 'iyi', 'karisik', 'zorlandim', 'stresli']
+const EXPERIENCE_TAG_CODES = [
+  'sure_iyi_yonettim',
+  'sure_yetismedi',
+  'fazla_zaman_harcadim',
+  'dikkat_dagildi',
+  'acele_ettim',
+  'yanlis_okudum',
+  'optik_kaydirdim',
+  'optige_aktarirken_zorlandim',
+  'son_kontrol_yapabildim',
+  'son_kontrol_yapamadim',
+  'bir_derste_zorlandim',
+  'odagimi_koruyabildim',
+]
+const EXPERIENCE_REVIEW_ANSWERS = ['evet', 'kismen', 'hayir']
+const GROWTH_SUMMARY_WINDOW = 5
+const GROWTH_SUMMARY_MIN_EXAMS = 3
+
 const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function isGuid(value) {
@@ -178,6 +201,128 @@ function normalizeQuestions(rawQuestions, total) {
     else counts.blank += 1
   }
   return { value: { questions, counts } }
+}
+
+// { mood, tags?: string[], learningNote?, nextAction?, previousActionReview? }
+// mood zorunlu (deneyim kaydı en az duygu seçilerek "tamamlanmış" sayılır); diğer alanlar
+// opsiyonel. tags allow-list dışı bir kod içeremez, dedupe edilir.
+function normalizeExperiencePayload(payload) {
+  const mood = typeof payload?.mood === 'string' ? payload.mood.trim() : ''
+  if (!EXPERIENCE_MOODS.includes(mood)) {
+    return { error: 'Sınav duygusu seçilmelidir.' }
+  }
+
+  const rawTags = Array.isArray(payload?.tags) ? payload.tags : []
+  const seenTags = new Set()
+  const tags = []
+  for (const raw of rawTags) {
+    const tag = typeof raw === 'string' ? raw.trim() : ''
+    if (!tag) continue
+    if (!EXPERIENCE_TAG_CODES.includes(tag)) {
+      return { error: 'Geçersiz deneyim etiketi.' }
+    }
+    if (seenTags.has(tag)) continue
+    seenTags.add(tag)
+    tags.push(tag)
+  }
+
+  const learningNote =
+    typeof payload?.learningNote === 'string' ? payload.learningNote.trim().slice(0, 500) || null : null
+  const nextAction = typeof payload?.nextAction === 'string' ? payload.nextAction.trim().slice(0, 300) || null : null
+
+  let previousActionReview = null
+  if (payload?.previousActionReview != null) {
+    const review = typeof payload.previousActionReview === 'string' ? payload.previousActionReview.trim() : ''
+    if (!EXPERIENCE_REVIEW_ANSWERS.includes(review)) {
+      return { error: 'Geçersiz değerlendirme.' }
+    }
+    previousActionReview = review
+  }
+
+  return { value: { mood, tags, learningNote, nextAction, previousActionReview } }
+}
+
+// Kronolojik sıralama anahtarı: sınav tarihi (yoksa oluşturulma tarihi) + oluşturulma zamanı +
+// id — string karşılaştırmasıyla listMockExamsForStudent'taki DESC sıralamayla birebir aynı
+// sırayı üretir (bkz. o sorgudaki ORDER BY).
+function examSortKey(exam) {
+  return `${exam.sortDate}T${exam.createdAt}#${exam.id}`
+}
+
+// Saf, DB'siz yardımcı: examList (herhangi bir sırada, her biri { id, sortDate, createdAt,
+// nextAction }) içinde currentExamId'den kronolojik olarak ÖNCE gelen, experience_next_action
+// dolu olan EN YAKIN kaydı bulur — "bir önceki denemede yazdığın hedef" eşleştirmesi budur.
+// Test edilebilir olması için SQL'in dışında tutulur (bkz. findPendingPreviousGoal).
+function pickEligiblePreviousExam(examList, currentExamId) {
+  const sorted = [...examList].sort((a, b) => {
+    const ak = examSortKey(a)
+    const bk = examSortKey(b)
+    if (ak === bk) return 0
+    return ak > bk ? -1 : 1 // DESC: en yeni önce
+  })
+  const currentIndex = sorted.findIndex((exam) => exam.id === currentExamId)
+  if (currentIndex === -1) return null
+  for (let i = currentIndex + 1; i < sorted.length; i += 1) {
+    if (sorted[i].nextAction) return sorted[i]
+  }
+  return null
+}
+
+// currentExamId'nin öğrencinin tüm deneme geçmişindeki yerini bulup, ondan önceki (kronolojik
+// olarak daha eski), henüz cevaplanmamış bir "sonraki deneme hedefi" olup olmadığını döner.
+// Yalnızca experience_previous_action_review henüz NULL olan denemeler için çağrılmalı —
+// zaten cevaplanmış bir denemenin eşleşmesi dondurulur (bkz. mockExams.js modül yorumu / plan).
+async function findPendingPreviousGoal(studentId, currentExamId) {
+  const db = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
+  const result = await db.query(`
+    SELECT id, COALESCE(exam_date, CAST(created_at AS date)) AS sort_date, created_at, experience_next_action
+    FROM dbo.MockExams
+    WHERE student_id = @studentId;
+  `)
+  const examList = result.recordset.map((row) => ({
+    id: row.id,
+    sortDate: toISODate(row.sort_date),
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+    nextAction: row.experience_next_action || null,
+  }))
+  return pickEligiblePreviousExam(examList, currentExamId)
+}
+
+// Bir denemenin "önceki hedef" bölümünde ne gösterileceğini çözer:
+// - Zaten cevaplanmışsa (experience_previous_action_review dolu) hangi denemeye karşılık
+//   verildiği DONDURULMUŞTUR (experience_previous_mock_exam_id) — yeniden hesaplanmaz, o
+//   denemenin nextAction'ı salt-okuma gösterim için join'lenir (silinmişse null döner, cevap
+//   yine de gösterilir).
+// - Henüz cevaplanmamışsa her çağrıda taze hesaplanır (araya sonradan eklenen bir deneme varsa
+//   onu bulur).
+async function resolvePreviousGoalReview(studentId, examRecord) {
+  if (examRecord.experience_previous_action_review) {
+    let previousNextAction = null
+    if (examRecord.experience_previous_mock_exam_id) {
+      const db = await withRequest({
+        id: { type: sql.UniqueIdentifier, value: examRecord.experience_previous_mock_exam_id },
+        studentId: { type: sql.UniqueIdentifier, value: studentId },
+      })
+      const result = await db.query(`
+        SELECT experience_next_action FROM dbo.MockExams WHERE id = @id AND student_id = @studentId;
+      `)
+      previousNextAction = result.recordset[0]?.experience_next_action || null
+    }
+    return {
+      status: 'answered',
+      review: examRecord.experience_previous_action_review,
+      previousMockExamId: examRecord.experience_previous_mock_exam_id || null,
+      previousNextAction,
+    }
+  }
+
+  const pending = await findPendingPreviousGoal(studentId, examRecord.id)
+  if (!pending) return null
+  return {
+    status: 'pending',
+    previousMockExamId: pending.id,
+    previousNextAction: pending.nextAction,
+  }
 }
 
 function handleError(error, label, fallback) {
@@ -398,6 +543,7 @@ function buildExam(examRecord, subjectRows) {
     schoolLabel: examRecord.school_label || undefined,
     createdByName: examRecord.created_by_name || undefined,
     createdAt: examRecord.created_at,
+    experienceMood: examRecord.experience_mood || undefined,
     subjects,
     totalQuestions,
     totalCorrect,
@@ -417,6 +563,7 @@ async function listMockExamsForStudent(studentId) {
   const [examsResult, subjectsResult] = await Promise.all([
     examsDb.query(`
       SELECT e.id, e.kind, e.exam_date, e.title, e.class_label, e.school_label, e.created_at,
+             e.experience_mood,
              u.full_name AS created_by_name
       FROM dbo.MockExams e
       LEFT JOIN dbo.Users u ON u.id = e.created_by_user_id
@@ -455,6 +602,8 @@ async function getMockExamDetailForStudent(studentId, mockExamId) {
   })
   const examResult = await requestDb.query(`
     SELECT e.id, e.kind, e.exam_date, e.title, e.class_label, e.school_label, e.created_at,
+           e.experience_mood, e.experience_learning_note, e.experience_next_action,
+           e.experience_previous_action_review, e.experience_previous_mock_exam_id, e.experience_updated_at,
            u.full_name AS created_by_name
     FROM dbo.MockExams e
     LEFT JOIN dbo.Users u ON u.id = e.created_by_user_id
@@ -463,13 +612,20 @@ async function getMockExamDetailForStudent(studentId, mockExamId) {
   const examRecord = examResult.recordset[0]
   if (!examRecord) return null
 
-  const [subjectsDb, mockQuestionsDb, legacyQuestionsDb, topicComparisonsDb] = await Promise.all([
+  const [subjectsDb, mockQuestionsDb, legacyQuestionsDb, topicComparisonsDb, experienceTagsDb] = await Promise.all([
+    withRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }),
     withRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }),
     withRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }),
     withRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }),
     withRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }),
   ])
-  const [subjectsResult, mockQuestionsResult, legacyQuestionsResult, topicComparisonsResult] = await Promise.all([
+  const [
+    subjectsResult,
+    mockQuestionsResult,
+    legacyQuestionsResult,
+    topicComparisonsResult,
+    experienceTagsResult,
+  ] = await Promise.all([
     subjectsDb.query(`
       SELECT s.id, s.mock_exam_id, s.subject_id, s.subject_name, s.total_questions,
              s.correct_count, s.wrong_count, s.blank_count,
@@ -514,6 +670,10 @@ async function getMockExamDetailForStudent(studentId, mockExamId) {
       INNER JOIN dbo.MockExamSubjects s ON s.id = tc.mock_exam_subject_id
       WHERE s.mock_exam_id = @mockExamId
       ORDER BY tc.mock_exam_subject_id, tc.order_no ASC;
+    `),
+    // Deneyim etiketleri (çoklu seçim) — bkz. EXPERIENCE_TAG_CODES.
+    experienceTagsDb.query(`
+      SELECT tag_code FROM dbo.MockExamExperienceTags WHERE mock_exam_id = @mockExamId ORDER BY tag_code ASC;
     `),
   ])
 
@@ -561,6 +721,12 @@ async function getMockExamDetailForStudent(studentId, mockExamId) {
     questions: questionsBySubject.get(subject.id) || [],
     topicComparisons: topicComparisonsBySubject.get(subject.id) || [],
   }))
+  exam.experienceTags = experienceTagsResult.recordset.map((row) => row.tag_code)
+  exam.experienceLearningNote = examRecord.experience_learning_note || undefined
+  exam.experienceNextAction = examRecord.experience_next_action || undefined
+  exam.experiencePreviousActionReview = examRecord.experience_previous_action_review || undefined
+  exam.experienceUpdatedAt = examRecord.experience_updated_at || undefined
+  exam.previousGoalReview = await resolvePreviousGoalReview(studentId, examRecord)
   return exam
 }
 
@@ -854,6 +1020,87 @@ async function updateMockExamHandler(request) {
   }
 }
 
+// Sınav Deneyimi Analizi: mevcut sonuç güncelleme akışından (updateMockExamHandler) tamamen
+// ayrı bir uç — sonuç formuna hiç dokunmadan sadece deneyim alanlarını yazar. Bilinçli olarak
+// daha kısıtlı bir yetki modeli uygular: requireStudentContext hem öğrenci hem veliye izin
+// verse de, burada yalnızca öğrenci (actorRole === 'ogrenci') yazabilir — veli/öğretmen
+// salt-okuma.
+async function updateMockExamExperienceHandler(request) {
+  try {
+    const payload = await request.json().catch(() => null)
+    const { error, studentId, actorRole } = await requireStudentContext(request, { studentId: payload?.studentId })
+    if (error) return error
+    if (actorRole !== 'ogrenci') {
+      return json(403, { error: 'Bu alanı yalnızca öğrenci düzenleyebilir.' })
+    }
+
+    const mockExamId = request.params.mockExamId
+    const ownerDb = await withRequest({
+      mockExamId: { type: sql.UniqueIdentifier, value: mockExamId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const ownerResult = await ownerDb.query(`
+      SELECT id, experience_previous_action_review, experience_previous_mock_exam_id
+      FROM dbo.MockExams WHERE id = @mockExamId AND student_id = @studentId;
+    `)
+    const existing = ownerResult.recordset[0]
+    if (!existing) return json(404, { error: 'Deneme bulunamadı.' })
+
+    const check = normalizeExperiencePayload(payload)
+    if (check.error) return json(400, { error: check.error })
+    const { mood, tags, learningNote, nextAction, previousActionReview } = check.value
+
+    // "Önceki hedef" eşleştirmesi ilk kez cevaplanıyorsa taze hesaplanıp dondurulur; zaten
+    // cevaplanmışsa (existing.experience_previous_action_review dolu) hangi denemeye karşılık
+    // geldiği değişmez, sadece review string'i güncellenebilir.
+    let previousMockExamId = existing.experience_previous_mock_exam_id || null
+    if (previousActionReview && !existing.experience_previous_action_review) {
+      const pending = await findPendingPreviousGoal(studentId, mockExamId)
+      if (!pending) {
+        return json(400, { error: 'Değerlendirilecek bir önceki hedef bulunamadı.' })
+      }
+      previousMockExamId = pending.id
+    }
+
+    await withTransaction(async (makeRequest) => {
+      await makeRequest({
+        mockExamId: { type: sql.UniqueIdentifier, value: mockExamId },
+        mood: { type: sql.NVarChar(30), value: mood },
+        learningNote: { type: sql.NVarChar(500), value: learningNote },
+        nextAction: { type: sql.NVarChar(300), value: nextAction },
+        previousActionReview: { type: sql.NVarChar(20), value: previousActionReview },
+        previousMockExamId: { type: sql.UniqueIdentifier, value: previousMockExamId },
+      }).query(`
+        UPDATE dbo.MockExams
+        SET experience_mood = @mood,
+            experience_learning_note = @learningNote,
+            experience_next_action = @nextAction,
+            experience_previous_action_review = @previousActionReview,
+            experience_previous_mock_exam_id = @previousMockExamId,
+            experience_updated_at = SYSUTCDATETIME()
+        WHERE id = @mockExamId;
+      `)
+
+      await makeRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }).query(`
+        DELETE FROM dbo.MockExamExperienceTags WHERE mock_exam_id = @mockExamId;
+      `)
+      for (const tag of tags) {
+        await makeRequest({
+          mockExamId: { type: sql.UniqueIdentifier, value: mockExamId },
+          tagCode: { type: sql.NVarChar(50), value: tag },
+        }).query(`
+          INSERT INTO dbo.MockExamExperienceTags (mock_exam_id, tag_code) VALUES (@mockExamId, @tagCode);
+        `)
+      }
+    })
+
+    const exam = await getMockExamDetailForStudent(studentId, mockExamId)
+    return json(200, { mockExam: exam })
+  } catch (error) {
+    return handleError(error, 'updateMockExamExperienceHandler', 'Deneyim kaydedilemedi.')
+  }
+}
+
 async function deleteMockExamHandler(request) {
   try {
     const payload = await request.json().catch(() => null)
@@ -872,6 +1119,12 @@ async function deleteMockExamHandler(request) {
       await makeRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }).query(`
         DELETE FROM dbo.WrongQuestions
         WHERE mock_exam_subject_id IN (SELECT id FROM dbo.MockExamSubjects WHERE mock_exam_id = @mockExamId);
+      `)
+      // experience_previous_mock_exam_id kendine referans FK'si NO ACTION (SQL Server kendine
+      // referansta SET NULL'a izin vermiyor) — bu denemeye referans veren satırları elle NULL'la.
+      await makeRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }).query(`
+        UPDATE dbo.MockExams SET experience_previous_mock_exam_id = NULL
+        WHERE experience_previous_mock_exam_id = @mockExamId;
       `)
       await makeRequest({ mockExamId: { type: sql.UniqueIdentifier, value: mockExamId } }).query(`
         DELETE FROM dbo.MockExams WHERE id = @mockExamId;
@@ -1107,6 +1360,95 @@ async function getMockExamTopicStatsHandler(request) {
   }
 }
 
+// "Deneme Gelişimi" — son GROWTH_SUMMARY_WINDOW denemedeki (kind bağımsız, kronolojik) deneyim
+// verisinin ham sayımı: duygu dağılımı, etiket sıklığı, "önceki hedefi uyguladın mı" cevap
+// dağılımı. Yalnızca sayı döner — cümle/yorum üretmez (bkz. frontend mockExamGrowthText.js);
+// bu ayrım "AI yorumu yok, sadece deterministik sayım" ürün kısıtını korur.
+// restrictSubjectId/restrictSubjectName, computeMockExamTopicStats ile aynı öğretmen filtresini
+// uygular: öğretmen kendi takip ettiği ders dışındaki deneyim verisini görmemeli.
+async function computeMockExamGrowthSummary(studentId, { restrictSubjectId, restrictSubjectName } = {}) {
+  const db = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
+  const result = await db.query(`
+    SELECT e.id, e.kind, e.experience_mood, e.experience_previous_action_review,
+           COALESCE(e.exam_date, CAST(e.created_at AS date)) AS sort_date, e.created_at,
+           firstSubject.subject_id, firstSubject.subject_name
+    FROM dbo.MockExams e
+    OUTER APPLY (
+      SELECT TOP 1 s.subject_id, s.subject_name
+      FROM dbo.MockExamSubjects s
+      WHERE s.mock_exam_id = e.id
+      ORDER BY s.id
+    ) firstSubject
+    WHERE e.student_id = @studentId AND e.experience_mood IS NOT NULL
+    ORDER BY sort_date DESC, e.created_at DESC;
+  `)
+
+  const normalizedRestrictName = restrictSubjectName ? normalizeSubjectName(restrictSubjectName) : null
+  const restricted = Boolean(restrictSubjectId || normalizedRestrictName)
+  const rows = result.recordset.filter((row) => {
+    if (row.kind === 'genel' || !restricted) return true
+    if (
+      restrictSubjectId &&
+      row.subject_id &&
+      String(row.subject_id).toLowerCase() === String(restrictSubjectId).toLowerCase()
+    ) {
+      return true
+    }
+    return normalizedRestrictName ? normalizeSubjectName(row.subject_name) === normalizedRestrictName : false
+  })
+
+  const windowRows = rows.slice(0, GROWTH_SUMMARY_WINDOW)
+  const examCount = windowRows.length
+
+  const moodCounts = {}
+  const previousActionReviewCounts = { evet: 0, kismen: 0, hayir: 0 }
+  for (const row of windowRows) {
+    moodCounts[row.experience_mood] = (moodCounts[row.experience_mood] || 0) + 1
+    if (row.experience_previous_action_review) {
+      previousActionReviewCounts[row.experience_previous_action_review] =
+        (previousActionReviewCounts[row.experience_previous_action_review] || 0) + 1
+    }
+  }
+
+  let tagCounts = []
+  if (windowRows.length) {
+    const bindings = {}
+    const placeholders = windowRows.map((row, index) => {
+      const key = `examId${index}`
+      bindings[key] = { type: sql.UniqueIdentifier, value: row.id }
+      return `@${key}`
+    })
+    const tagsDb = await withRequest(bindings)
+    const tagsResult = await tagsDb.query(`
+      SELECT tag_code, COUNT(*) AS cnt
+      FROM dbo.MockExamExperienceTags
+      WHERE mock_exam_id IN (${placeholders.join(', ')})
+      GROUP BY tag_code
+      ORDER BY cnt DESC, tag_code ASC;
+    `)
+    tagCounts = tagsResult.recordset.map((row) => ({ code: row.tag_code, count: row.cnt }))
+  }
+
+  return {
+    examCount,
+    minExams: GROWTH_SUMMARY_MIN_EXAMS,
+    windowSize: GROWTH_SUMMARY_WINDOW,
+    moodCounts,
+    tagCounts,
+    previousActionReviewCounts,
+  }
+}
+
+async function getMockExamGrowthSummaryHandler(request) {
+  try {
+    const { error, studentId } = await requireStudentContext(request)
+    if (error) return error
+    return json(200, await computeMockExamGrowthSummary(studentId))
+  } catch (error) {
+    return handleError(error, 'getMockExamGrowthSummaryHandler', 'Deneme gelişimi yüklenemedi.')
+  }
+}
+
 /* ------------------------------------------------------------------ öğretmen salt-okuma uçları */
 
 async function listTeacherMockExamsHandler(request) {
@@ -1181,6 +1523,28 @@ async function getTeacherMockExamTopicStatsHandler(request) {
     return json(200, stats)
   } catch (error) {
     return handleError(error, 'getTeacherMockExamTopicStatsHandler', 'Konu analizi yüklenemedi.')
+  }
+}
+
+async function getTeacherMockExamGrowthSummaryHandler(request) {
+  try {
+    const { error, studentId, subjectId } = await requireTeacherStudentContext(request)
+    if (error) return error
+
+    let subjectName = null
+    if (subjectId) {
+      const subjectDb = await withRequest({ subjectId: { type: sql.UniqueIdentifier, value: subjectId } })
+      const subjectResult = await subjectDb.query(`SELECT name FROM dbo.Subjects WHERE id = @subjectId;`)
+      subjectName = subjectResult.recordset[0]?.name || null
+    }
+
+    const summary = await computeMockExamGrowthSummary(studentId, {
+      restrictSubjectId: subjectId,
+      restrictSubjectName: subjectName,
+    })
+    return json(200, summary)
+  } catch (error) {
+    return handleError(error, 'getTeacherMockExamGrowthSummaryHandler', 'Deneme gelişimi yüklenemedi.')
   }
 }
 
@@ -1281,7 +1645,12 @@ module.exports = {
   MOCK_EXAM_KINDS,
   GENEL_DENEME_TEMPLATE,
   BRANS_QUESTION_COUNT,
+  EXPERIENCE_MOODS,
+  EXPERIENCE_TAG_CODES,
+  EXPERIENCE_REVIEW_ANSWERS,
   validateMockExamPayload,
+  normalizeExperiencePayload,
+  pickEligiblePreviousExam,
   computeNet,
   examVisibleToTeacher,
   listMockExamsForStudent,
@@ -1289,15 +1658,18 @@ module.exports = {
   getMockExamHandler,
   createMockExamHandler,
   updateMockExamHandler,
+  updateMockExamExperienceHandler,
   deleteMockExamHandler,
   addMockExamPhotoHandler,
   addMockExamQuestionPhotoHandler,
   deleteMockExamPhotoHandler,
   getMockExamTopicSuggestionsHandler,
   getMockExamTopicStatsHandler,
+  getMockExamGrowthSummaryHandler,
   listTeacherMockExamsHandler,
   getTeacherMockExamHandler,
   getTeacherMockExamPhotoHandler,
   getTeacherMockExamTopicStatsHandler,
+  getTeacherMockExamGrowthSummaryHandler,
   getTeacherClassMockExamAnalysisHandler,
 }
