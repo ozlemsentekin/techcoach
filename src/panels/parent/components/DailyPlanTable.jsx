@@ -301,6 +301,32 @@ function StatusPill({ status }) {
   )
 }
 
+function formatCompletionTimestamp(isoString) {
+  if (!isoString) return null
+  const date = new Date(isoString)
+  if (Number.isNaN(date.getTime())) return null
+
+  const datePart = date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })
+  const timePart = date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+  return `${datePart} · ${timePart}`
+}
+
+function getCompletionTimestampLabel(task) {
+  if (task.status !== 'tamamlandi') return null
+  return formatCompletionTimestamp(task.completedAt)
+}
+
+function CompletionTimestampNote({ label }) {
+  if (!label) return null
+
+  return (
+    <span className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-panel-text-muted">
+      <CalendarDays size={11} className="shrink-0" aria-hidden="true" />
+      Tamamlandı: {label}
+    </span>
+  )
+}
+
 function DailyFlowFilter({ activeFilter, counts, onChange }) {
   return (
     <div
@@ -709,6 +735,7 @@ function TaskAgendaItem({
         <div className="mt-3">
           <TaskDetail task={task} />
         </div>
+        <CompletionTimestampNote label={getCompletionTimestampLabel(task)} />
         {canComplete ? (
           <button
             type="button"
