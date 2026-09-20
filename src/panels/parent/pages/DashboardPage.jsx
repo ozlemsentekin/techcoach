@@ -22,7 +22,6 @@ const AddTaskDrawer = lazy(() => import('../components/AddTaskDrawer'))
 const TaskAnswerSheetModal = lazy(() => import('../../student/components/TaskAnswerSheetModal'))
 const TaskCompletionFlow = lazy(() => import('../components/TaskCompletionFlow'))
 
-const date = todayISODate()
 const SELECTED_STUDENT_STORAGE_KEY = 'tc.parent.selectedStudentId'
 const LOW_PRIORITY_BALANCE_WARNINGS = new Set(['Mola eklenmemiş', 'Serbest zaman yok'])
 
@@ -184,6 +183,10 @@ function TodaySidePanel({ requests, warnings, onApprove, onSuggestOther, onPostp
 export default function DashboardPage() {
   const { authUser } = useAuth()
   const { restricted: billingRestricted, promptPayment } = useBillingGate()
+  // Sekme gece yarısını geçerek açık kalabilir; bu yüzden "bugün" sabit bir modül
+  // değişkeni değil, gün değiştiğinde polling/visibilitychange ile tazelenen bir
+  // state (aksi halde dashboard eski güne takılı kalır, bkz. handleVisibleRefresh).
+  const [date, setDate] = useState(() => todayISODate())
   const [students, setStudents] = useState(null)
   // Son seçilen çocuğu hatırla: sayfa açılır açılmaz görev sorgusu bununla başlar,
   // /api/parent/students yanıtını beklemeden (kritik yol 2 seri istekten 1'e iner).
@@ -291,13 +294,20 @@ export default function DashboardPage() {
     return () => {
       ignore = true
     }
-  }, [selectedStudentId])
+  }, [selectedStudentId, date])
 
   // Mola süresi dolduğunda backend'i sistem olarak otomatik tamamlar (bkz. tasks.js
   // autoCompleteExpiredBreaks); burada periyodik yenileme yalnızca gün özeti ve
-  // akışın taze kalmasını sağlar.
+  // akışın taze kalmasını sağlar. Sekme gece yarısını geçerek açık kaldıysa `date`
+  // state'i burada tazelenir; değiştiyse yukarıdaki fetch effect'i yeni günle yeniden
+  // tetiklenir (bu tick'te eski günle tekrar sorgu atmayız).
   useVisiblePolling(() => {
     if (!selectedStudentId) return
+    const freshDate = todayISODate()
+    if (freshDate !== date) {
+      setDate(freshDate)
+      return
+    }
     getTasksForDate(date, { studentId: selectedStudentId })
       .then((tasksData) => setTasks(tasksData))
       .catch(() => {})
@@ -347,7 +357,7 @@ export default function DashboardPage() {
       [...tasks, ...buildTeacherLessonTasksForDate(teacherLessonSchedule, date)].filter(
         (task) => !isEndedPrivateLessonForToday(task, date),
       ),
-    [tasks, teacherLessonSchedule],
+    [tasks, teacherLessonSchedule, date],
   )
 
   // "Biriken Görev" akışı: hâlâ bekleyen gecikmiş görevler + tarihi bugün olmasa da bugün tamamlananlar.
@@ -358,7 +368,7 @@ export default function DashboardPage() {
 
   const getExistingTasksForDrawer = useCallback(
     (targetDate) => (targetDate === date ? tasks : getTasksForDate(targetDate, { studentId: selectedStudentId })),
-    [tasks, selectedStudentId],
+    [tasks, selectedStudentId, date],
   )
 
   const handleSaveDrawerTask = async (taskData) => {
@@ -418,7 +428,7 @@ export default function DashboardPage() {
         setCompletedBacklogTasks(backlogAndCompleted.completedOn)
       })
       .catch(() => {})
-  }, [selectedStudentId])
+  }, [selectedStudentId, date])
 
   const handleCompleteTask = async (task) => {
     if (resolveCompletionFlow(task) === 'direct') {
