@@ -917,7 +917,7 @@ export default function AdminUsersPage() {
           title="Üyeyi Sil"
           description={
             deletingUserError ||
-            `"${deletingUser.fullName}" adlı üyeyi silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`
+            `"${deletingUser.fullName}" adlı üyeyi silmek istediğinize emin misiniz? Varsa bağlı öğrenci hesabı ve tüm ilişkili kayıtlar (ödev, ders programı, deneme sınavı sonuçları, hata defteri vb.) da birlikte silinir. Bu işlem geri alınamaz.`
           }
           confirmLabel={deletingUserLoading ? 'Siliniyor...' : 'Sil'}
           cancelLabel="Vazgeç"

@@ -12,6 +12,7 @@ const {
 const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
 const { sanitizeUser: sanitizeSessionUser } = require('./auth')
 const { cancelSubscriptionsForUser } = require('./entitlements')
+const { cascadeDeleteUserAndDependents } = require('./userCascadeDelete')
 
 async function requireAdmin(request) {
   const token = readSessionToken(request)
@@ -384,18 +385,32 @@ async function deleteUserHandler(request) {
 
     // Entitlements/TeacherEntitlements satırları kullanıcının kendi hesap hakkı durumudur (1:1,
     // PK = kullanıcı id'si) — gerçek bir bağımlılık değil, o yüzden kullanıcıyla birlikte silinir.
-    // Bunun dışında kalan FK'lar (öğrenci verisi, ödev, ders programı vb.) hâlâ silmeyi engeller.
-    const rowsAffected = await withTransaction(async (requestInTransaction) => {
+    // Önce tek satırlık basit silme denenir; öğrenci/ödev/ders programı vb. bağlı kayıtlar
+    // yüzünden FK constraint'e (547) takılırsa, admin "Sil"e basarak bu kayıtların da
+    // silinmesini onaylamış sayılır — cascadeDeleteUserAndDependents ile dbo.Users(id)'e
+    // bağlı TÜM satırlar (ve varsa bu velinin öğrenci hesapları) aynı transaction içinde
+    // temizlenip silme tekrar denenir.
+    const { rowsAffected, cascaded } = await withTransaction(async (requestInTransaction) => {
       await requestInTransaction({ id: { type: sql.UniqueIdentifier, value: userId } }).query(`
         DELETE FROM dbo.Entitlements WHERE parent_id = @id;
       `)
       await requestInTransaction({ id: { type: sql.UniqueIdentifier, value: userId } }).query(`
         DELETE FROM dbo.TeacherEntitlements WHERE teacher_id = @id;
       `)
-      const result = await requestInTransaction({ id: { type: sql.UniqueIdentifier, value: userId } }).query(`
-        DELETE FROM dbo.Users WHERE id = @id;
-      `)
-      return result.rowsAffected[0]
+
+      try {
+        const result = await requestInTransaction({ id: { type: sql.UniqueIdentifier, value: userId } }).query(`
+          DELETE FROM dbo.Users WHERE id = @id;
+        `)
+        return { rowsAffected: result.rowsAffected[0], cascaded: false }
+      } catch (err) {
+        if (err.number !== 547) {
+          throw err
+        }
+      }
+
+      const cascadeResult = await cascadeDeleteUserAndDependents(requestInTransaction, userId)
+      return { rowsAffected: cascadeResult.usersDeleted, cascaded: true }
     })
 
     if (!rowsAffected) {
@@ -404,6 +419,7 @@ async function deleteUserHandler(request) {
 
     return json(200, {
       success: true,
+      ...(cascaded ? { cascaded: true } : {}),
       ...(subscriptionCancellation.failedReferenceCodes.length
         ? { subscriptionWarning: 'Kullanıcı silindi ancak bazı iyzico abonelikleri iptal edilemedi, iyzico panelinden elle kontrol edin.' }
         : {}),
