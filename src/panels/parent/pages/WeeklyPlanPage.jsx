@@ -468,6 +468,7 @@ export default function WeeklyPlanPage() {
           <WeeklyPlannerGrid
             weekDates={weekDates}
             tasksByDate={filteredTasksByDate}
+            isFiltering={isFiltering}
             lessonSchedule={lessonSchedule}
             schoolSchedule={schoolSchedule}
             schoolHolidays={schoolHolidays}

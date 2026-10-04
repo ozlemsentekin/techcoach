@@ -1127,6 +1127,7 @@ function GradeSummaryBar({ task, onViewAnswerSheet }) {
 export default function WeeklyPlannerGrid({
   weekDates,
   tasksByDate,
+  isFiltering,
   lessonSchedule,
   lessonScheduleExceptions,
   otherLessonSchedule,
@@ -1167,6 +1168,9 @@ export default function WeeklyPlannerGrid({
   // varsayılanı tersine çevirdi" anlamına gelir; backlog günde toggle açmak değil kapatmak demektir.
   const dayHasBacklogTask = (date) => (tasksByDate?.[date] || []).some((task) => isBacklogTask(task))
   const isPastDayExpandedForDate = (date) => {
+    // Arama/filtre aktifken ve o günde eşleşen bir görev varsa, kullanıcının manuel
+    // kapatmasını beklemeden günü otomatik göster.
+    if (isFiltering && (tasksByDate?.[date] || []).length > 0) return true
     const backlog = dayHasBacklogTask(date)
     return expandedPastDates.has(date) ? !backlog : backlog
   }
