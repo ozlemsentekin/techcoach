@@ -127,6 +127,36 @@ function DateField({ value, onChange, placeholder }) {
   )
 }
 
+// Sınav genelindeki "4/22" biçimindeki sıra: kaçıncı + kaç kişi içinde, iki ayrı sayı kutusu.
+function RankPairField({ label, rank, total, onRankChange, onTotalChange }) {
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-panel-text-muted">{label}</span>
+      <div className="flex items-center gap-1">
+        <input
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          value={rank}
+          placeholder="Sıra"
+          onChange={(event) => onRankChange(event.target.value.replace(/[^0-9]/g, ''))}
+          className={cn(FIELD_CLASS, 'p-1.5 text-center text-xs tabular-nums')}
+        />
+        <span className="text-xs text-panel-text-muted">/</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          value={total}
+          placeholder="Toplam"
+          onChange={(event) => onTotalChange(event.target.value.replace(/[^0-9]/g, ''))}
+          className={cn(FIELD_CLASS, 'p-1.5 text-center text-xs tabular-nums')}
+        />
+      </div>
+    </label>
+  )
+}
+
 // Puan/sıra/ortalama girişi: serbest metin olarak tutulur (yazarken virgülü noktaya çevirir),
 // sayıya çevirme yalnızca gönderim anında yapılır — yazarken "86." gibi ara durumlar bozulmaz.
 function DetailField({ label, value, onChange }) {
@@ -459,12 +489,26 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
   const [topicSuggestions, setTopicSuggestions] = useState({}) // subjectName -> string[]
   const [classLabel, setClassLabel] = useState(existing?.classLabel || '')
   const [schoolLabel, setSchoolLabel] = useState(existing?.schoolLabel || '')
+  // Sınav genelindeki (ders bazlı değil) "4/22" biçimindeki şube/okul/Türkiye sırası — yalnızca
+  // Genel Deneme'de anlamlı, sınav kurumu raporunun üst özet satırından elle girilir.
+  const [overallRanks, setOverallRanks] = useState(() => ({
+    branchRank: existing?.overallBranchRank != null ? String(existing.overallBranchRank) : '',
+    branchRankTotal: existing?.overallBranchRankTotal != null ? String(existing.overallBranchRankTotal) : '',
+    schoolRank: existing?.overallSchoolRank != null ? String(existing.overallSchoolRank) : '',
+    schoolRankTotal: existing?.overallSchoolRankTotal != null ? String(existing.overallSchoolRankTotal) : '',
+    turkeyRank: existing?.overallTurkeyRank != null ? String(existing.overallTurkeyRank) : '',
+    turkeyRankTotal: existing?.overallTurkeyRankTotal != null ? String(existing.overallTurkeyRankTotal) : '',
+  }))
+  const patchOverallRank = (key, value) => setOverallRanks((prev) => ({ ...prev, [key]: value }))
   // Puan/sıra/ortalama: sınav kurumu raporundan (PDF/portal) elle girilen isteğe bağlı detay —
   // düzenlemede bu alanlardan biri doluysa varsayılan olarak açık gelir.
   const [showDetail, setShowDetail] = useState(
     () =>
       Boolean(existing?.classLabel) ||
       Boolean(existing?.schoolLabel) ||
+      Boolean(existing?.overallBranchRank) ||
+      Boolean(existing?.overallSchoolRank) ||
+      Boolean(existing?.overallTurkeyRank) ||
       Boolean(existing?.subjects?.some((s) => s.score != null)),
   )
   // Konu grubu karşılaştırması: ders geneli Detay'dan bağımsız isteğe bağlı bölüm —
@@ -665,6 +709,12 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
       title: title.trim() || undefined,
       classLabel: showDetail ? classLabel.trim() || undefined : undefined,
       schoolLabel: showDetail ? schoolLabel.trim() || undefined : undefined,
+      overallBranchRank: showDetail && kind === 'genel' ? toNumOrUndef(overallRanks.branchRank) : undefined,
+      overallBranchRankTotal: showDetail && kind === 'genel' ? toNumOrUndef(overallRanks.branchRankTotal) : undefined,
+      overallSchoolRank: showDetail && kind === 'genel' ? toNumOrUndef(overallRanks.schoolRank) : undefined,
+      overallSchoolRankTotal: showDetail && kind === 'genel' ? toNumOrUndef(overallRanks.schoolRankTotal) : undefined,
+      overallTurkeyRank: showDetail && kind === 'genel' ? toNumOrUndef(overallRanks.turkeyRank) : undefined,
+      overallTurkeyRankTotal: showDetail && kind === 'genel' ? toNumOrUndef(overallRanks.turkeyRankTotal) : undefined,
       subjects: subjectRows.map((row) => {
         const subjectId = row.subjectId || matchSubjectId(subjects, row.subjectName)
         if (row.questionsMode) {
@@ -842,6 +892,31 @@ function ExamDrawer({ existing, initialKind, studentId, fetchTopicSuggestions, o
                       placeholder="Okul adı (isteğe bağlı)"
                       onChange={(event) => setSchoolLabel(event.target.value)}
                       className={cn(FIELD_CLASS, 'p-2.5 text-sm')}
+                    />
+                  </div>
+                ) : null}
+                {showDetail && kind === 'genel' ? (
+                  <div className="grid grid-cols-3 gap-2 rounded-lg bg-panel-surface-soft/60 p-2">
+                    <RankPairField
+                      label="Genel Şube Sıra"
+                      rank={overallRanks.branchRank}
+                      total={overallRanks.branchRankTotal}
+                      onRankChange={(v) => patchOverallRank('branchRank', v)}
+                      onTotalChange={(v) => patchOverallRank('branchRankTotal', v)}
+                    />
+                    <RankPairField
+                      label="Genel Okul Sıra"
+                      rank={overallRanks.schoolRank}
+                      total={overallRanks.schoolRankTotal}
+                      onRankChange={(v) => patchOverallRank('schoolRank', v)}
+                      onTotalChange={(v) => patchOverallRank('schoolRankTotal', v)}
+                    />
+                    <RankPairField
+                      label="Genel Türkiye Sıra"
+                      rank={overallRanks.turkeyRank}
+                      total={overallRanks.turkeyRankTotal}
+                      onRankChange={(v) => patchOverallRank('turkeyRank', v)}
+                      onTotalChange={(v) => patchOverallRank('turkeyRankTotal', v)}
                     />
                   </div>
                 ) : null}
@@ -1842,6 +1917,34 @@ function ExamCard({
               />
             ))}
           </div>
+          {exam.overallBranchRank != null || exam.overallSchoolRank != null || exam.overallTurkeyRank != null ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-panel-surface-soft/60 p-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">
+                Genel Sınav Sırası
+              </span>
+              {exam.overallBranchRank != null ? (
+                <StatPill
+                  label="Şube"
+                  value={`${exam.overallBranchRank}/${exam.overallBranchRankTotal}`}
+                  tone="bg-panel-lilac-soft text-panel-lilac"
+                />
+              ) : null}
+              {exam.overallSchoolRank != null ? (
+                <StatPill
+                  label="Okul"
+                  value={`${exam.overallSchoolRank}/${exam.overallSchoolRankTotal}`}
+                  tone="bg-panel-blue-soft text-panel-blue"
+                />
+              ) : null}
+              {exam.overallTurkeyRank != null ? (
+                <StatPill
+                  label="Türkiye"
+                  value={`${exam.overallTurkeyRank}/${exam.overallTurkeyRankTotal}`}
+                  tone="bg-panel-sage-soft text-panel-sage"
+                />
+              ) : null}
+            </div>
+          ) : null}
           <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
             <ExamComparisonChart exam={exam} />
             <TopicComparisonChart exam={exam} />

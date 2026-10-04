@@ -109,6 +109,23 @@ function optionalPositiveInt(value) {
   return { value: n }
 }
 
+// Sınav genelindeki (ders bazlı değil) "4/22" biçimindeki sıra bilgisi: kaçıncı (rank) + kaç
+// kişi içinde (total). İkisi de isteğe bağlıdır ama biri girilmişse ikisi de girilmeli ve
+// total, rank'tan küçük olamaz.
+function normalizeRankPair(rankRaw, totalRaw, label) {
+  const rank = optionalPositiveInt(rankRaw)
+  if (rank.error) return { error: `${label} geçersiz.` }
+  const total = optionalPositiveInt(totalRaw)
+  if (total.error) return { error: `${label} (toplam) geçersiz.` }
+  if ((rank.value === null) !== (total.value === null)) {
+    return { error: `${label}: sıra ve toplam birlikte girilmelidir.` }
+  }
+  if (rank.value !== null && total.value !== null && total.value < rank.value) {
+    return { error: `${label}: toplam, sıradan küçük olamaz.` }
+  }
+  return { value: { rank: rank.value, total: total.value } }
+}
+
 // Sınav kurumu raporlarındaki (PDF/portal) ders bazlı puan + şube/okul/genel sıra + sınıf/okul/
 // Türkiye ortalaması — "Detay" bölümünden isteğe bağlı girilir.
 function normalizeComparisonStats(row) {
@@ -355,6 +372,14 @@ function validateMockExamPayload(payload) {
   const title = typeof payload?.title === 'string' ? payload.title.trim().slice(0, 200) : null
   const classLabel = typeof payload?.classLabel === 'string' ? payload.classLabel.trim().slice(0, 50) || null : null
   const schoolLabel = typeof payload?.schoolLabel === 'string' ? payload.schoolLabel.trim().slice(0, 200) || null : null
+
+  const overallBranch = normalizeRankPair(payload?.overallBranchRank, payload?.overallBranchRankTotal, 'Genel şube sırası')
+  if (overallBranch.error) return { error: overallBranch.error }
+  const overallSchool = normalizeRankPair(payload?.overallSchoolRank, payload?.overallSchoolRankTotal, 'Genel okul sırası')
+  if (overallSchool.error) return { error: overallSchool.error }
+  const overallTurkey = normalizeRankPair(payload?.overallTurkeyRank, payload?.overallTurkeyRankTotal, 'Genel Türkiye sırası')
+  if (overallTurkey.error) return { error: overallTurkey.error }
+
   const rawSubjects = Array.isArray(payload?.subjects) ? payload.subjects : []
 
   const normalizeCounts = (row, total) => {
@@ -498,7 +523,22 @@ function validateMockExamPayload(payload) {
     ]
   }
 
-  return { value: { kind, examDate, title, classLabel, schoolLabel, subjects } }
+  return {
+    value: {
+      kind,
+      examDate,
+      title,
+      classLabel,
+      schoolLabel,
+      overallBranchRank: overallBranch.value.rank,
+      overallBranchRankTotal: overallBranch.value.total,
+      overallSchoolRank: overallSchool.value.rank,
+      overallSchoolRankTotal: overallSchool.value.total,
+      overallTurkeyRank: overallTurkey.value.rank,
+      overallTurkeyRankTotal: overallTurkey.value.total,
+      subjects,
+    },
+  }
 }
 
 function sanitizeSubjectRow(record) {
@@ -541,6 +581,12 @@ function buildExam(examRecord, subjectRows) {
     title: examRecord.title || undefined,
     classLabel: examRecord.class_label || undefined,
     schoolLabel: examRecord.school_label || undefined,
+    overallBranchRank: examRecord.overall_branch_rank ?? undefined,
+    overallBranchRankTotal: examRecord.overall_branch_rank_total ?? undefined,
+    overallSchoolRank: examRecord.overall_school_rank ?? undefined,
+    overallSchoolRankTotal: examRecord.overall_school_rank_total ?? undefined,
+    overallTurkeyRank: examRecord.overall_turkey_rank ?? undefined,
+    overallTurkeyRankTotal: examRecord.overall_turkey_rank_total ?? undefined,
     createdByName: examRecord.created_by_name || undefined,
     createdAt: examRecord.created_at,
     experienceMood: examRecord.experience_mood || undefined,
@@ -563,6 +609,9 @@ async function listMockExamsForStudent(studentId) {
   const [examsResult, subjectsResult] = await Promise.all([
     examsDb.query(`
       SELECT e.id, e.kind, e.exam_date, e.title, e.class_label, e.school_label, e.created_at,
+             e.overall_branch_rank, e.overall_branch_rank_total,
+             e.overall_school_rank, e.overall_school_rank_total,
+             e.overall_turkey_rank, e.overall_turkey_rank_total,
              e.experience_mood,
              u.full_name AS created_by_name
       FROM dbo.MockExams e
@@ -602,6 +651,9 @@ async function getMockExamDetailForStudent(studentId, mockExamId) {
   })
   const examResult = await requestDb.query(`
     SELECT e.id, e.kind, e.exam_date, e.title, e.class_label, e.school_label, e.created_at,
+           e.overall_branch_rank, e.overall_branch_rank_total,
+           e.overall_school_rank, e.overall_school_rank_total,
+           e.overall_turkey_rank, e.overall_turkey_rank_total,
            e.experience_mood, e.experience_learning_note, e.experience_next_action,
            e.experience_previous_action_review, e.experience_previous_mock_exam_id, e.experience_updated_at,
            u.full_name AS created_by_name
@@ -794,7 +846,20 @@ async function createMockExamHandler(request) {
 
     const check = validateMockExamPayload(payload)
     if (check.error) return json(400, { error: check.error })
-    const { kind, examDate, title, classLabel, schoolLabel, subjects } = check.value
+    const {
+      kind,
+      examDate,
+      title,
+      classLabel,
+      schoolLabel,
+      overallBranchRank,
+      overallBranchRankTotal,
+      overallSchoolRank,
+      overallSchoolRankTotal,
+      overallTurkeyRank,
+      overallTurkeyRankTotal,
+      subjects,
+    } = check.value
 
     const mockExamId = await withTransaction(async (makeRequest) => {
       const examResult = await makeRequest({
@@ -804,11 +869,26 @@ async function createMockExamHandler(request) {
         title: { type: sql.NVarChar(200), value: title },
         classLabel: { type: sql.NVarChar(50), value: classLabel },
         schoolLabel: { type: sql.NVarChar(200), value: schoolLabel },
+        overallBranchRank: { type: sql.Int, value: overallBranchRank },
+        overallBranchRankTotal: { type: sql.Int, value: overallBranchRankTotal },
+        overallSchoolRank: { type: sql.Int, value: overallSchoolRank },
+        overallSchoolRankTotal: { type: sql.Int, value: overallSchoolRankTotal },
+        overallTurkeyRank: { type: sql.Int, value: overallTurkeyRank },
+        overallTurkeyRankTotal: { type: sql.Int, value: overallTurkeyRankTotal },
         createdBy: { type: sql.UniqueIdentifier, value: actorId || null },
       }).query(`
-        INSERT INTO dbo.MockExams (student_id, kind, exam_date, title, class_label, school_label, created_by_user_id)
+        INSERT INTO dbo.MockExams
+          (student_id, kind, exam_date, title, class_label, school_label,
+           overall_branch_rank, overall_branch_rank_total,
+           overall_school_rank, overall_school_rank_total,
+           overall_turkey_rank, overall_turkey_rank_total,
+           created_by_user_id)
         OUTPUT inserted.id
-        VALUES (@studentId, @kind, @examDate, @title, @classLabel, @schoolLabel, @createdBy);
+        VALUES (@studentId, @kind, @examDate, @title, @classLabel, @schoolLabel,
+                @overallBranchRank, @overallBranchRankTotal,
+                @overallSchoolRank, @overallSchoolRankTotal,
+                @overallTurkeyRank, @overallTurkeyRankTotal,
+                @createdBy);
       `)
       const newExamId = examResult.recordset[0].id
 
@@ -915,7 +995,19 @@ async function updateMockExamHandler(request) {
     // ders sayıları güncellenir.
     const rebuilt = validateMockExamPayload({ ...payload, kind: existing.kind })
     if (rebuilt.error) return json(400, { error: rebuilt.error })
-    const { examDate, title, classLabel, schoolLabel, subjects } = rebuilt.value
+    const {
+      examDate,
+      title,
+      classLabel,
+      schoolLabel,
+      overallBranchRank,
+      overallBranchRankTotal,
+      overallSchoolRank,
+      overallSchoolRankTotal,
+      overallTurkeyRank,
+      overallTurkeyRankTotal,
+      subjects,
+    } = rebuilt.value
 
     await withTransaction(async (makeRequest) => {
       await makeRequest({
@@ -924,9 +1016,18 @@ async function updateMockExamHandler(request) {
         title: { type: sql.NVarChar(200), value: title },
         classLabel: { type: sql.NVarChar(50), value: classLabel },
         schoolLabel: { type: sql.NVarChar(200), value: schoolLabel },
+        overallBranchRank: { type: sql.Int, value: overallBranchRank },
+        overallBranchRankTotal: { type: sql.Int, value: overallBranchRankTotal },
+        overallSchoolRank: { type: sql.Int, value: overallSchoolRank },
+        overallSchoolRankTotal: { type: sql.Int, value: overallSchoolRankTotal },
+        overallTurkeyRank: { type: sql.Int, value: overallTurkeyRank },
+        overallTurkeyRankTotal: { type: sql.Int, value: overallTurkeyRankTotal },
       }).query(`
         UPDATE dbo.MockExams
         SET exam_date = @examDate, title = @title, class_label = @classLabel, school_label = @schoolLabel,
+            overall_branch_rank = @overallBranchRank, overall_branch_rank_total = @overallBranchRankTotal,
+            overall_school_rank = @overallSchoolRank, overall_school_rank_total = @overallSchoolRankTotal,
+            overall_turkey_rank = @overallTurkeyRank, overall_turkey_rank_total = @overallTurkeyRankTotal,
             updated_at = SYSUTCDATETIME()
         WHERE id = @mockExamId;
       `)
