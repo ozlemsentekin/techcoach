@@ -519,17 +519,15 @@ async function listStudentsHandler(request) {
     const result = await requestDb.query(`
       SELECT u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at, u.funded_by_teacher_id,
              sp.phone, sp.photo_url, sp.grade, sp.theme_id, s.name AS school_name,
-             COUNT(DISTINCT rb.id) AS resource_count,
-             COUNT(DISTINCT st.id) AS teacher_count
+             (SELECT COUNT(*)
+                FROM dbo.StudentResourceBooks srb
+                INNER JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id AND rb.is_active = 1
+               WHERE srb.student_id = u.id) AS resource_count,
+             (SELECT COUNT(*) FROM dbo.StudentTeachers st WHERE st.student_id = u.id) AS teacher_count
       FROM dbo.Users u
       LEFT JOIN dbo.StudentProfiles sp ON sp.student_id = u.id
       LEFT JOIN dbo.Schools s ON s.id = sp.school_id
-      LEFT JOIN dbo.StudentResourceBooks srb ON srb.student_id = u.id
-      LEFT JOIN dbo.ResourceBooks rb ON rb.id = srb.resource_book_id AND rb.is_active = 1
-      LEFT JOIN dbo.StudentTeachers st ON st.student_id = u.id
       WHERE u.parent_id = @parentId
-      GROUP BY u.id, u.full_name, u.email, u.role, u.last_login_at, u.created_at, u.funded_by_teacher_id,
-               sp.phone, sp.photo_url, sp.grade, sp.theme_id, s.name
       ORDER BY u.created_at ASC;
     `)
 
