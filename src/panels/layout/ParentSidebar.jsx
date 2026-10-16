@@ -1,4 +1,5 @@
 import { useLessonNotesAccess } from '../../hooks/useLessonNotesAccess'
+import { useSchoolHomeworkAccess } from '../../hooks/useSchoolHomeworkAccess'
 import { NavLink, useLocation } from 'react-router-dom'
 import NavIcon from './NavIcon'
 import SidebarShell from './SidebarShell'
@@ -11,6 +12,7 @@ export default function ParentSidebar() {
   const location = useLocation()
   const { authUser } = useAuth()
   const lessonNotesEnabled = useLessonNotesAccess()
+  const schoolHomeworksEnabled = useSchoolHomeworkAccess()
   const { hasStudents, studentCount } = useParentStudentsGate()
   const isAdminSection = location.pathname.startsWith('/parent/admin')
 
@@ -38,7 +40,7 @@ export default function ParentSidebar() {
     )
   }
 
-  const nav = getParentNav({ lessonNotesEnabled,
+  const nav = getParentNav({ lessonNotesEnabled, schoolHomeworksEnabled,
     hasStudents,
     canManageLibrary: Boolean(authUser?.canManageLibrary),
     isAdmin: Boolean(authUser?.isAdmin),

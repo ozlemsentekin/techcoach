@@ -14,6 +14,7 @@ const MistakesPage = lazy(() => import('./pages/MistakesPage'))
 const AnalysisPhotosPage = lazy(() => import('./pages/AnalysisPhotosPage'))
 const ProgressPage = lazy(() => import('./pages/ProgressPage'))
 const StudyHistoryPage = lazy(() => import('./pages/StudyHistoryPage'))
+const SchoolHomeworksPage = lazy(() => import('./pages/SchoolHomeworksPage'))
 const MockExamsPage = lazy(() => import('./pages/MockExamsPage'))
 const TeachersPage = lazy(() => import('./pages/TeachersPage'))
 const GuidePage = lazy(() => import('../shared/GuidePage'))
@@ -51,6 +52,7 @@ export default function StudentApp() {
           <Route path="mistakes" element={pageElement(MistakesPage)} />
           <Route path="analysis-photos" element={pageElement(AnalysisPhotosPage)} />
           <Route path="study-history" element={pageElement(StudyHistoryPage)} />
+          <Route path="school-homeworks" element={pageElement(SchoolHomeworksPage)} />
           <Route path="mock-exams" element={pageElement(MockExamsPage)} />
           <Route path="progress" element={pageElement(ProgressPage)} />
           <Route path="*" element={<Navigate to="today" replace />} />
