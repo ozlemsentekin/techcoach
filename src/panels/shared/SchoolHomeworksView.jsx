@@ -1,9 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
-import { School, Search, X } from 'lucide-react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Plus, School, Search, X } from 'lucide-react'
 import { getSchoolHomeworks } from '../../services/schoolHomeworkService'
+import { getSchoolSchedule, saveTaskForDay } from '../../services/weeklyPlanService'
+import { getTasksForDateRange } from '../../services/taskService'
+import { useBillingGate } from '../../context/useBillingGate'
 import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
 import TaskStatusBadge from './TaskStatusBadge'
+
+const AddTaskDrawer = lazy(() => import('../parent/components/AddTaskDrawer'))
+
+// Hızlı ekleme: Görev Ekle çekmecesi "Okul Ödevi" tipi seçili açılır (bkz. taskTemplates).
+const SCHOOL_HOMEWORK_TEMPLATE = { task: { title: 'Okul Ödevi', taskType: 'okul-odevi', durationMinutes: 45 } }
 
 const COMPLETED_STATUSES = new Set(['tamamlandi', 'kismen-tamamlandi'])
 const STATUS_FILTERS = [
@@ -114,11 +122,26 @@ function HomeworkCard({ item }) {
   )
 }
 
+function AddSchoolHomeworkButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[#f07b31] bg-[#f07b31] px-4 text-sm font-bold text-white shadow-sm transition-colors duration-150 hover:bg-[#d9691f]"
+    >
+      <Plus size={17} aria-hidden="true" />
+      Okul Ödevi Ekle
+    </button>
+  )
+}
+
 /**
- * Okul Ödevleri: ders sekmeleri (ilk ders varsayılan) + arama + durum/kaynak filtresi. Veli ve öğrenci panelinde ortak.
+ * Okul Ödevleri: ders sekmeleri (ilk ders varsayılan) + arama + durum/kaynak filtresi + hızlı
+ * "Okul Ödevi Ekle". Veli ve öğrenci panelinde ortak.
  * @param {string} [studentId] Veli oturumunda seçili çocuk; öğrenci oturumunda verilmez.
+ * @param {string|number} [studentGrade] Çekmecedeki ders listesini sınıfa göre süzer.
  */
-export default function SchoolHomeworksView({ studentId }) {
+export default function SchoolHomeworksView({ studentId, studentGrade }) {
   const studentKey = studentId || ''
   const [loaded, setLoaded] = useState(null)
   const [failed, setFailed] = useState(null)
@@ -126,6 +149,60 @@ export default function SchoolHomeworksView({ studentId }) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [resource, setResource] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [school, setSchool] = useState({ entries: [], holidays: [] })
+  const [banner, setBanner] = useState('')
+  const { restricted: billingRestricted, promptPayment } = useBillingGate()
+
+  // Okul ders saatleri/tatiller yalnızca çekmece açılınca (çakışma uyarısı için) çekilir.
+  useEffect(() => {
+    if (!drawerOpen) return undefined
+    let ignore = false
+    getSchoolSchedule({ studentId })
+      .then((data) => {
+        if (!ignore) setSchool(data)
+      })
+      .catch(() => {})
+    return () => {
+      ignore = true
+    }
+  }, [drawerOpen, studentId])
+
+  const getExistingTasksForDate = useCallback(
+    (date) => getTasksForDateRange(date, date, { studentId }),
+    [studentId],
+  )
+
+  const openDrawer = () => {
+    if (billingRestricted) {
+      promptPayment()
+      return
+    }
+    setDrawerOpen(true)
+  }
+
+  const handleSave = async (taskData) => {
+    await saveTaskForDay(taskData.date, taskData, { studentId })
+    setDrawerOpen(false)
+    setReloadKey((key) => key + 1)
+    setBanner('Okul ödevi eklendi.')
+    window.setTimeout(() => setBanner(''), 4000)
+  }
+
+  const drawer = drawerOpen ? (
+    <Suspense fallback={<LoadingState label="Yükleniyor..." />}>
+      <AddTaskDrawer
+        initialTemplate={SCHOOL_HOMEWORK_TEMPLATE}
+        getExistingTasksForDate={getExistingTasksForDate}
+        schoolSchedule={school.entries}
+        schoolHolidays={school.holidays}
+        studentGrade={studentGrade}
+        onSave={handleSave}
+        onClose={() => setDrawerOpen(false)}
+      />
+    </Suspense>
+  ) : null
 
   useEffect(() => {
     let ignore = false
@@ -141,7 +218,7 @@ export default function SchoolHomeworksView({ studentId }) {
     return () => {
       ignore = true
     }
-  }, [studentId, studentKey])
+  }, [studentId, studentKey, reloadKey])
 
   const items = loaded?.id === studentKey ? loaded.data : null
   const error = failed?.id === studentKey ? failed.message : ''
@@ -195,16 +272,25 @@ export default function SchoolHomeworksView({ studentId }) {
 
   if (items.length === 0) {
     return (
-      <EmptyState
-        icon={School}
-        title="Henüz okul ödevi yok"
-        description="Okul ödevi tipinde bir görev eklendiğinde burada ders ders listelenecek."
-      />
+      <>
+        <EmptyState
+          icon={School}
+          title="Henüz okul ödevi yok"
+          description="Okul ödevi tipinde bir görev eklendiğinde burada ders ders listelenecek."
+          action={<AddSchoolHomeworkButton onClick={openDrawer} />}
+        />
+        {drawer}
+      </>
     )
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {banner ? (
+        <div className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700" role="status">
+          {banner}
+        </div>
+      ) : null}
       {/* Ders sekmeleri */}
       <div className="-mx-1 overflow-x-auto px-1">
         <div role="tablist" aria-label="Dersler" className="flex w-max gap-1.5 border-b border-panel-border">
@@ -290,6 +376,7 @@ export default function SchoolHomeworksView({ studentId }) {
             ))}
           </select>
         ) : null}
+        <AddSchoolHomeworkButton onClick={openDrawer} />
       </div>
 
       <p className="text-sm text-panel-text-muted">
@@ -333,6 +420,7 @@ export default function SchoolHomeworksView({ studentId }) {
           </div>
         </>
       )}
+      {drawer}
     </div>
   )
 }

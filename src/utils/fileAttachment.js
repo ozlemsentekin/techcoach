@@ -2,6 +2,21 @@
 export const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf'
 export const ATTACHMENT_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf'])
 export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
+// Bir göreve en fazla 5 dosya, toplam 15 MB (bkz. api/src/tasks.js sanitizeTaskAttachments).
+export const MAX_ATTACHMENT_COUNT = 5
+export const MAX_ATTACHMENTS_TOTAL_BYTES = 15 * 1024 * 1024
+
+/** Görevin ek listesi; eski tekil attachmentUrl alanı da desteklenir. @returns {{ url: string, name: string }[]} */
+export function getTaskAttachments(task) {
+  if (Array.isArray(task?.attachments)) return task.attachments.filter((item) => item?.url)
+  return task?.attachmentUrl ? [{ url: task.attachmentUrl, name: task.attachmentName || 'ek-dosya' }] : []
+}
+
+// data URL'nin yaklaşık bayt karşılığı (base64 ≈ 4/3).
+export function attachmentBytes(attachment) {
+  const base64 = attachment?.url?.split(',')[1] || ''
+  return Math.floor((base64.length * 3) / 4)
+}
 
 export function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {

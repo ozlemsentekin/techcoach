@@ -1,5 +1,5 @@
 import { CalendarClock, CheckCircle2, Circle, Pencil, Trash2, X, XCircle } from 'lucide-react'
-import TaskAttachment from '../../shared/TaskAttachment'
+import { TaskAttachmentList } from '../../shared/TaskAttachment'
 
 function formatDate(dateISO) {
   if (!dateISO) return ''
@@ -48,9 +48,7 @@ export default function TaskDetailModal({ task, onReschedule, onEdit, onDelete, 
 
           {task.topic ? <p className="text-xs text-panel-text-muted">Konu: {task.topic}</p> : null}
 
-          {task.attachmentUrl ? (
-            <TaskAttachment url={task.attachmentUrl} name={task.attachmentName} />
-          ) : null}
+          <TaskAttachmentList task={task} />
 
           {hasQuestionProgress ? (
             <p className="text-sm text-panel-text-muted">

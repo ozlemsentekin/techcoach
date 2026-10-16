@@ -82,7 +82,7 @@ export default function SchoolHomeworksPage() {
         subtitle={`${selectedStudent.fullName} için okulda verilen ödevlerin ders ders listesi.`}
         actions={headerActions}
       />
-      <SchoolHomeworksView key={selectedStudent.id} studentId={selectedStudent.id} />
+      <SchoolHomeworksView key={selectedStudent.id} studentId={selectedStudent.id} studentGrade={selectedStudent.grade} />
     </div>
   )
 }

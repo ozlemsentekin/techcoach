@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Check, ChevronDown, ChevronRight, FileText, Loader2, Paperclip, Search, Trash2, X } from 'lucide-react'
+import { BookOpen, Check, ChevronDown, ChevronRight, Loader2, Search, Trash2, X } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { TASK_TYPES } from '../../../data/taskTypes'
 import { getPrivateLessonTeachers, getSchoolScheduleConflict, hasOverlap } from '../../../services/weeklyPlanService'
@@ -10,7 +10,8 @@ import { ResourceBookRates } from '../../shared/ResourceBookCard'
 import { filterTopicsBySearch } from '../../shared/homework/topicSearch'
 import TaskResourcePicker from './TaskResourcePicker'
 import SchoolResourceDropdown from '../../shared/homework/SchoolResourceDropdown'
-import { ATTACHMENT_ACCEPT, pickAttachment } from '../../../utils/fileAttachment'
+import { getTaskAttachments } from '../../../utils/fileAttachment'
+import AttachmentListEditor from '../../shared/AttachmentListEditor'
 
 const QUESTION_BANK_HOMEWORK_TASK_TYPE = 'soru-bankasi-odevi'
 const SCHOOL_HOMEWORK_TASK_TYPE = 'okul-odevi'
@@ -304,10 +305,7 @@ export default function AddTaskDrawer({
   const [deleting, setDeleting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [pickerSnapshot, setPickerSnapshot] = useState(null)
-  const [attachment, setAttachment] = useState(() =>
-    seed.attachmentUrl ? { url: seed.attachmentUrl, name: seed.attachmentName || 'ek-dosya' } : null,
-  )
-  const [attachmentError, setAttachmentError] = useState('')
+  const [attachments, setAttachments] = useState(() => getTaskAttachments(seed))
 
   const durationMinutes = Number(form.durationMinutes) || 0
   const endTime = durationMinutes > 0 ? addMinutesToTime(form.startTime, durationMinutes) : ''
@@ -587,24 +585,6 @@ export default function AddTaskDrawer({
     setForm((current) => ({ ...current, [field]: event.target.value }))
   }
 
-  const handleAttachmentChange = async (event) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    setAttachmentError('')
-    const result = await pickAttachment(file)
-    if (result.error) {
-      setAttachmentError(result.error)
-      return
-    }
-    setAttachment({ url: result.url, name: result.name })
-  }
-
-  const handleRemoveAttachment = () => {
-    setAttachment(null)
-    setAttachmentError('')
-  }
-
   const resetResourceSelection = () => {
     setResourceBookId('')
     setTopics(null)
@@ -774,8 +754,7 @@ export default function AddTaskDrawer({
       endTime: endTime || null,
       durationMinutes,
       description: form.description.trim() || null,
-      attachmentUrl: attachment?.url || null,
-      attachmentName: attachment?.name || null,
+      attachments,
     }
 
     if (isPrivateLesson) {
@@ -1155,36 +1134,7 @@ export default function AddTaskDrawer({
               />
             </label>
 
-            <div className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-panel-text-muted">Dosya ekle (isteğe bağlı)</span>
-              {attachment ? (
-                <div className="flex items-center gap-3 rounded-xl border border-panel-border bg-white p-2.5">
-                  {attachment.url.startsWith('data:image/') || /^https?:.*\.(jpe?g|png|webp)$/i.test(attachment.url) ? (
-                    <img src={attachment.url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
-                  ) : (
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
-                      <FileText size={20} aria-hidden="true" />
-                    </span>
-                  )}
-                  <span className="min-w-0 flex-1 truncate text-sm text-panel-text">{attachment.name}</span>
-                  <button
-                    type="button"
-                    onClick={handleRemoveAttachment}
-                    className="shrink-0 rounded-lg p-1.5 text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-warm"
-                    aria-label="Dosyayı kaldır"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-              ) : (
-                <label className="flex cursor-pointer items-center gap-2 self-start rounded-xl border border-dashed border-panel-border bg-white px-3 py-2.5 text-sm font-medium text-panel-blue hover:border-panel-blue hover:bg-panel-blue-soft">
-                  <Paperclip size={16} aria-hidden="true" />
-                  Dosya seç (JPG, PNG, WEBP, PDF · en fazla 5 MB)
-                  <input type="file" accept={ATTACHMENT_ACCEPT} onChange={handleAttachmentChange} className="sr-only" />
-                </label>
-              )}
-              {attachmentError ? <span className="text-xs text-panel-warm">{attachmentError}</span> : null}
-            </div>
+            <AttachmentListEditor attachments={attachments} onChange={setAttachments} />
           </div>
         </div>
 

@@ -7,16 +7,15 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  FileText,
   ListChecks,
   Loader2,
-  Paperclip,
   RotateCcw,
   Search,
   X,
   XCircle,
 } from 'lucide-react'
-import { ATTACHMENT_ACCEPT, pickAttachment } from '../../../utils/fileAttachment'
+import { getTaskAttachments } from '../../../utils/fileAttachment'
+import AttachmentListEditor from '../../shared/AttachmentListEditor'
 import { todayISODate } from '../../../utils/time'
 import Badge from '../../ui/Badge'
 import LoadingState from '../../shared/LoadingState'
@@ -98,10 +97,7 @@ export default function AssignHomeworkModal({
     isEditTopicReview ? 'konu-tekrari' : defaultHomeworkType || 'soru-bankasi-odevi',
   )
   const [topicText, setTopicText] = useState(editTask?.topic || '')
-  const [attachment, setAttachment] = useState(
-    editTask?.attachmentUrl ? { url: editTask.attachmentUrl, name: editTask.attachmentName || 'ek-dosya' } : null,
-  )
-  const [attachmentError, setAttachmentError] = useState('')
+  const [attachments, setAttachments] = useState(() => getTaskAttachments(editTask))
   const [resourceBookId, setResourceBookId] = useState('')
   const [schoolResourceId, setSchoolResourceId] = useState('')
   const [schoolResources, setSchoolResources] = useState(null)
@@ -142,19 +138,6 @@ export default function AssignHomeworkModal({
 
   const isSchoolHomework = homeworkType === 'okul-odevi'
   const isTopicReview = homeworkType === 'konu-tekrari'
-
-  const handleAttachmentChange = async (event) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    setAttachmentError('')
-    const result = await pickAttachment(file)
-    if (result.error) {
-      setAttachmentError(result.error)
-      return
-    }
-    setAttachment({ url: result.url, name: result.name })
-  }
 
   useEffect(() => {
     if (!isSchoolHomework || schoolResources !== null || schoolResourcesError) return undefined
@@ -296,8 +279,7 @@ export default function AssignHomeworkModal({
           taskDate: isEditTopicReview ? editTask.date : defaultTaskDate,
           taskTime: trimmedTime || null,
           taskDurationMinutes: trimmedTime ? selectedDuration || DEFAULT_TASK_DURATION_MINUTES : null,
-          attachmentUrl: attachment?.url || null,
-          attachmentName: attachment?.name || null,
+          attachments,
         })
       } catch (err) {
         setSaveError(err.message || 'Bir hata oluştu, tekrar deneyin.')
@@ -454,36 +436,7 @@ export default function AssignHomeworkModal({
                 />
               </label>
 
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-panel-text-muted">Dosya ekle (isteğe bağlı)</span>
-                {attachment ? (
-                  <div className="flex items-center gap-3 rounded-xl border border-panel-border p-2.5">
-                    {attachment.url.startsWith('data:image/') ? (
-                      <img src={attachment.url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
-                    ) : (
-                      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
-                        <FileText size={20} aria-hidden="true" />
-                      </span>
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-sm text-panel-text">{attachment.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => setAttachment(null)}
-                      className="shrink-0 rounded-lg p-1.5 text-panel-text-muted hover:bg-panel-surface-soft hover:text-panel-warm"
-                      aria-label="Dosyayı kaldır"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex cursor-pointer items-center gap-2 self-start rounded-xl border border-dashed border-panel-border px-3 py-2.5 text-sm font-medium text-panel-blue hover:border-panel-blue hover:bg-panel-blue-soft">
-                    <Paperclip size={16} aria-hidden="true" />
-                    Dosya seç (JPG, PNG, WEBP, PDF · en fazla 5 MB)
-                    <input type="file" accept={ATTACHMENT_ACCEPT} onChange={handleAttachmentChange} className="sr-only" />
-                  </label>
-                )}
-                {attachmentError ? <span className="text-xs text-panel-warm">{attachmentError}</span> : null}
-              </div>
+              <AttachmentListEditor attachments={attachments} onChange={setAttachments} />
 
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs font-medium text-panel-text-muted">Başlangıç saati (isteğe bağlı)</span>

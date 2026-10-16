@@ -42,7 +42,7 @@ function addDaysISO(dateISO, days) {
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
-const { SELECT_TASK, sanitizeTask, sanitizeTaskAttachment, fetchTaskAnswerSheetData } = require('./tasks')
+const { SELECT_TASK, sanitizeTask, applyTaskAttachmentsPayload, fetchTaskAnswerSheetData } = require('./tasks')
 const { resolveStudentSchoolSchedule } = require('./schoolSchedule')
 const {
   fetchResourceBookTopicsWithTests,
@@ -2474,10 +2474,13 @@ async function createTeacherTopicReviewHandler(request) {
     }
     const endTime = startTime && durationMinutes ? computeEndTime(startTime, durationMinutes) : null
 
-    const attachment = sanitizeTaskAttachment(payload?.attachmentUrl, payload?.attachmentName)
-    if (attachment.error) {
-      return json(400, { error: attachment.error })
+    const attachmentPayload = { attachments: payload?.attachments, attachmentUrl: payload?.attachmentUrl, attachmentName: payload?.attachmentName }
+    if (attachmentPayload.attachments === undefined) delete attachmentPayload.attachments
+    const attachmentError = applyTaskAttachmentsPayload(attachmentPayload)
+    if (attachmentError) {
+      return json(400, { error: attachmentError })
     }
+    const attachmentsJson = attachmentPayload.attachments?.length ? JSON.stringify(attachmentPayload.attachments) : null
 
     const subjectDb = await withRequest({ subjectId: { type: sql.UniqueIdentifier, value: subjectId } })
     const subjectResult = await subjectDb.query(`SELECT TOP 1 name FROM dbo.Subjects WHERE id = @subjectId;`)
@@ -2496,21 +2499,20 @@ async function createTeacherTopicReviewHandler(request) {
       startTime: { type: sql.Char(5), value: startTime },
       endTime: { type: sql.Char(5), value: endTime },
       durationMinutes: { type: sql.Int, value: durationMinutes || 0 },
-      attachmentUrl: { type: sql.NVarChar(sql.MAX), value: attachment.url },
-      attachmentName: { type: sql.NVarChar(255), value: attachment.name },
+      attachmentsJson: { type: sql.NVarChar(sql.MAX), value: attachmentsJson },
       createdByUserId: { type: sql.UniqueIdentifier, value: teacherUserId || null },
     })
     const insertResult = await insertDb.query(`
       INSERT INTO dbo.Tasks (
         student_id, student_teacher_id, subject_id, date, title, subject, topic, description,
         task_type, start_time, end_time, duration_minutes, status, priority,
-        created_by, created_by_user_id, is_draft, attachment_url, attachment_name
+        created_by, created_by_user_id, is_draft, attachments_json
       )
       OUTPUT inserted.id
       VALUES (
         @studentId, @studentTeacherId, @subjectId, @date, @title, @subject, @topic, @description,
         'konu-tekrari', @startTime, @endTime, @durationMinutes, 'bekliyor', 'orta',
-        'ogretmen', @createdByUserId, 0, @attachmentUrl, @attachmentName
+        'ogretmen', @createdByUserId, 0, @attachmentsJson
       );
     `)
 
@@ -2905,10 +2907,13 @@ async function updateTeacherStudentTaskHandler(request) {
       if (!topic && !description) {
         return json(400, { error: 'Konu veya açıklama girmelisiniz.' })
       }
-      const attachment = sanitizeTaskAttachment(payload?.attachmentUrl, payload?.attachmentName)
-      if (attachment.error) {
-        return json(400, { error: attachment.error })
+      const attachmentPayload = { attachments: payload?.attachments, attachmentUrl: payload?.attachmentUrl, attachmentName: payload?.attachmentName }
+      if (attachmentPayload.attachments === undefined) delete attachmentPayload.attachments
+      const attachmentError = applyTaskAttachmentsPayload(attachmentPayload)
+      if (attachmentError) {
+        return json(400, { error: attachmentError })
       }
+      const attachmentsJson = attachmentPayload.attachments?.length ? JSON.stringify(attachmentPayload.attachments) : null
       const trEndTime = startTime && durationMinutes ? computeEndTime(startTime, durationMinutes) : null
 
       const trDb = await withRequest({
@@ -2920,14 +2925,13 @@ async function updateTeacherStudentTaskHandler(request) {
         startTime: { type: sql.Char(5), value: startTime },
         endTime: { type: sql.Char(5), value: trEndTime },
         durationMinutes: { type: sql.Int, value: startTime && durationMinutes ? durationMinutes : 0 },
-        attachmentUrl: { type: sql.NVarChar(sql.MAX), value: attachment.url },
-        attachmentName: { type: sql.NVarChar(255), value: attachment.name },
+        attachmentsJson: { type: sql.NVarChar(sql.MAX), value: attachmentsJson },
       })
       await trDb.query(`
         UPDATE dbo.Tasks
         SET date = @date, topic = @topic, description = @description,
             start_time = @startTime, end_time = @endTime, duration_minutes = @durationMinutes,
-            attachment_url = @attachmentUrl, attachment_name = @attachmentName
+            attachments_json = @attachmentsJson, attachment_url = NULL, attachment_name = NULL
         WHERE id = @id AND student_id = @studentId;
       `)
 

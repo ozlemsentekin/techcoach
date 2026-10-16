@@ -1,4 +1,5 @@
 import { FileText, ImageIcon } from 'lucide-react'
+import { getTaskAttachments } from '../../utils/fileAttachment'
 
 /**
  * Bir görevin dosya ekini (resim veya PDF; base64 data URL) gösterir.
@@ -50,5 +51,23 @@ export default function TaskAttachment({ url, name, label = 'Ek dosya', classNam
         </span>
       </span>
     </button>
+  )
+}
+
+/** Görevin tüm ekleri (birden fazla olabilir); ek yoksa hiçbir şey çizmez. */
+export function TaskAttachmentList({ task, className = '' }) {
+  const attachments = getTaskAttachments(task)
+  if (!attachments.length) return null
+  return (
+    <div className={`flex flex-col gap-2 ${className}`}>
+      {attachments.map((attachment, index) => (
+        <TaskAttachment
+          key={`${attachment.name}-${index}`}
+          url={attachment.url}
+          name={attachment.name}
+          label={attachments.length > 1 ? `Ek dosya ${index + 1}` : 'Ek dosya'}
+        />
+      ))}
+    </div>
   )
 }

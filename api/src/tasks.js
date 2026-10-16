@@ -57,6 +57,66 @@ function sanitizeTaskAttachment(url, name) {
   return { url: value.replace(/\s/g, ''), name: cleanName || 'ek-dosya' }
 }
 
+// Göreve birden fazla ek: Tasks.attachments_json = [{ url, name }] (bkz.
+// add-task-attachments-json.sql). Eski tek ekli görevler attachment_url/attachment_name'de kalır,
+// okurken listenin ilk elemanı sayılır; görev bir sonraki kayıtta yeni kolona taşınır.
+const MAX_TASK_ATTACHMENT_COUNT = 5
+const MAX_TASK_ATTACHMENTS_TOTAL_MB = 15
+const MAX_TASK_ATTACHMENTS_TOTAL_LENGTH = Math.ceil((MAX_TASK_ATTACHMENTS_TOTAL_MB * 1024 * 1024 * 4) / 3)
+
+/** Ek listesini doğrular: { error } ya da { attachments: [{ url, name }] } döner. */
+function sanitizeTaskAttachments(list) {
+  if (list === null || list === undefined) return { attachments: [] }
+  if (!Array.isArray(list)) return { error: 'Geçersiz dosya listesi.' }
+  const attachments = []
+  for (const item of list) {
+    const attachment = sanitizeTaskAttachment(item?.url, item?.name)
+    if (attachment.error) return { error: attachment.error }
+    if (attachment.url) attachments.push({ url: attachment.url, name: attachment.name })
+  }
+  if (attachments.length > MAX_TASK_ATTACHMENT_COUNT) {
+    return { error: `En fazla ${MAX_TASK_ATTACHMENT_COUNT} dosya ekleyebilirsiniz.` }
+  }
+  if (attachments.reduce((sum, a) => sum + a.url.length, 0) > MAX_TASK_ATTACHMENTS_TOTAL_LENGTH) {
+    return { error: `Dosyaların toplam boyutu en fazla ${MAX_TASK_ATTACHMENTS_TOTAL_MB} MB olabilir.` }
+  }
+  return { attachments }
+}
+
+/**
+ * İstek gövdesindeki ek alanlarını normalleştirir: `attachments` (yeni) ya da eski tekil
+ * `attachmentUrl`/`attachmentName`. Ek alanı yoksa dokunmaz. Kayıtta liste attachments_json'a
+ * yazılır, eski kolonlar boşaltılır. Hata varsa mesajı döner.
+ */
+function applyTaskAttachmentsPayload(payload) {
+  if (!payload) return null
+  let result
+  if (payload.attachments !== undefined) {
+    result = sanitizeTaskAttachments(payload.attachments)
+  } else if (payload.attachmentUrl !== undefined) {
+    result = sanitizeTaskAttachments([{ url: payload.attachmentUrl, name: payload.attachmentName }])
+  } else {
+    return null
+  }
+  if (result.error) return result.error
+  payload.attachments = result.attachments
+  payload.attachmentUrl = null
+  payload.attachmentName = null
+  return null
+}
+
+function readTaskAttachments(record) {
+  if (record.attachments_json) {
+    try {
+      const parsed = JSON.parse(record.attachments_json)
+      if (Array.isArray(parsed)) return parsed.filter((item) => item?.url)
+    } catch {
+      // bozuk JSON → eski kolona düş
+    }
+  }
+  return record.attachment_url ? [{ url: record.attachment_url, name: record.attachment_name || 'ek-dosya' }] : []
+}
+
 function sanitizeTask(record) {
   return {
     id: record.id,
@@ -132,8 +192,7 @@ function sanitizeTask(record) {
     studentTeacherId: record.student_teacher_id || undefined,
     teacherFullName: record.teacher_full_name || undefined,
     resourceType: record.resource_type || undefined,
-    attachmentUrl: record.attachment_url || undefined,
-    attachmentName: record.attachment_name || undefined,
+    attachments: readTaskAttachments(record),
     hasAnswerKey: record.has_answer_key === null || record.has_answer_key === undefined ? undefined : Boolean(record.has_answer_key),
     contentMode: record.resource_book_content_mode || undefined,
     publisherName: record.publisher_name || undefined,
@@ -161,7 +220,7 @@ const SELECT_TASK = `
          t.blank_count, t.difficulty, t.emotion, t.reflection_answers_json, t.completed_sub_goals_json,
          t.resource_book_id, t.selected_test_ids_json, t.answers_json, t.test_results_json, rb.name AS resource_book_name, rb.resource_type, rb.has_answer_key, rb.content_mode AS resource_book_content_mode, p.name AS publisher_name,
          t.school_resource_id, scr.name AS school_resource_name, scr.image_url AS school_resource_image_url,
-         t.attachment_url, t.attachment_name,
+         t.attachment_url, t.attachment_name, t.attachments_json,
          t.student_teacher_id, st.teacher_full_name, cbu.full_name AS created_by_full_name,
          t.reviewed_at, rvu.full_name AS reviewed_by_full_name,
          stu.full_name AS student_full_name, par.full_name AS parent_full_name,
@@ -208,6 +267,7 @@ const FIELD_MAP = {
   description: (v) => ({ column: 'description', type: sql.NVarChar(1000), value: v || null }),
   attachmentUrl: (v) => ({ column: 'attachment_url', type: sql.NVarChar(sql.MAX), value: v || null }),
   attachmentName: (v) => ({ column: 'attachment_name', type: sql.NVarChar(255), value: v || null }),
+  attachments: (v) => ({ column: 'attachments_json', type: sql.NVarChar(sql.MAX), value: v && v.length ? JSON.stringify(v) : null }),
   parentNote: (v) => ({ column: 'parent_note', type: sql.NVarChar(1000), value: v || null }),
   createdBy: (v) => ({ column: 'created_by', type: sql.NVarChar(20), value: v }),
   createdByUserId: (v) => ({ column: 'created_by_user_id', type: sql.UniqueIdentifier, value: v || null }),
@@ -257,6 +317,7 @@ const PLAN_DEFINITION_FIELDS = new Set([
   'description',
   'attachmentUrl',
   'attachmentName',
+  'attachments',
   'parentNote',
   'isDraft',
   'targetQuestionCount',
@@ -718,13 +779,9 @@ async function createTaskHandler(request) {
       return json(400, { error: 'Başlangıç ve bitiş saati birlikte girilmeli.' })
     }
 
-    if (payload.attachmentUrl !== undefined) {
-      const attachment = sanitizeTaskAttachment(payload.attachmentUrl, payload.attachmentName)
-      if (attachment.error) {
-        return json(400, { error: attachment.error })
-      }
-      payload.attachmentUrl = attachment.url
-      payload.attachmentName = attachment.name
+    const attachmentError = applyTaskAttachmentsPayload(payload)
+    if (attachmentError) {
+      return json(400, { error: attachmentError })
     }
 
     // Özel ders görevinde öğretmen isteğe bağlıdır: seçili öğretmen varsa öğrenciye ait
@@ -809,13 +866,9 @@ async function updateTaskHandler(request) {
       delete payload.createdByUserId
     }
 
-    if (payload?.attachmentUrl !== undefined) {
-      const attachment = sanitizeTaskAttachment(payload.attachmentUrl, payload.attachmentName)
-      if (attachment.error) {
-        return json(400, { error: attachment.error })
-      }
-      payload.attachmentUrl = attachment.url
-      payload.attachmentName = attachment.name
+    const attachmentError = applyTaskAttachmentsPayload(payload)
+    if (attachmentError) {
+      return json(400, { error: attachmentError })
     }
 
     const previousDb = await withRequest({
@@ -1767,4 +1820,6 @@ module.exports = {
   SELECT_TASK,
   sanitizeTask,
   sanitizeTaskAttachment,
+  sanitizeTaskAttachments,
+  applyTaskAttachmentsPayload,
 }
