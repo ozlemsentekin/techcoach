@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { School } from 'lucide-react'
 import { cachedGet } from '../../../services/authClient'
@@ -7,7 +7,7 @@ import { useAuth } from '../../../context/useAuth'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
 import EmptyState from '../../shared/EmptyState'
-import SchoolHomeworksView from '../../shared/SchoolHomeworksView'
+import SchoolHomeworksView, { PendingHomeworkSummary } from '../../shared/SchoolHomeworksView'
 
 export default function SchoolHomeworksPage() {
   const { authUser } = useAuth()
@@ -16,6 +16,9 @@ export default function SchoolHomeworksPage() {
   const [students, setStudents] = useState(null)
   const [selectedStudentId, setSelectedStudentId] = useState(requestedStudentId)
   const [studentsError, setStudentsError] = useState('')
+  // { studentId, subjects } — çocuk değişince eski çocuğun özeti gösterilmesin.
+  const [summary, setSummary] = useState(null)
+  const handleSummaryChange = useCallback((subjects, studentId) => setSummary({ studentId, subjects }), [])
 
   // Seçicide yalnızca okul ödevi olan çocuklar listelenir.
   useEffect(() => {
@@ -58,6 +61,7 @@ export default function SchoolHomeworksPage() {
   }
 
   const selectedStudent = students.find((student) => student.id === selectedStudentId) || students[0]
+  const activeSummary = summary?.studentId === selectedStudent.id ? summary.subjects : null
 
   const headerActions =
     students.length > 1 ? (
@@ -79,10 +83,24 @@ export default function SchoolHomeworksPage() {
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Okul Ödevleri"
-        subtitle={`${selectedStudent.fullName} için okulda verilen ödevlerin ders ders listesi.`}
+        subtitle={
+          activeSummary ? (
+            <PendingHomeworkSummary
+              subjects={activeSummary}
+              studentName={selectedStudent.fullName.trim().split(/\s+/)[0]}
+            />
+          ) : (
+            `${selectedStudent.fullName} için okulda verilen ödevlerin ders ders listesi.`
+          )
+        }
         actions={headerActions}
       />
-      <SchoolHomeworksView key={selectedStudent.id} studentId={selectedStudent.id} studentGrade={selectedStudent.grade} />
+      <SchoolHomeworksView
+        key={selectedStudent.id}
+        studentId={selectedStudent.id}
+        studentGrade={selectedStudent.grade}
+        onSummaryChange={handleSummaryChange}
+      />
     </div>
   )
 }
