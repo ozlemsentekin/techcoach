@@ -27,7 +27,8 @@ import {
 } from 'lucide-react'
 import { HOMEWORK_TASK_TYPES, TASK_TYPES } from '../../../data/taskTypes'
 import TaskReviewControl from '../../shared/TaskReviewControl'
-import TaskAttachment from '../../shared/TaskAttachment'
+import { TaskAttachmentList } from '../../shared/TaskAttachment'
+import { getTaskAttachments } from '../../../utils/fileAttachment'
 import { parseTimeToMinutes, todayISODate, WEEKDAY_KEYS as DAY_KEYS } from '../../../utils/time'
 import { isBacklogTask } from '../../../utils/backlogTasks'
 import { getSubjectBarClass, getSubjectStyle } from '../../../utils/subjectStyles'
@@ -726,7 +727,7 @@ function TaskCard({
     Boolean(pageProgress) ||
     graded ||
     Boolean(completionTimestampLabel) ||
-    Boolean(task.attachmentUrl) ||
+    getTaskAttachments(task).length > 0 ||
     Boolean(task.createdBy)
 
   const handlePick = (minutes) => {
@@ -1063,9 +1064,9 @@ function TaskCard({
               onToggle={(next) => onToggleReview(task, next)}
             />
           ) : null}
-          {task.attachmentUrl ? (
+          {getTaskAttachments(task).length ? (
             <div onClick={(event) => event.stopPropagation()} role="presentation">
-              <TaskAttachment url={task.attachmentUrl} name={task.attachmentName} />
+              <TaskAttachmentList task={task} />
             </div>
           ) : null}
           {!isHomework ? <CreatorNote task={task} /> : null}

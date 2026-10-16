@@ -28,3 +28,19 @@ test('okul ödevi satırı genel başlığı açıklamayla değiştirir ve veril
   assert.equal(custom.subjectName, 'Diğer')
   assert.equal(custom.assignedDate, '2026-09-30')
 })
+
+test('görev ekleri: çoklu liste doğrulanır, eski tekil ek listeye çevrilir', () => {
+  const { sanitizeTaskAttachments, applyTaskAttachmentsPayload } = require('../api/src/tasks.js')
+  const png = { url: 'data:image/png;base64,aGVsbG8=', name: 'a.png' }
+  const pdf = { url: 'data:application/pdf;base64,aGVsbG8=', name: 'b.pdf' }
+  assert.deepEqual(sanitizeTaskAttachments([png, pdf]).attachments.map(a => a.name), ['a.png', 'b.pdf'])
+  assert.ok(sanitizeTaskAttachments(Array(6).fill(png)).error)
+  assert.ok(sanitizeTaskAttachments([{ url: 'data:image/svg+xml;base64,aGVsbG8=', name: 'x.svg' }]).error)
+  const legacy = { attachmentUrl: png.url, attachmentName: 'a.png' }
+  assert.equal(applyTaskAttachmentsPayload(legacy), null)
+  assert.deepEqual(legacy.attachments, [png])
+  assert.equal(legacy.attachmentUrl, null)
+  const untouched = { title: 'x' }
+  applyTaskAttachmentsPayload(untouched)
+  assert.equal('attachments' in untouched, false)
+})

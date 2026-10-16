@@ -152,8 +152,7 @@ export default function StudentDetailPage() {
         description: payload.description,
         startTime: payload.taskTime,
         durationMinutes: payload.taskDurationMinutes,
-        attachmentUrl: payload.attachmentUrl,
-        attachmentName: payload.attachmentName,
+        attachments: payload.attachments,
       }
       if (payload.mode === 'edit') {
         await updateTeacherTopicReview(studentTeacherId, payload.taskId, body)
