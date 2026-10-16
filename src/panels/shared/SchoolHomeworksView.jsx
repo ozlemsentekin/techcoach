@@ -122,6 +122,62 @@ function HomeworkCard({ item }) {
   )
 }
 
+// Türkçe ilgi hâli eki: "Aylin" → "Aylin'in", "Ece" → "Ece'nin".
+function genitive(name) {
+  const vowels = name.toLocaleLowerCase('tr').match(/[aeıioöuü]/g)
+  const last = vowels ? vowels[vowels.length - 1] : 'e'
+  const suffix = { a: 'ın', ı: 'ın', e: 'in', i: 'in', o: 'un', u: 'un', ö: 'ün', ü: 'ün' }[last]
+  const endsWithVowel = /[aeıioöuü]$/i.test(name)
+  return `${name}'${endsWithVowel ? 'n' : ''}${suffix}`
+}
+
+function PendingTag({ children }) {
+  return (
+    <span className="mx-0.5 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold tabular-nums text-amber-700">
+      {children}
+    </span>
+  )
+}
+
+/**
+ * Sayfa başlığı altındaki özet (bir punto küçük): "Matematik dersinden 2, Türkçe dersinden 1
+ * olmak üzere toplam [3 bekleyen okul ödevin] var." Yalnızca toplam ifadesi etiket (chip) olarak.
+ * @param {{ name: string, pending: number }[]} subjects SchoolHomeworksView onSummaryChange çıktısı.
+ * @param {string} [studentName] Veli panelinde çocuğun adı; verilmezse öğrenciye hitap edilir.
+ */
+export function PendingHomeworkSummary({ subjects, studentName }) {
+  const pendingSubjects = subjects.filter((s) => s.pending > 0)
+  const total = pendingSubjects.reduce((sum, s) => sum + s.pending, 0)
+  const noun = studentName ? 'okul ödevi' : 'okul ödevin'
+
+  if (!total) {
+    return (
+      <span className="text-sm">
+        {studentName ? `${genitive(studentName)} bekleyen` : 'Bekleyen'} {noun} yok; tüm okul ödevleri tamamlanmış.
+      </span>
+    )
+  }
+
+  const owner = studentName ? `${genitive(studentName)} ` : ''
+  // Tek derste sayı zaten toplamdır: "Matematik dersinden [2 bekleyen okul ödevin] var."
+  if (pendingSubjects.length === 1) {
+    return (
+      <span className="text-sm">
+        {owner}
+        {pendingSubjects[0].name} dersinden <PendingTag>{total} bekleyen {noun}</PendingTag> var.
+      </span>
+    )
+  }
+
+  const breakdown = pendingSubjects.map((s) => `${s.name} dersinden ${s.pending}`).join(', ')
+  return (
+    <span className="text-sm">
+      {owner}
+      {breakdown} olmak üzere toplam <PendingTag>{total} bekleyen {noun}</PendingTag> var.
+    </span>
+  )
+}
+
 function AddSchoolHomeworkButton({ onClick }) {
   return (
     <button
@@ -140,8 +196,10 @@ function AddSchoolHomeworkButton({ onClick }) {
  * "Okul Ödevi Ekle". Veli ve öğrenci panelinde ortak.
  * @param {string} [studentId] Veli oturumunda seçili çocuk; öğrenci oturumunda verilmez.
  * @param {string|number} [studentGrade] Çekmecedeki ders listesini sınıfa göre süzer.
+ * @param {(subjects: { name: string, count: number, pending: number }[], studentId?: string) => void} [onSummaryChange]
+ *   Ders bazlı bekleyen/toplam sayıları (başlık altı özet için). Sabit (memoize) bir fonksiyon verilmeli.
  */
-export default function SchoolHomeworksView({ studentId, studentGrade }) {
+export default function SchoolHomeworksView({ studentId, studentGrade, onSummaryChange }) {
   const studentKey = studentId || ''
   const [loaded, setLoaded] = useState(null)
   const [failed, setFailed] = useState(null)
@@ -223,15 +281,24 @@ export default function SchoolHomeworksView({ studentId, studentGrade }) {
   const items = loaded?.id === studentKey ? loaded.data : null
   const error = failed?.id === studentKey ? failed.message : ''
 
-  // Sekmeler: ödev verilen dersler (SUBJECT_ORDER sırasıyla), her birinde ödev sayısı.
+  // Sekmeler: ödev verilen dersler (SUBJECT_ORDER sırasıyla), her birinde bekleyen/toplam ödev.
   const subjects = useMemo(() => {
     if (!items) return []
     const counts = new Map()
-    for (const it of items) counts.set(it.subjectName, (counts.get(it.subjectName) || 0) + 1)
-    return Array.from(counts, ([name, count]) => ({ name, count })).sort(
+    for (const it of items) {
+      const entry = counts.get(it.subjectName) || { count: 0, pending: 0 }
+      entry.count += 1
+      if (!isCompleted(it)) entry.pending += 1
+      counts.set(it.subjectName, entry)
+    }
+    return Array.from(counts, ([name, entry]) => ({ name, ...entry })).sort(
       (a, b) => subjectRank(a.name) - subjectRank(b.name) || a.name.localeCompare(b.name, 'tr'),
     )
   }, [items])
+
+  useEffect(() => {
+    if (items) onSummaryChange?.(subjects, studentId)
+  }, [items, subjects, onSummaryChange, studentId])
 
   // Seçili sekme yoksa (ilk açılış / çocuk değişimi) ilk ders seçilir.
   const activeTab = subjects.some((s) => s.name === tab) ? tab : subjects[0]?.name
@@ -311,11 +378,12 @@ export default function SchoolHomeworksView({ studentId, studentGrade }) {
               >
                 {t.name}
                 <span
+                  title={`${t.pending} bekleyen / ${t.count} toplam ödev`}
                   className={`rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${
                     selected ? 'bg-panel-blue-soft text-panel-blue' : 'bg-panel-surface-soft text-panel-text-muted'
                   }`}
                 >
-                  {t.count}
+                  {t.pending}/{t.count}
                 </span>
               </button>
             )
