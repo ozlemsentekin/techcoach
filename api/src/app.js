@@ -1925,6 +1925,13 @@ registerHttp('panel-study-history-list', {
   handler: listStudyHistoryHandler,
 })
 
+registerHttp('panel-school-homeworks-list', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/school-homeworks',
+  handler: require('./schoolHomeworks').listSchoolHomeworksHandler,
+})
+
 registerHttp('panel-progress-overview', {
   authLevel: 'anonymous',
   methods: ['GET'],

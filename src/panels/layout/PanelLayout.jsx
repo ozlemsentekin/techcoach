@@ -1,4 +1,5 @@
 import { useLessonNotesAccess } from '../../hooks/useLessonNotesAccess'
+import { useSchoolHomeworkAccess } from '../../hooks/useSchoolHomeworkAccess'
 import { Outlet, useLocation } from 'react-router-dom'
 import { BillingGateProvider } from '../../context/BillingGateContext'
 import BillingBanner from './BillingBanner'
@@ -24,13 +25,14 @@ export default function PanelLayout({ role }) {
   const location = useLocation()
   const { authUser } = useAuth()
   const lessonNotesEnabled = useLessonNotesAccess()
+  const schoolHomeworksEnabled = useSchoolHomeworkAccess()
   const { hasStudents, studentCount } = useParentStudentsGate()
   const Sidebar = SIDEBAR_BY_ROLE[role] || StudentSidebar
   const isAdminSection = role === 'parent' && location.pathname.startsWith('/parent/admin')
   const canManageLibrary = Boolean(authUser?.isAdmin || authUser?.canManageLibrary)
   const roleNav =
     role === 'parent'
-      ? getParentNav({ lessonNotesEnabled,
+      ? getParentNav({ lessonNotesEnabled, schoolHomeworksEnabled,
           hasStudents,
           canManageLibrary: Boolean(authUser?.canManageLibrary),
           isAdmin: Boolean(authUser?.isAdmin),
@@ -38,7 +40,7 @@ export default function PanelLayout({ role }) {
         })
       : role === 'teacher'
         ? getTeacherNav(canManageLibrary, lessonNotesEnabled)
-        : getStudentNav({ lessonNotesEnabled })
+        : getStudentNav({ lessonNotesEnabled, schoolHomeworksEnabled })
   const { primary, more } = navToMobile(roleNav)
   const primaryItems = isAdminSection ? [RETURN_TO_PANEL_ITEM] : primary
   const moreItems = isAdminSection ? PARENT_ADMIN_NAV.children : more

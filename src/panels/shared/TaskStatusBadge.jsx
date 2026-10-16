@@ -10,11 +10,19 @@ const STATUS_STYLES = {
   'yardim-bekliyor': { className: 'bg-panel-accent-soft text-panel-warm', icon: HelpCircle },
 }
 
-export default function TaskStatusBadge({ status }) {
-  const { className, icon: Icon } = STATUS_STYLES[status] || STATUS_STYLES.bekliyor
+// size="sm": yoğun tablolarda bir punto küçük rozet. toneOverrides: { [status]: className } ile
+// renk yalnızca o ekranda değiştirilebilir.
+export default function TaskStatusBadge({ status, size = 'md', toneOverrides }) {
+  const style = STATUS_STYLES[status] || STATUS_STYLES.bekliyor
+  const { icon: Icon } = style
+  const className = toneOverrides?.[status] || style.className
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium ${className}`}>
-      <Icon size={13} className="shrink-0" aria-hidden="true" />
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full font-medium ${
+        size === 'sm' ? 'px-2.5 py-0.5 text-xs' : 'px-3 py-1 text-sm'
+      } ${className}`}
+    >
+      <Icon size={size === 'sm' ? 12 : 13} className="shrink-0" aria-hidden="true" />
       {STATUS_LABELS[status] || status}
     </span>
   )

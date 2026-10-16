@@ -24,9 +24,14 @@ const ANALYSIS_PHOTOS_STUDENT_ITEM = { to: '/student/analysis-photos', label: 'H
 const ANALYSIS_PHOTOS_PARENT_ITEM = { to: '/parent/analysis-photos', label: 'Hata Analizlerim', icon: 'Image' }
 const ANALYSIS_PHOTOS_TEACHER_ITEM = { to: '/teacher/analysis-photos', label: 'Hata Analizlerim', icon: 'Image' }
 
+// "Okul Ödevleri": yalnızca okul ödevi tipinde görevi olan öğrenci/velide görünür
+// (bkz. useSchoolHomeworkAccess). "Çalışma Sonuçları" grubunda, Çalışma Geçmişi'nin altında.
+const SCHOOL_HOMEWORKS_STUDENT_ITEM = { to: '/student/school-homeworks', label: 'Okul Ödevleri', icon: 'School' }
+const SCHOOL_HOMEWORKS_PARENT_ITEM = { to: '/parent/school-homeworks', label: 'Okul Ödevleri', icon: 'School' }
+
 // Öğrenci menüsü iki ana başlık altında gruplanır ("Çalışma Planım", "Çalışma
 // Sonuçlarım"); "Öğretmenlerim" ve "Taleplerim" tekil öğe olarak kalır.
-export function getStudentNav({ lessonNotesEnabled = false } = {}) {
+export function getStudentNav({ lessonNotesEnabled = false, schoolHomeworksEnabled = false } = {}) {
   return [
     {
       key: 'calisma-planim',
@@ -44,6 +49,7 @@ export function getStudentNav({ lessonNotesEnabled = false } = {}) {
       icon: 'BarChart3',
       children: [
         { to: '/student/study-history', label: 'Çalışma Geçmişim', icon: 'History' },
+        ...(schoolHomeworksEnabled ? [SCHOOL_HOMEWORKS_STUDENT_ITEM] : []),
         { to: '/student/mistakes', label: 'Hata Defterim', icon: 'AlertCircle' },
         { to: '/student/mock-exams', label: 'Deneme Sınavları', icon: 'FileCheck2' },
         { to: '/student/progress', label: 'Gelişimim', icon: 'TrendingUp' },
@@ -87,7 +93,7 @@ export function navToMobile(nav) {
 // Veli menüsü öğrenci paneliyle aynı stilde gruplanır. Henüz hiç çocuk profili
 // eklenmemiş bir veli için Bugün/Haftalık Plan sayfaları boş görünür (öğrenci bağlamı
 // gerektirir); o yüzden ilk kayıtta yalnızca Çocuklarım + Taleplerim gösterilir.
-export function getParentNav({ hasStudents = true, canManageLibrary = false, isAdmin = false, studentCount = null, lessonNotesEnabled = false } = {}) {
+export function getParentNav({ hasStudents = true, canManageLibrary = false, isAdmin = false, studentCount = null, lessonNotesEnabled = false, schoolHomeworksEnabled = false } = {}) {
   const studentsItem = getParentStudentsNavItem(studentCount)
   if (!hasStudents) return [studentsItem, PARENT_REQUESTS_NAV_ITEM, PARENT_GUIDE_NAV_ITEM]
 
@@ -116,6 +122,7 @@ export function getParentNav({ hasStudents = true, canManageLibrary = false, isA
       icon: 'BarChart3',
       children: [
         { to: '/parent/study-history', label: 'Çalışma Geçmişi', icon: 'History' },
+        ...(schoolHomeworksEnabled ? [SCHOOL_HOMEWORKS_PARENT_ITEM] : []),
         { to: '/parent/mistakes', label: 'Hata Defteri', icon: 'AlertCircle' },
         { to: '/parent/mock-exams', label: 'Deneme Sınavları', icon: 'FileCheck2' },
         { to: '/parent/progress', label: 'Gelişim Analizi', icon: 'TrendingUp' },
