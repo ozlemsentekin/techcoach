@@ -1,6 +1,42 @@
 const { sql } = require('./db')
 
 const GUID_RE = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/
+const MAX_DEPENDENT_DEPTH = 5
+
+// `table`'dan `whereSql` ile silinecek satırlara referans veren alt tablo satırlarını
+// (FK'si Users'a değil, bu tabloya giden — ör. kullanıcının açtığı PanelRequests'e bağlı,
+// admine adreslenmiş PanelRequestNotifications) özyinelemeli olarak temizler. NULL kabul
+// eden FK kolonları NULL'a çekilir, NOT NULL olanların satırları silinir.
+async function clearRowsReferencing(requestInTransaction, schemaName, tableName, whereSql, depth = 0) {
+  if (depth >= MAX_DEPENDENT_DEPTH) {
+    return
+  }
+
+  const refs = await requestInTransaction().query(`
+    SELECT OBJECT_SCHEMA_NAME(fk.parent_object_id) AS schema_name,
+           OBJECT_NAME(fk.parent_object_id)        AS table_name,
+           c.name                                  AS column_name,
+           c.is_nullable                           AS is_nullable,
+           rc.name                                 AS referenced_column
+    FROM sys.foreign_keys fk
+    JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+    JOIN sys.columns c  ON c.object_id  = fkc.parent_object_id     AND c.column_id  = fkc.parent_column_id
+    JOIN sys.columns rc ON rc.object_id = fkc.referenced_object_id AND rc.column_id = fkc.referenced_column_id
+    WHERE fk.referenced_object_id = OBJECT_ID('${schemaName}.${tableName}')
+      AND fk.parent_object_id <> fk.referenced_object_id;
+  `)
+
+  for (const ref of refs.recordset) {
+    const childTable = `[${ref.schema_name}].[${ref.table_name}]`
+    const childWhere = `[${ref.column_name}] IN (SELECT [${ref.referenced_column}] FROM [${schemaName}].[${tableName}] WHERE ${whereSql})`
+    if (ref.is_nullable) {
+      await requestInTransaction().query(`UPDATE ${childTable} SET [${ref.column_name}] = NULL WHERE ${childWhere};`)
+    } else {
+      await clearRowsReferencing(requestInTransaction, ref.schema_name, ref.table_name, childWhere, depth + 1)
+      await requestInTransaction().query(`DELETE FROM ${childTable} WHERE ${childWhere};`)
+    }
+  }
+}
 
 // deleteUserHandler'ın basit silmesi (Entitlements/TeacherEntitlements/Users tek satır) FK
 // constraint'e (547) takıldığında çağrılır — admin "Sil"e basarak bu bağımlı kayıtların da
@@ -67,6 +103,17 @@ async function cascadeDeleteUserAndDependents(requestInTransaction, rootUserId) 
         if (n > 0) progressed = true
       } catch (err) {
         if (err.number === 547) {
+          // Silinecek satırlara başka tablolar (Users dışı FK ile) bağlıysa önce onları
+          // temizle; sonraki pass'te bu FK tekrar denenir.
+          if (!fk.is_nullable && !selfRef) {
+            await clearRowsReferencing(
+              requestInTransaction,
+              fk.schema_name,
+              fk.table_name,
+              `${col} IN (${targetsIn})`,
+            )
+            progressed = true
+          }
           stillPending.push(fk)
         } else {
           throw err
