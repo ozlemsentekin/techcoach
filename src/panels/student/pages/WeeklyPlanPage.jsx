@@ -7,7 +7,7 @@ import {
   getWeekDates,
   saveTaskForDay,
 } from '../../../services/weeklyPlanService'
-import { addDaysISO, addMinutesToTime, getMondayOfWeek, todayISODate } from '../../../utils/time'
+import { addDaysISO, getMondayOfWeek, todayISODate } from '../../../utils/time'
 import { useAuth } from '../../../context/useAuth'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
@@ -86,19 +86,6 @@ export default function WeeklyPlanPage() {
     await patchTask(task.id, { date: newDate })
     reload()
     showBanner('Görev taşındı.')
-  }
-
-  const handleQuickAddBreak = async (date, afterTask, minutes) => {
-    const breakStart = afterTask.endTime
-    await saveTaskForDay(date, {
-      title: 'Mola',
-      taskType: 'mola',
-      startTime: breakStart,
-      endTime: addMinutesToTime(breakStart, minutes),
-      durationMinutes: minutes,
-    })
-    reload()
-    showBanner(`${minutes} dakikalık mola eklendi.`)
   }
 
   const getExistingTasksForDrawer = (date) => tasksByDate[date] || []
@@ -212,7 +199,6 @@ export default function WeeklyPlanPage() {
             schoolHolidays={schoolHolidays}
             onAddHomework={(date) => setDrawerState({ defaultDate: date })}
             onEditTask={(task) => setDrawerState({ initialTask: task })}
-            onQuickAddBreak={handleQuickAddBreak}
             onMoveTask={handleMoveTask}
             canEditTask={(task) => task.createdBy === 'ogrenci'}
           />
