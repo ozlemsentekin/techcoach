@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   AlertTriangle,
   BookOpen,
@@ -36,8 +36,6 @@ import { isEndedPrivateLessonForToday } from '../../../utils/lessonTasks'
 import Badge from '../../ui/Badge'
 import { isSchoolHoliday, getSchoolExams } from '../../../services/weeklyPlanService'
 import { useBillingGate } from '../../../context/useBillingGate'
-
-const BREAK_DURATION_OPTIONS = [15, 30, 45, 60]
 
 // Sürükle-bırak ile gün değiştirme: tamamlanmış/değerlendirilmiş/zaten yeniden planlanmış
 // görev başka bir kayda referans olduğu için taşınamaz.
@@ -376,66 +374,6 @@ function getGradeSummary(task) {
   return { correct, wrong, blank, net, percent }
 }
 
-function QuickBreakMenu({ task, onPick, onClose }) {
-  const menuRef = useRef(null)
-  const [customValue, setCustomValue] = useState('')
-
-  useEffect(() => {
-    const handlePointerDown = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) onClose()
-    }
-    document.addEventListener('mousedown', handlePointerDown)
-    return () => document.removeEventListener('mousedown', handlePointerDown)
-  }, [onClose])
-
-  const handleCustomSubmit = (event) => {
-    event.preventDefault()
-    const minutes = Number(customValue)
-    if (minutes > 0) onPick(minutes)
-  }
-
-  return (
-    <div
-      ref={menuRef}
-      onClick={(event) => event.stopPropagation()}
-      className="absolute right-0 top-full z-20 mt-1 w-40 rounded-xl border border-panel-border bg-panel-surface p-2 shadow-lg"
-    >
-      <p className="px-1 pb-1.5 text-[11px] font-bold text-panel-text-muted">
-        {formatTaskTime(task).split(' – ')[1] || ''} sonrasına mola
-      </p>
-      <div className="grid grid-cols-2 gap-1.5">
-        {BREAK_DURATION_OPTIONS.map((minutes) => (
-          <button
-            key={minutes}
-            type="button"
-            onClick={() => onPick(minutes)}
-            className="rounded-lg border border-amber-100 bg-amber-50/70 px-2 py-1.5 text-xs font-bold text-panel-warm transition-colors duration-150 hover:bg-amber-100/70"
-          >
-            {minutes} dk
-          </button>
-        ))}
-      </div>
-      <form onSubmit={handleCustomSubmit} className="mt-1.5 flex items-center gap-1">
-        <input
-          type="number"
-          min="1"
-          value={customValue}
-          onChange={(event) => setCustomValue(event.target.value)}
-          placeholder="Özel"
-          className="h-8 w-full min-w-0 rounded-lg border border-panel-border px-2 text-xs font-semibold text-panel-text focus:border-panel-blue focus:outline-none"
-        />
-        <button
-          type="submit"
-          disabled={!(Number(customValue) > 0)}
-          className="h-8 shrink-0 rounded-lg border border-panel-blue-soft bg-panel-blue-soft/60 px-2 text-xs font-bold text-panel-blue transition-colors duration-150 hover:bg-panel-blue-soft disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Ekle
-        </button>
-      </form>
-    </div>
-  )
-}
-
 // Öğretmenin bu öğrenciyle sabit ders programındaki (bkz. StudentTeachers.schedule_json) bir
 // zaman dilimini temsil eden salt okunur, sahte "görev" kartı. Gerçek bir Tasks satırı değildir;
 // sadece o saatin dolu olduğunu haftalık takvimde ayrı bir renkle göstermek için render edilir.
@@ -643,7 +581,6 @@ function CompactMetricChips({
 function TaskCard({
   task,
   onEditTask,
-  onQuickAddBreak,
   onViewAnswerSheet,
   onCompleteTask,
   onToggleReview,
@@ -654,7 +591,6 @@ function TaskCard({
   onTaskDragEnd,
   muted = false,
 }) {
-  const [showBreakMenu, setShowBreakMenu] = useState(false)
   const [expanded, setExpanded] = useState(false)
 
   if (task.isScheduleSlot)
@@ -674,7 +610,6 @@ function TaskCard({
   const homeworkStatus = getHomeworkStatusIcon(task)
   const Icon = backlog ? AlertTriangle : homeworkStatus?.Icon || style.icon
   const iconClassName = backlog ? 'bg-panel-red-soft text-panel-red' : homeworkStatus?.iconClassName || style.iconClassName
-  const canAddBreak = typeof onQuickAddBreak === 'function' && !['mola', 'dinlenme'].includes(task.taskType) && Boolean(task.endTime)
   const testRows = isHomework ? getTaskTestRows(task) : []
   const fallbackDetail = !isHomework || testRows.length === 0 ? getFallbackDetail(task) : null
   const source = isHomework ? getTaskSource(task) : null
@@ -729,11 +664,6 @@ function TaskCard({
     Boolean(completionTimestampLabel) ||
     getTaskAttachments(task).length > 0 ||
     Boolean(task.createdBy)
-
-  const handlePick = (minutes) => {
-    setShowBreakMenu(false)
-    onQuickAddBreak(task, minutes)
-  }
 
   const cardToneClassName = backlog
     ? 'border-panel-red/50 bg-panel-red-soft/30 text-panel-text shadow-[0_1px_4px_rgba(220,38,38,0.15)]'
@@ -862,7 +792,7 @@ function TaskCard({
       role={hasDetails ? 'button' : undefined}
       tabIndex={hasDetails ? 0 : undefined}
       aria-expanded={hasDetails ? expanded : undefined}
-      className={`group relative flex min-h-[66px] w-full flex-col gap-1.5 rounded-xl border py-2.5 pr-2 transition duration-150 ${showAccentBar ? 'pl-4' : 'pl-2.5'} ${cardToneClassName} ${showBreakMenu ? 'z-30' : ''} ${hasDetails ? 'cursor-pointer' : ''} ${isMovable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      className={`group relative flex min-h-[66px] w-full flex-col gap-1.5 rounded-xl border py-2.5 pr-2 transition duration-150 ${showAccentBar ? 'pl-4' : 'pl-2.5'} ${cardToneClassName} ${hasDetails ? 'cursor-pointer' : ''} ${isMovable ? 'cursor-grab active:cursor-grabbing' : ''}`}
     >
       {showAccentBar ? (
         <span className={`absolute inset-y-2 left-1.5 w-1 rounded-full ${accentBarClass}`} aria-hidden="true" />
@@ -922,21 +852,6 @@ function TaskCard({
             </button>
           ) : null}
 
-          {canAddBreak ? (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation()
-                setShowBreakMenu((current) => !current)
-              }}
-              title="Bu dersin ardına mola ekle"
-              aria-expanded={showBreakMenu}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-panel-text-muted opacity-0 transition-colors duration-150 hover:bg-amber-100/70 hover:text-panel-warm focus-visible:opacity-100 group-hover:opacity-100"
-            >
-              <Coffee size={15} aria-hidden="true" />
-            </button>
-          ) : null}
-
           {hasDetails ? (
             <button
               type="button"
@@ -952,10 +867,6 @@ function TaskCard({
                 aria-hidden="true"
               />
             </button>
-          ) : null}
-
-          {canAddBreak && showBreakMenu ? (
-            <QuickBreakMenu task={task} onPick={handlePick} onClose={() => setShowBreakMenu(false)} />
           ) : null}
         </div>
       </div>
@@ -1137,7 +1048,6 @@ export default function WeeklyPlannerGrid({
   schoolHolidays,
   onAddHomework,
   onEditTask,
-  onQuickAddBreak,
   onViewAnswerSheet,
   onCompleteTask,
   onToggleReview,
@@ -1466,11 +1376,6 @@ export default function WeeklyPlannerGrid({
                 onTaskDragStart={handleTaskDragStart}
                 onTaskDragEnd={handleTaskDragEnd}
                 muted={isPastDay}
-                onQuickAddBreak={
-                  isPastDay || typeof onQuickAddBreak !== 'function' || task.isScheduleSlot || task.isSchoolSlot
-                    ? undefined
-                    : (pickedTask, minutes) => onQuickAddBreak(date, pickedTask, minutes)
-                }
               />
             )) : (
               <div

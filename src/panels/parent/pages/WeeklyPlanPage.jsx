@@ -14,7 +14,7 @@ import {
 } from '../../../services/weeklyPlanService'
 import { preloadPanelHomeworkResourceBooks } from '../../../services/resourceBookService'
 import { getUnscheduledTasks, patchTask, removeTask } from '../../../services/taskService'
-import { addDaysISO, addMinutesToTime, getMondayOfWeek, todayISODate } from '../../../utils/time'
+import { addDaysISO, getMondayOfWeek, todayISODate } from '../../../utils/time'
 import { withGenitive } from '../../../utils/turkishSuffix'
 import Button from '../../ui/Button'
 import LoadingState from '../../shared/LoadingState'
@@ -220,26 +220,6 @@ export default function WeeklyPlanPage() {
     await patchTask(task.id, { date: newDate }, selectedStudentId)
     await refresh()
     showBanner('Görev taşındı.')
-  }
-
-  const handleQuickAddBreak = async (date, afterTask, minutes) => {
-    const breakStart = afterTask.endTime
-    const breakEnd = addMinutesToTime(breakStart, minutes)
-
-    await saveTaskForDay(
-      date,
-      {
-        title: 'Mola',
-        taskType: 'mola',
-        startTime: breakStart,
-        endTime: breakEnd,
-        durationMinutes: minutes,
-      },
-      { studentId: selectedStudentId },
-    )
-
-    await refresh()
-    showBanner(`${minutes} dakikalık mola eklendi.`)
   }
 
   const getExistingTasksForDrawer = useCallback(
@@ -476,7 +456,6 @@ export default function WeeklyPlanPage() {
             onEditTask={(task) => setDrawerState({ initialTask: task })}
             onViewAnswerSheet={setAnswerSheetTask}
             onCompleteTask={handleCompleteTask}
-            onQuickAddBreak={handleQuickAddBreak}
             onManageLessonSlot={setManagingSlot}
             onMoveTask={handleMoveTask}
           />
