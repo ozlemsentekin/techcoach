@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X, CheckCircle2, XCircle, MinusCircle, Trash2, Camera } from 'lucide-react'
+import { X, CheckCircle2, XCircle, MinusCircle, Trash2, Camera, BookOpenText } from 'lucide-react'
 import {
   getTaskAnswerSheet,
   saveTaskAnswers,
@@ -14,6 +14,7 @@ import ConfirmationDialog from '../../shared/ConfirmationDialog'
 import SuccessCelebration from '../../shared/SuccessCelebration'
 import WrongQuestionGalleryModal from '../../shared/WrongQuestionGalleryModal'
 import MistakePhotoCaptureModal from './MistakePhotoCaptureModal'
+import MistakeBookletQuestionsModal from '../../shared/MistakeBookletQuestionsModal'
 
 // Bir testin fotoğraflı yanlış/boş sorularını WrongQuestionGalleryModal item şekline çevirir.
 function buildGalleryItems(test, photosMap, result) {
@@ -88,7 +89,7 @@ function ResultBadge({ result }) {
   )
 }
 
-function TestSection({ test, answers, result, photos, photoMode, canRegrade, onSelect, onRemove, onCapture, onOpenGallery }) {
+function TestSection({ test, answers, result, photos, photoMode, canRegrade, onSelect, onRemove, onCapture, onOpenGallery, onOpenBooklet }) {
   // Öğrenci akışında değerlendirilen test kilitlenir; veli (canRegrade) yanlış aktarılmış
   // bir optiği düzeltebilsin diye kilit açık kalır.
   const locked = Boolean(result) && !canRegrade
@@ -112,6 +113,17 @@ function TestSection({ test, answers, result, photos, photoMode, canRegrade, onS
           <Trash2 size={14} aria-hidden="true" />
         </button>
       </div>
+
+      {test.isMistakeBooklet ? (
+        <button
+          type="button"
+          onClick={onOpenBooklet}
+          className="mt-1.5 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-student-theme-primary px-2 py-1.5 text-xs font-semibold text-student-theme-text hover:bg-student-theme-soft"
+        >
+          <BookOpenText size={14} aria-hidden="true" />
+          Soruları Gör
+        </button>
+      ) : null}
 
       <div className="mt-1.5">
         <ResultBadge result={result} />
@@ -250,6 +262,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
   // { testId, items, index } — bir testin fotoğraflı yanlışları arasında gezinilen hata analizi galerisi.
   const [gallery, setGallery] = useState(null)
   const [celebrate, setCelebrate] = useState(false)
+  const [bookletTestId, setBookletTestId] = useState(null)
 
   useEffect(() => {
     let ignore = false
@@ -477,6 +490,7 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
                   onRemove={setRemovingTest}
                   onCapture={(orderNo) => setCapturingQuestion({ testId: test.id, orderNo, reopenGallery: true })}
                   onOpenGallery={(orderNo) => openGallery(test, orderNo)}
+                  onOpenBooklet={() => setBookletTestId(test.id)}
                 />
               ))}
             </div>
@@ -549,8 +563,11 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
         <MistakePhotoCaptureModal
           questionLabel={capturingQuestion.orderNo}
           existingPhotoUrl={getPhotoUrl(photosByTest[capturingQuestion.testId]?.[String(capturingQuestion.orderNo)])}
-          onVerifyQuestionNumber={(dataUrl) =>
-            verifyMistakePhotoQuestionNumber(dataUrl, capturingQuestion.orderNo)
+          onVerifyQuestionNumber={
+            // Hata Kitapçığı görselindeki numara orijinal kitabın numarası, kitapçık sırası değil.
+            tests?.find((test) => test.id === capturingQuestion.testId)?.isMistakeBooklet
+              ? undefined
+              : (dataUrl) => verifyMistakePhotoQuestionNumber(dataUrl, capturingQuestion.orderNo)
           }
           onClose={() => setCapturingQuestion(null)}
           onSave={handleSavePhoto}
@@ -558,6 +575,10 @@ export default function TaskAnswerSheetModal({ task, lessonLabel, photoMode = 'e
       ) : null}
 
       {celebrate ? <SuccessCelebration onClose={() => setCelebrate(false)} /> : null}
+
+      {bookletTestId ? (
+        <MistakeBookletQuestionsModal testId={bookletTestId} studentId={studentId} onClose={() => setBookletTestId(null)} />
+      ) : null}
 
       {gallery && !capturingQuestion && gallery.items.length > 0 ? (
         <WrongQuestionGalleryModal

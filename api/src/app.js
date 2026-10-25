@@ -24,6 +24,7 @@ const {
   verifyPasswordResetOtpHandler,
   confirmPasswordResetHandler,
 } = require('./otp')
+const { createMistakeBookletTestHandler, listMistakeBookletQuestionsHandler } = require('./mistakeBooklets')
 const {
   listUsersHandler,
   updateUserHandler,
@@ -1832,6 +1833,20 @@ registerHttp('panel-check-in-set', {
   methods: ['PUT'],
   route: 'panel/check-in',
   handler: saveCheckInHandler,
+})
+
+registerHttp('panel-mistake-booklet-tests-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel/mistake-booklets/tests',
+  handler: createMistakeBookletTestHandler,
+})
+
+registerHttp('panel-mistake-booklet-test-questions', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/mistake-booklets/tests/{testId}/questions',
+  handler: listMistakeBookletQuestionsHandler,
 })
 
 registerHttp('panel-wrong-questions-list', {

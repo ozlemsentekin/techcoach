@@ -7,6 +7,7 @@ const { recordTaskActivities } = require('./taskActivity')
 const { sanitizeWrongQuestion, fetchWrongQuestionAnalyses } = require('./progress')
 const { sanitizeAnswers, gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGrading')
 const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
+const { fetchBookletTestIdSet } = require('./mistakeBooklets')
 const { getUserBillingState, billingRestrictedResponse } = require('./entitlements')
 
 function toISODate(value) {
@@ -1058,6 +1059,7 @@ async function fetchTaskAnswerSheetData(taskId, studentId) {
   `)
 
   const testsById = new Map(testsResult.recordset.map((row) => [row.id, row]))
+  const bookletTestIds = await fetchBookletTestIdSet(testIds)
   const tests = testIds
     .map((id) => testsById.get(id))
     .filter(Boolean)
@@ -1068,6 +1070,7 @@ async function fetchTaskAnswerSheetData(taskId, studentId) {
       questionCount: row.question_count,
       answers: answers[row.id] || {},
       result: results[row.id] || null,
+      isMistakeBooklet: bookletTestIds.has(String(row.id).toLowerCase()),
     }))
 
   const photosDb = await withRequest({ taskId: { type: sql.UniqueIdentifier, value: taskId } })

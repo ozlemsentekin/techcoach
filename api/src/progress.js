@@ -4,6 +4,7 @@ const { json } = require('./http')
 const { isSessionError } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
 const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
+const { attachRepeatInfo } = require('./mistakeBooklets')
 
 const MISTAKE_REASONS = ['dikkat-hatasi', 'bilgi-eksikligi', 'soruyu-anlamadim']
 
@@ -492,11 +493,17 @@ async function listWrongQuestionsHandler(request) {
     // bookImageUrl'i her satırda tekrar tekrar döndürmek yerine (bkz. yukarıdaki
     // fetchWrongQuestionBookImagesByName yorumu) ayrı, kitap başına tek girişli bir harita
     // olarak gönderiyoruz; istemci bunu book_name ile eşleyip sadece görüntülerken kullanır.
-    return json(200, {
-      wrongQuestions: result.recordset.map((row) => ({
+    // repeatCount: aynı soru (Hata Kitapçığı'nda tekrar yanlış yapılanlar dahil) kaç kez yanlış —
+    // bkz. mistakeBooklets.attachRepeatInfo.
+    const wrongQuestions = await attachRepeatInfo(
+      studentId,
+      result.recordset.map((row) => ({
         ...sanitizeWrongQuestion(row),
         analysisComments: analysesMap.get(row.id) || [],
       })),
+    )
+    return json(200, {
+      wrongQuestions,
       bookImages: Object.fromEntries(bookImageByName),
     })
   } catch (error) {

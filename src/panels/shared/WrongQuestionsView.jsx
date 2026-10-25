@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   Layers,
   Loader2,
+  Repeat,
   Search,
   Tag,
 } from 'lucide-react'
@@ -22,6 +23,7 @@ import { cn } from '../ui/utils'
 import WrongQuestionGalleryModal from './WrongQuestionGalleryModal'
 import AddWrongQuestionModal from './AddWrongQuestionModal'
 import MistakePhotoCaptureModal from '../student/components/MistakePhotoCaptureModal'
+import MistakeBookletTestModal from './MistakeBookletTestModal'
 import { verifyMistakePhotoQuestionNumber } from '../../services/mistakePhotoService'
 import { ResourceBookAvatar } from './ResourceBookCard'
 import { RATE_TONES, completionRateTone, successRateTone } from './rateTones'
@@ -448,7 +450,31 @@ function TopicAccordionHeader({ topic, wrongCount, stats, isOpen, onToggle }) {
 // bileşen mount olduğunda (yani içerik grubu açıldığında) tembel çekilir; kapalı gruplar hiç
 // mount edilmediği için fotoğraf istemez — WrongQuestionGalleryModal'daki tembel yükleme deseniyle
 // aynı fikir, tek farkı burada tüm grup için paralel çalışır.
-function WrongQuestionThumbnail({ item, fetchPhoto, onClick, viewerRole, onLoadingChange }) {
+// Aynı sorunun (Hata Kitapçığı'nda tekrar yanlış yapılanlar dahil) kaç kez yanlış yapıldığı —
+// backend repeatCount'u root_key ile hesaplar (bkz. api/src/mistakeBooklets.js).
+function RepeatBadge({ count }) {
+  if (!count || count < 2) return null
+  return (
+    <span
+      title={`Bu soru toplam ${count} kez yanlış yapıldı`}
+      className="inline-flex h-5 items-center gap-0.5 rounded-full bg-panel-red-soft px-1.5 text-[10px] font-bold text-panel-red"
+    >
+      <Repeat size={10} aria-hidden="true" />
+      {count}×
+    </span>
+  )
+}
+
+function WrongQuestionThumbnail({
+  item,
+  fetchPhoto,
+  onClick,
+  viewerRole,
+  onLoadingChange,
+  selectMode = false,
+  selectionIndex = -1,
+  showBookletUsage = false,
+}) {
   const [fetchedPhotoUrl, setFetchedPhotoUrl] = useState(null)
   const [error, setError] = useState('')
   // Hata Defteri'nden fotoğraf değiştirildiğinde üst bileşen item'a taze `photoUrl` yazar; o
@@ -487,13 +513,37 @@ function WrongQuestionThumbnail({ item, fetchPhoto, onClick, viewerRole, onLoadi
     <button
       type="button"
       onClick={onClick}
-      className="group flex flex-col overflow-hidden rounded-xl border border-panel-border bg-panel-surface text-left shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-md"
+      aria-pressed={selectMode ? selectionIndex >= 0 : undefined}
+      className={cn(
+        'group relative flex flex-col overflow-hidden rounded-xl border bg-panel-surface text-left shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-md',
+        selectMode && selectionIndex >= 0 ? 'border-panel-blue ring-2 ring-panel-blue' : 'border-panel-border',
+      )}
     >
+      {selectMode ? (
+        <span
+          className={cn(
+            'absolute bottom-2 right-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full border-2 text-xs font-bold shadow',
+            selectionIndex >= 0 ? 'border-panel-blue bg-panel-blue text-white' : 'border-white bg-black/30 text-white',
+          )}
+          aria-hidden="true"
+        >
+          {selectionIndex >= 0 ? selectionIndex + 1 : ''}
+        </span>
+      ) : null}
       <div className="flex items-start justify-between gap-1 px-2 py-1.5">
         <p className="line-clamp-2 text-[11px] font-medium leading-snug text-panel-text" title={caption}>
           {caption}
         </p>
         <span className="flex shrink-0 items-center gap-1">
+          <RepeatBadge count={item.repeatCount} />
+          {showBookletUsage && item.bookletUseCount > 0 ? (
+            <span
+              title={`Bu soru ${item.bookletUseCount} kez Hata Kitapçığı testine kondu`}
+              className="inline-flex h-5 items-center rounded-full border border-panel-border px-1.5 text-[10px] font-semibold text-panel-text-muted"
+            >
+              K{item.bookletUseCount}
+            </span>
+          ) : null}
           {item.hasAnalysisPhoto ? (
             <span
               title="Hata Analiz eklendi"
@@ -527,7 +577,18 @@ function WrongQuestionThumbnail({ item, fetchPhoto, onClick, viewerRole, onLoadi
 // Bir kaynağa (kitaba) tıklandığında açılan ekran: içerik gruplarına (konulara) göre kapalı
 // gelen akordeonlar ve her grubun altında tüm sorulara ait fotoğrafların ızgara görünümü. Test
 // adı/konuya göre arama, eşleşen gruplardaki soruları otomatik açar.
-function SourceQuestionBoard({ subject, topics, statsForTopic, fetchPhoto, onSelectItem, viewerRole }) {
+function SourceQuestionBoard({
+  subject,
+  topics,
+  statsForTopic,
+  fetchPhoto,
+  onSelectItem,
+  viewerRole,
+  selectMode = false,
+  selectedIds = [],
+  onToggleSelect,
+  showBookletUsage = false,
+}) {
   const [query, setQuery] = useState('')
   const [expandedKeys, setExpandedKeys] = useState(() => new Set())
   const [pendingPhotoIds, setPendingPhotoIds] = useState(() => new Set())
@@ -612,7 +673,10 @@ function SourceQuestionBoard({ subject, topics, statsForTopic, fetchPhoto, onSel
                       item={item}
                       fetchPhoto={fetchPhoto}
                       viewerRole={viewerRole}
-                      onClick={() => onSelectItem(topicGroup.items, itemIndex)}
+                      selectMode={selectMode}
+                      selectionIndex={selectMode ? selectedIds.indexOf(item.id) : -1}
+                      showBookletUsage={showBookletUsage}
+                      onClick={() => (selectMode ? onToggleSelect(item) : onSelectItem(topicGroup.items, itemIndex))}
                       onLoadingChange={handleThumbnailLoadingChange}
                     />
                   ))}
@@ -785,6 +849,7 @@ export default function WrongQuestionsView({
   headerActions,
   backSlot = null,
   hideHeaderWhenUnselected = false,
+  canCreateBookletTest = false,
 }) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [wrongQuestions, setWrongQuestions] = useState(null)
@@ -803,6 +868,11 @@ export default function WrongQuestionsView({
   const [replacingPhotoItem, setReplacingPhotoItem] = useState(null)
   const [analysisFilter, setAnalysisFilter] = useState('tumu')
   const [dateFilter, setDateFilter] = useState('last7')
+  const [repeatOnly, setRepeatOnly] = useState(false)
+  // Hata Kitapçığı (yalnız admin): seçim sırası = testteki soru sırası; ders değişince sıfırlanır.
+  const [bookletSelectMode, setBookletSelectMode] = useState(false)
+  const [bookletSelection, setBookletSelection] = useState([])
+  const [showBookletModal, setShowBookletModal] = useState(false)
   const today = todayISODate()
 
   useEffect(() => {
@@ -852,10 +922,10 @@ export default function WrongQuestionsView({
   // görünüyordu). Bu yüzden dateFilter aktifken stats'i kartlara hiç vermiyoruz; kartlar o zaman
   // otomatik olarak (zaten tarihe göre filtrelenmiş) fotoğraf sayısına düşüyor.
   const dateFilterActive = dateFilter !== 'all'
-  const photoQuestions = useMemo(
-    () => applyAnalysisFilter(dateFilteredQuestions, analysisFilter),
-    [dateFilteredQuestions, analysisFilter],
-  )
+  const photoQuestions = useMemo(() => {
+    const filtered = applyAnalysisFilter(dateFilteredQuestions, analysisFilter)
+    return repeatOnly ? filtered.filter((item) => (item.repeatCount || 1) > 1) : filtered
+  }, [dateFilteredQuestions, analysisFilter, repeatOnly])
   const filterOptions = useMemo(() => analysisFilterOptions(viewerRole), [viewerRole])
 
   const contentGroups = useMemo(() => groupBySubjectAndTopic(photoQuestions), [photoQuestions])
@@ -972,16 +1042,31 @@ export default function WrongQuestionsView({
     setSelectedTopicKeys(new Set())
   }
 
+  const resetBookletSelection = () => {
+    setBookletSelectMode(false)
+    setBookletSelection([])
+  }
+
+  const toggleBookletItem = (item) => {
+    setBookletSelection((prev) =>
+      prev.some((selected) => selected.id === item.id)
+        ? prev.filter((selected) => selected.id !== item.id)
+        : [...prev, item],
+    )
+  }
+
   const handleSelectSubject = (subject) => {
     setSelectedSubject(subject)
     setSelectedSourceKey(null)
     resetTopicSelection()
+    resetBookletSelection()
   }
 
   const handleBackToSubjects = () => {
     setSelectedSubject(null)
     setSelectedSourceKey(null)
     resetTopicSelection()
+    resetBookletSelection()
   }
 
   const handleChangeGroupMode = (mode) => {
@@ -1137,6 +1222,15 @@ export default function WrongQuestionsView({
             <div className="flex items-center gap-2">
               {headerActions}
               {addButton}
+              {canCreateBookletTest ? (
+                <Button
+                  type="button"
+                  variant={bookletSelectMode ? 'primary' : 'secondary'}
+                  onClick={() => (bookletSelectMode ? resetBookletSelection() : setBookletSelectMode(true))}
+                >
+                  {bookletSelectMode ? 'Seçimi Kapat' : 'Soru Seç → Test'}
+                </Button>
+              ) : null}
               <SourcePdfExportButton subject={effectiveSelectedSubject} source={activeSource} fetchPhoto={fetchPhoto} />
               <Button variant="secondary" onClick={() => setSelectedSourceKey(null)}>
                 <ArrowLeft size={15} aria-hidden="true" />
@@ -1226,6 +1320,15 @@ export default function WrongQuestionsView({
               </option>
             ))}
           </select>
+          <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-panel-text-muted">
+            <input
+              type="checkbox"
+              checked={repeatOnly}
+              onChange={(event) => setRepeatOnly(event.target.checked)}
+              className="h-4 w-4"
+            />
+            Sadece tekrar eden hatalar
+          </label>
           {viewerRole === 'ogretmen'
             ? (() => {
                 const pending = pendingAnalysisCount(scopedPhotoQuestions, viewerRole)
@@ -1257,11 +1360,15 @@ export default function WrongQuestionsView({
       ) : wrongQuestions === null ? (
         <LoadingState label="Hata defteri yükleniyor..." />
       ) : contentGroups.length === 0 ? (
-        analysisFilter !== 'tumu' && allPhotoQuestions.length > 0 ? (
+        (analysisFilter !== 'tumu' || repeatOnly) && allPhotoQuestions.length > 0 ? (
           <EmptyState
             icon={AlertCircle}
             title="Bu filtreye uyan soru yok"
-            description="Seçtiğin analiz durumundaki tüm sorular tamamlanmış. Filtreyi 'Tüm sorular' yaparak hepsini görebilirsin."
+            description={
+              repeatOnly
+                ? 'Seçili tarih aralığında birden fazla kez yanlış yapılan soru yok.'
+                : "Seçtiğin analiz durumundaki tüm sorular tamamlanmış. Filtreyi 'Tüm sorular' yaparak hepsini görebilirsin."
+            }
           />
         ) : (
           <EmptyState
@@ -1282,6 +1389,10 @@ export default function WrongQuestionsView({
           fetchPhoto={fetchPhoto}
           viewerRole={viewerRole}
           onSelectItem={(items, index) => setSourceGallerySelection({ items, index })}
+          selectMode={bookletSelectMode}
+          selectedIds={bookletSelection.map((item) => item.id)}
+          onToggleSelect={toggleBookletItem}
+          showBookletUsage={canCreateBookletTest}
         />
       ) : effectiveSelectedSubject ? (
         <div className="flex flex-col gap-4">
@@ -1403,6 +1514,35 @@ export default function WrongQuestionsView({
           fetchAnalysisPhotos={fetchAnalysisPhotos}
           onAddAnalysisPhoto={handleAddAnalysisPhoto}
           onRemoveAnalysisPhoto={handleRemoveAnalysisPhoto}
+        />
+      ) : null}
+
+      {bookletSelectMode ? (
+        <div className="sticky bottom-3 z-30 mx-auto flex w-full max-w-2xl flex-wrap items-center justify-between gap-2 rounded-2xl border border-panel-border bg-panel-surface px-4 py-3 shadow-lg">
+          <p className="text-sm text-panel-text">
+            <span className="font-semibold">{bookletSelection.length} soru seçildi</span>
+            <span className="text-panel-text-muted"> · seçim sırası test sırası olur, başka kaynaklardan da ekleyebilirsin</span>
+          </p>
+          <div className="flex gap-2">
+            {bookletSelection.length ? (
+              <Button type="button" variant="ghost" size="sm" onClick={() => setBookletSelection([])}>
+                Temizle
+              </Button>
+            ) : null}
+            <Button type="button" size="sm" disabled={!bookletSelection.length} onClick={() => setShowBookletModal(true)}>
+              Teste Dönüştür
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {showBookletModal ? (
+        <MistakeBookletTestModal
+          studentId={studentId}
+          subject={effectiveSelectedSubject}
+          items={bookletSelection}
+          onCreated={resetBookletSelection}
+          onClose={() => setShowBookletModal(false)}
         />
       ) : null}
 
