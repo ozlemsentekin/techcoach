@@ -209,3 +209,26 @@ export async function updateWrongQuestion(id, updates, studentId) {
   })
   return data.wrongQuestion
 }
+
+/**
+ * Hata Kitapçığı (yalnız admin): seçilen Hata Defteri sorularından, öğrencinin o dersteki
+ * "Hata Kitapçığı" kaynağına cevap anahtarlı yeni bir test ekler. Kitap ilk seferde otomatik açılır.
+ * @param {{ studentId: string, testName: string, questions: { wrongQuestionId: string, correctLabel?: string }[] }} payload
+ */
+export async function createMistakeBookletTest(payload) {
+  const data = await authRequest('/api/panel/mistake-booklets/tests', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return data.test
+}
+
+/**
+ * Kitapçık testinin soru görselleri (sırasıyla, cevap anahtarı olmadan).
+ * @param {string} testId @param {string} [studentId]
+ * @returns {Promise<{ testName: string, questions: { orderNo: number, photoUrl: string|null }[] }>}
+ */
+export async function getMistakeBookletQuestions(testId, studentId) {
+  const query = studentId ? `?studentId=${studentId}` : ''
+  return authRequest(`/api/panel/mistake-booklets/tests/${testId}/questions${query}`, { method: 'GET' })
+}

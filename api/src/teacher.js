@@ -11,6 +11,7 @@ const { requireTeacherSession, requireTeacherStudentContext } = require('./teach
 const { normalizeTeacherSubjectIds, parseTeacherSubjectIdsJson } = require('./subjectIds')
 const { fetchTeacherResourceBooks, verifySubjectExists } = require('./students')
 const { fetchStudentProfile, validateGeoSelection, sanitizePhotoUrl } = require('./studentProfile')
+const { attachRepeatInfo } = require('./mistakeBooklets')
 const { getTeacherQuota, hasActiveParentEntitlement, billingRestrictedResponse } = require('./entitlements')
 const {
   SELECT_HOMEWORK,
@@ -3388,11 +3389,15 @@ async function listTeacherStudentWrongQuestionsHandler(request) {
       fetchWrongQuestionAnalyses(studentId, { subject: subjectName }),
     ])
 
-    return json(200, {
-      wrongQuestions: result.recordset.map((row) => ({
+    const wrongQuestions = await attachRepeatInfo(
+      studentId,
+      result.recordset.map((row) => ({
         ...sanitizeWrongQuestion(row),
         analysisComments: analysesMap.get(row.id) || [],
       })),
+    )
+    return json(200, {
+      wrongQuestions,
       bookImages: Object.fromEntries(bookImageByName),
     })
   } catch (error) {

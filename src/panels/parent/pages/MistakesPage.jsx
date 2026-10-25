@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Users } from 'lucide-react'
 import { cachedGet } from '../../../services/authClient'
+import { useAuth } from '../../../context/useAuth'
 import Button from '../../ui/Button'
 import {
   getWrongQuestions,
@@ -20,6 +21,10 @@ import WrongQuestionsView from '../../shared/WrongQuestionsView'
 export default function MistakesPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { authUser } = useAuth()
+  // Hata Kitapçığı (soru seçip teste dönüştürme) yalnız yöneticiye açık: kendi hesabında
+  // (isAdmin) ya da bir veliyi impersonate ederken (actingAdmin). Backend ayrıca doğrular.
+  const canCreateBookletTest = Boolean(authUser?.isAdmin || authUser?.actingAdmin)
   const requestedStudentId = searchParams.get('studentId') || ''
   const [students, setStudents] = useState(null)
   const [selectedStudentId, setSelectedStudentId] = useState(requestedStudentId)
@@ -93,6 +98,7 @@ export default function MistakesPage() {
       removeAnalysisPhoto={(id, photoId) => deleteWrongQuestionAnalysisPhoto(id, photoId, selectedStudent.id)}
       viewerRole="ebeveyn"
       studentId={selectedStudent.id}
+      canCreateBookletTest={canCreateBookletTest}
       updateMistakeAnalysis={(id, analysis) => updateWrongQuestion(id, { analysis }, selectedStudent.id)}
       updateMistakeMeta={(id, updates) => updateWrongQuestion(id, updates, selectedStudent.id)}
       updateMistakePhoto={(id, dataUrl) => updateWrongQuestionPhoto(id, dataUrl, selectedStudent.id)}
