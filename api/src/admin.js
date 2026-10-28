@@ -1,4 +1,5 @@
 const { sql, withRequest, withTransaction } = require('./db')
+const { deleteBlobsWithPrefix } = require('./blobStore')
 const { isConfigError } = require('./config')
 const { accountDisabledResponse, clearSessionHeaders, createSessionHeaders, json } = require('./http')
 const {
@@ -383,6 +384,10 @@ async function deleteUserHandler(request) {
     // tahsilata devam eder.
     const subscriptionCancellation = await cancelSubscriptionsForUser(userId)
 
+    const ownersDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: userId } })
+    const ownersResult = await ownersDb.query(`SELECT id FROM dbo.Users WHERE id = @id OR parent_id = @id;`)
+    const blobOwnerIds = ownersResult.recordset.map((row) => String(row.id))
+
     // Entitlements/TeacherEntitlements satırları kullanıcının kendi hesap hakkı durumudur (1:1,
     // PK = kullanıcı id'si) — gerçek bir bağımlılık değil, o yüzden kullanıcıyla birlikte silinir.
     // Önce tek satırlık basit silme denenir; öğrenci/ödev/ders programı vb. bağlı kayıtlar
@@ -416,6 +421,12 @@ async function deleteUserHandler(request) {
     if (!rowsAffected) {
       return json(404, { error: 'Kullanıcı bulunamadı.' })
     }
+
+    // Silinen kullanıcının (veli ise öğrencilerinin de) depodaki Hata Defteri fotoğrafları;
+    // dosyalar öğrenci id'si klasöründe durur (bkz. blobStore.storeDataUrl).
+    await Promise.all(blobOwnerIds.map((id) => deleteBlobsWithPrefix(id).catch((err) => {
+      console.warn('deleteUserHandler blob cleanup failed', id, err.message)
+    })))
 
     return json(200, {
       success: true,

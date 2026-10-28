@@ -4,6 +4,7 @@ const { getAnthropicConfig, isConfigError } = require('./config')
 const { json } = require('./http')
 const { consumeRateLimit } = require('./rate-limit')
 const { isSessionError, readSessionToken, verifySessionToken } = require('./security')
+const { storeDataUrl } = require('./blobStore')
 
 const MAX_MISTAKE_PHOTO_MB = 5
 const MAX_MISTAKE_PHOTO_LENGTH = Math.ceil((MAX_MISTAKE_PHOTO_MB * 1024 * 1024 * 4) / 3)
@@ -199,7 +200,13 @@ const WRONG_QUESTION_OUTPUT_COLUMNS = `
   inserted.photo_url, inserted.created_at
 `
 
+/** Doğrulanmış fotoğrafı (data URL) depoya yükler; kolona yazılacak referansı döner (bkz. blobStore). */
+function storeMistakePhoto(photo, studentId) {
+  return storeDataUrl(photo, { prefix: studentId })
+}
+
 module.exports = {
+  storeMistakePhoto,
   sanitizeMistakePhoto,
   verifyMistakePhotoQuestionNumberHandler,
   WRONG_QUESTION_OUTPUT_COLUMNS,

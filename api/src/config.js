@@ -123,6 +123,14 @@ function getAnthropicConfig() {
   }
 }
 
+/** Dosya deposu (Azure Blob). Tanımlı değilse fotoğraflar eskisi gibi veritabanına yazılır. */
+function getBlobConfig() {
+  loadLocalSettings()
+  return {
+    blobConnectionString: process.env.BLOB_CONNECTION_STRING || '',
+  }
+}
+
 function getBillingConfig() {
   loadLocalSettings()
 
@@ -226,6 +234,7 @@ module.exports = {
   getAuthConfig,
   getAnthropicConfig,
   getBillingConfig,
+  getBlobConfig,
   getSmsConfig,
   getIyzicoConfig,
   getCaptchaConfig,

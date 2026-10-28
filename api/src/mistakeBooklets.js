@@ -1,4 +1,5 @@
 const { sql, withRequest, withTransaction } = require('./db')
+const { toReadUrl } = require('./blobStore')
 const { isConfigError } = require('./config')
 const { json } = require('./http')
 const { isSessionError, readSessionToken, verifySessionToken } = require('./security')
@@ -337,7 +338,7 @@ async function listMistakeBookletQuestionsHandler(request) {
 
     return json(200, {
       testName: result.recordset[0].test_name,
-      questions: result.recordset.map((row) => ({ orderNo: row.order_no, photoUrl: row.photo_url || null })),
+      questions: result.recordset.map((row) => ({ orderNo: row.order_no, photoUrl: toReadUrl(row.photo_url) || null })),
     })
   } catch (error) {
     return handleError(error, 'listMistakeBookletQuestionsHandler', 'Kitapçık soruları yüklenemedi.')

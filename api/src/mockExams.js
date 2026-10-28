@@ -4,7 +4,8 @@ const { json } = require('./http')
 const { isSessionError } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
 const { requireTeacherSession, requireTeacherStudentContext } = require('./teacherScope')
-const { sanitizeMistakePhoto } = require('./mistakePhoto')
+const { sanitizeMistakePhoto, storeMistakePhoto } = require('./mistakePhoto')
+const { toReadUrl } = require('./blobStore')
 
 const MOCK_EXAM_KINDS = ['brans', 'genel', 'etut']
 const BRANS_QUESTION_COUNT = 20
@@ -939,7 +940,7 @@ async function createMockExamHandler(request) {
                 subjectName: subject.subjectName,
                 topic,
                 questionNumber: i + 1,
-                photoUrl: subject.photos[i],
+                photoUrl: await storeMistakePhoto(subject.photos[i], studentId),
               }),
             ).query(MOCK_EXAM_WQ_INSERT_SQL)
           }
@@ -1273,7 +1274,7 @@ async function addMockExamPhotoHandler(request) {
         subjectName: scope.subject_name,
         topic: subjectTopicLabel(scope.subject_name, toISODate(scope.exam_date)),
         questionNumber: scope.photo_count + 1,
-        photoUrl: photoCheck.value,
+        photoUrl: await storeMistakePhoto(photoCheck.value, studentId),
       }),
     )
     await insertDb.query(MOCK_EXAM_WQ_INSERT_SQL)
@@ -1325,7 +1326,7 @@ async function addMockExamQuestionPhotoHandler(request) {
           subjectName: scope.subject_name,
           topic: scope.topic_name || subjectTopicLabel(scope.subject_name, null),
           questionNumber: scope.order_no,
-          photoUrl: photoCheck.value,
+          photoUrl: await storeMistakePhoto(photoCheck.value, studentId),
         }),
       ).query(MOCK_EXAM_WQ_INSERT_RETURNING_ID_SQL)
       const newWrongQuestionId = insertResult.recordset[0]?.id
@@ -1599,7 +1600,7 @@ async function getTeacherMockExamPhotoHandler(request) {
     `)
     const photoUrl = result.recordset[0]?.photo_url
     if (!photoUrl) return json(404, { error: 'Fotoğraf bulunamadı.' })
-    return json(200, { photoUrl })
+    return json(200, { photoUrl: toReadUrl(photoUrl) })
   } catch (error) {
     return handleError(error, 'getTeacherMockExamPhotoHandler', 'Fotoğraf yüklenemedi.')
   }

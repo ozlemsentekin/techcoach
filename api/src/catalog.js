@@ -5,7 +5,7 @@ const { requireAdmin, requireCatalogStaff, requireLibraryEditor } = require('./a
 const { isSessionError, readSessionToken, verifySessionToken } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
 const { gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGrading')
-const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
+const { sanitizeMistakePhoto, storeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
 const { sanitizeWrongQuestion } = require('./progress')
 const { syncTasksForManualTestCompletion } = require('./tasks')
 const { cached, invalidateCache } = require('./memoryCache')
@@ -1747,7 +1747,7 @@ async function saveManualWrongQuestionPhotoHandler(request) {
       testName: { type: sql.NVarChar(200), value: testInfo.test_name || null },
       bookName: { type: sql.NVarChar(200), value: testInfo.book_name || null },
       publisherName: { type: sql.NVarChar(200), value: testInfo.publisher_name || null },
-      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoCheck.value },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: await storeMistakePhoto(photoCheck.value, studentId) },
       errorType: { type: sql.NVarChar(50), value: 'cevap-kagidi' },
     }
 

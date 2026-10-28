@@ -3,7 +3,8 @@ const { isConfigError } = require('./config')
 const { json } = require('./http')
 const { isSessionError } = require('./security')
 const { requireStudentContext, requireStudentWriteContext } = require('./studentScope')
-const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
+const { sanitizeMistakePhoto, storeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
+const { toReadUrl } = require('./blobStore')
 const { attachRepeatInfo } = require('./mistakeBooklets')
 
 const MISTAKE_REASONS = ['dikkat-hatasi', 'bilgi-eksikligi', 'soruyu-anlamadim']
@@ -153,7 +154,7 @@ function sanitizeWrongQuestion(record) {
     // çok pahalı olması nedeniyle sadece has_photo bayrağını seçer; tam photoUrl sadece tekil
     // fotoğraf uçlarından (getWrongQuestionPhotoHandler) veya foto kaydeden akışlardan gelir.
     hasPhoto: record.has_photo !== undefined ? Boolean(record.has_photo) : Boolean(record.photo_url),
-    photoUrl: record.photo_url || undefined,
+    photoUrl: toReadUrl(record.photo_url) || undefined,
     // "Hata Analiz" görselleri (yalnızca veli ekler/kaldırır, herkes görüntüler; birden fazla
     // olabilir) — aynı tembel çekim deseni: liste uçları sadece sayı/bayrak taşır, görsellerin
     // kendisi listWrongQuestionAnalysisPhotoRecordsHandler'dan gelir (bkz. yukarısındaki
@@ -544,7 +545,7 @@ async function getWrongQuestionPhotoHandler(request) {
       return json(404, { error: 'Fotoğraf bulunamadı.' })
     }
 
-    return json(200, { photoUrl })
+    return json(200, { photoUrl: toReadUrl(photoUrl) })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -579,7 +580,7 @@ async function updateWrongQuestionPhotoHandler(request) {
     const requestDb = await withRequest({
       id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
       studentId: { type: sql.UniqueIdentifier, value: studentId },
-      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoCheck.value },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: await storeMistakePhoto(photoCheck.value, studentId) },
     })
     const result = await requestDb.query(`
       UPDATE dbo.WrongQuestions SET photo_url = @photoUrl
@@ -634,7 +635,7 @@ async function listWrongQuestionAnalysisPhotoRecordsHandler(request) {
     return json(200, {
       photos: result.recordset.map((row) => ({
         id: row.id,
-        photoUrl: row.photo_url,
+        photoUrl: toReadUrl(row.photo_url),
         createdAt: row.created_at,
       })),
     })
@@ -687,7 +688,7 @@ async function addWrongQuestionAnalysisPhotoHandler(request) {
 
     const requestDb = await withRequest({
       wrongQuestionId: { type: sql.UniqueIdentifier, value: wrongQuestionId },
-      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoCheck.value },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: await storeMistakePhoto(photoCheck.value, studentId) },
       addedBy: { type: sql.UniqueIdentifier, value: actorId },
     })
     const result = await requestDb.query(`
@@ -697,7 +698,7 @@ async function addWrongQuestionAnalysisPhotoHandler(request) {
     `)
 
     const row = result.recordset[0]
-    return json(201, { photo: { id: row.id, photoUrl: row.photo_url, createdAt: row.created_at } })
+    return json(201, { photo: { id: row.id, photoUrl: toReadUrl(row.photo_url), createdAt: row.created_at } })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -900,7 +901,7 @@ async function addWrongQuestionHandler(request) {
       publisherName: { type: sql.NVarChar(200), value: publisherName },
       errorType: { type: sql.NVarChar(50), value: 'serbest' },
       studentNote: { type: sql.NVarChar(1000), value: payload?.studentNote || null },
-      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoCheck.value },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: await storeMistakePhoto(photoCheck.value, studentId) },
     })
     const result = await requestDb.query(`
       INSERT INTO dbo.WrongQuestions
