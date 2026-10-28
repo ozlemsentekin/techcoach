@@ -84,9 +84,9 @@ export default function StudentGoals({ studentId, currentDate, tasks, renderHead
         const hasRobertImage = kind === 'private' && /robert/i.test(goal?.name || '')
         const hasKabatasImage = kind === 'public' && /kabataş|kabatas/i.test(goal?.name || '')
         const photo = hasRobertImage
-          ? { src: '/images/schools/robert-college-gould-hall.jpg', alt: 'Robert Koleji Gould Hall binası ve bahçesi' }
+          ? { src: '/images/schools/robert-college-ivy-garden.jpg', alt: 'Robert Koleji Gould Hall binası ve bahçesi' }
           : hasKabatasImage
-            ? { src: '/images/schools/kabatas-erkek-lisesi.webp', alt: 'Kabataş Erkek Lisesi sahil binası' }
+            ? { src: '/images/schools/kabatas-bosphorus.jpg', alt: 'Kabataş Erkek Lisesi sahil binası' }
             : null
         return <div key={kind} className="flex min-w-0 items-center gap-3 rounded-xl border border-panel-border bg-panel-surface p-3 sm:gap-4">
           {photo ? <img src={photo.src} alt={photo.alt} width={144} height={108} className="aspect-[4/3] w-24 shrink-0 rounded-lg object-cover object-center lg:w-36" />
