@@ -6,7 +6,7 @@ const { requireStudentContext, requireStudentWriteContext } = require('./student
 const { recordTaskActivities } = require('./taskActivity')
 const { sanitizeWrongQuestion, fetchWrongQuestionAnalyses } = require('./progress')
 const { sanitizeAnswers, gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGrading')
-const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
+const { sanitizeMistakePhoto, storeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
 const { fetchBookletTestIdSet } = require('./mistakeBooklets')
 const { getUserBillingState, billingRestrictedResponse } = require('./entitlements')
 
@@ -1299,7 +1299,7 @@ async function saveWrongQuestionPhotoHandler(request) {
       testName: { type: sql.NVarChar(200), value: testInfo.test_name || null },
       bookName: { type: sql.NVarChar(200), value: testInfo.book_name || null },
       publisherName: { type: sql.NVarChar(200), value: testInfo.publisher_name || null },
-      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoCheck.value },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: await storeMistakePhoto(photoCheck.value, studentId) },
       errorType: { type: sql.NVarChar(50), value: 'cevap-kagidi' },
     }
 
@@ -1583,7 +1583,7 @@ async function saveSimpleTaskResultHandler(request) {
         subject: { type: sql.NVarChar(100), value: taskRecord.subject || 'Genel' },
         bookName: { type: sql.NVarChar(200), value: taskRecord.book_name || null },
         errorType: { type: sql.NVarChar(50), value: 'soru-bankasi-basit' },
-        photoUrl: { type: sql.NVarChar(sql.MAX), value: photoUrl },
+        photoUrl: { type: sql.NVarChar(sql.MAX), value: await storeMistakePhoto(photoUrl, studentId) },
       })
       await photoDb.query(`
         INSERT INTO dbo.WrongQuestions (student_id, task_id, resource_book_id, subject, book_name, error_type, photo_url)

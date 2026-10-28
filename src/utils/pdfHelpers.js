@@ -13,6 +13,25 @@ export function registerTurkishFont(doc) {
   doc.setFont('Roboto', 'normal')
 }
 
+// Fotoğraflar artık depodan kısa ömürlü bir adresle (SAS) gelebiliyor; jsPDF.addImage ise data URL
+// ister. Data URL ise aynen döner, değilse indirilip çevrilir. İndirilemezse null.
+export async function toImageDataUrl(url) {
+  if (!url || url.startsWith('data:')) return url || null
+  try {
+    const response = await fetch(url)
+    if (!response.ok) return null
+    const blob = await response.blob()
+    return await new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = () => resolve(null)
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
+}
+
 export function detectImageFormat(dataUrl) {
   const match = /^data:image\/(\w+);base64,/i.exec(dataUrl || '')
   const type = (match?.[1] || 'jpeg').toLowerCase()

@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf'
-import { registerTurkishFont, detectImageFormat, loadImageSize, slugifyForFileName } from './pdfHelpers'
+import { registerTurkishFont, detectImageFormat, loadImageSize, slugifyForFileName, toImageDataUrl } from './pdfHelpers'
 
 const PAGE_MARGIN = 12
 const BOX_GAP = 6
@@ -50,7 +50,7 @@ async function drawQuestionRow(doc, { x0, contentWidth, cursorY, item, fetchPhot
 
   let photoUrl = null
   try {
-    photoUrl = await fetchPhoto(item.id)
+    photoUrl = await toImageDataUrl(await fetchPhoto(item.id))
   } catch {
     photoUrl = null
   }

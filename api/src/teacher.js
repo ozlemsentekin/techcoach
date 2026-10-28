@@ -67,7 +67,8 @@ const {
   MISTAKE_REASONS,
 } = require('./progress')
 const { gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGrading')
-const { sanitizeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
+const { sanitizeMistakePhoto, storeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
+const { toReadUrl } = require('./blobStore')
 
 const TEACHER_TYPE_LABELS = {
   ozel_ogretmen: 'Özel Öğretmen',
@@ -2278,7 +2279,7 @@ async function saveTeacherManualWrongQuestionPhotoHandler(request) {
       testName: { type: sql.NVarChar(200), value: testInfo.test_name || null },
       bookName: { type: sql.NVarChar(200), value: testInfo.book_name || null },
       publisherName: { type: sql.NVarChar(200), value: testInfo.publisher_name || null },
-      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoCheck.value },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: await storeMistakePhoto(photoCheck.value, studentId) },
       errorType: { type: sql.NVarChar(50), value: 'cevap-kagidi' },
     }
 
@@ -3431,7 +3432,7 @@ async function getTeacherStudentWrongQuestionPhotoHandler(request) {
       return json(404, { error: 'Fotoğraf bulunamadı.' })
     }
 
-    return json(200, { photoUrl })
+    return json(200, { photoUrl: toReadUrl(photoUrl) })
   } catch (error) {
     return handleError(error, 'getTeacherStudentWrongQuestionPhotoHandler', 'Fotoğraf yüklenemedi.')
   }
@@ -3462,7 +3463,7 @@ async function listTeacherStudentWrongQuestionAnalysisPhotosHandler(request) {
     `)
 
     return json(200, {
-      photos: result.recordset.map((row) => ({ id: row.id, photoUrl: row.photo_url, createdAt: row.created_at })),
+      photos: result.recordset.map((row) => ({ id: row.id, photoUrl: toReadUrl(row.photo_url), createdAt: row.created_at })),
     })
   } catch (error) {
     return handleError(
@@ -3574,7 +3575,7 @@ async function getTeacherWrongQuestionAnalysisPhotosHandler(request) {
     `)
 
     return json(200, {
-      photos: result.recordset.map((row) => ({ id: row.id, photoUrl: row.photo_url, createdAt: row.created_at })),
+      photos: result.recordset.map((row) => ({ id: row.id, photoUrl: toReadUrl(row.photo_url), createdAt: row.created_at })),
     })
   } catch (error) {
     return handleError(error, 'getTeacherWrongQuestionAnalysisPhotosHandler', 'Hata analiz görselleri yüklenemedi.')
@@ -3608,7 +3609,7 @@ async function getTeacherWrongQuestionPhotoRecordHandler(request) {
       return json(404, { error: 'Fotoğraf bulunamadı.' })
     }
 
-    return json(200, { photoUrl })
+    return json(200, { photoUrl: toReadUrl(photoUrl) })
   } catch (error) {
     return handleError(error, 'getTeacherWrongQuestionPhotoRecordHandler', 'Fotoğraf yüklenemedi.')
   }
@@ -3757,7 +3758,7 @@ async function updateTeacherStudentWrongQuestionPhotoHandler(request) {
       id: { type: sql.UniqueIdentifier, value: wrongQuestionId },
       studentId: { type: sql.UniqueIdentifier, value: studentId },
       subject: { type: sql.NVarChar(100), value: subjectName },
-      photoUrl: { type: sql.NVarChar(sql.MAX), value: photoCheck.value },
+      photoUrl: { type: sql.NVarChar(sql.MAX), value: await storeMistakePhoto(photoCheck.value, studentId) },
     })
     const result = await requestDb.query(`
       UPDATE dbo.WrongQuestions SET photo_url = @photoUrl

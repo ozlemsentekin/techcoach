@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf'
-import { registerTurkishFont, detectImageFormat, loadImageSize, slugifyForFileName } from './pdfHelpers'
+import { registerTurkishFont, detectImageFormat, loadImageSize, slugifyForFileName, toImageDataUrl } from './pdfHelpers'
 
 const PAGE_MARGIN = 12
 
@@ -34,14 +34,15 @@ export async function buildAnalysisPhotosPdf({ title, subtitle, photos }) {
     const photo = photos[i]
     const availableWidth = pageWidth - PAGE_MARGIN * 2
     const availableHeight = pageHeight - headerBottom - PAGE_MARGIN
-    const size = await loadImageSize(photo.photoUrl)
+    const photoDataUrl = await toImageDataUrl(photo.photoUrl)
+    const size = photoDataUrl ? await loadImageSize(photoDataUrl) : null
     if (size) {
       const ratio = Math.min(availableWidth / size.width, availableHeight / size.height)
       const drawWidth = size.width * ratio
       const drawHeight = size.height * ratio
       const offsetX = PAGE_MARGIN + (availableWidth - drawWidth) / 2
       const offsetY = headerBottom + (availableHeight - drawHeight) / 2
-      doc.addImage(photo.photoUrl, detectImageFormat(photo.photoUrl), offsetX, offsetY, drawWidth, drawHeight)
+      doc.addImage(photoDataUrl, detectImageFormat(photoDataUrl), offsetX, offsetY, drawWidth, drawHeight)
     }
 
     if (photos.length > 1) {
