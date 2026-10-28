@@ -56,60 +56,46 @@ export default function TodayPage() {
     [],
   )
 
+  // Bugünün görevleri, biriken (geçmiş 30 gün) görevler, öğretmen ders programı ve check-in
+  // paralel çekilir; sayfa hepsi gelince tek seferde çizilir (sayılar sonradan zıplamasın diye).
   useEffect(() => {
     let ignore = false
-    getCheckIn(date)
-      .then((data) => { if (!ignore) setCheckIn(data) })
-      .catch((err) => { if (!ignore) setLoadError(err.message) })
-    getTeacherLessonSchedule()
-      .then((data) => { if (!ignore) setTeacherLessonSchedule(data) })
-      .catch(() => {})
-    getTasksForDate(date)
-      .then((tasksData) => {
-        if (ignore) return
-        setTasks(tasksData)
-      })
-      .catch((err) => {
-        if (!ignore) setLoadError(err.message)
-      })
-      .finally(() => {
-        if (!ignore) setLoading(false)
-      })
+    const from = historyDays.reduce((min, day) => (day < min ? day : min))
+    const to = historyDays.reduce((max, day) => (day > max ? day : max))
+    Promise.allSettled([
+      getTasksForDate(date),
+      getTasksForDateRange(from, to),
+      getTeacherLessonSchedule(),
+      getCheckIn(date),
+    ]).then(([todayResult, rangeResult, scheduleResult, checkInResult]) => {
+      if (ignore) return
+      if (todayResult.status === 'fulfilled') setTasks(todayResult.value || [])
+      if (rangeResult.status === 'fulfilled') {
+        const map = {}
+        historyDays.forEach((day) => {
+          map[day] = []
+        })
+        ;(rangeResult.value || []).forEach((task) => {
+          if (map[task.date]) map[task.date].push(task)
+        })
+        setHistoryTasks(map)
+      }
+      if (scheduleResult.status === 'fulfilled') setTeacherLessonSchedule(scheduleResult.value)
+      if (checkInResult.status === 'fulfilled') setCheckIn(checkInResult.value)
+      const failed = [todayResult, rangeResult, checkInResult].find((result) => result.status === 'rejected')
+      if (failed) setLoadError(failed.reason?.message || 'Veriler yüklenemedi.')
+      setLoading(false)
+    })
     return () => {
       ignore = true
     }
-  }, [])
+  }, [historyDays])
 
   // Mola süresi dolduğunda backend'i sistem olarak otomatik tamamlar (bkz. autoCompleteExpiredBreaks);
   // burada periyodik yenileme yalnızca bu değişikliğin ekrana yansımasını sağlar.
   useVisiblePolling(() => {
     getTasksForDate(date).then(setTasks).catch(() => {})
   }, 30000)
-
-  useEffect(() => {
-    if (historyDays.length === 0) return undefined
-    let ignore = false
-    const from = historyDays.reduce((min, day) => (day < min ? day : min))
-    const to = historyDays.reduce((max, day) => (day > max ? day : max))
-    getTasksForDateRange(from, to)
-      .then((rangeTasks) => {
-        if (ignore) return
-        const map = {}
-        historyDays.forEach((day) => {
-          map[day] = []
-        })
-        rangeTasks.forEach((task) => {
-          if (map[task.date]) map[task.date].push(task)
-        })
-        setHistoryTasks(map)
-      })
-      .catch((err) => {
-        if (!ignore) setLoadError(err.message)
-      })
-    return () => {
-      ignore = true
-    }
-  }, [historyDays])
 
   useEffect(() => {
     const handleSupportRequested = () => setShowStressModal(true)

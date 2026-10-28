@@ -6,10 +6,11 @@ import { getTaskAttachments } from '../../utils/fileAttachment'
  * Tıklayınca dosyayı yeni sekmede açar — data URL'ler bazı tarayıcılarda üst düzey
  * gezinmede engellendiğinden önce Blob URL'ye çevrilir.
  */
-export default function TaskAttachment({ url, name, label = 'Ek dosya', className = '' }) {
+export default function TaskAttachment({ url, name, mimeType, label = 'Ek dosya', className = '' }) {
   if (!url) return null
 
-  const isImage = url.startsWith('data:image/') || /\.(jpe?g|png|webp)$/i.test(url)
+  // Görev listelerinde ekler data URL yerine indirme adresiyle gelir; türü mimeType söyler.
+  const isImage = url.startsWith('data:image/') || Boolean(mimeType?.startsWith('image/')) || /\.(jpe?g|png|webp)$/i.test(url)
 
   const openAttachment = () => {
     try {
@@ -37,7 +38,7 @@ export default function TaskAttachment({ url, name, label = 'Ek dosya', classNam
       className={`flex w-full items-center gap-3 rounded-xl border border-panel-border bg-panel-surface p-2.5 text-left transition-colors hover:border-panel-blue hover:bg-panel-blue-soft/50 ${className}`}
     >
       {isImage ? (
-        <img src={url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+        <img src={url} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
       ) : (
         <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
           <FileText size={20} aria-hidden="true" />
@@ -65,6 +66,7 @@ export function TaskAttachmentList({ task, className = '' }) {
           key={`${attachment.name}-${index}`}
           url={attachment.url}
           name={attachment.name}
+          mimeType={attachment.mimeType}
           label={attachments.length > 1 ? `Ek dosya ${index + 1}` : 'Ek dosya'}
         />
       ))}
