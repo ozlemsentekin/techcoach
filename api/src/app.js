@@ -209,6 +209,7 @@ const {
   createTaskHandler,
   updateTaskHandler,
   deleteTaskHandler,
+  getTaskAttachmentHandler,
   getTaskAnswerSheetHandler,
   saveTaskAnswersHandler,
   saveSimpleTaskResultHandler,
@@ -1687,6 +1688,13 @@ registerHttp('panel-tasks-delete', {
   methods: ['DELETE'],
   route: 'panel/tasks/{taskId}',
   handler: deleteTaskHandler,
+})
+
+registerHttp('panel-tasks-attachment-get', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/tasks/{taskId}/attachments/{index:int}',
+  handler: getTaskAttachmentHandler,
 })
 
 registerHttp('panel-task-activity-list', {

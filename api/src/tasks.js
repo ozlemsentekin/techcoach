@@ -118,6 +118,105 @@ function readTaskAttachments(record) {
   return record.attachment_url ? [{ url: record.attachment_url, name: record.attachment_name || 'ek-dosya' }] : []
 }
 
+// Liste yanıtlarında ekler base64 yerine bu adresle gönderilir (bir görevdeki birkaç MB'lık ek,
+// "Bugün"ün 30 günlük biriken görev isteğini dev boyutlara çıkarıyordu). Dosya yalnızca
+// görüntülenince getTaskAttachmentHandler'dan iner; formlar bu adresi geri gönderirse
+// resolveTaskAttachmentRefs mevcut dosyayla değiştirir.
+const TASK_ATTACHMENT_REF_PATTERN = /^\/api\/panel\/tasks\/([0-9a-f-]{36})\/attachments\/(\d+)(?:\?.*)?$/i
+
+function attachmentMimeType(url) {
+  const match = /^data:([^;,]+)/.exec(url || '')
+  return match ? match[1] : undefined
+}
+
+/** sanitizeTask çıktısındaki data URL ekleri indirme adresine çevirir. */
+function withAttachmentRefs(task, requestedStudentId) {
+  if (!task.attachments?.length) return task
+  const query = requestedStudentId ? `?studentId=${encodeURIComponent(requestedStudentId)}` : ''
+  return {
+    ...task,
+    attachments: task.attachments.map((attachment, index) => (
+      attachment.url.startsWith('data:')
+        ? { url: `/api/panel/tasks/${task.id}/attachments/${index}${query}`, name: attachment.name, mimeType: attachmentMimeType(attachment.url) }
+        : attachment
+    )),
+  }
+}
+
+/**
+ * payload.attachments içindeki indirme adreslerini (bkz. withAttachmentRefs) aynı öğrencinin
+ * görevindeki gerçek data URL'lerle değiştirir. Bulunamayan referans listeden düşer.
+ */
+async function resolveTaskAttachmentRefs(payload, studentId) {
+  if (!Array.isArray(payload?.attachments)) return
+  const refs = payload.attachments
+    .map((item) => TASK_ATTACHMENT_REF_PATTERN.exec(typeof item?.url === 'string' ? item.url : ''))
+  const taskIds = [...new Set(refs.filter(Boolean).map((match) => match[1].toLowerCase()))]
+  if (!taskIds.length) return
+
+  const bindings = { studentId: { type: sql.UniqueIdentifier, value: studentId } }
+  taskIds.forEach((id, index) => {
+    bindings[`ref${index}`] = { type: sql.UniqueIdentifier, value: id }
+  })
+  const requestDb = await withRequest(bindings)
+  const result = await requestDb.query(`
+    SELECT id, attachment_url, attachment_name, attachments_json FROM dbo.Tasks
+    WHERE student_id = @studentId AND id IN (${taskIds.map((_, index) => `@ref${index}`).join(', ')});
+  `)
+  const attachmentsByTask = new Map(result.recordset.map((record) => [String(record.id).toLowerCase(), readTaskAttachments(record)]))
+
+  payload.attachments = payload.attachments.flatMap((item, index) => {
+    const match = refs[index]
+    if (!match) return [item]
+    const stored = attachmentsByTask.get(match[1].toLowerCase())?.[Number(match[2])]
+    return stored ? [{ url: stored.url, name: item.name || stored.name }] : []
+  })
+}
+
+async function getTaskAttachmentHandler(request) {
+  try {
+    const { error, studentId } = await requireStudentContext(request)
+    if (error) {
+      return error
+    }
+
+    const requestDb = await withRequest({
+      id: { type: sql.UniqueIdentifier, value: request.params.taskId },
+      studentId: { type: sql.UniqueIdentifier, value: studentId },
+    })
+    const result = await requestDb.query(`
+      SELECT attachment_url, attachment_name, attachments_json FROM dbo.Tasks
+      WHERE id = @id AND student_id = @studentId;
+    `)
+    const attachment = result.recordset[0] ? readTaskAttachments(result.recordset[0])[Number(request.params.index)] : null
+    const match = attachment ? /^data:([^;,]+);base64,(.*)$/s.exec(attachment.url) : null
+    if (!match) {
+      return json(404, { error: 'Dosya bulunamadı.' })
+    }
+
+    return {
+      status: 200,
+      headers: {
+        'Content-Type': match[1],
+        'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(attachment.name || 'ek-dosya')}`,
+        'Cache-Control': 'private, max-age=3600',
+      },
+      body: Buffer.from(match[2], 'base64'),
+    }
+  } catch (error) {
+    if (isConfigError(error)) {
+      return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
+    }
+
+    if (isSessionError(error)) {
+      return json(401, { error: 'Oturum geçersiz.' })
+    }
+
+    console.error('getTaskAttachmentHandler failed', error)
+    return json(500, { error: 'Dosya yüklenemedi.' })
+  }
+}
+
 function sanitizeTask(record) {
   return {
     id: record.id,
@@ -640,6 +739,7 @@ async function listTasksHandler(request) {
     const to = request.query.get('to')
     const isDraft = request.query.get('isDraft') === 'true'
     const unscheduledOnly = request.query.get('unscheduled') === 'true'
+    const toListTask = (record) => withAttachmentRefs(sanitizeTask(record), request.query.get('studentId'))
 
     // Ödev/görev tekilleştirme (Faz 2): bir güne/saate atanmamış ders-tipi görevler ("Atanmamış
     // Görevler"). Takvimde görünmezler; Haftalık Plan sayfasındaki ayrı bir bölümden yönetilirler.
@@ -654,7 +754,7 @@ async function listTasksHandler(request) {
         ORDER BY t.assigned_date ASC, t.created_at ASC;
       `)
 
-      return json(200, { tasks: result.recordset.map(sanitizeTask) })
+      return json(200, { tasks: result.recordset.map(toListTask) })
     }
 
     // Geçmiş günlerin tamamlanmamış görevlerini tek istekte listelemek için (bkz. TodayPage
@@ -674,7 +774,7 @@ async function listTasksHandler(request) {
         ORDER BY t.date ASC, t.start_time ASC, t.created_at ASC;
       `)
 
-      return json(200, { tasks: result.recordset.map(sanitizeTask) })
+      return json(200, { tasks: result.recordset.map(toListTask) })
     }
 
     if (!date) {
@@ -697,7 +797,7 @@ async function listTasksHandler(request) {
     // üzerinden çalışır, süresi geçen yoksa ek DB isteği atmaz.
     await autoCompleteExpiredBreakRows(result.recordset, { studentId, isDraft })
 
-    return json(200, { tasks: result.recordset.map(sanitizeTask) })
+    return json(200, { tasks: result.recordset.map(toListTask) })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -780,6 +880,7 @@ async function createTaskHandler(request) {
       return json(400, { error: 'Başlangıç ve bitiş saati birlikte girilmeli.' })
     }
 
+    await resolveTaskAttachmentRefs(payload, studentId)
     const attachmentError = applyTaskAttachmentsPayload(payload)
     if (attachmentError) {
       return json(400, { error: attachmentError })
@@ -867,6 +968,7 @@ async function updateTaskHandler(request) {
       delete payload.createdByUserId
     }
 
+    await resolveTaskAttachmentRefs(payload, studentId)
     const attachmentError = applyTaskAttachmentsPayload(payload)
     if (attachmentError) {
       return json(400, { error: attachmentError })
@@ -1813,6 +1915,7 @@ module.exports = {
   createTaskHandler,
   updateTaskHandler,
   deleteTaskHandler,
+  getTaskAttachmentHandler,
   getTaskAnswerSheetHandler,
   saveTaskAnswersHandler,
   saveSimpleTaskResultHandler,
@@ -1825,4 +1928,5 @@ module.exports = {
   sanitizeTaskAttachment,
   sanitizeTaskAttachments,
   applyTaskAttachmentsPayload,
+  resolveTaskAttachmentRefs,
 }

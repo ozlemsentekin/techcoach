@@ -8,7 +8,8 @@ import {
   pickAttachment,
 } from '../../utils/fileAttachment'
 
-const isImageUrl = (url) => url.startsWith('data:image/') || /^https?:.*\.(jpe?g|png|webp)$/i.test(url)
+const isImageAttachment = ({ url, mimeType }) =>
+  url.startsWith('data:image/') || Boolean(mimeType?.startsWith('image/')) || /^https?:.*\.(jpe?g|png|webp)$/i.test(url)
 
 /**
  * Göreve birden fazla dosya ekleme alanı (en fazla MAX_ATTACHMENT_COUNT). Veli/öğrenci
@@ -59,8 +60,8 @@ export default function AttachmentListEditor({ attachments, onChange, label = 'D
           key={`${attachment.name}-${index}`}
           className="flex items-center gap-3 rounded-xl border border-panel-border bg-white p-2.5"
         >
-          {isImageUrl(attachment.url) ? (
-            <img src={attachment.url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+          {isImageAttachment(attachment) ? (
+            <img src={attachment.url} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
           ) : (
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-panel-blue-soft text-panel-blue">
               <FileText size={20} aria-hidden="true" />
