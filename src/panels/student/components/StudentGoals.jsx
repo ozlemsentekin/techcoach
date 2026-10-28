@@ -1,5 +1,6 @@
+import SchoolPhotoModal from './SchoolPhotoModal'
 import { useEffect, useState } from 'react'
-import { Hourglass, Pencil, Target } from 'lucide-react'
+import { Hourglass, Pencil, Target, ZoomIn } from 'lucide-react'
 import { authRequest } from '../../../services/authClient'
 import { buildTeacherLessonTasksForDate, getSchoolSchedule, getTeacherLessonSchedule, isSchoolHoliday } from '../../../services/weeklyPlanService'
 import { dateToISO, getWeekdayKey } from '../../../utils/time'
@@ -13,6 +14,7 @@ const duration = (minutes) => {
 }
 
 export default function StudentGoals({ studentId, currentDate, tasks, renderHeader }) {
+  const [selectedPhoto, setSelectedPhoto] = useState(null)
   const [data, setData] = useState(null)
   const [schedule, setSchedule] = useState(null)
   const [editing, setEditing] = useState(false)
@@ -84,12 +86,15 @@ export default function StudentGoals({ studentId, currentDate, tasks, renderHead
         const hasRobertImage = kind === 'private' && /robert/i.test(goal?.name || '')
         const hasKabatasImage = kind === 'public' && /kabataş|kabatas/i.test(goal?.name || '')
         const photo = hasRobertImage
-          ? { src: '/images/schools/robert-college-ivy-garden.jpg', alt: 'Robert Koleji Gould Hall binası ve bahçesi' }
+          ? { src: '/images/schools/robert-college-ivy-garden.jpg', largeSrc: '/images/schools/robert-college-ivy-garden-large.jpg', alt: 'Robert Koleji Gould Hall binası ve bahçesi' }
           : hasKabatasImage
-            ? { src: '/images/schools/kabatas-bosphorus.jpg', alt: 'Kabataş Erkek Lisesi sahil binası' }
+            ? { src: '/images/schools/kabatas-bosphorus.jpg', largeSrc: '/images/schools/kabatas-bosphorus-large.jpg', alt: 'Kabataş Erkek Lisesi sahil binası' }
             : null
         return <div key={kind} className="flex min-w-0 items-center gap-3 rounded-xl border border-panel-border bg-panel-surface p-3 sm:gap-4">
-          {photo ? <img src={photo.src} alt={photo.alt} width={144} height={108} className="aspect-[4/3] w-24 shrink-0 rounded-lg object-cover object-center lg:w-36" />
+          {photo ? <button type="button" onClick={() => setSelectedPhoto({ ...photo, name: goal.name })} aria-label={`${goal.name} fotoğrafını büyüt`} aria-haspopup="dialog" className="group relative w-24 shrink-0 cursor-zoom-in overflow-hidden rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-student-theme-primary lg:w-36">
+            <img src={photo.src} alt={photo.alt} width={144} height={108} className="aspect-[4/3] w-full object-cover object-center" />
+            <span className="absolute bottom-1 right-1 rounded-md bg-black/50 p-1 text-white transition-colors group-hover:bg-black/75"><ZoomIn size={14} aria-hidden="true" /></span>
+          </button>
             : <div className="flex aspect-[4/3] w-24 shrink-0 items-center justify-center rounded-lg bg-student-theme-soft/40 lg:w-36"><Target size={28} className="text-student-theme-text" aria-hidden="true" /></div>}
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-[11px] font-medium text-panel-text-muted"><Target size={13} className="shrink-0 text-student-theme-text" aria-hidden="true" />{kind === 'private' ? 'Özel lise' : 'Devlet lisesi'}</p>
@@ -104,5 +109,6 @@ export default function StudentGoals({ studentId, currentDate, tasks, renderHead
       {studyIndicator}
     </div>}
   </div>
+    {selectedPhoto && <SchoolPhotoModal photo={selectedPhoto} onClose={() => setSelectedPhoto(null)} />}
   </>
 }
