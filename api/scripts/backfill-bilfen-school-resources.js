@@ -48,7 +48,6 @@ async function main() {
     console.log(`Benzersiz kaynak kombinasyonu: ${canonicalRows.length}`)
 
     let inserted = 0
-    let skipped = 0
     for (const row of canonicalRows) {
       const existing = new Set(
         (
@@ -87,7 +86,6 @@ async function main() {
         }
         inserted++
       }
-      skipped += schools.length - (schools.length - Array.from(existing).length)
     }
 
     console.log(`\n${COMMIT ? 'Eklendi' : 'Eklenecek (dry-run)'}: ${inserted}`)

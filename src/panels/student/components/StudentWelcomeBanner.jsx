@@ -1,3 +1,4 @@
+import StudentGoals from './StudentGoals'
 import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Sparkles, X } from 'lucide-react'
 import { dateToISO, formatDateLong, getGreetingByHour, pickGreeting } from '../../../utils/time'
@@ -16,7 +17,7 @@ function daysUntil(targetDate, currentDate) {
   return Math.ceil((startOfTarget.getTime() - startOfCurrent.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-export default function StudentWelcomeBanner({ studentId, studentName, grade, tasks = [], checkIn }) {
+export default function StudentWelcomeBanner({ studentId, studentName, grade, tasks = [], studyTasks = tasks, checkIn }) {
   // LGS geri sayım banner'ı yalnızca 8. sınıf öğrencilerinde gösterilir.
   const showLgsCountdown = String(grade ?? '').trim() === '8'
   const [currentDate, setCurrentDate] = useState(() => new Date())
@@ -42,7 +43,7 @@ export default function StudentWelcomeBanner({ studentId, studentName, grade, ta
   useEffect(() => {
     const interval = window.setInterval(() => {
       setCurrentDate(new Date())
-    }, 60000)
+    }, 1000)
     return () => window.clearInterval(interval)
   }, [])
 
@@ -92,8 +93,9 @@ export default function StudentWelcomeBanner({ studentId, studentName, grade, ta
 
   return (
     <section className="overflow-hidden rounded-2xl border border-panel-border bg-panel-surface">
+      <StudentGoals key={studentId} studentId={studentId} currentDate={currentDate} tasks={studyTasks} renderHeader={() => (
       <div className="flex flex-col gap-3 bg-student-theme-soft/35 px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <h1 className="text-2xl font-bold leading-tight text-panel-text">
               {firstName ? `${greeting.label}, ${firstName}` : greeting.label}
@@ -103,11 +105,12 @@ export default function StudentWelcomeBanner({ studentId, studentName, grade, ta
               {formatDateLong(currentDate)}
             </span>
           </div>
-          <p className="mt-2 flex min-w-0 items-center gap-2 text-sm text-panel-text-muted">
-            <Sparkles className="shrink-0 text-student-theme-text" size={15} aria-hidden="true" />
-            <span className="truncate" title={bannerLead}>{bannerLead}</span>
+          <p className="mt-2 flex min-w-0 items-start gap-2 text-sm text-panel-text-muted">
+            <Sparkles className="mt-1 shrink-0 text-student-theme-text" size={15} aria-hidden="true" />
+            <span className="min-w-0 break-words leading-relaxed">{bannerLead}</span>
           </p>
         </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-3">
         {lgsCountdownVisible ? (
           <div className="flex shrink-0 items-center gap-2 self-start lg:self-auto">
             <CalendarDays size={16} className="text-student-theme-text" aria-hidden="true" />
@@ -126,7 +129,9 @@ export default function StudentWelcomeBanner({ studentId, studentName, grade, ta
             LGS geri sayımını göster
           </button>
         ) : null}
+        </div>
       </div>
+      )} />
     </section>
   )
 }

@@ -1,3 +1,4 @@
+const { studentGoalsHandler } = require('./studentGoals')
 const { app } = require('@azure/functions')
 const { withPasswordGate } = require('./passwordGate')
 
@@ -2148,3 +2149,5 @@ registerHttp('panel-lesson-notes', { methods: ['GET'], authLevel: 'anonymous', r
 registerHttp('admin-lesson-notes-list', { methods: ['GET'], authLevel: 'anonymous', route: 'panel/admin/lesson-notes', handler: lessonNotes.adminLessonNotes })
 registerHttp('admin-lesson-notes-save', { methods: ['POST'], authLevel: 'anonymous', route: 'panel/admin/lesson-notes', handler: lessonNotes.saveLessonNote })
 registerHttp('admin-lesson-notes-delete', { methods: ['DELETE'], authLevel: 'anonymous', route: 'panel/admin/lesson-notes/{id}', handler: lessonNotes.deleteLessonNote })
+
+registerHttp('panel-high-school-goals', { authLevel: 'anonymous', methods: ['GET', 'PUT'], route: 'panel/high-school-goals', handler: studentGoalsHandler })

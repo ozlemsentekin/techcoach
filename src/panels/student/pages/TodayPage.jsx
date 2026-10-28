@@ -435,7 +435,7 @@ export default function TodayPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4">
-      <StudentWelcomeBanner studentId={authUser?.id} studentName={authUser?.fullName || ''} grade={authUser?.grade} tasks={listTasks} checkIn={checkIn} />
+      <StudentWelcomeBanner studentId={authUser?.id} studentName={authUser?.fullName || ''} grade={authUser?.grade} tasks={listTasks} studyTasks={tasks} checkIn={checkIn} />
       <StudentStatsCards tasks={listTasks} />
 
       {loadError ? (
