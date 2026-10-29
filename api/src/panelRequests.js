@@ -3,6 +3,7 @@ const { isConfigError } = require('./config')
 const { clearSessionHeaders, json } = require('./http')
 const { isSessionError, readSessionToken, verifySessionToken } = require('./security')
 const { requireAdmin } = require('./admin')
+const { CONTAINERS, storeDataUrl, toReadUrl } = require('./blobStore')
 
 // Panel talep sistemi (bkz. api/sql/create-panel-requests-schema.sql +
 // add-panel-request-general-and-messages-schema.sql). İki tür:
@@ -232,7 +233,10 @@ async function createPanelRequestHandler(request) {
             requestId: { type: sql.UniqueIdentifier, value: newId },
             section: { type: sql.NVarChar(20), value: dbSection },
             sortOrder: { type: sql.Int, value: index },
-            photoUrl: { type: sql.NVarChar(sql.MAX), value: list[index].replace(/\s/g, '') },
+            photoUrl: {
+              type: sql.NVarChar(sql.MAX),
+              value: await storeDataUrl(list[index].replace(/\s/g, ''), { container: CONTAINERS.panelRequestPhotos, prefix: newId }),
+            },
           }).query(`
             INSERT INTO dbo.PanelRequestPhotos (request_id, section, sort_order, photo_url)
             VALUES (@requestId, @section, @sortOrder, @photoUrl);
@@ -375,7 +379,7 @@ async function getPanelRequestHandler(request) {
     const sectionKeyByDb = { kapak: 'kapak', icindekiler: 'icindekiler', 'cevap-anahtari': 'cevapAnahtari' }
     for (const photo of photosResult.recordset) {
       const key = sectionKeyByDb[photo.section]
-      if (key) photos[key].push({ id: photo.id, url: photo.photo_url })
+      if (key) photos[key].push({ id: photo.id, url: toReadUrl(photo.photo_url) })
     }
 
     const messagesResult = await requestDb.query(`

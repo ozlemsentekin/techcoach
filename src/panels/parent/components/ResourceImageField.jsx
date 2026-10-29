@@ -78,7 +78,11 @@ export default function ResourceImageField({
   const inputId = useId()
   const previewShapeClass = shape === 'circle' ? 'rounded-full' : 'rounded-xl'
   const [error, setError] = useState('')
-  const [showUrlInput, setShowUrlInput] = useState(Boolean(value && !value.startsWith('data:image/')))
+  // Yüklenmiş görseller depodan kısa ömürlü bir adresle (*.blob.core.windows.net) gelir; onlar
+  // "dış bağlantı" sayılmaz, URL kutusu yalnızca elle girilmiş adresler için açılır.
+  const [showUrlInput, setShowUrlInput] = useState(
+    Boolean(value && !value.startsWith('data:image/') && !/^https:\/\/[^/]+\.blob\.core\.windows\.net\//.test(value)),
+  )
   const [uploading, setUploading] = useState(false)
 
   const handleFile = async (file) => {

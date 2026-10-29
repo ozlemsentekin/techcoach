@@ -4,7 +4,10 @@ const { readSessionToken, verifySessionToken, isSessionError } = require('./secu
 const { requireAdmin } = require('./admin')
 const { requireStudentContext } = require('./studentScope')
 const { requireTeacherSession } = require('./teacherScope')
+const { CONTAINERS, parseBlobRef, refFromReadUrl, toReadUrl, toStoredValue } = require('./blobStore')
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+// Sayfa görselleri depoda (lesson-notes); düzenlemede mevcut sayfalar SAS adresiyle geri gelir.
+const storedImage = i => parseBlobRef(i)?.container === CONTAINERS.lessonNotes || Boolean(refFromReadUrl(i, CONTAINERS.lessonNotes))
 
 function validateNote(p) {
   const date = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v
@@ -12,7 +15,7 @@ function validateNote(p) {
   if (typeof p.title !== 'string' || !p.title.trim() || p.title.length > 200) return 'Ana başlık 1–200 karakter olmalı.'
   if (!date(p.weekStart) || !date(p.weekEnd) || p.weekEnd < p.weekStart) return 'Geçerli ders haftası tarihleri girin.'
   if (!Array.isArray(p.topics) || !p.topics.length || p.topics.length > 100 || p.topics.some(t => typeof t !== 'string' || !t.trim() || t.length > 500)) return 'En az bir alt başlık girin (en fazla 100).'
-  if (!Array.isArray(p.images) || !p.images.length || p.images.length > 20 || p.images.some(i => typeof i !== 'string' || i.length > 7000000 || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(i)) || p.images.join('').length > 28000000) return 'PNG, JPG veya WEBP yükleyin; sayfa başına 5 MB, toplam 20 MB sınırı vardır.'
+  if (!Array.isArray(p.images) || !p.images.length || p.images.length > 20 || p.images.some(i => typeof i !== 'string' || i.length > 7000000 || !(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(i) || storedImage(i))) || p.images.join('').length > 28000000) return 'PNG, JPG veya WEBP yükleyin; sayfa başına 5 MB, toplam 20 MB sınırı vardır.'
   return null
 }
 async function scope(request) {
@@ -75,7 +78,7 @@ const list = admin => protect(async request => {
     WHERE grade = @grade AND subject_id = @subjectId ${noteId ? 'AND id = @noteId' : ''}
     ORDER BY week_start DESC, title`)
   if (noteId && !rows.recordset.length) return json(404, { error: 'Ders notu bulunamadı.' })
-  return json(200, { courses: unique, selection: `${grade}:${subjectId}`, notes: rows.recordset.map(r => ({ id: r.id, title: r.title, weekStart: r.weekStart, weekEnd: r.weekEnd, topics: JSON.parse(r.topics_json), ...(noteId ? { images: JSON.parse(r.images_json) } : { imageCount: r.imageCount }) })) })
+  return json(200, { courses: unique, selection: `${grade}:${subjectId}`, notes: rows.recordset.map(r => ({ id: r.id, title: r.title, weekStart: r.weekStart, weekEnd: r.weekEnd, topics: JSON.parse(r.topics_json), ...(noteId ? { images: JSON.parse(r.images_json).map(toReadUrl) } : { imageCount: r.imageCount }) })) })
 })
 const save = protect(async request => {
   const auth = await requireAdmin(request)
@@ -84,7 +87,7 @@ const save = protect(async request => {
   const error = validateNote(p)
   if (error) return json(400, { error })
   if (p.id && !guid.test(p.id)) return json(400, { error: 'Geçersiz kayıt.' })
-  const db = await withRequest({ id: { type: sql.UniqueIdentifier, value: p.id || null }, grade: { type: sql.NVarChar(20), value: String(p.grade) }, subjectId: { type: sql.UniqueIdentifier, value: p.subjectId }, title: { type: sql.NVarChar(200), value: p.title.trim() }, start: { type: sql.Date, value: p.weekStart }, end: { type: sql.Date, value: p.weekEnd }, topics: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(p.topics.map(t => t.trim())) }, images: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(p.images) } })
+  const db = await withRequest({ id: { type: sql.UniqueIdentifier, value: p.id || null }, grade: { type: sql.NVarChar(20), value: String(p.grade) }, subjectId: { type: sql.UniqueIdentifier, value: p.subjectId }, title: { type: sql.NVarChar(200), value: p.title.trim() }, start: { type: sql.Date, value: p.weekStart }, end: { type: sql.Date, value: p.weekEnd }, topics: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(p.topics.map(t => t.trim())) }, images: { type: sql.NVarChar(sql.MAX), value: JSON.stringify(await Promise.all(p.images.map(i => toStoredValue(i, { container: CONTAINERS.lessonNotes })))) } })
   const result = await db.query(`IF NOT EXISTS (SELECT 1 FROM dbo.Subjects WHERE id = @subjectId AND is_active = 1 AND (grades_json IS NULL OR EXISTS (SELECT 1 FROM OPENJSON(grades_json) WHERE value = @grade)))
     THROW 50001, 'Invalid subject grade', 1;
     IF @id IS NULL
