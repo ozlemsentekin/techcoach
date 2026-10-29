@@ -14,6 +14,15 @@ const { getBlobConfig } = require('./config')
 // scripts/migrate-wrong-question-photos-to-blob.js).
 const BLOB_REF_PREFIX = 'azblob:'
 const WRONG_QUESTION_PHOTOS_CONTAINER = 'wrong-question-photos'
+const CONTAINERS = {
+  wrongQuestionPhotos: WRONG_QUESTION_PHOTOS_CONTAINER,
+  panelRequestPhotos: 'panel-request-photos',
+  lessonNotes: 'lesson-notes',
+  schoolResources: 'school-resources',
+  taskAttachments: 'task-attachments',
+}
+// Üye silinince öğrenci id'si klasörü temizlenen klasörler (bkz. admin deleteUserHandler).
+const STUDENT_SCOPED_CONTAINERS = [CONTAINERS.wrongQuestionPhotos, CONTAINERS.taskAttachments]
 // SAS bitişi 15 dakikalık dilimlere yuvarlanır: aynı dilimde aynı adres üretilir, tarayıcı önbelleği çalışır.
 const SAS_WINDOW_MS = 15 * 60 * 1000
 const DATA_URL_PATTERN = /^data:([^;,]+);base64,(.+)$/s
@@ -85,6 +94,42 @@ async function storeDataUrl(dataUrl, { container = WRONG_QUESTION_PHOTOS_CONTAIN
   return `${BLOB_REF_PREFIX}${container}/${blobName}`
 }
 
+/**
+ * Bu depo hesabının SAS/düz adresini (istemcinin bir düzenleme formunda geri gönderdiği) kolona
+ * yazılacak referansa çevirir. Adres başka bir yere aitse ya da `container` tutmuyorsa null.
+ */
+function refFromReadUrl(url, container) {
+  const clients = getBlobClients()
+  if (!clients || typeof url !== 'string') return null
+  const base = clients.service.url.endsWith('/') ? clients.service.url : `${clients.service.url}/`
+  const prefix = `${base}${container}/`
+  if (!url.startsWith(prefix)) return null
+  const blobName = decodeURIComponent(url.slice(prefix.length).split('?')[0])
+  return blobName ? `${BLOB_REF_PREFIX}${container}/${blobName}` : null
+}
+
+/**
+ * İstemciden gelen bir dosya değerini kolona yazılacak hale getirir: data URL → depoya yüklenir,
+ * bu klasörün SAS adresi / referansı → referans, diğer (dış https) adresler aynen.
+ */
+async function toStoredValue(value, { container, prefix } = {}) {
+  if (typeof value !== 'string' || !value) return value
+  if (value.startsWith('data:')) return storeDataUrl(value, { container, prefix })
+  if (isBlobRef(value)) return parseBlobRef(value)?.container === container ? value : null
+  return refFromReadUrl(value, container) || value
+}
+
+/** Referans ya da data URL'nin içerik türü (uzantıdan); bilinmiyorsa undefined. */
+function storedMimeType(value) {
+  if (typeof value !== 'string') return undefined
+  const dataMatch = /^data:([^;,]+)/.exec(value)
+  if (dataMatch) return dataMatch[1]
+  const ref = parseBlobRef(value)
+  if (!ref) return undefined
+  const extension = ref.blobName.split('.').pop().toLowerCase()
+  return Object.entries(EXTENSION_BY_TYPE).find(([, ext]) => ext === extension)?.[0]
+}
+
 /** Kolondaki değeri istemciye verilecek adrese çevirir: referans → SAS adresi, diğerleri aynen. */
 function toReadUrl(value) {
   const ref = parseBlobRef(value)
@@ -145,6 +190,12 @@ async function deleteBlobsWithPrefix(prefix, { container = WRONG_QUESTION_PHOTOS
 module.exports = {
   BLOB_REF_PREFIX,
   WRONG_QUESTION_PHOTOS_CONTAINER,
+  CONTAINERS,
+  STUDENT_SCOPED_CONTAINERS,
+  parseBlobRef,
+  refFromReadUrl,
+  toStoredValue,
+  storedMimeType,
   isBlobConfigured,
   isBlobRef,
   storeDataUrl,

@@ -43,7 +43,7 @@ function addDaysISO(dateISO, days) {
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
-const { SELECT_TASK, sanitizeTask, applyTaskAttachmentsPayload, resolveTaskAttachmentRefs, fetchTaskAnswerSheetData } = require('./tasks')
+const { SELECT_TASK, sanitizeTask, applyTaskAttachmentsPayload, resolveTaskAttachmentRefs, storeTaskAttachmentFiles, fetchTaskAnswerSheetData } = require('./tasks')
 const { resolveStudentSchoolSchedule } = require('./schoolSchedule')
 const {
   fetchResourceBookTopicsWithTests,
@@ -2483,6 +2483,7 @@ async function createTeacherTopicReviewHandler(request) {
     if (attachmentError) {
       return json(400, { error: attachmentError })
     }
+    await storeTaskAttachmentFiles(attachmentPayload, studentId)
     const attachmentsJson = attachmentPayload.attachments?.length ? JSON.stringify(attachmentPayload.attachments) : null
 
     const subjectDb = await withRequest({ subjectId: { type: sql.UniqueIdentifier, value: subjectId } })
@@ -2917,6 +2918,7 @@ async function updateTeacherStudentTaskHandler(request) {
       if (attachmentError) {
         return json(400, { error: attachmentError })
       }
+      await storeTaskAttachmentFiles(attachmentPayload, studentId)
       const attachmentsJson = attachmentPayload.attachments?.length ? JSON.stringify(attachmentPayload.attachments) : null
       const trEndTime = startTime && durationMinutes ? computeEndTime(startTime, durationMinutes) : null
 

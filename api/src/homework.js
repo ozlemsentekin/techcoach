@@ -1,4 +1,5 @@
 const { sql, withRequest } = require('./db')
+const { toReadUrl } = require('./blobStore')
 const { isConfigError } = require('./config')
 const { json } = require('./http')
 const { isSessionError } = require('./security')
@@ -74,7 +75,7 @@ function sanitizeHomework(record) {
     publisherName: record.publisher_name || null,
     schoolResourceId: record.school_resource_id || null,
     schoolResourceName: record.school_resource_name || null,
-    schoolResourceImageUrl: record.school_resource_image_url || null,
+    schoolResourceImageUrl: toReadUrl(record.school_resource_image_url) || null,
     homeworkType: record.school_resource_id ? 'okul-odevi' : 'soru-bankasi-odevi',
     title,
     description,

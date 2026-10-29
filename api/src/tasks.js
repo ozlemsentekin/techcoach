@@ -8,6 +8,7 @@ const { sanitizeWrongQuestion, fetchWrongQuestionAnalyses } = require('./progres
 const { sanitizeAnswers, gradeTestAnswers, pruneCorrectedWrongQuestions } = require('./testGrading')
 const { sanitizeMistakePhoto, storeMistakePhoto, WRONG_QUESTION_OUTPUT_COLUMNS } = require('./mistakePhoto')
 const { fetchBookletTestIdSet } = require('./mistakeBooklets')
+const { CONTAINERS, isBlobRef, parseBlobRef, refFromReadUrl, storeDataUrl, storedMimeType, toReadUrl } = require('./blobStore')
 const { getUserBillingState, billingRestrictedResponse } = require('./entitlements')
 
 function toISODate(value) {
@@ -48,13 +49,17 @@ const TASK_ATTACHMENT_DATA_URL_PATTERN = /^data:(image\/(?:jpeg|jpg|png|webp)|ap
 function sanitizeTaskAttachment(url, name) {
   const value = typeof url === 'string' ? url.trim() : ''
   if (!value) return { url: null, name: null }
+  const cleanName = typeof name === 'string' ? name.trim().slice(0, 255) : ''
+  // Depodaki mevcut dosya; sahipliği resolveTaskAttachmentRefs doğrular (bkz. o fonksiyon).
+  if (parseBlobRef(value)?.container === CONTAINERS.taskAttachments) {
+    return { url: value, name: cleanName || 'ek-dosya' }
+  }
   if (value.length > MAX_TASK_ATTACHMENT_LENGTH) {
     return { error: `Dosya çok büyük. En fazla ${MAX_TASK_ATTACHMENT_MB} MB olabilir.` }
   }
   if (!TASK_ATTACHMENT_DATA_URL_PATTERN.test(value)) {
     return { error: 'Yalnızca JPG, PNG, WEBP veya PDF dosyası ekleyebilirsiniz.' }
   }
-  const cleanName = typeof name === 'string' ? name.trim().slice(0, 255) : ''
   return { url: value.replace(/\s/g, ''), name: cleanName || 'ek-dosya' }
 }
 
@@ -149,6 +154,16 @@ function withAttachmentRefs(task, requestedStudentId) {
  */
 async function resolveTaskAttachmentRefs(payload, studentId) {
   if (!Array.isArray(payload?.attachments)) return
+  // Depo referansı / SAS adresi yalnızca bu öğrencinin klasöründeyse kabul edilir; aksi halde
+  // başka bir öğrencinin dosyasına erişim yolu açılırdı.
+  const ownPrefix = `${String(studentId).toLowerCase()}/`
+  payload.attachments = payload.attachments.flatMap((item) => {
+    const url = typeof item?.url === 'string' ? item.url : ''
+    const ref = isBlobRef(url) ? url : refFromReadUrl(url, CONTAINERS.taskAttachments)
+    if (!ref) return [item]
+    const parsed = parseBlobRef(ref)
+    return parsed?.container === CONTAINERS.taskAttachments && parsed.blobName.startsWith(ownPrefix) ? [{ ...item, url: ref }] : []
+  })
   const refs = payload.attachments
     .map((item) => TASK_ATTACHMENT_REF_PATTERN.exec(typeof item?.url === 'string' ? item.url : ''))
   const taskIds = [...new Set(refs.filter(Boolean).map((match) => match[1].toLowerCase()))]
@@ -173,6 +188,15 @@ async function resolveTaskAttachmentRefs(payload, studentId) {
   })
 }
 
+/** applyTaskAttachmentsPayload'dan sonra: yeni (data URL) ekleri depoya yükler, referansla değiştirir. */
+async function storeTaskAttachmentFiles(payload, studentId) {
+  if (!Array.isArray(payload?.attachments)) return
+  payload.attachments = await Promise.all(payload.attachments.map(async (attachment) => ({
+    ...attachment,
+    url: await storeDataUrl(attachment.url, { container: CONTAINERS.taskAttachments, prefix: studentId }),
+  })))
+}
+
 async function getTaskAttachmentHandler(request) {
   try {
     const { error, studentId } = await requireStudentContext(request)
@@ -189,6 +213,9 @@ async function getTaskAttachmentHandler(request) {
       WHERE id = @id AND student_id = @studentId;
     `)
     const attachment = result.recordset[0] ? readTaskAttachments(result.recordset[0])[Number(request.params.index)] : null
+    if (attachment && isBlobRef(attachment.url)) {
+      return { status: 302, headers: { Location: toReadUrl(attachment.url), 'Cache-Control': 'private, no-store' } }
+    }
     const match = attachment ? /^data:([^;,]+);base64,(.*)$/s.exec(attachment.url) : null
     if (!match) {
       return json(404, { error: 'Dosya bulunamadı.' })
@@ -288,11 +315,15 @@ function sanitizeTask(record) {
     resourceBookName: record.resource_book_name || undefined,
     schoolResourceId: record.school_resource_id || undefined,
     schoolResourceName: record.school_resource_name || undefined,
-    schoolResourceImageUrl: record.school_resource_image_url || undefined,
+    schoolResourceImageUrl: toReadUrl(record.school_resource_image_url) || undefined,
     studentTeacherId: record.student_teacher_id || undefined,
     teacherFullName: record.teacher_full_name || undefined,
     resourceType: record.resource_type || undefined,
-    attachments: readTaskAttachments(record),
+    attachments: readTaskAttachments(record).map((attachment) => ({
+      url: toReadUrl(attachment.url),
+      name: attachment.name,
+      mimeType: storedMimeType(attachment.url),
+    })),
     hasAnswerKey: record.has_answer_key === null || record.has_answer_key === undefined ? undefined : Boolean(record.has_answer_key),
     contentMode: record.resource_book_content_mode || undefined,
     publisherName: record.publisher_name || undefined,
@@ -885,6 +916,7 @@ async function createTaskHandler(request) {
     if (attachmentError) {
       return json(400, { error: attachmentError })
     }
+    await storeTaskAttachmentFiles(payload, studentId)
 
     // Özel ders görevinde öğretmen isteğe bağlıdır: seçili öğretmen varsa öğrenciye ait
     // ve aktif olduğu doğrulanır, ders adı öğretmen kaydından türetilir; öğretmen yoksa
@@ -973,6 +1005,7 @@ async function updateTaskHandler(request) {
     if (attachmentError) {
       return json(400, { error: attachmentError })
     }
+    await storeTaskAttachmentFiles(payload, studentId)
 
     const previousDb = await withRequest({
       id: { type: sql.UniqueIdentifier, value: taskId },
@@ -1929,4 +1962,5 @@ module.exports = {
   sanitizeTaskAttachments,
   applyTaskAttachmentsPayload,
   resolveTaskAttachmentRefs,
+  storeTaskAttachmentFiles,
 }

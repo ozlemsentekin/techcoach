@@ -5,6 +5,7 @@ const { isSessionError } = require('./security')
 const { requireAdmin } = require('./admin')
 const { requireStudentContext } = require('./studentScope')
 const { requireTeacherStudentContext } = require('./teacherScope')
+const { CONTAINERS, toReadUrl, toStoredValue } = require('./blobStore')
 
 const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const GRADE_OPTIONS = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'])
@@ -41,7 +42,7 @@ function sanitizeResource(record) {
     subjectId: record.subject_id,
     subjectName: record.subject_name || null,
     name: record.name,
-    imageUrl: record.image_url || null,
+    imageUrl: toReadUrl(record.image_url) || null,
     isActive: Boolean(record.is_active),
   }
 }
@@ -117,6 +118,8 @@ async function createSchoolResourceHandler(request) {
     if (imageResult.error) {
       return json(400, { error: imageResult.error })
     }
+    // Yeni görsel depoya yüklenir; düzenlemede geri gelen SAS adresi tekrar referansa çevrilir.
+    imageResult.value = await toStoredValue(imageResult.value, { container: CONTAINERS.schoolResources })
 
     const requestDb = await withRequest({
       schoolId: { type: sql.UniqueIdentifier, value: schoolId },
@@ -204,6 +207,8 @@ async function updateSchoolResourceHandler(request) {
     if (imageResult.error) {
       return json(400, { error: imageResult.error })
     }
+    // Yeni görsel depoya yüklenir; düzenlemede geri gelen SAS adresi tekrar referansa çevrilir.
+    imageResult.value = await toStoredValue(imageResult.value, { container: CONTAINERS.schoolResources })
     const isActive = payload?.isActive === undefined ? true : Boolean(payload.isActive)
 
     const requestDb = await withRequest({
@@ -325,7 +330,7 @@ async function getPanelSchoolResourcesHandler(request) {
       groupsMap.get(row.subject_id).resources.push({
         id: row.id,
         name: row.name,
-        imageUrl: row.image_url || null,
+        imageUrl: toReadUrl(row.image_url) || null,
       })
     }
 
@@ -378,7 +383,7 @@ async function getTeacherStudentSchoolResourcesHandler(request) {
       resources: result.recordset.map((row) => ({
         id: row.id,
         name: row.name,
-        imageUrl: row.image_url || null,
+        imageUrl: toReadUrl(row.image_url) || null,
       })),
     })
   } catch (error) {

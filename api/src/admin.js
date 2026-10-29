@@ -1,5 +1,5 @@
 const { sql, withRequest, withTransaction } = require('./db')
-const { deleteBlobsWithPrefix } = require('./blobStore')
+const { STUDENT_SCOPED_CONTAINERS, deleteBlobsWithPrefix } = require('./blobStore')
 const { isConfigError } = require('./config')
 const { accountDisabledResponse, clearSessionHeaders, createSessionHeaders, json } = require('./http')
 const {
@@ -422,11 +422,13 @@ async function deleteUserHandler(request) {
       return json(404, { error: 'Kullanıcı bulunamadı.' })
     }
 
-    // Silinen kullanıcının (veli ise öğrencilerinin de) depodaki Hata Defteri fotoğrafları;
+    // Silinen kullanıcının (veli ise öğrencilerinin de) depodaki Hata Defteri fotoğrafları ve görev ekleri;
     // dosyalar öğrenci id'si klasöründe durur (bkz. blobStore.storeDataUrl).
-    await Promise.all(blobOwnerIds.map((id) => deleteBlobsWithPrefix(id).catch((err) => {
-      console.warn('deleteUserHandler blob cleanup failed', id, err.message)
-    })))
+    await Promise.all(blobOwnerIds.flatMap((id) => STUDENT_SCOPED_CONTAINERS.map((container) => (
+      deleteBlobsWithPrefix(id, { container }).catch((err) => {
+        console.warn('deleteUserHandler blob cleanup failed', container, id, err.message)
+      })
+    ))))
 
     return json(200, {
       success: true,
