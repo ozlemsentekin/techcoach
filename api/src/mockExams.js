@@ -798,11 +798,17 @@ const MOCK_EXAM_WQ_INSERT_RETURNING_ID_SQL = `
     (@studentId, @subjectRowId, @subject, @topic, @bookName, @questionNumber, @errorType, @photoUrl);
 `
 
+// Deneme şablonu LGS adını kullanır ("T.C. İnkılap Tarihi…"); Hata Defteri'ne panel ders adıyla
+// (dbo.Subjects) yazılır ki Gelişim/Hata Defteri ekranlarında ayrı bir ders gibi görünmesin.
+function wrongQuestionSubjectName(subjectName) {
+  return String(subjectName || '').replace(/^T\.\s*C\.\s*/i, '')
+}
+
 function mockExamWqBindings({ studentId, subjectRowId, subjectName, topic, questionNumber, photoUrl }) {
   return {
     studentId: { type: sql.UniqueIdentifier, value: studentId },
     subjectRowId: { type: sql.UniqueIdentifier, value: subjectRowId },
-    subject: { type: sql.NVarChar(100), value: subjectName },
+    subject: { type: sql.NVarChar(100), value: wrongQuestionSubjectName(subjectName) },
     topic: { type: sql.NVarChar(200), value: topic },
     bookName: { type: sql.NVarChar(200), value: MOCK_EXAM_WRONG_BOOK_NAME },
     questionNumber: { type: sql.NVarChar(20), value: questionNumber == null ? null : String(questionNumber) },
