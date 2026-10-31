@@ -278,7 +278,7 @@ export default function AddTaskDrawer({
   const autoTitleRef = useRef(seedTitle)
   const [resourceBookId, setResourceBookId] = useState(seed.resourceBookId || '')
   const [schoolResourceId, setSchoolResourceId] = useState(seed.schoolResourceId || '')
-  const [schoolSubjectId, setSchoolSubjectId] = useState('')
+  const [schoolSubjectId, setSchoolSubjectId] = useState(null)
   const [schoolResourceGroups, setSchoolResourceGroups] = useState(null)
   const [schoolResourceGroupsError, setSchoolResourceGroupsError] = useState('')
   const [subjectId, setSubjectId] = useState('')
@@ -470,14 +470,20 @@ export default function AddTaskDrawer({
   }, [resourceBooks, effectiveSubjectId, isQuestionBankHomework, questionBankResourceBooks])
 
   // --- Okul Ödevi: okul+sınıf+ders bazlı okul kaynağı seçimi ---
-  // Görev düzenlenirken kayıtlı kaynaktan dersi geri türet.
+  // Görev düzenlenirken dersi kayıtlı kaynaktan, kaynak yoksa kayıtlı ders adından geri türet.
+  // schoolSubjectId === null: kullanıcı dersi henüz değiştirmedi; '' ise bilerek temizledi.
   const effectiveSchoolSubjectId =
-    schoolSubjectId ||
-    (schoolResourceId && schoolResourceGroups
-      ? schoolResourceGroups.find((group) => group.resources.some((r) => r.id === schoolResourceId))?.subjectId || ''
-      : '')
+    schoolSubjectId !== null
+      ? schoolSubjectId
+      : schoolResourceGroups
+        ? (schoolResourceId
+            ? schoolResourceGroups.find((group) => group.resources.some((r) => r.id === schoolResourceId))?.subjectId
+            : schoolResourceGroups.find((group) => group.subjectName === seed.subject)?.subjectId) || ''
+        : ''
+  // Kayıtlı ders bu okulun kaynak gruplarında yoksa da ders adı düzenlemede kaybolmasın.
   const selectedSchoolSubjectName =
-    schoolResourceGroups?.find((group) => group.subjectId === effectiveSchoolSubjectId)?.subjectName || null
+    schoolResourceGroups?.find((group) => group.subjectId === effectiveSchoolSubjectId)?.subjectName ||
+    (schoolSubjectId === null && !schoolResourceId && isSchoolHomework ? seed.subject || null : null)
   const schoolResourcesForSubject =
     schoolResourceGroups?.find((group) => group.subjectId === effectiveSchoolSubjectId)?.resources || []
   const selectedSchoolResource =
@@ -639,6 +645,7 @@ export default function AddTaskDrawer({
 
   const handleClearSchoolResource = () => {
     applyAutoTitle(buildAutoTitle(form.taskType, selectedSchoolSubjectName, null))
+    setSchoolSubjectId(effectiveSchoolSubjectId)
     setSchoolResourceId('')
   }
 
@@ -1034,7 +1041,7 @@ export default function AddTaskDrawer({
                     {needsResource ? 'Kaynak ve içerik' : 'Okul kaynağı (isteğe bağlı)'}
                   </span>
                   <button type="button" onClick={openResourcePicker} className="shrink-0 rounded-xl border border-panel-blue px-3 py-2 text-sm font-semibold text-panel-blue hover:bg-panel-blue-soft">
-                    {selectedBook || selectedSchoolResource ? 'Değiştir' : needsResource ? 'Kaynak ve içerik seç' : 'Kaynak seç'}
+                    {selectedBook || selectedSchoolResource || (isSchoolHomework && selectedSchoolSubjectName) ? 'Değiştir' : needsResource ? 'Kaynak ve içerik seç' : 'Kaynak seç'}
                   </button>
                 </div>
                 {selectedBook || selectedSchoolResource ? (
@@ -1053,6 +1060,14 @@ export default function AddTaskDrawer({
                           </p>
                         </>
                       ) : null}
+                    </div>
+                  </div>
+                ) : isSchoolHomework && selectedSchoolSubjectName ? (
+                  <div className="flex items-start gap-3">
+                    <BookOpen size={22} className="shrink-0 text-panel-blue" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-panel-text">{selectedSchoolSubjectName}</p>
+                      <p className="mt-1 text-xs text-panel-text-muted">Kaynak seçilmedi</p>
                     </div>
                   </div>
                 ) : <p className="text-sm text-panel-text-muted">{needsResource ? 'Ders, kaynak ve testleri ayrı pencerede kolayca seçin.' : 'Göreve eklemek istediğiniz okul kaynağını seçebilirsiniz.'}</p>}
@@ -1169,7 +1184,8 @@ export default function AddTaskDrawer({
             ? isSimpleContentBook
               ? `${selectedBook?.name || ''} (basit kayıt)`
               : `${selectedTestIds.size} test · ${totalQuestionCount} soru seçildi`
-            : selectedSchoolResource?.name || 'Kaynak seçimi isteğe bağlıdır'
+            : selectedSchoolResource?.name ||
+              (selectedSchoolSubjectName ? `${selectedSchoolSubjectName} · kaynak seçilmedi` : 'Kaynak seçimi isteğe bağlıdır')
         }
         canConfirm={
           !needsResource ||
