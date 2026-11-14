@@ -2459,6 +2459,9 @@ export default function MockExamsView({
   fetchTopicSuggestions,
   fetchTopicStats,
   fetchGrowthSummary,
+  // true: "Denemeler / Konu Analizi / Deneme Gelişimi" seçicisi gizlenir, yalnızca deneme listesi
+  // gösterilir (öğretmenin öğrenciye özel "Sınav Sonuçları" sayfası).
+  hideViewToggle = false,
 }) {
   const [exams, setExams] = useState(null)
   const [error, setError] = useState('')
@@ -2636,7 +2639,7 @@ export default function MockExamsView({
     fetchGrowthSummary ? { value: 'growth', label: 'Deneme Gelişimi' } : null,
   ].filter(Boolean)
 
-  const viewToggle = viewOptions.length > 1 ? (
+  const viewToggle = !hideViewToggle && viewOptions.length > 1 ? (
     <div className="flex flex-wrap gap-1.5 rounded-xl bg-panel-surface-soft p-1">
       {viewOptions.map((opt) => (
         <button
