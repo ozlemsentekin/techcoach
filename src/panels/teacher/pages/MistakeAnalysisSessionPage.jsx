@@ -600,7 +600,7 @@ export default function MistakeAnalysisSessionPage() {
         <ArrowLeft size={16} /> Öğrenci sayfası
       </Link>
       <PageHeader
-        title="Hata Analizi"
+        title={`${String(session.studentFullName || '').trim().split(/\s+/)[0] || 'Öğrenci'} Hata Defteri`}
         subtitle={`${session.studentFullName} · ${session.subjectName} — tüm hatalar`}
         actions={
           <Button onClick={() => openViewer(0)} disabled={!visibleItems.length}>

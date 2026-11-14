@@ -173,6 +173,16 @@ export function getTeacherNav(canManageLibrary = false, lessonNotesEnabled = fal
   ]
 }
 
+// Öğrenciye özel link (Hata Analizi / öğrenci Kitaplığı) açıkken öğretmen menüsü: yalnızca o
+// öğrencinin iki sayfası (bkz. hooks/useTeacherStudentFocus.js).
+export function getTeacherStudentFocusNav({ studentTeacherId, firstName }) {
+  const name = firstName ? `${firstName} ` : ''
+  return [
+    { to: `/teacher/students/${studentTeacherId}/hata-analizi`, label: `${name}Hata Defteri`, icon: 'AlertCircle' },
+    { to: `/teacher/students/${studentTeacherId}/kitaplik`, label: `${name}Kitaplık`, icon: 'BookMarked' },
+  ]
+}
+
 export const PARENT_ADMIN_NAV = {
   label: 'Admin Paneli',
   icon: 'ShieldCheck',
