@@ -4,8 +4,13 @@ import { getTeacherStudent } from '../services/teacherService'
 
 // Öğretmene gönderilen öğrenciye özel linklerde (Hata Analizi / öğrenci Kitaplığı) sol menü tüm
 // öğretmen menüsü yerine yalnızca o öğrencinin iki sayfasını gösterir ("Aylin Hata Defteri",
-// "Aylin Kitaplık"). Bu hook adres o sayfalardan biriyse öğrencinin bilgisini döner, değilse null.
-const FOCUS_PATTERNS = ['/teacher/students/:studentTeacherId/hata-analizi', '/teacher/students/:studentTeacherId/kitaplik']
+// "Kitaplık", "Gelişim Analizi", "Sınav Sonuçları"). Bu hook adres o sayfalardan biriyse öğrencinin bilgisini döner, değilse null.
+const FOCUS_PATTERNS = [
+  '/teacher/students/:studentTeacherId/hata-analizi',
+  '/teacher/students/:studentTeacherId/kitaplik',
+  '/teacher/students/:studentTeacherId/gelisim',
+  '/teacher/students/:studentTeacherId/sinav-sonuclari',
+]
 
 const studentCache = new Map()
 
