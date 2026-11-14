@@ -54,6 +54,22 @@ function formatErrorDate(value) {
   return ERROR_DATE_FMT.format(new Date(y, m - 1, d))
 }
 
+// Kart başlığı: denemede "Deneme adı - tarih", kitapta kaynak adı.
+function cardTitle(item) {
+  if (item.mockExamTitle) {
+    const date = formatErrorDate(item.errorDate)
+    return date ? `${item.mockExamTitle} - ${date}` : item.mockExamTitle
+  }
+  return sourceLabel(item)
+}
+
+// Kart alt satırı: denemede soru no; kitapta test · soru no · tarih.
+function cardSubtitle(item) {
+  const question = item.questionNumber ? `Soru ${item.questionNumber}` : null
+  if (item.mockExamTitle) return question || 'Soru'
+  return [item.testName, question, formatErrorDate(item.errorDate)].filter(Boolean).join(' · ') || 'Soru'
+}
+
 function sourceLabel(item) {
   return item.bookName || 'Kaynak belirtilmemiş'
 }
@@ -116,12 +132,14 @@ function Thumbnail({ item, onOpen }) {
         ) : null}
       </span>
       <span className="min-w-0 px-2 py-1.5">
-        <span className="block truncate text-xs font-semibold text-panel-text">{questionLabel(item)}</span>
-        <span className="block truncate text-[11px] text-panel-text-muted">
-          {item.myAnalysis?.questionTopic || item.topic || sourceLabel(item)}
+        <span className="block truncate text-xs font-semibold text-panel-text" title={cardTitle(item)}>
+          {cardTitle(item)}
         </span>
-        {item.errorDate ? (
-          <span className="block text-[11px] font-semibold text-panel-blue">{formatErrorDate(item.errorDate)}</span>
+        <span className="block truncate text-[11px] text-panel-text-muted">{cardSubtitle(item)}</span>
+        {item.myAnalysis?.questionTopic || item.topic ? (
+          <span className="block truncate text-[11px] text-panel-text-muted">
+            {item.myAnalysis?.questionTopic || item.topic}
+          </span>
         ) : null}
       </span>
     </button>
