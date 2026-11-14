@@ -129,6 +129,12 @@ const {
   createTeacherStudentHandler,
 } = require('./teacher')
 const { listQuarterAnalysisHandler } = require('./quarterAnalysis')
+const {
+  getPanelMistakeAnalysisSessionHandler,
+  createPanelMistakeAnalysisHandler,
+  updatePanelMistakeAnalysisHandler,
+  deletePanelMistakeAnalysisHandler,
+} = require('./mistakeAnalysisSession')
 const { getTeacherClassAnalysisHandler } = require('./classAnalysis')
 const {
   listMockExamsHandler,
@@ -1039,6 +1045,36 @@ registerHttp('panel-teacher-wrong-questions-update', {
 
 // Hata Analizi Oturumu: öğretmenin dersindeki tüm yanlışlar (fotoğraf adresleriyle) + öğretmenin
 // kendi analiz yorumunu ekleme / düzeltme / geri alma (bkz. teacher.js).
+// Öğrenci/veli Hata Defteri kart görünümü + kendi analizini ekle/düzelt/geri al
+// (bkz. mistakeAnalysisSession.js).
+registerHttp('panel-mistake-analysis-session', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/mistake-analysis-session',
+  handler: getPanelMistakeAnalysisSessionHandler,
+})
+
+registerHttp('panel-mistake-analysis-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel/wrong-questions/{wrongQuestionId}/analyses',
+  handler: createPanelMistakeAnalysisHandler,
+})
+
+registerHttp('panel-mistake-analysis-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel/wrong-questions/{wrongQuestionId}/analyses/{analysisId}',
+  handler: updatePanelMistakeAnalysisHandler,
+})
+
+registerHttp('panel-mistake-analysis-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel/wrong-questions/{wrongQuestionId}/analyses/{analysisId}',
+  handler: deletePanelMistakeAnalysisHandler,
+})
+
 // Veli "Çeyrek Dönem Analizi": çocuğun dersleri + öğretmen linkleri (bkz. quarterAnalysis.js).
 registerHttp('panel-quarter-analysis', {
   authLevel: 'anonymous',

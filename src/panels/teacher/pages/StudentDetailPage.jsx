@@ -471,6 +471,7 @@ export default function StudentDetailPage() {
             fetchPhoto={fetchPhoto}
             fetchAnalysisPhotos={fetchAnalysisPhotos}
             viewerRole="ogretmen"
+            teacherStudentTeacherId={studentTeacherId}
             updateMistakeAnalysis={updateMistakeAnalysis}
             updateMistakeMeta={updateMistakeMeta}
             updateMistakePhoto={updateMistakePhoto}
