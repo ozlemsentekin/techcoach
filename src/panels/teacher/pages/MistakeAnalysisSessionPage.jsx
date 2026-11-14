@@ -83,10 +83,12 @@ const MOCK_EXAM_KIND_TAGS = {
   etut: { label: 'Etüt', tone: 'bg-panel-sage text-white' },
 }
 
-function Tag({ className, children, title }) {
+function Tag({ className, children, title, large = false }) {
   return (
     <span
-      className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[10px] font-semibold leading-4 ${className}`}
+      className={`inline-block max-w-full rounded-full font-semibold ${
+        large ? 'whitespace-normal break-words px-2.5 py-1 text-xs leading-4' : 'truncate px-2 py-0.5 text-[10px] leading-4'
+      } ${className}`}
       title={title}
     >
       {children}
@@ -94,25 +96,31 @@ function Tag({ className, children, title }) {
   )
 }
 
-// Kart alt yazısı. Kitap: yayınevi + kaynak etiketi, ünite, (varsa) test konusu, test · soru.
-// Deneme: tür etiketi (Deneme Sınavı / Branş İzleme / Etüt), deneme adı, tarih, soru.
-function CardCaption({ item }) {
+// Soru bilgisi. Kitap: yayınevi + kaynak etiketi, ünite, (varsa) test konusu, test · soru, çözüldüğü
+// tarih. Deneme: tür etiketi (Deneme Sınavı / Branş İzleme / Etüt), deneme adı, tarih, soru.
+// large: slayt ekranının sağ panelinde daha büyük ve kısaltmasız gösterim.
+function CardCaption({ item, large = false }) {
   const question = item.questionNumber ? `Soru ${item.questionNumber}` : 'Soru'
+  const clip = large ? 'break-words' : 'truncate'
+  const small = `block ${clip} ${large ? 'text-sm' : 'text-[11px]'}`
+  const title = `block ${clip} font-semibold text-panel-text ${large ? 'text-base' : 'text-xs'}`
+  const wrapper = `flex min-w-0 flex-col ${large ? 'gap-1.5' : 'gap-1 px-2 py-2'}`
+
   if (item.mockExamTitle) {
     const kind = MOCK_EXAM_KIND_TAGS[item.mockExamKind] || { label: 'Deneme', tone: 'bg-panel-blue text-white' }
     return (
-      <span className="flex min-w-0 flex-col gap-1 px-2 py-2">
+      <span className={wrapper}>
         <span className="flex min-w-0 flex-wrap gap-1">
-          <Tag className={kind.tone}>{kind.label}</Tag>
+          <Tag large={large} className={kind.tone}>
+            {kind.label}
+          </Tag>
         </span>
-        <span className="block truncate text-xs font-semibold text-panel-text" title={item.mockExamTitle}>
+        <span className={title} title={item.mockExamTitle}>
           {item.mockExamTitle}
         </span>
-        {item.errorDate ? (
-          <span className="block text-[11px] text-panel-text-muted">{formatErrorDate(item.errorDate)}</span>
-        ) : null}
-        <span className="block text-[11px] font-semibold text-panel-text">{question}</span>
-        <TeacherTopic item={item} />
+        {item.errorDate ? <span className={`${small} text-panel-text-muted`}>{formatErrorDate(item.errorDate)}</span> : null}
+        <span className={`${small} font-semibold text-panel-text`}>{question}</span>
+        {large ? null : <TeacherTopic item={item} />}
       </span>
     )
   }
@@ -120,34 +128,32 @@ function CardCaption({ item }) {
   const unit = item.topic
   const testTopic = item.topicName && item.topicName !== item.topic ? item.topicName : null
   return (
-    <span className="flex min-w-0 flex-col gap-1 px-2 py-2">
+    <span className={wrapper}>
       <span className="flex min-w-0 flex-col items-start gap-1">
         {item.publisherName ? (
-          <Tag className={tagTone(item.publisherName)} title={item.publisherName}>
+          <Tag large={large} className={tagTone(item.publisherName)} title={item.publisherName}>
             {item.publisherName}
           </Tag>
         ) : null}
-        <Tag className={tagTone(sourceLabel(item), 7)} title={sourceLabel(item)}>
+        <Tag large={large} className={tagTone(sourceLabel(item), 7)} title={sourceLabel(item)}>
           {sourceLabel(item)}
         </Tag>
       </span>
       {unit ? (
-        <span className="block truncate text-[11px] text-panel-text" title={unit}>
+        <span className={`${small} text-panel-text`} title={unit}>
           {unit}
         </span>
       ) : null}
       {testTopic ? (
-        <span className="block truncate text-[11px] text-panel-text-muted" title={testTopic}>
+        <span className={`${small} text-panel-text-muted`} title={testTopic}>
           {testTopic}
         </span>
       ) : null}
-      <span className="block truncate text-[11px] font-semibold text-panel-text">
-        {[item.testName, question].filter(Boolean).join(' · ')}
-      </span>
+      <span className={`${small} font-semibold text-panel-text`}>{[item.testName, question].filter(Boolean).join(' · ')}</span>
       {item.errorDate ? (
-        <span className="block text-[11px] text-panel-text-muted">Çözüldü: {formatErrorDate(item.errorDate)}</span>
+        <span className={`${small} text-panel-text-muted`}>Çözüldü: {formatErrorDate(item.errorDate)}</span>
       ) : null}
-      <TeacherTopic item={item} />
+      {large ? null : <TeacherTopic item={item} />}
     </span>
   )
 }
@@ -596,10 +602,11 @@ function SlideViewer({
               </div>
             ) : null}
 
+            <div className="rounded-xl border border-panel-border bg-panel-surface-soft p-3">
+              <CardCaption item={current} large />
+            </div>
+
             <div className="flex flex-wrap gap-1.5 text-[11px]">
-              {current.topic ? (
-                <span className="rounded-full bg-panel-surface-soft px-2 py-0.5 text-panel-text-muted">Kaynak konusu: {current.topic}</span>
-              ) : null}
               {current.correctAnswer ? (
                 <span className="rounded-full bg-panel-blue-soft px-2 py-0.5 font-semibold text-panel-blue">
                   Doğru cevap: {current.correctAnswer}
