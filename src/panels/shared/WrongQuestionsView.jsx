@@ -24,6 +24,21 @@ import WrongQuestionGalleryModal from './WrongQuestionGalleryModal'
 import AddWrongQuestionModal from './AddWrongQuestionModal'
 import MistakePhotoCaptureModal from '../student/components/MistakePhotoCaptureModal'
 import MistakeBookletTestModal from './MistakeBookletTestModal'
+import MistakeAnalysisBoard from './MistakeAnalysisBoard'
+import {
+  createMistakeAnalysis,
+  deleteMistakeAnalysis,
+  getMistakeAnalysisSession,
+  updateMistakeAnalysis as updateOwnMistakeAnalysis,
+  updateWrongQuestionPhoto,
+} from '../../services/wrongQuestionService'
+import {
+  createTeacherMistakeAnalysis,
+  deleteTeacherMistakeAnalysis,
+  getTeacherMistakeAnalysisSession,
+  updateTeacherMistakeAnalysis,
+  updateTeacherStudentWrongQuestionPhoto,
+} from '../../services/teacherService'
 import { verifyMistakePhotoQuestionNumber } from '../../services/mistakePhotoService'
 import { ResourceBookAvatar } from './ResourceBookCard'
 import { RATE_TONES, completionRateTone, successRateTone } from './rateTones'
@@ -850,8 +865,11 @@ export default function WrongQuestionsView({
   backSlot = null,
   hideHeaderWhenUnselected = false,
   canCreateBookletTest = false,
+  // Öğretmen görünümü: kart görünümü bu öğretmen-öğrenci ilişkisi (öğretmenin dersi) üzerinden çalışır.
+  teacherStudentTeacherId = null,
 }) {
   const [showAddModal, setShowAddModal] = useState(false)
+  const [boardReloadKey, setBoardReloadKey] = useState(0)
   const [wrongQuestions, setWrongQuestions] = useState(null)
   const [bookImages, setBookImages] = useState({})
   const [topicStats, setTopicStats] = useState([])
@@ -867,7 +885,8 @@ export default function WrongQuestionsView({
   const [selectedTopicKeys, setSelectedTopicKeys] = useState(() => new Set())
   const [replacingPhotoItem, setReplacingPhotoItem] = useState(null)
   const [analysisFilter, setAnalysisFilter] = useState('tumu')
-  const [dateFilter, setDateFilter] = useState('last7')
+  // Kart görünümü tüm zamanları gösterdiği için ders listesi de varsayılan olarak tüm zamanlar.
+  const [dateFilter, setDateFilter] = useState('all')
   const [repeatOnly, setRepeatOnly] = useState(false)
   // Hata Kitapçığı (yalnız admin): seçim sırası = testteki soru sırası; ders değişince sıfırlanır.
   const [bookletSelectMode, setBookletSelectMode] = useState(false)
@@ -935,6 +954,36 @@ export default function WrongQuestionsView({
   // Tek ders varsa (ör. öğretmen-öğrenci ilişkisi zaten tek derse özgü), ders seçim
   // ekranını atlayıp doğrudan o dersin içeriğini gösteriyoruz.
   const effectiveSelectedSubject = selectedSubject ?? (hasSingleSubject ? contentGroups[0].subject : null)
+
+  // Ders seçilince yalnızca kart görünümü (MistakeAnalysisBoard) gösterilir: klasörler, tarih sıralı
+  // görsel kartlar, slayt ve izleyicinin kendi analiz formu (her rol kendi analizini yazar).
+  const boardApi = useMemo(() => {
+    if (!effectiveSelectedSubject) return null
+    if (teacherStudentTeacherId) {
+      const id = teacherStudentTeacherId
+      return {
+        load: () => getTeacherMistakeAnalysisSession(id),
+        create: (itemId, payload) => createTeacherMistakeAnalysis(id, itemId, payload),
+        update: (itemId, analysisId, payload) => updateTeacherMistakeAnalysis(id, itemId, analysisId, payload),
+        remove: (itemId, analysisId) => deleteTeacherMistakeAnalysis(id, itemId, analysisId),
+        savePhoto: (itemId, dataUrl) => updateTeacherStudentWrongQuestionPhoto(id, itemId, dataUrl),
+      }
+    }
+    const subject = effectiveSelectedSubject
+    return {
+      load: () => getMistakeAnalysisSession(subject, studentId),
+      create: (itemId, payload) => createMistakeAnalysis(itemId, payload, studentId),
+      update: (itemId, analysisId, payload) => updateOwnMistakeAnalysis(itemId, analysisId, payload, studentId),
+      remove: (itemId, analysisId) => deleteMistakeAnalysis(itemId, analysisId, studentId),
+      savePhoto: (itemId, dataUrl) => updateWrongQuestionPhoto(itemId, dataUrl, studentId),
+    }
+  }, [effectiveSelectedSubject, teacherStudentTeacherId, studentId])
+  const boardDoneHint =
+    viewerRole === 'ogretmen'
+      ? "Öğrenci Hata Analizlerim'de görür"
+      : viewerRole === 'ebeveyn'
+        ? "Çocuğunuz Hata Analizlerim'de görür"
+        : "Hata Analizlerim'de de görünür"
 
   const selectedContentGroup = contentGroups.find((group) => group.subject === effectiveSelectedSubject) || null
   const selectedSourceGroup = sourceGroups.find((group) => group.subject === effectiveSelectedSubject) || null
@@ -1195,6 +1244,7 @@ export default function WrongQuestionsView({
   const handleWrongQuestionAdded = (wrongQuestion) => {
     setWrongQuestions((prev) => [wrongQuestion, ...(prev || [])])
     setShowAddModal(false)
+    setBoardReloadKey((value) => value + 1)
   }
 
   // Öğretmen görünümü farklı bir kimlik bağlamı (studentTeacherId) üzerinden çalışıyor;
@@ -1282,7 +1332,7 @@ export default function WrongQuestionsView({
         />
       ) : null}
 
-      {allPhotoQuestions.length > 0 ? (
+      {allPhotoQuestions.length > 0 && !(effectiveSelectedSubject && boardApi) ? (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-panel-border bg-panel-surface px-3 py-2">
           {/* Analiz durumu filtresi ve "eksik analiz" rozeti sadece öğretmende gösterilir — öğrenci/veli
               görünümünde bu iş yükü takibi anlamlı değil (kendi tek soru kümesini zaten görüyorlar). */}
@@ -1377,6 +1427,14 @@ export default function WrongQuestionsView({
             description="Cevap kağıdında yanlış işaretlenen bir soruya tıklayıp fotoğrafını eklediğinde burada görünecek."
           />
         )
+      ) : effectiveSelectedSubject && boardApi ? (
+        <MistakeAnalysisBoard
+          key={effectiveSelectedSubject}
+          api={boardApi}
+          title={null}
+          doneHint={boardDoneHint}
+          reloadKey={boardReloadKey}
+        />
       ) : activeSource ? (
         <SourceQuestionBoard
           subject={effectiveSelectedSubject}

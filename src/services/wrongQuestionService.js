@@ -232,3 +232,46 @@ export async function getMistakeBookletQuestions(testId, studentId) {
   const query = studentId ? `?studentId=${studentId}` : ''
   return authRequest(`/api/panel/mistake-booklets/tests/${testId}/questions${query}`, { method: 'GET' })
 }
+
+/* ------------------------------------------------------- Hata Defteri kart görünümü (öğrenci/veli) */
+
+function studentQuery(studentId, extra = {}) {
+  const params = new URLSearchParams(extra)
+  if (studentId) params.set('studentId', studentId)
+  const text = params.toString()
+  return text ? `?${text}` : ''
+}
+
+/**
+ * Bir dersin TÜM fotoğraflı yanlışları (fotoğraf adresleriyle) + izleyicinin (öğrenci ya da veli)
+ * kendi analizi (`myAnalysis`) ve diğerlerinin yorumları (`otherComments`). Bkz. MistakeAnalysisBoard.
+ * @returns {Promise<{subjectName: string, items: Array}>}
+ */
+export async function getMistakeAnalysisSession(subject, studentId) {
+  const data = await authRequest(`/api/panel/mistake-analysis-session${studentQuery(studentId, { subject })}`, {
+    method: 'GET',
+  })
+  return { subjectName: data.subjectName || subject, items: data.items || [] }
+}
+
+export async function createMistakeAnalysis(wrongQuestionId, payload, studentId) {
+  const data = await authRequest(`/api/panel/wrong-questions/${wrongQuestionId}/analyses${studentQuery(studentId)}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return data.analysis
+}
+
+export async function updateMistakeAnalysis(wrongQuestionId, analysisId, payload, studentId) {
+  const data = await authRequest(
+    `/api/panel/wrong-questions/${wrongQuestionId}/analyses/${analysisId}${studentQuery(studentId)}`,
+    { method: 'PATCH', body: JSON.stringify(payload) },
+  )
+  return data.analysis
+}
+
+export async function deleteMistakeAnalysis(wrongQuestionId, analysisId, studentId) {
+  await authRequest(`/api/panel/wrong-questions/${wrongQuestionId}/analyses/${analysisId}${studentQuery(studentId)}`, {
+    method: 'DELETE',
+  })
+}
