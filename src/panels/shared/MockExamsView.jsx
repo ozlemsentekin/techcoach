@@ -2067,12 +2067,12 @@ function examTitle(exam) {
   return exam.title || mockExamKindLabel(exam.kind) || ''
 }
 
-// Kronolojik (eski → yeni) karşılaştırma. Aynı tarihte deneme adı TERS sıralanır; böylece listeyi
-// ters çevirince tablo "tarih azalan, aynı tarihte ad artan" (Test 6, Test 7…) görünür.
+// Kronolojik (eski → yeni) karşılaştırma; aynı tarihte deneme adı artan. Liste ters çevrilince tablo
+// "tarih azalan, aynı tarihte ad azalan" (Test 7, Test 6…) görünür.
 function compareChrono(a, b) {
   const diff = examTime(a.exam) - examTime(b.exam)
   if (diff !== 0) return diff
-  return examTitle(b.exam).localeCompare(examTitle(a.exam), 'tr', { numeric: true })
+  return examTitle(a.exam).localeCompare(examTitle(b.exam), 'tr', { numeric: true })
 }
 
 function round1(value) {
