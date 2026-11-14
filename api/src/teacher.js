@@ -3819,7 +3819,7 @@ async function getTeacherMistakeAnalysisSessionHandler(request) {
                t.topic_name,
                COALESCE(rb.name, rb2.name, wq.book_name) AS book_name,
                COALESCE(pub.name, pub2.name, wq.publisher_name) AS publisher_name,
-               me.title AS mock_exam_title, me.exam_date AS mock_exam_date,
+               me.title AS mock_exam_title, me.exam_date AS mock_exam_date, me.kind AS mock_exam_kind,
                tak.correct_label AS correct_answer
         FROM dbo.WrongQuestions wq
         LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
@@ -3862,6 +3862,7 @@ async function getTeacherMistakeAnalysisSessionHandler(request) {
           publisherName: isMockExam ? undefined : row.publisher_name || undefined,
           mockExamTitle: isMockExam ? row.mock_exam_title || row.topic || undefined : undefined,
           mockExamDate: isMockExam ? row.mock_exam_date || undefined : undefined,
+          mockExamKind: isMockExam ? row.mock_exam_kind || undefined : undefined,
           correctAnswer: row.correct_answer || undefined,
           createdAt: row.created_at,
           errorDate: sessionErrorDate(isMockExam ? row.mock_exam_date : null, row.created_at),
