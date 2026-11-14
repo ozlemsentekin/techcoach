@@ -55,20 +55,105 @@ function formatErrorDate(value) {
   return ERROR_DATE_FMT.format(new Date(y, m - 1, d))
 }
 
-// Kart başlığı: denemede "Deneme adı - tarih", kitapta kaynak adı.
-function cardTitle(item) {
-  if (item.mockExamTitle) {
-    const date = formatErrorDate(item.errorDate)
-    return date ? `${item.mockExamTitle} - ${date}` : item.mockExamTitle
-  }
-  return sourceLabel(item)
+// Etiket renkleri (panel-* token'ları): ada göre sabit renk — aynı kaynak her kartta aynı renkte.
+const TAG_PALETTE = [
+  'bg-panel-blue-soft text-panel-blue',
+  'bg-panel-sage-soft text-panel-sage',
+  'bg-panel-lilac-soft text-panel-lilac',
+  'bg-panel-slate-soft text-panel-slate',
+  'bg-panel-accent-soft text-panel-accent',
+  'bg-panel-warm-soft text-panel-warm',
+  'bg-panel-yellow-soft text-panel-yellow',
+  'bg-panel-green-soft text-panel-green',
+]
+
+function tagTone(name, seed = 0) {
+  if (!name) return 'bg-panel-surface-soft text-panel-text-muted'
+  let hash = seed
+  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) | 0
+  return TAG_PALETTE[Math.abs(hash) % TAG_PALETTE.length]
 }
 
-// Kart alt satırı: denemede soru no; kitapta test · soru no · tarih.
-function cardSubtitle(item) {
-  const question = item.questionNumber ? `Soru ${item.questionNumber}` : null
-  if (item.mockExamTitle) return question || 'Soru'
-  return [item.testName, question, formatErrorDate(item.errorDate)].filter(Boolean).join(' · ') || 'Soru'
+const MOCK_EXAM_KIND_TAGS = {
+  genel: { label: 'Deneme Sınavı', tone: 'bg-panel-blue text-white' },
+  brans: { label: 'Branş İzleme', tone: 'bg-panel-lilac text-white' },
+  etut: { label: 'Etüt', tone: 'bg-panel-sage text-white' },
+}
+
+function Tag({ className, children, title }) {
+  return (
+    <span
+      className={`inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[10px] font-semibold leading-4 ${className}`}
+      title={title}
+    >
+      {children}
+    </span>
+  )
+}
+
+// Kart alt yazısı. Kitap: yayınevi + kaynak etiketi, ünite, (varsa) test konusu, test · soru.
+// Deneme: tür etiketi (Deneme Sınavı / Branş İzleme / Etüt), deneme adı, tarih, soru.
+function CardCaption({ item }) {
+  const question = item.questionNumber ? `Soru ${item.questionNumber}` : 'Soru'
+  if (item.mockExamTitle) {
+    const kind = MOCK_EXAM_KIND_TAGS[item.mockExamKind] || { label: 'Deneme', tone: 'bg-panel-blue text-white' }
+    return (
+      <span className="flex min-w-0 flex-col gap-1 px-2 py-2">
+        <span className="flex min-w-0 flex-wrap gap-1">
+          <Tag className={kind.tone}>{kind.label}</Tag>
+        </span>
+        <span className="block truncate text-xs font-semibold text-panel-text" title={item.mockExamTitle}>
+          {item.mockExamTitle}
+        </span>
+        {item.errorDate ? (
+          <span className="block text-[11px] text-panel-text-muted">{formatErrorDate(item.errorDate)}</span>
+        ) : null}
+        <span className="block text-[11px] font-semibold text-panel-text">{question}</span>
+        <TeacherTopic item={item} />
+      </span>
+    )
+  }
+
+  const unit = item.topic
+  const testTopic = item.topicName && item.topicName !== item.topic ? item.topicName : null
+  return (
+    <span className="flex min-w-0 flex-col gap-1 px-2 py-2">
+      <span className="flex min-w-0 flex-col items-start gap-1">
+        {item.publisherName ? (
+          <Tag className={tagTone(item.publisherName)} title={item.publisherName}>
+            {item.publisherName}
+          </Tag>
+        ) : null}
+        <Tag className={tagTone(sourceLabel(item), 7)} title={sourceLabel(item)}>
+          {sourceLabel(item)}
+        </Tag>
+      </span>
+      {unit ? (
+        <span className="block truncate text-[11px] text-panel-text" title={unit}>
+          {unit}
+        </span>
+      ) : null}
+      {testTopic ? (
+        <span className="block truncate text-[11px] text-panel-text-muted" title={testTopic}>
+          {testTopic}
+        </span>
+      ) : null}
+      <span className="block truncate text-[11px] font-semibold text-panel-text">
+        {[item.testName, question].filter(Boolean).join(' · ')}
+      </span>
+      <TeacherTopic item={item} />
+    </span>
+  )
+}
+
+// Öğretmenin bu soru için yazdığı konu (analiz yapıldıysa).
+function TeacherTopic({ item }) {
+  if (!item.myAnalysis?.questionTopic) return null
+  return (
+    <span className="block truncate text-[11px] text-panel-blue" title={item.myAnalysis.questionTopic}>
+      Konu: {item.myAnalysis.questionTopic}
+    </span>
+  )
 }
 
 function sourceLabel(item) {
@@ -132,17 +217,7 @@ function Thumbnail({ item, onOpen }) {
           </span>
         ) : null}
       </span>
-      <span className="min-w-0 px-2 py-1.5">
-        <span className="block truncate text-xs font-semibold text-panel-text" title={cardTitle(item)}>
-          {cardTitle(item)}
-        </span>
-        <span className="block truncate text-[11px] text-panel-text-muted">{cardSubtitle(item)}</span>
-        {item.myAnalysis?.questionTopic || item.topic ? (
-          <span className="block truncate text-[11px] text-panel-text-muted">
-            {item.myAnalysis?.questionTopic || item.topic}
-          </span>
-        ) : null}
-      </span>
+      <CardCaption item={item} />
     </button>
   )
 }
