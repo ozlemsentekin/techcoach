@@ -2063,6 +2063,18 @@ function examTime(exam) {
   return Number.isNaN(t) ? 0 : t
 }
 
+function examTitle(exam) {
+  return exam.title || mockExamKindLabel(exam.kind) || ''
+}
+
+// Kronolojik (eski → yeni) karşılaştırma; aynı tarihte deneme adı artan. Liste ters çevrilince tablo
+// "tarih azalan, aynı tarihte ad azalan" (Test 7, Test 6…) görünür.
+function compareChrono(a, b) {
+  const diff = examTime(a.exam) - examTime(b.exam)
+  if (diff !== 0) return diff
+  return examTitle(a.exam).localeCompare(examTitle(b.exam), 'tr', { numeric: true })
+}
+
 function round1(value) {
   return Math.round(value * 10) / 10
 }
@@ -2202,7 +2214,7 @@ function MonitorStatCard({ label, value, hint, tone }) {
 
 function MonitorAnalysis({ group, countLabel, lgsEstimate }) {
   // Kronolojik (eski → yeni) sıra: değişim ve son deneme hesapları için.
-  const chrono = [...group.rows].sort((a, b) => examTime(a.exam) - examTime(b.exam))
+  const chrono = [...group.rows].sort(compareChrono)
   const count = chrono.length
   const avgNet = count ? round1(chrono.reduce((s, r) => s + r.stats.net, 0) / count) : 0
   const avgQuestions = count ? round1(group.totalQuestions / count) : 0
@@ -2269,7 +2281,7 @@ function MonitorAnalysis({ group, countLabel, lgsEstimate }) {
 function MonitorResultsTable({ group, cardProps, canEditExperience, showQuestionCount }) {
   const [openId, setOpenId] = useState(null)
   const rows = useMemo(() => {
-    const chrono = [...group.rows].sort((a, b) => examTime(a.exam) - examTime(b.exam))
+    const chrono = [...group.rows].sort(compareChrono)
     const withDelta = chrono.map((row, i) => ({ ...row, delta: i > 0 ? row.stats.net - chrono[i - 1].stats.net : null }))
     return withDelta.reverse() // tabloda en yeni üstte
   }, [group.rows])
