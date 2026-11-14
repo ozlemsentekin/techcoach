@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Check, Copy, Loader2, LogIn, MessageCircle, UserRound, Users } from 'lucide-react'
-import { cachedGet } from '../../../services/authClient'
+import { Check, Copy, Loader2, LogIn, UserRound, Users } from 'lucide-react'
+import { authRequest, cachedGet } from '../../../services/authClient'
 import { useAuth } from '../../../context/useAuth'
 import { getQuarterAnalysis } from '../../../services/quarterAnalysisService'
 import PageHeader from '../../layout/PageHeader'
@@ -50,12 +49,11 @@ async function copyText(text) {
   }
 }
 
-function SubjectCard({ subject, studentFullName, onOpenAsTeacher, opening }) {
+function SubjectCard({ subject, onOpenAsTeacher, opening }) {
   const [copied, setCopied] = useState(false)
   const tone = subjectTone(subject.subjectName)
   const link = analysisLink(subject.studentTeacherId)
   const percent = subject.wrongCount ? Math.round((subject.analyzedCount / subject.wrongCount) * 100) : 0
-  const message = `Merhaba ${subject.teacherFullName || ''}, ${studentFullName}'in ${subject.subjectName} çeyrek dönem analizi sayfası: ${link}`
 
   const handleCopy = async () => {
     if (await copyText(link)) {
@@ -100,21 +98,13 @@ function SubjectCard({ subject, studentFullName, onOpenAsTeacher, opening }) {
               {copied ? <Check size={16} className="text-panel-green" /> : <Copy size={16} />}
               {copied ? 'Kopyalandı' : 'Linki kopyala'}
             </button>
-            <a
-              href={`https://wa.me/?text=${encodeURIComponent(message)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#25D366] px-3 py-2 text-sm font-semibold text-white hover:brightness-95"
-            >
-              <MessageCircle size={16} /> WhatsApp
-            </a>
             {onOpenAsTeacher && subject.teacherUserId ? (
               <button
                 type="button"
                 onClick={() => onOpenAsTeacher(subject)}
                 disabled={opening}
                 title="Yönetici olarak bu öğretmenin hesabına geçip linki açar"
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-panel-blue px-3 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-panel-blue px-3 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60"
               >
                 {opening ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
                 Öğretmen olarak aç
@@ -132,8 +122,7 @@ function SubjectCard({ subject, studentFullName, onOpenAsTeacher, opening }) {
 }
 
 export default function QuarterAnalysisPage() {
-  const navigate = useNavigate()
-  const { authUser, impersonateUser } = useAuth()
+  const { authUser } = useAuth()
   const [openingId, setOpeningId] = useState('')
   const [students, setStudents] = useState(null)
   const [selectedStudentId, setSelectedStudentId] = useState('')
@@ -177,8 +166,15 @@ export default function QuarterAnalysisPage() {
     setOpeningId(subject.studentTeacherId)
     setError('')
     try {
-      await impersonateUser(subject.teacherUserId)
-      navigate(`/teacher/students/${subject.studentTeacherId}/hata-analizi`)
+      // Oturum çerezini öğretmene çevirir (admin impersonate). AuthContext'teki impersonateUser
+      // kullanılmaz: oturum durumu değişince veli rotası (RequireRole) kullanıcıyı öğretmenin ana
+      // sayfasına yönlendirip linki ezer. Bunun yerine link tam sayfa yüklemeyle açılır ve yeni
+      // oturum çerezden okunur.
+      await authRequest(`/api/panel-admin/users/${subject.teacherUserId}/impersonate`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      window.location.assign(`/teacher/students/${subject.studentTeacherId}/hata-analizi`)
     } catch (err) {
       setError(err.message || 'Öğretmen hesabına geçilemedi.')
       setOpeningId('')
@@ -199,7 +195,7 @@ export default function QuarterAnalysisPage() {
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Çeyrek Dönem Analizi"
-        subtitle="Her dersin linkini o dersin öğretmeniyle paylaşın; öğretmen yalnızca kendi dersinin hata defterini, kitaplığını, gelişim analizini ve sınav sonuçlarını görür."
+        subtitle="Her dersin linkini kopyalayıp o dersin öğretmeniyle paylaşın; öğretmen yalnızca kendi dersinin hata defterini, kitaplığını, gelişim analizini ve sınav sonuçlarını görür."
         actions={
           students.length > 1 ? (
             <select
@@ -226,7 +222,6 @@ export default function QuarterAnalysisPage() {
             <SubjectCard
               key={subject.studentTeacherId}
               subject={subject}
-              studentFullName={current.studentFullName}
               onOpenAsTeacher={authUser?.isAdmin ? handleOpenAsTeacher : null}
               opening={openingId === subject.studentTeacherId}
             />
