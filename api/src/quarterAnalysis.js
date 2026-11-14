@@ -10,11 +10,16 @@ const { requireStudentContext } = require('./studentScope')
 // öğretmen yalnızca kendi dersini görür (bkz. teacher.js getTeacherMistakeAnalysisSessionHandler).
 async function listQuarterAnalysisHandler(request) {
   try {
-    const { error, studentId, actorRole } = await requireStudentContext(request)
+    const { error, studentId, actorRole, actorId } = await requireStudentContext(request)
     if (error) return error
     if (actorRole !== 'ebeveyn') {
       return json(403, { error: 'Bu sayfa yalnızca veli içindir.' })
     }
+
+    // Yönetici, kartlardaki "Öğretmen olarak aç" ile öğretmenin hesabına geçebilir (bkz. admin
+    // impersonate); bunun için öğretmenin kullanıcı kimliği yalnızca yöneticiye döner.
+    const adminDb = await withRequest({ id: { type: sql.UniqueIdentifier, value: actorId } })
+    const isAdmin = Boolean((await adminDb.query(`SELECT is_admin FROM dbo.Users WHERE id = @id;`)).recordset[0]?.is_admin)
 
     const db = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
     const result = await db.query(`
@@ -46,6 +51,7 @@ async function listQuarterAnalysisHandler(request) {
         // Panel hesabı olmayan / pasif öğretmene link paylaşmak işe yaramaz.
         canShare: Boolean(row.teacher_user_id) && row.teacher_active !== false,
         teacherLastLoginAt: row.teacher_last_login_at || null,
+        ...(isAdmin && row.teacher_user_id ? { teacherUserId: row.teacher_user_id } : {}),
         wrongCount: row.wrong_count || 0,
         analyzedCount: row.analyzed_count || 0,
       })),

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Check, Copy, MessageCircle, UserRound, Users } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Check, Copy, Loader2, LogIn, MessageCircle, UserRound, Users } from 'lucide-react'
 import { cachedGet } from '../../../services/authClient'
+import { useAuth } from '../../../context/useAuth'
 import { getQuarterAnalysis } from '../../../services/quarterAnalysisService'
 import PageHeader from '../../layout/PageHeader'
 import LoadingState from '../../shared/LoadingState'
@@ -48,7 +50,7 @@ async function copyText(text) {
   }
 }
 
-function SubjectCard({ subject, studentFullName }) {
+function SubjectCard({ subject, studentFullName, onOpenAsTeacher, opening }) {
   const [copied, setCopied] = useState(false)
   const tone = subjectTone(subject.subjectName)
   const link = analysisLink(subject.studentTeacherId)
@@ -106,6 +108,18 @@ function SubjectCard({ subject, studentFullName }) {
             >
               <MessageCircle size={16} /> WhatsApp
             </a>
+            {onOpenAsTeacher && subject.teacherUserId ? (
+              <button
+                type="button"
+                onClick={() => onOpenAsTeacher(subject)}
+                disabled={opening}
+                title="Yönetici olarak bu öğretmenin hesabına geçip linki açar"
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-panel-blue px-3 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60"
+              >
+                {opening ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
+                Öğretmen olarak aç
+              </button>
+            ) : null}
           </div>
         ) : (
           <p className="mt-auto rounded-xl bg-panel-surface-soft px-3 py-2 text-xs text-panel-text-muted">
@@ -118,6 +132,9 @@ function SubjectCard({ subject, studentFullName }) {
 }
 
 export default function QuarterAnalysisPage() {
+  const navigate = useNavigate()
+  const { authUser, impersonateUser } = useAuth()
+  const [openingId, setOpeningId] = useState('')
   const [students, setStudents] = useState(null)
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [data, setData] = useState(null)
@@ -153,6 +170,20 @@ export default function QuarterAnalysisPage() {
       ignore = true
     }
   }, [selectedStudentId])
+
+  // Yönetici: öğretmenin hesabına geçip (impersonate) öğretmene özel Hata Analizi linkini açar;
+  // üst çubuktaki "Yönetici Paneline Dön" ile geri dönülür.
+  const handleOpenAsTeacher = async (subject) => {
+    setOpeningId(subject.studentTeacherId)
+    setError('')
+    try {
+      await impersonateUser(subject.teacherUserId)
+      navigate(`/teacher/students/${subject.studentTeacherId}/hata-analizi`)
+    } catch (err) {
+      setError(err.message || 'Öğretmen hesabına geçilemedi.')
+      setOpeningId('')
+    }
+  }
 
   if (error) {
     return <div className="rounded-xl bg-panel-accent-soft px-4 py-3 text-base text-panel-warm">{error}</div>
@@ -192,7 +223,13 @@ export default function QuarterAnalysisPage() {
       ) : current.subjects.length ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {current.subjects.map((subject) => (
-            <SubjectCard key={subject.studentTeacherId} subject={subject} studentFullName={current.studentFullName} />
+            <SubjectCard
+              key={subject.studentTeacherId}
+              subject={subject}
+              studentFullName={current.studentFullName}
+              onOpenAsTeacher={authUser?.isAdmin ? handleOpenAsTeacher : null}
+              opening={openingId === subject.studentTeacherId}
+            />
           ))}
         </div>
       ) : (
