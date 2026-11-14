@@ -130,6 +130,8 @@ function IndicatorBadge({ icon: Icon, label, tone }) {
 function AnalysisRow({ item, showStudentColumn, fetchQuestionPhoto, onShowQuestion, onShowDetail }) {
   const tag = publisherTagStyle(item.publisherName)
   const commentRoles = new Set((item.analysisComments || []).map((comment) => comment.role))
+  // Öğretmenin Hata Analizi Oturumu'nda yazdığı en son "Sorunun konusu".
+  const questionTopic = [...(item.analysisComments || [])].reverse().find((comment) => comment.questionTopic)?.questionTopic
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-panel-border bg-panel-surface p-3.5 transition-colors hover:border-panel-blue/40 sm:flex-row sm:items-center sm:gap-4">
@@ -155,6 +157,11 @@ function AnalysisRow({ item, showStudentColumn, fetchQuestionPhoto, onShowQuesti
         <div className="truncate text-sm font-semibold text-panel-text" title={item.topicName || item.topic || ''}>
           {item.topicName || item.topic || 'Genel'}
         </div>
+        {questionTopic ? (
+          <div className="truncate text-xs text-panel-blue" title={questionTopic}>
+            Sorunun konusu: {questionTopic}
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-panel-text-muted">
           <span>
             {[item.testName, item.questionNumber != null ? `Soru ${item.questionNumber}` : null].filter(Boolean).join(' · ') || '—'}

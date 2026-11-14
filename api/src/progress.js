@@ -25,6 +25,7 @@ function mapAnalysisRows(rows) {
       role: row.role,
       mistakeReason: row.mistake_reason || undefined,
       note: row.note || undefined,
+      questionTopic: row.question_topic || undefined,
       analyzedByName: row.analyzed_by_name || undefined,
       createdAt: row.created_at,
     })
@@ -43,7 +44,7 @@ async function fetchWrongQuestionAnalyses(studentId, { subject } = {}) {
     ...(subject ? { subject: { type: sql.NVarChar(100), value: subject } } : {}),
   })
   const result = await requestDb.query(`
-    SELECT a.id, a.wrong_question_id, a.role, a.mistake_reason, a.note, a.created_at,
+    SELECT a.id, a.wrong_question_id, a.role, a.mistake_reason, a.note, a.question_topic, a.created_at,
            u.full_name AS analyzed_by_name
     FROM dbo.WrongQuestionAnalyses a
     LEFT JOIN dbo.Users u ON u.id = a.analyzed_by_user_id
@@ -69,7 +70,7 @@ async function fetchAnalysesByQuestionIds(wrongQuestionIds) {
   })
   const requestDb = await withRequest(bindings)
   const result = await requestDb.query(`
-    SELECT a.id, a.wrong_question_id, a.role, a.mistake_reason, a.note, a.created_at,
+    SELECT a.id, a.wrong_question_id, a.role, a.mistake_reason, a.note, a.question_topic, a.created_at,
            u.full_name AS analyzed_by_name
     FROM dbo.WrongQuestionAnalyses a
     LEFT JOIN dbo.Users u ON u.id = a.analyzed_by_user_id
@@ -82,18 +83,24 @@ async function fetchAnalysesByQuestionIds(wrongQuestionIds) {
 // Bir yanlış soruya YENİ bir analiz yorumu ekler (artık rol başına tek satır değil — her çağrı bir
 // satır ekler, bkz. yukarıdaki dosya başı yorumu). mistakeReason verilmişse çağıran katman
 // MISTAKE_REASONS ile doğrulamalıdır. Eklenen yorumu (analyzedByName dahil) döner.
-async function addWrongQuestionAnalysisComment(wrongQuestionId, role, { mistakeReason, note }, analyzedByUserId) {
+async function addWrongQuestionAnalysisComment(
+  wrongQuestionId,
+  role,
+  { mistakeReason, note, questionTopic },
+  analyzedByUserId,
+) {
   const requestDb = await withRequest({
     wrongQuestionId: { type: sql.UniqueIdentifier, value: wrongQuestionId },
     role: { type: sql.NVarChar(20), value: role },
     mistakeReason: { type: sql.NVarChar(30), value: mistakeReason || null },
     note: { type: sql.NVarChar(1000), value: note || null },
+    questionTopic: { type: sql.NVarChar(200), value: questionTopic || null },
     analyzedByUserId: { type: sql.UniqueIdentifier, value: analyzedByUserId || null },
   })
   const result = await requestDb.query(`
-    INSERT INTO dbo.WrongQuestionAnalyses (wrong_question_id, role, mistake_reason, note, analyzed_by_user_id)
-    OUTPUT inserted.id, inserted.role, inserted.mistake_reason, inserted.note, inserted.created_at
-    VALUES (@wrongQuestionId, @role, @mistakeReason, @note, @analyzedByUserId);
+    INSERT INTO dbo.WrongQuestionAnalyses (wrong_question_id, role, mistake_reason, note, question_topic, analyzed_by_user_id)
+    OUTPUT inserted.id, inserted.role, inserted.mistake_reason, inserted.note, inserted.question_topic, inserted.created_at
+    VALUES (@wrongQuestionId, @role, @mistakeReason, @note, @questionTopic, @analyzedByUserId);
   `)
   const inserted = result.recordset[0]
 
@@ -109,6 +116,7 @@ async function addWrongQuestionAnalysisComment(wrongQuestionId, role, { mistakeR
     role: inserted.role,
     mistakeReason: inserted.mistake_reason || undefined,
     note: inserted.note || undefined,
+    questionTopic: inserted.question_topic || undefined,
     analyzedByName: authorName,
     createdAt: inserted.created_at,
   }

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { KeyRound, LogIn, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
-import { panelPathForRole } from '../utils/panelPath'
+import { postLoginPath } from '../utils/panelPath'
 import TurnstileWidget from './TurnstileWidget'
 import './LandingPage.css'
 
@@ -31,6 +31,8 @@ function blurActiveControl() {
 
 export default function AuthPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const nextPath = searchParams.get('next')
   const {
     authUser,
     sessionLoading,
@@ -65,9 +67,9 @@ export default function AuthPage() {
   useEffect(() => {
     if (!sessionLoading && authUser?.role) {
       blurActiveControl()
-      navigate(panelPathForRole(authUser.role), { replace: true })
+      navigate(postLoginPath(authUser.role, nextPath), { replace: true })
     }
-  }, [authUser, sessionLoading, navigate])
+  }, [authUser, sessionLoading, navigate, nextPath])
 
   useEffect(() => {
     if (cooldown <= 0) return undefined

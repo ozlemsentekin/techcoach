@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { lazy, Suspense, useEffect } from 'react'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from './context/useAuth'
 import LoadingState from './panels/shared/LoadingState'
@@ -40,15 +40,27 @@ function RootRoute() {
   return <LandingPage />
 }
 
+// Bu sayfa ömründe bir kez oturum görüldüyse (ör. kullanıcı çıkış yaptı) panelden ana sayfaya
+// dönülür; oturum hiç yokken bir panel linki açıldıysa (ör. öğretmene gönderilen Hata Analizi
+// linki) giriş sayfasına gidilir ve giriş sonrası aynı adrese dönülür (bkz. AuthPage `next`).
+const authSeen = { value: false }
+
 function RequireRole({ role, children }) {
   const { authUser, sessionLoading } = useAuth()
+  const location = useLocation()
+
+  useEffect(() => {
+    if (authUser) authSeen.value = true
+  }, [authUser])
 
   if (sessionLoading) {
     return <LoadingState label="Oturum kontrol ediliyor..." fullScreen />
   }
 
   if (!authUser) {
-    return <Navigate to="/" replace />
+    if (authSeen.value) return <Navigate to="/" replace />
+    const next = `${location.pathname}${location.search}`
+    return <Navigate to={`/login?next=${encodeURIComponent(next)}`} replace />
   }
 
   if (authUser.mustChangePassword && !authUser.actingParent && !authUser.actingAdmin) {

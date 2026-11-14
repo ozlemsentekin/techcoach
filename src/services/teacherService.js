@@ -454,6 +454,52 @@ export async function getTeacherWrongQuestionPhotoRecord(wrongQuestionId) {
   return data.photoUrl
 }
 
+/* ------------------------------------------------------------------- Hata Analizi Oturumu */
+
+/**
+ * Öğretmenin dersindeki TÜM yanlışlar, fotoğraf adresleriyle (tek istek). Her satırda
+ * `myAnalysis` (bu öğretmenin analizi — doluysa "Analiz yapılanlar") ve salt-okunur
+ * `otherComments` bulunur.
+ * @returns {Promise<{studentFullName: string, subjectName: string, items: Array}>}
+ */
+export async function getTeacherMistakeAnalysisSession(studentTeacherId) {
+  const data = await authRequest(`/api/panel-teacher/students/${studentTeacherId}/mistake-analysis-session`, {
+    method: 'GET',
+  })
+  return { studentFullName: data.studentFullName || '', subjectName: data.subjectName || '', items: data.items || [] }
+}
+
+/** @returns {Promise<Object>} kaydedilen analiz ({ id, questionTopic, note, mistakeReason, createdAt }) */
+export async function createTeacherMistakeAnalysis(studentTeacherId, wrongQuestionId, { questionTopic, note, mistakeReason }) {
+  const data = await authRequest(
+    `/api/panel-teacher/students/${studentTeacherId}/wrong-questions/${wrongQuestionId}/analyses`,
+    { method: 'POST', body: JSON.stringify({ questionTopic, note, mistakeReason: mistakeReason || null }) },
+  )
+  return data.analysis
+}
+
+/** @returns {Promise<Object>} güncellenen analiz */
+export async function updateTeacherMistakeAnalysis(
+  studentTeacherId,
+  wrongQuestionId,
+  analysisId,
+  { questionTopic, note, mistakeReason },
+) {
+  const data = await authRequest(
+    `/api/panel-teacher/students/${studentTeacherId}/wrong-questions/${wrongQuestionId}/analyses/${analysisId}`,
+    { method: 'PATCH', body: JSON.stringify({ questionTopic, note, mistakeReason: mistakeReason || null }) },
+  )
+  return data.analysis
+}
+
+/** Öğretmenin kendi analizini geri alır (soru "Analiz edilecek hatalar"a döner). */
+export async function deleteTeacherMistakeAnalysis(studentTeacherId, wrongQuestionId, analysisId) {
+  await authRequest(
+    `/api/panel-teacher/students/${studentTeacherId}/wrong-questions/${wrongQuestionId}/analyses/${analysisId}`,
+    { method: 'DELETE' },
+  )
+}
+
 /* -------------------------------------------------------------------- Deneme Sınavları (salt-okuma) */
 
 /** @returns {Promise<import('./mockExamService').MockExam[]>} */
