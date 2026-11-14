@@ -1,10 +1,11 @@
 import { createElement, Fragment, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarCheck, CalendarRange, Clock, Layers3, Target } from 'lucide-react'
+import { CalendarCheck, CalendarRange, ClipboardCheck, Clock, Layers3, Target } from 'lucide-react'
 import { formatNet, formatNumber } from './progressAnalytics'
 import { RATE_TONES } from './rateTones'
 import { ResourceBookAvatar } from './ResourceBookCard'
 import { cn } from '../ui/utils'
+import { calculateNet } from '../../utils/netCalculator'
 import {
   COMPOSITION_LEGEND,
   DEFAULT_LABELS,
@@ -381,6 +382,28 @@ function PerfCell({ bucket }) {
   )
 }
 
+// Deneme/etüt hücresi: o ayın başarı %'si (doğru / toplam soru — Deneme Sınavları sayfasıyla
+// aynı formül) + altında deneme sayısı; ayrıntı tooltip'te.
+function MockExamCell({ bucket }) {
+  if (!bucket || bucket.questions === 0) return <span className="text-panel-text-muted">–</span>
+  const rate = (bucket.correct / bucket.questions) * 100
+  const tone = RATE_TONES[toneFor(rate)]
+  const net = calculateNet(bucket.correct, bucket.wrong)
+  return (
+    <span
+      className={`inline-flex min-w-[46px] cursor-help flex-col items-center rounded-lg px-2 py-1 leading-tight ${tone.chip}`}
+      title={`Deneme sayısı: ${formatNumber(bucket.exams)}\nSoru: ${formatNumber(bucket.questions)}\nDoğru: ${formatNumber(
+        bucket.correct,
+      )}\nYanlış: ${formatNumber(bucket.wrong)}\nBoş: ${formatNumber(bucket.blank)}\nNet: ${formatNet(
+        net,
+      )}\nBaşarı oranı: ${Math.round(rate)}%`}
+    >
+      <span className="text-sm font-bold text-panel-text">{Math.round(rate)}%</span>
+      <span className="text-[10px] font-bold">{formatNumber(bucket.exams)} deneme</span>
+    </span>
+  )
+}
+
 // Aylık sonuç: o ayın başarı %'si + altında doğru/yanlış/boş sayıları.
 function ResultCell({ bucket }) {
   const total = bucket ? bucket.correct + bucket.wrong + bucket.blank : 0
@@ -584,6 +607,7 @@ export function AnalysisBody({
   onSelect,
   labels: labelOverrides,
   showLastActivity = true,
+  mockExamMonthly = null,
 }) {
   const labels = { ...DEFAULT_LABELS, ...labelOverrides }
   const { entities, resourceColumns, months } = analysis
@@ -596,6 +620,24 @@ export function AnalysisBody({
     () => [...entities].sort((a, b) => b.totals.questions - a.totals.questions),
     [entities],
   )
+  // Deneme/etüt satırları üstteki çalışma tablosuyla aynı ders sırasında; yalnızca deneme
+  // kaydı olan dersler gösterilir, panelde karşılığı olmayan deneme dersleri sona eklenir.
+  const mockExamRows = useMemo(() => {
+    if (!mockExamMonthly) return null
+    const rows = []
+    const used = new Set()
+    for (const entity of byQuestions) {
+      const entry = mockExamMonthly.get(entity.key)
+      if (!entry) continue
+      rows.push({ ...entry, key: entity.key, name: entity.name, shortLabel: entity.shortLabel })
+      used.add(entity.key)
+    }
+    for (const [key, entry] of mockExamMonthly) {
+      if (!used.has(key)) rows.push(entry)
+    }
+    return rows
+  }, [mockExamMonthly, byQuestions])
+
   const taskRows = useMemo(
     () =>
       [...entities]
@@ -626,6 +668,22 @@ export function AnalysisBody({
           renderCell={(bucket) => <PerfCell bucket={bucket} />}
         />
       </Card>
+
+      {mockExamRows ? (
+        <Card title={labels.mockExamTitle} subtitle={labels.mockExamSubtitle} icon={ClipboardCheck}>
+          {mockExamRows.length ? (
+            <MonthlyTable
+              entities={mockExamRows}
+              months={months}
+              onSelect={onSelect}
+              showTotal
+              renderCell={(bucket) => <MockExamCell bucket={bucket} />}
+            />
+          ) : (
+            <p className="py-4 text-sm text-panel-text-muted">{labels.mockExamEmpty}</p>
+          )}
+        </Card>
+      ) : null}
 
       <Card title={labels.monthlyResultTitle} subtitle={labels.monthlyResultSubtitle} icon={Target}>
         <MonthlyTable

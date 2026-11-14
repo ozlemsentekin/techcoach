@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BookOpen, Clock, Target } from 'lucide-react'
 import { getProgressOverview } from '../../services/progressService'
+import { getMockExams } from '../../services/mockExamService'
 import LoadingState from './LoadingState'
 import EmptyState from './EmptyState'
 import { RATE_TONES } from './rateTones'
@@ -14,7 +15,7 @@ import {
   subjectLabel,
 } from './progressAnalytics'
 import { AnalysisBody, SummaryMetric } from './analysisView'
-import { SORTS, analyzeEntity, buildAnalysis, pct, toneFor } from './analysisData'
+import { SORTS, analyzeEntity, buildAnalysis, buildMockExamMonthly, pct, toneFor } from './analysisData'
 
 const LAST_ACTIVITY_FMT = new Intl.DateTimeFormat('tr-TR', {
   day: 'numeric',
@@ -55,6 +56,10 @@ const SUBJECT_LABELS = {
   entityHeader: 'Ders',
   monthlyPerfSubtitle: 'Ders başına aylık çözülen soru ve o ayın başarı yüzdesi (Ağustos–Haziran)',
   monthlyResultSubtitle: 'Ders başına aylık doğru / yanlış / boş dağılımı ve o ayın başarı yüzdesi',
+  mockExamTitle: 'Aylara Göre Deneme ve Etüt Performansı',
+  mockExamSubtitle:
+    'Branş, genel deneme ve etüt sonuçları — ders başına o ayın başarı yüzdesi (doğru / toplam soru) ve deneme sayısı',
+  mockExamEmpty: 'Henüz deneme veya etüt sonucu girilmemiş.',
   resourceSubtitle: 'Kaynak × ders — her hücrede o kitaptaki doğruluk yüzdesi ve tamamlanma oranı',
   resourceEmpty: 'Henüz kaynak bazlı çözüm kaydı yok.',
   taskSubtitle: 'Her dersteki görev tamamlama disiplini',
@@ -68,6 +73,7 @@ const SUBJECT_LABELS = {
 export default function SubjectProgressAnalysis({ studentId = '', studentName = '' }) {
   const [loadedOverview, setLoadedOverview] = useState(null)
   const [failedOverview, setFailedOverview] = useState(null)
+  const [loadedMockExams, setLoadedMockExams] = useState(null)
   const [sortKey, setSortKey] = useState('accuracyAsc')
   const today = useMemo(() => todayISODate(), [])
 
@@ -85,9 +91,27 @@ export default function SubjectProgressAnalysis({ studentId = '', studentName = 
     }
   }, [studentId])
 
+  // Deneme/etüt sonuçları ayrı uçtan gelir; hata olursa sayfa yine açılır, yalnızca deneme
+  // tablosu gösterilmez.
+  useEffect(() => {
+    let ignore = false
+    getMockExams(studentId || undefined)
+      .then((exams) => {
+        if (!ignore) setLoadedMockExams({ id: studentId, exams })
+      })
+      .catch(() => {
+        if (!ignore) setLoadedMockExams({ id: studentId, exams: null })
+      })
+    return () => {
+      ignore = true
+    }
+  }, [studentId])
+
   // Öğrenci değişince eski çocuğun verisi ekranda kalmasın.
   const overview = loadedOverview?.id === studentId ? loadedOverview.data : null
   const overviewError = failedOverview?.id === studentId ? failedOverview.message : ''
+  const mockExams = loadedMockExams?.id === studentId ? loadedMockExams.exams : null
+  const mockExamMonthly = useMemo(() => (mockExams ? buildMockExamMonthly(mockExams) : null), [mockExams])
 
   const analysis = useMemo(() => {
     if (!overview) return null
@@ -175,6 +199,7 @@ export default function SubjectProgressAnalysis({ studentId = '', studentName = 
           onSortChange={setSortKey}
           labels={SUBJECT_LABELS}
           showLastActivity={false}
+          mockExamMonthly={mockExamMonthly}
         />
       )}
     </>

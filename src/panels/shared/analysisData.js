@@ -60,10 +60,46 @@ export function mergeBuckets(buckets) {
       acc.correct += bucket.correct
       acc.wrong += bucket.wrong
       acc.blank += bucket.blank
+      acc.exams += bucket.exams || 0
       return acc
     },
-    { questions: 0, correct: 0, wrong: 0, blank: 0 },
+    { questions: 0, correct: 0, wrong: 0, blank: 0, exams: 0 },
   )
+}
+
+// Deneme şablonu LGS adını kullanır ("T.C. İnkılap Tarihi…"); panel ders adına indirger ki
+// Gelişim Analizi'ndeki ders satırıyla eşleşsin (bkz. api/src/mockExams.js wrongQuestionSubjectName).
+export function mockExamSubjectLabel(subjectName) {
+  return String(subjectName || '').replace(/^T\.\s*C\.\s*/i, '').trim() || 'Genel'
+}
+
+// Deneme/etüt sonuçlarını ders → ay → { questions, correct, wrong, blank, exams } olarak toplar.
+// Etüt'ün tarihi isteğe bağlı olduğu için tarih yoksa kayıt tarihine düşülür.
+export function buildMockExamMonthly(mockExams) {
+  const bySubject = new Map()
+  for (const exam of mockExams || []) {
+    const monthKey = String(exam.examDate || exam.createdAt || '').slice(0, 7)
+    if (monthKey.length !== 7) continue
+    for (const subject of exam.subjects || []) {
+      const correct = Number(subject.correct) || 0
+      const wrong = Number(subject.wrong) || 0
+      const blank = Number(subject.blank) || 0
+      const questions = Number(subject.totalQuestions) || correct + wrong + blank
+      if (questions <= 0) continue
+      const label = mockExamSubjectLabel(subject.subjectName)
+      const key = label.toLocaleLowerCase('tr-TR')
+      const entry = bySubject.get(key) || { key, name: label, shortLabel: label, monthly: new Map() }
+      const bucket = entry.monthly.get(monthKey) || { questions: 0, correct: 0, wrong: 0, blank: 0, exams: 0 }
+      bucket.questions += questions
+      bucket.correct += correct
+      bucket.wrong += wrong
+      bucket.blank += blank
+      bucket.exams += 1
+      entry.monthly.set(monthKey, bucket)
+      bySubject.set(key, entry)
+    }
+  }
+  return bySubject
 }
 
 // Bir "entity" (öğrenci veya ders) için önceden süzülmüş kayıt/görev listesini tek-öğrenci
