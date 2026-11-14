@@ -10,10 +10,12 @@ import PanelHeader from './PanelHeader'
 import MobileBottomNavigation from './MobileBottomNavigation'
 import { useAuth } from '../../context/useAuth'
 import { useParentStudentsGate } from '../parent/useParentStudentsGate'
+import { useTeacherStudentFocus } from '../../hooks/useTeacherStudentFocus'
 import {
   getStudentNav,
   getParentNav,
   getTeacherNav,
+  getTeacherStudentFocusNav,
   navToMobile,
   PARENT_ADMIN_NAV,
 } from './navConfig'
@@ -27,6 +29,7 @@ export default function PanelLayout({ role }) {
   const lessonNotesEnabled = useLessonNotesAccess()
   const schoolHomeworksEnabled = useSchoolHomeworkAccess()
   const { hasStudents, studentCount } = useParentStudentsGate()
+  const teacherFocus = useTeacherStudentFocus()
   const Sidebar = SIDEBAR_BY_ROLE[role] || StudentSidebar
   const isAdminSection = role === 'parent' && location.pathname.startsWith('/parent/admin')
   const canManageLibrary = Boolean(authUser?.isAdmin || authUser?.canManageLibrary)
@@ -39,7 +42,9 @@ export default function PanelLayout({ role }) {
           studentCount,
         })
       : role === 'teacher'
-        ? getTeacherNav(canManageLibrary, lessonNotesEnabled)
+        ? teacherFocus
+          ? getTeacherStudentFocusNav(teacherFocus)
+          : getTeacherNav(canManageLibrary, lessonNotesEnabled)
         : getStudentNav({ lessonNotesEnabled, schoolHomeworksEnabled })
   const { primary, more } = navToMobile(roleNav)
   const primaryItems = isAdminSection ? [RETURN_TO_PANEL_ITEM] : primary

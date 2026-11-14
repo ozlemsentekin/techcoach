@@ -77,7 +77,9 @@ function BookCard({ book, showAssignees, showCreator, canViewContent, onClick, o
   )
 }
 
-export default function BookshelfPage({ showAssignees = true }) {
+// studentId verilirse (öğretmenin öğrenciye özel Kitaplık linki) yalnızca o öğrenciye atanmış
+// kaynaklar listelenir; title/subtitle başlığı değiştirir.
+export default function BookshelfPage({ showAssignees = true, studentId = null, title = 'Kitaplık', subtitle = null }) {
   const { authUser } = useAuth()
   const navigate = useNavigate()
   const requestsPath = authUser?.role === 'ogretmen' ? '/teacher/requests' : '/parent/requests'
@@ -101,14 +103,15 @@ export default function BookshelfPage({ showAssignees = true }) {
   const [viewingContentBookId, setViewingContentBookId] = useState(null)
 
   const load = () => {
-    getBookshelfBooks()
+    getBookshelfBooks({ studentId })
       .then((data) => setBooks(data))
       .catch((err) => setError(err.message))
   }
 
   useEffect(() => {
     load()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentId])
 
   const filteredBooks = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('tr-TR')
@@ -142,11 +145,12 @@ export default function BookshelfPage({ showAssignees = true }) {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Kitaplık"
+        title={title}
         subtitle={
-          adminView
+          subtitle ||
+          (adminView
             ? 'Veli, öğretmen ve öğrencilerin eklediği tüm özel kaynaklar. Ekleyebilir, düzenleyebilir, atayabilir ve silebilirsiniz.'
-            : 'Öğrencilerinizle takip ettiğiniz tüm kaynaklar — katalog kitapları ve sizin eklediğiniz özel kaynaklar. Özel kaynakları buradan ekleyip yönetebilirsiniz.'
+            : 'Öğrencilerinizle takip ettiğiniz tüm kaynaklar — katalog kitapları ve sizin eklediğiniz özel kaynaklar. Özel kaynakları buradan ekleyip yönetebilirsiniz.')
         }
         actions={
           <div className="flex flex-wrap gap-2">
