@@ -21,6 +21,7 @@ import Button from '../ui/Button'
 import ConfirmationDialog from './ConfirmationDialog'
 import { cn } from '../ui/utils'
 import { cachedGet } from '../../services/authClient'
+import { useAuth } from '../../context/useAuth'
 import { todayISODate } from '../../utils/time'
 import MistakePhotoCaptureModal from '../student/components/MistakePhotoCaptureModal'
 import MockExamTopicAnalysis from './MockExamTopicAnalysis'
@@ -2138,6 +2139,45 @@ function buildMonitorGroups(kind, exams) {
   return [...map.values()].map(finalizeGroup).sort((a, b) => a.label.localeCompare(b.label, 'tr'))
 }
 
+// LGS ders katsayıları (2026 LGS: Türkçe/Matematik/Fen 4, İnkılap/Din/İngilizce 1; en fazla 270
+// ağırlıklı net). Puan, MEB'in standart puan hesabına yakın yaygın doğrusal yaklaşımla tahmin edilir:
+// 194.752082 + ağırlıklı net × 1.1305478 (270 ağırlıklı net = 500). Gerçek kurum raporlarındaki puanlarla
+// birkaç puan içinde örtüşür; resmi hesap değildir.
+const LGS_SUBJECTS = [
+  { key: 'turkce', label: 'Türkçe', coef: 4, match: (n) => n.includes('türkçe') },
+  { key: 'matematik', label: 'Matematik', coef: 4, match: (n) => n.includes('matematik') },
+  { key: 'fen', label: 'Fen Bilimleri', coef: 4, match: (n) => n.includes('fen') },
+  { key: 'inkilap', label: 'İnkılap', coef: 1, match: (n) => n.includes('inkılap') },
+  { key: 'din', label: 'Din Kültürü', coef: 1, match: (n) => n.includes('din kültürü') },
+  { key: 'ingilizce', label: 'İngilizce', coef: 1, match: (n) => n.includes('ingilizce') },
+]
+const LGS_BASE_SCORE = 194.752082
+const LGS_NET_MULTIPLIER = 1.1305478
+
+// Tüm genel denemelerde her LGS dersinin ortalama netini alıp katsayılarla tahmini LGS puanı hesaplar.
+// Herhangi bir LGS dersi hiç girilmemişse null döner.
+function computeLgsEstimate(exams) {
+  const sums = new Map(LGS_SUBJECTS.map((s) => [s.key, { total: 0, count: 0 }]))
+  exams.forEach((exam) => {
+    ;(exam.subjects || []).forEach((subject) => {
+      const name = (subject.subjectName || '').toLocaleLowerCase('tr')
+      const def = LGS_SUBJECTS.find((s) => s.match(name))
+      if (!def) return
+      const entry = sums.get(def.key)
+      entry.total += subjectStats(subject).net
+      entry.count += 1
+    })
+  })
+  let weightedNet = 0
+  for (const def of LGS_SUBJECTS) {
+    const entry = sums.get(def.key)
+    if (!entry.count) return null
+    weightedNet += (entry.total / entry.count) * def.coef
+  }
+  const score = Math.min(500, LGS_BASE_SCORE + weightedNet * LGS_NET_MULTIPLIER)
+  return { score: Math.round(score * 100) / 100, weightedNet: round1(weightedNet) }
+}
+
 function DeltaBadge({ value }) {
   if (value == null) return <span className="text-panel-text-muted">—</span>
   const rounded = round1(value)
@@ -2160,7 +2200,7 @@ function MonitorStatCard({ label, value, hint, tone }) {
   )
 }
 
-function MonitorAnalysis({ group, countLabel }) {
+function MonitorAnalysis({ group, countLabel, lgsEstimate }) {
   // Kronolojik (eski → yeni) sıra: değişim ve son deneme hesapları için.
   const chrono = [...group.rows].sort((a, b) => examTime(a.exam) - examTime(b.exam))
   const count = chrono.length
@@ -2175,7 +2215,7 @@ function MonitorAnalysis({ group, countLabel }) {
   const blankRate = group.totalQuestions ? Math.round((group.blank / group.totalQuestions) * 100) : 0
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+    <div className={cn('grid grid-cols-2 gap-3', lgsEstimate ? 'sm:grid-cols-4 xl:grid-cols-7' : 'sm:grid-cols-3 xl:grid-cols-6')}>
       <MonitorStatCard label={countLabel} value={count} hint={`${group.totalQuestions} soru`} />
       <MonitorStatCard
         label="Ortalama Net"
@@ -2215,6 +2255,13 @@ function MonitorAnalysis({ group, countLabel }) {
         value={trend == null ? '—' : <DeltaBadge value={trend} />}
         hint={trend == null ? 'en az 4 sonuç gerekir' : `son yarı − ilk yarı ort. net · boş %${blankRate}`}
       />
+      {lgsEstimate ? (
+        <MonitorStatCard
+          label="LGS Tahmini"
+          value={lgsEstimate.score.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          tone="text-panel-blue"
+        />
+      ) : null}
     </div>
   )
 }
@@ -2322,7 +2369,17 @@ function MonitorResultsTable({ group, cardProps, canEditExperience, showQuestion
 }
 
 function MockExamMonitoringView({ kind, exams, cardProps, canEditExperience }) {
+  const { authUser } = useAuth()
+  // LGS tahmini yalnızca veli ve admin görür; öğrenci (ve öğretmen) görmez. Veli/admin öğrenci
+  // hesabına geçmişse (actingParent/actingAdmin) yine görünür.
+  const canSeeLgsEstimate = Boolean(
+    authUser?.role === 'ebeveyn' || authUser?.isAdmin || authUser?.actingAdmin || authUser?.actingParent,
+  )
   const groups = useMemo(() => buildMonitorGroups(kind, exams), [kind, exams])
+  const lgsEstimate = useMemo(
+    () => (kind === 'genel' && canSeeLgsEstimate ? computeLgsEstimate(exams) : null),
+    [kind, exams, canSeeLgsEstimate],
+  )
   const [activeKey, setActiveKey] = useState(null)
   const current = groups.find((g) => g.key === activeKey) || groups[0]
   if (!current) return null
@@ -2354,7 +2411,11 @@ function MockExamMonitoringView({ kind, exams, cardProps, canEditExperience }) {
         </div>
       </div>
 
-      <MonitorAnalysis group={current} countLabel={kind === 'etut' ? 'Etüt Sayısı' : 'Deneme Sayısı'} />
+      <MonitorAnalysis
+        group={current}
+        countLabel={kind === 'etut' ? 'Etüt Sayısı' : 'Deneme Sayısı'}
+        lgsEstimate={current.key === GENEL_TOTAL_KEY ? lgsEstimate : null}
+      />
       <MonitorResultsTable
         key={current.key}
         group={current}
