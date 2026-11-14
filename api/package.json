@@ -4,7 +4,7 @@
   "private": true,
   "main": "src/app.js",
   "scripts": {
-    "start": "func start --javascript",
+    "start": "PATH=\"/opt/homebrew/opt/node@22/bin:$PATH\" func start --javascript",
     "check:db": "node scripts/check-db.js",
     "lint": "echo \"No API lint configured\""
   },
