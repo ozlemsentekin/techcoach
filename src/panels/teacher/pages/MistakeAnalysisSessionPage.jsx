@@ -46,6 +46,14 @@ function questionLabel(item) {
   return [item.testName, item.questionNumber ? `Soru ${item.questionNumber}` : null].filter(Boolean).join(' · ') || 'Soru'
 }
 
+const ERROR_DATE_FMT = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })
+
+function formatErrorDate(value) {
+  const [y, m, d] = String(value || '').split('-').map(Number)
+  if (!y || !m || !d) return ''
+  return ERROR_DATE_FMT.format(new Date(y, m - 1, d))
+}
+
 function sourceLabel(item) {
   return item.bookName || 'Kaynak belirtilmemiş'
 }
@@ -91,14 +99,14 @@ function Thumbnail({ item, onOpen }) {
       onClick={onOpen}
       className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-panel-border bg-panel-surface text-left hover:border-panel-blue"
     >
-      <span className="relative block aspect-[4/3] w-full bg-panel-surface-soft">
+      <span className="relative block aspect-[4/3] w-full shrink-0 overflow-hidden bg-panel-surface-soft">
         {item.photoUrl ? (
           <img
             src={item.photoUrl}
             alt={questionLabel(item)}
             loading="lazy"
             decoding="async"
-            className="h-full w-full object-cover object-top"
+            className="absolute inset-0 h-full w-full object-cover object-top"
           />
         ) : null}
         {item.myAnalysis ? (
@@ -112,6 +120,9 @@ function Thumbnail({ item, onOpen }) {
         <span className="block truncate text-[11px] text-panel-text-muted">
           {item.myAnalysis?.questionTopic || item.topic || sourceLabel(item)}
         </span>
+        {item.errorDate ? (
+          <span className="block text-[11px] font-semibold text-panel-blue">{formatErrorDate(item.errorDate)}</span>
+        ) : null}
       </span>
     </button>
   )
@@ -256,6 +267,7 @@ function SlideViewer({
             {sourceLabel(current)} · {questionLabel(current)}
           </h2>
           <p className="truncate text-xs text-white/70">
+            {current.errorDate ? `${formatErrorDate(current.errorDate)} · ` : ''}
             {index + 1} / {queue.length}
             {folder === 'pending' ? ` · ${remainingPending} soru analiz bekliyor` : ' · Analiz yapılanlar'}
           </p>

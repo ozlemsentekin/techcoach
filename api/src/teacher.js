@@ -3784,6 +3784,16 @@ function sanitizeSessionAnalysis(row) {
   }
 }
 
+// Hatanın "tarihi" (gün, Türkiye saati): denemede deneme tarihi, diğerlerinde hatanın kaydedildiği gün.
+function sessionErrorDate(examDate, createdAt) {
+  if (examDate) {
+    return examDate instanceof Date ? examDate.toISOString().slice(0, 10) : String(examDate).slice(0, 10)
+  }
+  if (!createdAt) return ''
+  const time = new Date(createdAt).getTime()
+  return Number.isNaN(time) ? '' : new Date(time + 3 * 60 * 60 * 1000).toISOString().slice(0, 10)
+}
+
 function questionNumberSortKey(value) {
   const number = Number.parseInt(String(value ?? ''), 10)
   return Number.isFinite(number) ? number : Number.MAX_SAFE_INTEGER
@@ -3854,14 +3864,18 @@ async function getTeacherMistakeAnalysisSessionHandler(request) {
           mockExamDate: isMockExam ? row.mock_exam_date || undefined : undefined,
           correctAnswer: row.correct_answer || undefined,
           createdAt: row.created_at,
+          errorDate: sessionErrorDate(isMockExam ? row.mock_exam_date : null, row.created_at),
           photoUrl: toReadUrl(row.photo_url),
           // Öğrenci/velinin (ve varsa başka öğretmenin) yorumları salt-okunur bağlam olarak gelir.
           otherComments: (analysesMap.get(row.id) || []).filter((comment) => !mineIds.has(comment.id)),
           myAnalysis: sanitizeSessionAnalysis(mineByQuestion.get(row.id)),
         }
       })
+      // En yeni tarih önce (ör. bugünkü denemenin hataları en üstte); aynı gün içinde kaynak/test/soru
+      // sırası korunur.
       .sort(
         (a, b) =>
+          String(b.errorDate || '').localeCompare(String(a.errorDate || '')) ||
           String(a.bookName || '').localeCompare(String(b.bookName || ''), 'tr') ||
           String(a.topic || a.mockExamTitle || '').localeCompare(String(b.topic || b.mockExamTitle || ''), 'tr') ||
           String(a.testName || '').localeCompare(String(b.testName || ''), 'tr', { numeric: true }) ||
