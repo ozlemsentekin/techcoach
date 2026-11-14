@@ -881,7 +881,7 @@ export default function MistakeAnalysisSessionPage() {
         <ArrowLeft size={16} /> Öğrenci sayfası
       </Link>
       <PageHeader
-        title={`${String(session.studentFullName || '').trim().split(/\s+/)[0] || 'Öğrenci'} Hata Defteri`}
+        title={`${session.subjectName || ''} Hata Defteri`.trim()}
         subtitle={`${session.studentFullName} · ${session.subjectName} — tüm hatalar`}
         actions={
           <Button onClick={() => openViewer(0)} disabled={!visibleItems.length}>

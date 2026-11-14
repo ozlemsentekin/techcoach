@@ -21,6 +21,12 @@ const AnalysisPhotosPage = lazy(() => import('./pages/AnalysisPhotosPage'))
 const MembershipPage = lazy(() => import('./pages/MembershipPage'))
 const MistakeAnalysisSessionPage = lazy(() => import('./pages/MistakeAnalysisSessionPage'))
 const StudentBookshelfPage = lazy(() => import('./pages/StudentBookshelfPage'))
+const TeacherStudentProgressPage = lazy(() =>
+  import('./pages/StudentFocusPages').then((module) => ({ default: module.TeacherStudentProgressPage })),
+)
+const TeacherStudentMockExamsPage = lazy(() =>
+  import('./pages/StudentFocusPages').then((module) => ({ default: module.TeacherStudentMockExamsPage })),
+)
 
 function pageElement(Page) {
   return (
@@ -85,6 +91,8 @@ export default function TeacherApp() {
             <Route path="students/:studentTeacherId" element={pageElement(StudentDetailPage)} />
             <Route path="students/:studentTeacherId/hata-analizi" element={pageElement(MistakeAnalysisSessionPage)} />
             <Route path="students/:studentTeacherId/kitaplik" element={pageElement(StudentBookshelfPage)} />
+            <Route path="students/:studentTeacherId/gelisim" element={pageElement(TeacherStudentProgressPage)} />
+            <Route path="students/:studentTeacherId/sinav-sonuclari" element={pageElement(TeacherStudentMockExamsPage)} />
             <Route path="parents" element={pageElement(ParentsPage)} />
             <Route path="lesson-plan" element={pageElement(LessonPlanPage)} />
             <Route path="library" element={pageElement(LibraryPage)} />
