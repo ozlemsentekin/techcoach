@@ -1,17 +1,18 @@
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import BookshelfPage from '../../shared/bookshelf/BookshelfPage'
+import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
 import LoadingState from '../../shared/LoadingState'
-import { studentFirstName, useTeacherStudent } from '../../../hooks/useTeacherStudentFocus'
+import { useTeacherStudent } from '../../../hooks/useTeacherStudentFocus'
 
-// Öğretmenin öğrenciye özel Kitaplık görünümü (/teacher/students/:id/kitaplik): ortak Kitaplık
-// sayfası, yalnızca o öğrenciye atanmış kaynaklarla.
+// Öğretmenin öğrenciye özel "<Ad> Kitaplık" sayfası (/teacher/students/:id/kitaplik): Öğrencilerim
+// kartındaki "Kaynaklar" penceresinin sayfa hali — öğretmenin dersindeki kaynaklar, ilerleme/başarı,
+// kaynağa tıklayınca içerik/test ayrıntısı, "Kütüphane" sekmesinden kaynak atama.
 export default function TeacherStudentBookshelfPage() {
   const { studentTeacherId } = useParams()
   const student = useTeacherStudent(studentTeacherId)
 
   if (!student) {
-    return <LoadingState label="Kitaplık yükleniyor..." />
+    return <LoadingState label="Kaynaklar yükleniyor..." />
   }
 
   return (
@@ -22,11 +23,9 @@ export default function TeacherStudentBookshelfPage() {
       >
         <ArrowLeft size={16} /> Öğrenci sayfası
       </Link>
-      <BookshelfPage
-        showAssignees
-        studentId={student.studentId}
-        title={`${studentFirstName(student)} Kitaplık`}
-        subtitle={`${student.studentFullName} ile takip ettiğiniz kaynaklar.`}
+      <StudentResourceLibraryModal
+        asPage
+        student={{ studentTeacherId, studentFullName: student.studentFullName }}
       />
     </div>
   )
