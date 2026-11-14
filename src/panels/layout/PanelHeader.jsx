@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
+  ChartNoAxesCombined,
   Check,
   ChevronDown,
   ChevronRight,
@@ -151,10 +152,27 @@ export default function PanelHeader({ focusTitle = null }) {
       {/* Öğretmenin öğrenciye özel link sayfalarında başlık ("Aylin Şişman · Fen Bilimleri Çeyrek
           Dönem Analizi") — bkz. PanelLayout / useTeacherStudentFocus. */}
       {focusTitle ? (
-        <p className="mr-auto min-w-0 truncate text-sm font-bold text-panel-text sm:text-lg">
-          {focusTitle.name}
-          {focusTitle.detail ? <span className="font-semibold text-panel-text-muted"> · {focusTitle.detail}</span> : null}
-        </p>
+        <div className="mr-auto flex min-w-0 items-center gap-2.5">
+          <span
+            className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#2b3d82] to-[#1c2b5e] text-white shadow-panel-1 sm:flex"
+            aria-hidden="true"
+          >
+            <ChartNoAxesCombined size={18} />
+          </span>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 truncate text-sm font-extrabold tracking-tight text-panel-text sm:text-lg">
+              {focusTitle.name}
+            </span>
+            {focusTitle.subject ? (
+              <span className="hidden shrink-0 rounded-full bg-panel-blue-soft px-2.5 py-0.5 text-xs font-bold text-panel-blue md:inline-block">
+                {focusTitle.subject}
+              </span>
+            ) : null}
+            <span className="hidden shrink-0 rounded-full bg-gradient-to-br from-[#f07b31] to-[#cc682a] px-2.5 py-0.5 text-xs font-bold text-white shadow-[0_6px_16px_rgba(240,123,49,0.25)] sm:inline-block">
+              Çeyrek Dönem Analizi
+            </span>
+          </div>
+        </div>
       ) : null}
       {actingParent ? (
         <button

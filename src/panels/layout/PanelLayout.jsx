@@ -59,10 +59,7 @@ export default function PanelLayout({ role }) {
             <PanelHeader
               focusTitle={
                 role === 'teacher' && teacherFocus?.student
-                  ? {
-                      name: teacherFocus.student.studentFullName,
-                      detail: `${teacherFocus.student.subjectName ? `${teacherFocus.student.subjectName} ` : ''}Çeyrek Dönem Analizi`,
-                    }
+                  ? { name: teacherFocus.student.studentFullName, subject: teacherFocus.student.subjectName || '' }
                   : null
               }
             />
