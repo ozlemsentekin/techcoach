@@ -2190,16 +2190,26 @@ function computeLgsEstimate(exams) {
   return { score: Math.round(score * 100) / 100, weightedNet: round1(weightedNet) }
 }
 
-function DeltaBadge({ value }) {
+function DeltaBadge({ value, suffix = '' }) {
   if (value == null) return <span className="text-panel-text-muted">—</span>
   const rounded = round1(value)
-  if (rounded === 0) return <span className="font-semibold text-panel-text-muted tabular-nums">0</span>
+  if (rounded === 0) return <span className="font-semibold text-panel-text-muted tabular-nums">0{suffix}</span>
   const up = rounded > 0
   return (
     <span className={cn('font-semibold tabular-nums', up ? 'text-panel-green' : 'text-panel-red')}>
       {up ? '▲' : '▼'} {Math.abs(rounded)}
+      {suffix}
     </span>
   )
+}
+
+// Değişim / gidişat ölçütü: soru sayısı sabit olan Branş İzleme ve Genel Deneme'de net; soru
+// sayısı her etütte farklı olduğu için (7 soruluk test ile 64 soruluk test) Etüt'te net farkı
+// anlamsız olur — orada başarı yüzdesi (puan) farkı kullanılır.
+function trendMetric(byRate) {
+  return byRate
+    ? { value: (row) => row.stats.successRate, unit: 'başarı', suffix: ' puan' }
+    : { value: (row) => row.stats.net, unit: 'net', suffix: ' net' }
 }
 
 function MonitorStatCard({ label, value, hint, tone }) {
@@ -2212,18 +2222,20 @@ function MonitorStatCard({ label, value, hint, tone }) {
   )
 }
 
-function MonitorAnalysis({ group, countLabel, lgsEstimate }) {
+function MonitorAnalysis({ group, countLabel, lgsEstimate, byRate = false }) {
   // Kronolojik (eski → yeni) sıra: değişim ve son deneme hesapları için.
   const chrono = [...group.rows].sort(compareChrono)
   const count = chrono.length
   const avgNet = count ? round1(chrono.reduce((s, r) => s + r.stats.net, 0) / count) : 0
   const avgQuestions = count ? round1(group.totalQuestions / count) : 0
-  const best = chrono.reduce((acc, r) => (acc == null || r.stats.net > acc.stats.net ? r : acc), null)
+  const metric = trendMetric(byRate)
+  const best = chrono.reduce((acc, r) => (acc == null || metric.value(r) > metric.value(acc) ? r : acc), null)
   const last = chrono[count - 1]
   const prev = count > 1 ? chrono[count - 2] : null
   const half = Math.floor(count / 2)
-  const avgOf = (rows) => rows.reduce((s, r) => s + r.stats.net, 0) / rows.length
+  const avgOf = (rows) => rows.reduce((s, r) => s + metric.value(r), 0) / rows.length
   const trend = count >= 4 ? avgOf(chrono.slice(count - half)) - avgOf(chrono.slice(0, half)) : null
+  const showMetric = (row) => (byRate ? `%${row.stats.successRate}` : row.stats.net)
   const blankRate = group.totalQuestions ? Math.round((group.blank / group.totalQuestions) * 100) : 0
 
   return (
@@ -2244,18 +2256,18 @@ function MonitorAnalysis({ group, countLabel, lgsEstimate }) {
         }
       />
       <MonitorStatCard
-        label="En Yüksek Net"
-        value={best ? best.stats.net : '—'}
+        label={byRate ? 'En Yüksek Başarı' : 'En Yüksek Net'}
+        value={best ? showMetric(best) : '—'}
         hint={best ? formatExamDate(best.exam.examDate) : undefined}
         tone="text-panel-green"
       />
       <MonitorStatCard
-        label="Son Net"
-        value={last ? last.stats.net : '—'}
+        label={byRate ? 'Son Başarı' : 'Son Net'}
+        value={last ? showMetric(last) : '—'}
         hint={
           prev ? (
             <span>
-              öncekine göre <DeltaBadge value={last.stats.net - prev.stats.net} />
+              bir öncekine göre <DeltaBadge value={metric.value(last) - metric.value(prev)} suffix={metric.suffix} />
             </span>
           ) : (
             formatExamDate(last?.exam.examDate)
@@ -2264,8 +2276,12 @@ function MonitorAnalysis({ group, countLabel, lgsEstimate }) {
       />
       <MonitorStatCard
         label="Gidişat"
-        value={trend == null ? '—' : <DeltaBadge value={trend} />}
-        hint={trend == null ? 'en az 4 sonuç gerekir' : `son yarı − ilk yarı ort. net · boş %${blankRate}`}
+        value={trend == null ? '—' : <DeltaBadge value={trend} suffix={metric.suffix} />}
+        hint={
+          trend == null
+            ? 'en az 4 sonuç gerekir'
+            : `son ${half} sonucun ${metric.unit} ortalaması, ilk ${half} sonucunkine göre · boş %${blankRate}`
+        }
       />
       {lgsEstimate ? (
         <MonitorStatCard
@@ -2278,13 +2294,15 @@ function MonitorAnalysis({ group, countLabel, lgsEstimate }) {
   )
 }
 
-function MonitorResultsTable({ group, cardProps, canEditExperience, showQuestionCount }) {
+function MonitorResultsTable({ group, cardProps, canEditExperience, showQuestionCount, byRate = false }) {
   const [openId, setOpenId] = useState(null)
+  const metric = trendMetric(byRate)
   const rows = useMemo(() => {
+    const { value } = trendMetric(byRate)
     const chrono = [...group.rows].sort(compareChrono)
-    const withDelta = chrono.map((row, i) => ({ ...row, delta: i > 0 ? row.stats.net - chrono[i - 1].stats.net : null }))
+    const withDelta = chrono.map((row, i) => ({ ...row, delta: i > 0 ? value(row) - value(chrono[i - 1]) : null }))
     return withDelta.reverse() // tabloda en yeni üstte
-  }, [group.rows])
+  }, [group.rows, byRate])
 
   const th = 'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted'
   const td = 'px-3 py-2.5 tabular-nums'
@@ -2304,7 +2322,15 @@ function MonitorResultsTable({ group, cardProps, canEditExperience, showQuestion
               <th className={cn(th, 'text-center')}>B</th>
               <th className={cn(th, 'text-center')}>Net</th>
               <th className={cn(th, 'text-center')}>Başarı</th>
-              <th className={cn(th, 'text-center')}>Değişim</th>
+              <th
+                className={cn(th, 'text-center')}
+                title={`Bir önceki sonuca göre ${metric.unit} farkı`}
+              >
+                Değişim
+                <span className="block text-[10px] font-medium normal-case tracking-normal">
+                  önceki sınava göre {metric.unit}
+                </span>
+              </th>
               <th className={cn(th, 'w-8')}>
                 <span className="sr-only">Detay</span>
               </th>
@@ -2350,7 +2376,7 @@ function MonitorResultsTable({ group, cardProps, canEditExperience, showQuestion
                       </span>
                     </td>
                     <td className={cn(td, 'text-center text-xs')}>
-                      <DeltaBadge value={delta} />
+                      <DeltaBadge value={delta} suffix={byRate ? ' puan' : ''} />
                     </td>
                     <td className="px-2 py-2.5 text-panel-text-muted">
                       <button
@@ -2427,6 +2453,7 @@ function MockExamMonitoringView({ kind, exams, cardProps, canEditExperience }) {
         group={current}
         countLabel={kind === 'etut' ? 'Etüt Sayısı' : 'Deneme Sayısı'}
         lgsEstimate={current.key === GENEL_TOTAL_KEY ? lgsEstimate : null}
+        byRate={kind === 'etut'}
       />
       <MonitorResultsTable
         key={current.key}
@@ -2434,6 +2461,7 @@ function MockExamMonitoringView({ kind, exams, cardProps, canEditExperience }) {
         cardProps={cardProps}
         canEditExperience={canEditExperience}
         showQuestionCount={kind !== 'brans'}
+        byRate={kind === 'etut'}
       />
     </div>
   )

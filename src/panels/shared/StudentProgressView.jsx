@@ -645,7 +645,10 @@ export default function StudentProgressView({
         />
       ) : (
         <>
-          <div className={cn('grid grid-cols-1 gap-3.5 sm:grid-cols-2', examStats && 'xl:grid-cols-3')}>
+          {examStats ? (
+            <MetricGroupTitle title="Kaynak Kitaplar" hint="Kaynak kitaplardan çözülen testler" />
+          ) : null}
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
             <SummaryMetric
               icon={BookOpenCheck}
               iconClassName="bg-panel-sage-soft text-panel-sage"
@@ -661,8 +664,13 @@ export default function StudentProgressView({
               value={formatPercent(accuracy)}
               description={`${formatNet(calculateNet(stats.correct, stats.wrong))} net · ${formatNumber(stats.blank)} boş`}
             />
-            {examStats ? <ExamSuccessMetric stats={examStats} /> : null}
           </div>
+          {examStats ? (
+            <>
+              <MetricGroupTitle title="Sınavlar" hint="Deneme, branş izleme ve etüt sonuçları" />
+              <ExamMetrics stats={examStats} />
+            </>
+          ) : null}
 
           {hideInsights ? null : <InsightPanel insights={insights} />}
 
@@ -692,25 +700,41 @@ export default function StudentProgressView({
   )
 }
 
-// Seçili dersin deneme / branş izleme / etüt başarısı: doğru / toplam soru (Deneme Sınavları
-// sayfasıyla aynı formül).
-function ExamSuccessMetric({ stats }) {
+function MetricGroupTitle({ title, hint }) {
+  return (
+    <div className="-mb-1 flex flex-wrap items-baseline gap-x-2">
+      <h2 className="text-sm font-bold uppercase tracking-wide text-panel-text">{title}</h2>
+      {hint ? <span className="text-xs text-panel-text-muted">{hint}</span> : null}
+    </div>
+  )
+}
+
+// Seçili dersin deneme / branş izleme / etüt sonuçları: çözülen soru ve doğruluk (doğru / toplam
+// soru — Deneme Sınavları sayfasıyla aynı formül). Zaman filtresine uyar.
+function ExamMetrics({ stats }) {
   const rate = stats.questions ? (stats.correct / stats.questions) * 100 : NaN
   const tone = RATE_TONES[successRateTone(Number.isFinite(rate) ? rate / 100 : null)] || null
   return (
-    <SummaryMetric
-      icon={ClipboardCheck}
-      iconClassName={cn('bg-panel-lilac-soft', tone?.text || 'text-panel-lilac')}
-      valueClassName={Number.isFinite(rate) ? tone?.text : undefined}
-      title="Sınav Başarısı"
-      value={Number.isFinite(rate) ? formatPercent(rate) : '–'}
-      description={
-        stats.exams
-          ? `${formatNumber(stats.exams)} sınav · ${formatNumber(stats.correct)} doğru / ${formatNumber(stats.questions)} soru · ${formatNet(
-              calculateNet(stats.correct, stats.wrong),
-            )} net`
-          : 'Bu filtrede sınav sonucu yok.'
-      }
-    />
+    <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+      <SummaryMetric
+        icon={ClipboardCheck}
+        iconClassName="bg-panel-lilac-soft text-panel-lilac"
+        title="Çözülen Soru"
+        value={formatNumber(stats.questions)}
+        description={
+          stats.exams
+            ? `${formatNumber(stats.correct)} doğru, ${formatNumber(stats.wrong)} yanlış · ${formatNumber(stats.exams)} sınav`
+            : 'Bu filtrede sınav sonucu yok.'
+        }
+      />
+      <SummaryMetric
+        icon={CheckCircle2}
+        iconClassName={cn('bg-panel-lilac-soft', tone?.text || 'text-panel-lilac')}
+        valueClassName={Number.isFinite(rate) ? tone?.text : undefined}
+        title="Doğruluk"
+        value={Number.isFinite(rate) ? formatPercent(rate) : '–'}
+        description={`${formatNet(calculateNet(stats.correct, stats.wrong))} net · ${formatNumber(stats.blank)} boş`}
+      />
+    </div>
   )
 }
