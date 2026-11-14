@@ -128,6 +128,7 @@ export function getParentNav({ hasStudents = true, canManageLibrary = false, isA
         { to: '/parent/progress', label: 'Gelişim Analizi', icon: 'TrendingUp' },
       ],
     },
+    { to: '/parent/quarter-analysis', label: 'Çeyrek Dönem Analizi', icon: 'BarChart3' },
     studentsItem,
     PARENT_TEACHERS_NAV_ITEM,
     PARENT_REQUESTS_NAV_ITEM,
