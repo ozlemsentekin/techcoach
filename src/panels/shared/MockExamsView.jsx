@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   CalendarDays,
   ChevronDown,
@@ -42,7 +42,6 @@ import {
   matchSubjectId,
   mockExamKindLabel,
   previousActionReviewLabel,
-  subjectTone,
 } from './mockExamConfig'
 
 const DATE_FMT = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -1810,6 +1809,7 @@ function ExamCard({
   updateExperience,
   studentId,
   bare = false,
+  hideHeader = false,
   fetchMockExam,
   fetchPhoto,
   addPhoto,
@@ -1819,7 +1819,10 @@ function ExamCard({
   onDelete,
   onChanged,
 }) {
-  const [open, setOpen] = useState(false)
+  // hideHeader: Branş İzleme tablosunda satırın kendisi başlık görevi görür; kart sadece detayı
+  // (açık hâlde) gösterir.
+  const [openState, setOpen] = useState(false)
+  const open = hideHeader || openState
   const [photoSubject, setPhotoSubject] = useState(null)
   const [addFor, setAddFor] = useState(null)
   const [manageSubjectId, setManageSubjectId] = useState(null)
@@ -1854,6 +1857,7 @@ function ExamCard({
 
   return (
     <div className={cn('overflow-hidden', bare ? '' : 'panel-card')}>
+      {hideHeader ? null : (
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -1901,9 +1905,10 @@ function ExamCard({
           )}
         </div>
       </button>
+      )}
 
       {open ? (
-        <div className="border-t border-panel-border px-4 py-3">
+        <div className={cn('px-4 py-3', hideHeader ? '' : 'border-t border-panel-border')}>
           <div className="flex flex-col">
             {exam.subjects.map((subject) => (
               <SubjectLine
@@ -2046,6 +2051,321 @@ function ExamCard({
   )
 }
 
+/* ------------------------------------------------------------------ sekmeli izleme görünümü */
+// Branş İzleme / Genel Deneme / Etüt ortak görünümü: sekmeler (ders ya da Genel Toplam) →
+// analiz kartları → sonuç tablosu (satıra tıklayınca deneme detayı açılır).
+
+const GENEL_TOTAL_KEY = '__genel_toplam__'
+
+function examTime(exam) {
+  const t = exam.examDate ? new Date(exam.examDate).getTime() : NaN
+  return Number.isNaN(t) ? 0 : t
+}
+
+function round1(value) {
+  return Math.round(value * 10) / 10
+}
+
+function examTotalsStats(exam) {
+  return {
+    correct: exam.totalCorrect,
+    wrong: exam.totalWrong,
+    blank: exam.totalBlank,
+    net: exam.net,
+    successRate: exam.successRate,
+    totalQuestions: exam.totalQuestions,
+  }
+}
+
+function subjectStats(subject) {
+  const totalQuestions = subject.totalQuestions ?? subject.correct + subject.wrong + subject.blank
+  return {
+    correct: subject.correct,
+    wrong: subject.wrong,
+    blank: subject.blank,
+    net: subject.net ?? computeNet(subject.correct, subject.wrong),
+    successRate:
+      subject.successRate ?? (totalQuestions > 0 ? Math.round((subject.correct / totalQuestions) * 1000) / 10 : 0),
+    totalQuestions,
+  }
+}
+
+function finalizeGroup(group) {
+  const sum = group.rows.reduce(
+    (acc, { stats }) => ({
+      totalQuestions: acc.totalQuestions + stats.totalQuestions,
+      correct: acc.correct + stats.correct,
+      wrong: acc.wrong + stats.wrong,
+      blank: acc.blank + stats.blank,
+    }),
+    { totalQuestions: 0, correct: 0, wrong: 0, blank: 0 },
+  )
+  return {
+    ...group,
+    ...sum,
+    successRate: sum.totalQuestions > 0 ? Math.round((sum.correct / sum.totalQuestions) * 1000) / 10 : 0,
+  }
+}
+
+// Tür bazında sekme grupları. Branş/Etüt: derse göre (alfabetik). Genel: "Genel Toplam" + dersler
+// (denemedeki ders sırasıyla — LGS şablonu).
+function buildMonitorGroups(kind, exams) {
+  const map = new Map()
+  const push = (key, label, row) => {
+    let entry = map.get(key)
+    if (!entry) {
+      entry = { key, label, rows: [] }
+      map.set(key, entry)
+    }
+    entry.rows.push(row)
+  }
+
+  if (kind === 'genel') {
+    exams.forEach((exam) => {
+      push(GENEL_TOTAL_KEY, 'Genel Toplam', { exam, stats: examTotalsStats(exam) })
+      ;(exam.subjects || []).forEach((subject) => {
+        const name = subject.subjectName || 'Ders belirtilmemiş'
+        push(name, name, { exam, stats: subjectStats(subject) })
+      })
+    })
+    return [...map.values()].map(finalizeGroup)
+  }
+
+  exams.forEach((exam) => {
+    const name = exam.subjects[0]?.subjectName || 'Ders belirtilmemiş'
+    push(name, name, { exam, stats: examTotalsStats(exam) })
+  })
+  return [...map.values()].map(finalizeGroup).sort((a, b) => a.label.localeCompare(b.label, 'tr'))
+}
+
+function DeltaBadge({ value }) {
+  if (value == null) return <span className="text-panel-text-muted">—</span>
+  const rounded = round1(value)
+  if (rounded === 0) return <span className="font-semibold text-panel-text-muted tabular-nums">0</span>
+  const up = rounded > 0
+  return (
+    <span className={cn('font-semibold tabular-nums', up ? 'text-panel-green' : 'text-panel-red')}>
+      {up ? '▲' : '▼'} {Math.abs(rounded)}
+    </span>
+  )
+}
+
+function MonitorStatCard({ label, value, hint, tone }) {
+  return (
+    <div className="panel-card flex flex-col gap-1 px-4 py-3">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted">{label}</span>
+      <span className={cn('text-2xl font-bold tabular-nums leading-tight', tone || 'text-panel-text')}>{value}</span>
+      {hint ? <span className="text-xs text-panel-text-muted">{hint}</span> : null}
+    </div>
+  )
+}
+
+function MonitorAnalysis({ group, countLabel }) {
+  // Kronolojik (eski → yeni) sıra: değişim ve son deneme hesapları için.
+  const chrono = [...group.rows].sort((a, b) => examTime(a.exam) - examTime(b.exam))
+  const count = chrono.length
+  const avgNet = count ? round1(chrono.reduce((s, r) => s + r.stats.net, 0) / count) : 0
+  const avgQuestions = count ? round1(group.totalQuestions / count) : 0
+  const best = chrono.reduce((acc, r) => (acc == null || r.stats.net > acc.stats.net ? r : acc), null)
+  const last = chrono[count - 1]
+  const prev = count > 1 ? chrono[count - 2] : null
+  const half = Math.floor(count / 2)
+  const avgOf = (rows) => rows.reduce((s, r) => s + r.stats.net, 0) / rows.length
+  const trend = count >= 4 ? avgOf(chrono.slice(count - half)) - avgOf(chrono.slice(0, half)) : null
+  const blankRate = group.totalQuestions ? Math.round((group.blank / group.totalQuestions) * 100) : 0
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      <MonitorStatCard label={countLabel} value={count} hint={`${group.totalQuestions} soru`} />
+      <MonitorStatCard
+        label="Ortalama Net"
+        value={avgNet}
+        hint={`ortalama ${avgQuestions} soru üzerinden`}
+        tone="text-panel-blue"
+      />
+      <MonitorStatCard
+        label="Başarı"
+        value={`%${group.successRate}`}
+        hint={`D ${group.correct} · Y ${group.wrong} · B ${group.blank}`}
+        tone={
+          group.successRate >= 85 ? 'text-panel-green' : group.successRate >= 60 ? 'text-panel-yellow' : 'text-panel-red'
+        }
+      />
+      <MonitorStatCard
+        label="En Yüksek Net"
+        value={best ? best.stats.net : '—'}
+        hint={best ? formatExamDate(best.exam.examDate) : undefined}
+        tone="text-panel-green"
+      />
+      <MonitorStatCard
+        label="Son Net"
+        value={last ? last.stats.net : '—'}
+        hint={
+          prev ? (
+            <span>
+              öncekine göre <DeltaBadge value={last.stats.net - prev.stats.net} />
+            </span>
+          ) : (
+            formatExamDate(last?.exam.examDate)
+          )
+        }
+      />
+      <MonitorStatCard
+        label="Gidişat"
+        value={trend == null ? '—' : <DeltaBadge value={trend} />}
+        hint={trend == null ? 'en az 4 sonuç gerekir' : `son yarı − ilk yarı ort. net · boş %${blankRate}`}
+      />
+    </div>
+  )
+}
+
+function MonitorResultsTable({ group, cardProps, canEditExperience, showQuestionCount }) {
+  const [openId, setOpenId] = useState(null)
+  const rows = useMemo(() => {
+    const chrono = [...group.rows].sort((a, b) => examTime(a.exam) - examTime(b.exam))
+    const withDelta = chrono.map((row, i) => ({ ...row, delta: i > 0 ? row.stats.net - chrono[i - 1].stats.net : null }))
+    return withDelta.reverse() // tabloda en yeni üstte
+  }, [group.rows])
+
+  const th = 'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-panel-text-muted'
+  const td = 'px-3 py-2.5 tabular-nums'
+  const colCount = showQuestionCount ? 10 : 9
+
+  return (
+    <div className="panel-card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[680px] text-sm">
+          <thead className="border-b border-panel-border bg-panel-surface-soft/40">
+            <tr>
+              <th className={th}>Tarih</th>
+              <th className={th}>Deneme</th>
+              {showQuestionCount ? <th className={cn(th, 'text-center')}>Soru</th> : null}
+              <th className={cn(th, 'text-center')}>D</th>
+              <th className={cn(th, 'text-center')}>Y</th>
+              <th className={cn(th, 'text-center')}>B</th>
+              <th className={cn(th, 'text-center')}>Net</th>
+              <th className={cn(th, 'text-center')}>Başarı</th>
+              <th className={cn(th, 'text-center')}>Değişim</th>
+              <th className={cn(th, 'w-8')}>
+                <span className="sr-only">Detay</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-panel-border/60">
+            {rows.map(({ exam, stats, delta }) => {
+              const isOpen = openId === exam.id
+              return (
+                <Fragment key={exam.id}>
+                  <tr
+                    onClick={() => setOpenId(isOpen ? null : exam.id)}
+                    className={cn(
+                      'cursor-pointer transition-colors hover:bg-panel-surface-soft/50',
+                      isOpen && 'bg-panel-surface-soft/50',
+                    )}
+                  >
+                    <td className={cn(td, 'whitespace-nowrap text-panel-text-muted')}>{formatExamDate(exam.examDate)}</td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-semibold text-panel-text">{exam.title || mockExamKindLabel(exam.kind)}</span>
+                        {exam.experienceMood ? (
+                          <span className="rounded-lg bg-panel-sage-soft px-1.5 py-0.5 text-[10px] font-semibold text-panel-sage">
+                            Analiz tamamlandı
+                          </span>
+                        ) : canEditExperience ? (
+                          <span className="rounded-lg bg-panel-yellow-soft px-1.5 py-0.5 text-[10px] font-semibold text-panel-yellow">
+                            Denemeni değerlendir
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    {showQuestionCount ? (
+                      <td className={cn(td, 'text-center text-panel-text-muted')}>{stats.totalQuestions}</td>
+                    ) : null}
+                    <td className={cn(td, 'text-center font-semibold text-panel-green')}>{stats.correct}</td>
+                    <td className={cn(td, 'text-center font-semibold text-panel-red')}>{stats.wrong}</td>
+                    <td className={cn(td, 'text-center text-panel-text-muted')}>{stats.blank}</td>
+                    <td className={cn(td, 'text-center font-bold text-panel-blue')}>{stats.net}</td>
+                    <td className={cn(td, 'text-center')}>
+                      <span className={cn('rounded-lg px-2 py-0.5 text-xs font-semibold', successTone(stats.successRate))}>
+                        %{stats.successRate}
+                      </span>
+                    </td>
+                    <td className={cn(td, 'text-center text-xs')}>
+                      <DeltaBadge value={delta} />
+                    </td>
+                    <td className="px-2 py-2.5 text-panel-text-muted">
+                      <button
+                        type="button"
+                        aria-expanded={isOpen}
+                        aria-label={isOpen ? 'Detayı kapat' : 'Detayı aç'}
+                        className="flex items-center"
+                      >
+                        {isOpen ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
+                      </button>
+                    </td>
+                  </tr>
+                  {isOpen ? (
+                    <tr>
+                      <td colSpan={colCount} className="bg-panel-surface-soft/20 p-0">
+                        <ExamCard {...cardProps(exam)} key={exam.id} bare hideHeader />
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function MockExamMonitoringView({ kind, exams, cardProps, canEditExperience }) {
+  const groups = useMemo(() => buildMonitorGroups(kind, exams), [kind, exams])
+  const [activeKey, setActiveKey] = useState(null)
+  const current = groups.find((g) => g.key === activeKey) || groups[0]
+  if (!current) return null
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="-mx-1 overflow-x-auto px-1">
+        <div className="flex w-max gap-1 border-b border-panel-border">
+          {groups.map((group) => {
+            const selected = group.key === current.key
+            return (
+              <button
+                key={group.key}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => setActiveKey(group.key)}
+                className={cn(
+                  '-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-semibold transition-colors',
+                  selected
+                    ? 'border-panel-blue text-panel-blue'
+                    : 'border-transparent text-panel-text-muted hover:text-panel-text',
+                )}
+              >
+                {group.label}
+                <span className="ml-1.5 text-xs font-medium tabular-nums opacity-70">({group.rows.length})</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <MonitorAnalysis group={current} countLabel={kind === 'etut' ? 'Etüt Sayısı' : 'Deneme Sayısı'} />
+      <MonitorResultsTable
+        key={current.key}
+        group={current}
+        cardProps={cardProps}
+        canEditExperience={canEditExperience}
+        showQuestionCount={kind !== 'brans'}
+      />
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------ ana görünüm */
 
 export default function MockExamsView({
@@ -2088,32 +2408,6 @@ export default function MockExamsView({
   }, [exams])
 
   const activeGroup = kindGroups.find((group) => group.value === activeKind) || kindGroups[0]
-
-  // Branş İzleme / Etüt (tek derslik) sekmelerinde denemeler derse göre gruplanır.
-  const subjectGroups = useMemo(() => {
-    if (!activeGroup || activeGroup.value === 'genel') return null
-    const map = new Map()
-    activeGroup.exams.forEach((exam) => {
-      const name = exam.subjects[0]?.subjectName || 'Ders belirtilmemiş'
-      let entry = map.get(name)
-      if (!entry) {
-        entry = { subject: name, exams: [], totalQuestions: 0, correct: 0, wrong: 0, blank: 0 }
-        map.set(name, entry)
-      }
-      entry.exams.push(exam)
-      entry.totalQuestions += exam.totalQuestions
-      entry.correct += exam.totalCorrect
-      entry.wrong += exam.totalWrong
-      entry.blank += exam.totalBlank
-    })
-    return [...map.values()]
-      .map((entry) => ({
-        ...entry,
-        net: computeNet(entry.correct, entry.wrong),
-        successRate: entry.totalQuestions > 0 ? Math.round((entry.correct / entry.totalQuestions) * 1000) / 10 : 0,
-      }))
-      .sort((a, b) => a.subject.localeCompare(b.subject, 'tr'))
-  }, [activeGroup])
 
   const load = useCallback(() => {
     setError('')
@@ -2248,51 +2542,17 @@ export default function MockExamsView({
       onChanged: load,
     })
 
-    // Genel Deneme: düz liste. Branş İzleme / Etüt: derse göre gruplu kartlar.
-    if (!subjectGroups) {
-      return (
-        <div className="flex flex-col gap-3">
-          {errorBanner}
-          {activeGroup.exams.map((exam) => (
-            <ExamCard {...cardProps(exam)} />
-          ))}
-        </div>
-      )
-    }
-
+    // Tüm türler: sekmeler (ders / Genel Toplam) → analiz kartları → sonuç tablosu.
     return (
       <div className="flex flex-col gap-4">
         {errorBanner}
-        {subjectGroups.map((group) => (
-          <div key={group.subject} className="panel-card overflow-hidden">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-panel-border bg-panel-surface-soft/40 px-4 py-3">
-              <span className={cn('rounded-lg px-2.5 py-1 text-sm font-bold', subjectTone(group.subject))}>
-                {group.subject}
-              </span>
-              <span className="text-xs font-medium text-panel-text-muted">
-                {group.exams.length} etüt · {group.totalQuestions} soru
-              </span>
-              <span className="flex-1" />
-              <StatPill label="D" value={group.correct} tone="bg-panel-green-soft text-panel-green" />
-              <StatPill label="Y" value={group.wrong} tone="bg-panel-red-soft text-panel-red" />
-              <StatPill label="B" value={group.blank} tone="bg-panel-surface-soft text-panel-text-muted" />
-              <StatPill label="Net" value={group.net} tone="bg-panel-blue-soft text-panel-blue" />
-              <span
-                className={cn(
-                  'rounded-lg px-2 py-0.5 text-xs font-semibold tabular-nums',
-                  successTone(group.successRate),
-                )}
-              >
-                %{group.successRate}
-              </span>
-            </div>
-            <div className="divide-y divide-panel-border/60">
-              {group.exams.map((exam) => (
-                <ExamCard {...cardProps(exam)} bare />
-              ))}
-            </div>
-          </div>
-        ))}
+        <MockExamMonitoringView
+          key={activeGroup.value}
+          kind={activeGroup.value}
+          exams={activeGroup.exams}
+          cardProps={cardProps}
+          canEditExperience={canEditExperience}
+        />
       </div>
     )
   })()
