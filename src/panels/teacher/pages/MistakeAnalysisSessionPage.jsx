@@ -144,6 +144,9 @@ function CardCaption({ item }) {
       <span className="block truncate text-[11px] font-semibold text-panel-text">
         {[item.testName, question].filter(Boolean).join(' · ')}
       </span>
+      {item.errorDate ? (
+        <span className="block text-[11px] text-panel-text-muted">Çözüldü: {formatErrorDate(item.errorDate)}</span>
+      ) : null}
       <TeacherTopic item={item} />
     </span>
   )

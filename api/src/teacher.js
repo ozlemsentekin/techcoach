@@ -3784,7 +3784,7 @@ function sanitizeSessionAnalysis(row) {
   }
 }
 
-// Hatanın "tarihi" (gün, Türkiye saati): denemede deneme tarihi, diğerlerinde hatanın kaydedildiği gün.
+// Hatanın "tarihi" (gün, Türkiye saati): denemede deneme tarihi, kitapta testin çözüldüğü gün.
 function sessionErrorDate(examDate, createdAt) {
   if (examDate) {
     return examDate instanceof Date ? examDate.toISOString().slice(0, 10) : String(examDate).slice(0, 10)
@@ -3820,8 +3820,15 @@ async function getTeacherMistakeAnalysisSessionHandler(request) {
                COALESCE(rb.name, rb2.name, wq.book_name) AS book_name,
                COALESCE(pub.name, pub2.name, wq.publisher_name) AS publisher_name,
                me.title AS mock_exam_title, me.exam_date AS mock_exam_date, me.kind AS mock_exam_kind,
-               tak.correct_label AS correct_answer
+               tak.correct_label AS correct_answer,
+               COALESCE(tk.completed_at, manual.marked_at) AS solved_at
         FROM dbo.WrongQuestions wq
+        LEFT JOIN dbo.Tasks tk ON tk.id = wq.task_id
+        OUTER APPLY (
+          SELECT TOP 1 m.marked_at FROM dbo.StudentManualTestCompletions m
+          WHERE m.student_id = wq.student_id AND m.test_id = wq.test_id
+          ORDER BY m.marked_at DESC
+        ) manual
         LEFT JOIN dbo.ResourceBookTopicTests t ON t.id = wq.test_id
         LEFT JOIN dbo.ResourceBookTopics tp ON tp.id = t.topic_id
         LEFT JOIN dbo.ResourceBooks rb ON rb.id = tp.resource_book_id
@@ -3865,7 +3872,11 @@ async function getTeacherMistakeAnalysisSessionHandler(request) {
           mockExamKind: isMockExam ? row.mock_exam_kind || undefined : undefined,
           correctAnswer: row.correct_answer || undefined,
           createdAt: row.created_at,
-          errorDate: sessionErrorDate(isMockExam ? row.mock_exam_date : null, row.created_at),
+          // Kitapta testin çözüldüğü gün (görevin tamamlanması / kitaplıktan işaretlenme), yoksa kayıt günü.
+          errorDate: sessionErrorDate(
+            isMockExam ? row.mock_exam_date : null,
+            isMockExam ? row.created_at : row.solved_at || row.created_at,
+          ),
           photoUrl: toReadUrl(row.photo_url),
           // Öğrenci/velinin (ve varsa başka öğretmenin) yorumları salt-okunur bağlam olarak gelir.
           otherComments: (analysesMap.get(row.id) || []).filter((comment) => !mineIds.has(comment.id)),
