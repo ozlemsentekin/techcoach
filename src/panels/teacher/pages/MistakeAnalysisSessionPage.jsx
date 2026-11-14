@@ -11,6 +11,7 @@ import {
   Play,
   RotateCcw,
   RotateCw,
+  Save,
   X,
   ZoomIn,
   ZoomOut,
@@ -26,7 +27,9 @@ import {
   deleteTeacherMistakeAnalysis,
   getTeacherMistakeAnalysisSession,
   updateTeacherMistakeAnalysis,
+  updateTeacherStudentWrongQuestionPhoto,
 } from '../../../services/teacherService'
+import { rotateImageToDataUrl } from '../../../utils/rotateImage'
 
 // Hata Analizi Oturumu: öğretmen ve öğrenci online derste, öğretmenin dersindeki TÜM yanlışları
 // slayt gibi gezip her soru için "Sorunun konusu" + "Dikkat edilmesi gereken" yazar. "Analiz
@@ -316,6 +319,7 @@ function SlideViewer({
   onSave,
   onUndo,
   onPhotoError,
+  onSaveRotation,
   onClose,
 }) {
   const [index, setIndex] = useState(startIndex)
@@ -324,6 +328,7 @@ function SlideViewer({
   const [error, setError] = useState('')
   const [flash, setFlash] = useState('')
   const [rotations, setRotations] = useState(readRotations)
+  const [savingRotation, setSavingRotation] = useState(false)
 
   const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
   const queue = useMemo(() => queueIds.map((id) => itemsById.get(id)).filter(Boolean), [queueIds, itemsById])
@@ -354,6 +359,16 @@ function SlideViewer({
       const next = { ...prev }
       if (nextAngle) next[id] = nextAngle
       else delete next[id]
+      writeRotations(next)
+      return next
+    })
+  }, [])
+
+  const clearRotation = useCallback((id) => {
+    setRotations((prev) => {
+      if (!prev[id]) return prev
+      const next = { ...prev }
+      delete next[id]
       writeRotations(next)
       return next
     })
@@ -445,6 +460,23 @@ function SlideViewer({
   }
 
   const allDone = folder === 'pending' && remainingPending === 0
+  const currentRotation = rotations[current.id] || 0
+
+  // Döndürmeyi asıl fotoğrafa kalıcı yazar: öğrencinin Hata Defteri ve Hata Analizlerim'inde de düz görünür.
+  const handleSaveRotation = async () => {
+    if (!currentRotation || savingRotation) return
+    setSavingRotation(true)
+    setError('')
+    try {
+      await onSaveRotation(current, currentRotation)
+      clearRotation(current.id)
+      setFlash('Fotoğraf döndürülmüş haliyle kaydedildi')
+    } catch (err) {
+      setError(err.message || 'Döndürülen fotoğraf kaydedilemedi.')
+    } finally {
+      setSavingRotation(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col bg-panel-text" role="dialog" aria-modal="true" aria-label="Hata analizi">
@@ -481,6 +513,18 @@ function SlideViewer({
           >
             <RotateCw size={18} />
           </button>
+          {currentRotation ? (
+            <button
+              type="button"
+              onClick={handleSaveRotation}
+              disabled={savingRotation}
+              className="flex h-9 items-center gap-1.5 rounded-full bg-white px-3 text-xs font-semibold text-panel-text hover:bg-white/90 disabled:opacity-60"
+              title="Döndürülmüş hali asıl fotoğraf olarak kaydet (öğrenci de düz görür)"
+            >
+              {savingRotation ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              <span className="hidden sm:inline">Döndürmeyi kaydet</span>
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setZoomed((value) => !value)}
@@ -514,10 +558,10 @@ function SlideViewer({
           </button>
           {current.photoUrl ? (
             <RotatableImage
-              key={current.id}
+              key={current.photoUrl}
               src={current.photoUrl}
               alt={questionLabel(current)}
-              rotation={rotations[current.id] || 0}
+              rotation={currentRotation}
               zoomed={zoomed}
               onToggleZoom={() => setZoomed((value) => !value)}
               onError={() => onPhotoError(current.id)}
@@ -772,6 +816,16 @@ export default function MistakeAnalysisSessionPage() {
     [studentTeacherId, replaceItem, clearDraft],
   )
 
+  const handleSaveRotation = useCallback(
+    async (item, degrees) => {
+      const dataUrl = await rotateImageToDataUrl(item.photoUrl, degrees)
+      const updated = await updateTeacherStudentWrongQuestionPhoto(studentTeacherId, item.id, dataUrl)
+      if (updated?.photoUrl) replaceItem(item.id, { photoUrl: updated.photoUrl })
+      else await load({ silent: true })
+    },
+    [studentTeacherId, replaceItem, load],
+  )
+
   const handleUndo = useCallback(
     async (item) => {
       if (!item.myAnalysis) return
@@ -906,6 +960,7 @@ export default function MistakeAnalysisSessionPage() {
           onSave={handleSave}
           onUndo={handleUndo}
           onPhotoError={handlePhotoError}
+          onSaveRotation={handleSaveRotation}
           onClose={() => setViewer(null)}
         />
       ) : null}
