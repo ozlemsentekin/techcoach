@@ -9,6 +9,7 @@ const MockExamsView = lazy(() => import('../../shared/MockExamsView'))
 
 // Öğrenciye özel link menüsündeki "Gelişim Analizi" ve "Sınav Sonuçları" sayfaları: öğrenci
 // sayfasındaki aynı sekmelerin (StudentDetailPage) ayrı sayfa hali — sunucu öğretmenin dersiyle süzer.
+// Gelişim Analizi profildeki sekmeyle aynı ayarlarla; Sınav Sonuçları'nda görünüm seçicisi gizli.
 function FocusPageFrame({ children }) {
   return (
     <div className="flex flex-col gap-4">
@@ -26,8 +27,8 @@ export function TeacherStudentProgressPage() {
       <StudentProgressView
         studentId={studentTeacherId}
         title="Gelişim Analizi"
-        emptySubtitle=""
-        buildSubtitle={() => ''}
+        emptySubtitle={`${student.subjectName || 'Bu ders'} için ilerleme burada görünecek.`}
+        buildSubtitle={(subjectLabel) => `${subjectLabel} için emek, doğruluk ve kaynak ilerlemesi.`}
         fetchOverview={getTeacherStudentProgressOverview}
       />
     </FocusPageFrame>
@@ -50,6 +51,7 @@ export function TeacherStudentMockExamsPage() {
         fetchPhoto={fetchers.fetchPhoto}
         fetchTopicStats={fetchers.fetchTopicStats}
         fetchGrowthSummary={fetchers.fetchGrowthSummary}
+        hideViewToggle
       />
     </FocusPageFrame>
   )
