@@ -128,6 +128,7 @@ const {
   updateTeacherProfileHandler,
   createTeacherStudentHandler,
 } = require('./teacher')
+const { listQuarterAnalysisHandler } = require('./quarterAnalysis')
 const { getTeacherClassAnalysisHandler } = require('./classAnalysis')
 const {
   listMockExamsHandler,
@@ -1038,6 +1039,14 @@ registerHttp('panel-teacher-wrong-questions-update', {
 
 // Hata Analizi Oturumu: öğretmenin dersindeki tüm yanlışlar (fotoğraf adresleriyle) + öğretmenin
 // kendi analiz yorumunu ekleme / düzeltme / geri alma (bkz. teacher.js).
+// Veli "Çeyrek Dönem Analizi": çocuğun dersleri + öğretmen linkleri (bkz. quarterAnalysis.js).
+registerHttp('panel-quarter-analysis', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel/quarter-analysis',
+  handler: listQuarterAnalysisHandler,
+})
+
 registerHttp('panel-teacher-mistake-analysis-session', {
   authLevel: 'anonymous',
   methods: ['GET'],

@@ -36,6 +36,7 @@ const AnalysisPhotosPage = lazy(() => import('./pages/AnalysisPhotosPage'))
 const StudyHistoryPage = lazy(() => import('./pages/StudyHistoryPage'))
 const SchoolHomeworksPage = lazy(() => import('./pages/SchoolHomeworksPage'))
 const MockExamsPage = lazy(() => import('./pages/MockExamsPage'))
+const QuarterAnalysisPage = lazy(() => import('./pages/QuarterAnalysisPage'))
 
 function RequireAdmin({ children }) {
   const { authUser } = useAuth()
@@ -142,6 +143,10 @@ export default function ParentApp() {
             <Route
               path="school-homeworks"
               element={<RequireStudents>{pageElement(SchoolHomeworksPage)}</RequireStudents>}
+            />
+            <Route
+              path="quarter-analysis"
+              element={<RequireStudents>{pageElement(QuarterAnalysisPage)}</RequireStudents>}
             />
             <Route
               path="mock-exams"
