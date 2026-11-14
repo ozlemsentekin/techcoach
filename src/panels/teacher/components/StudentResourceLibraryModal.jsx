@@ -496,7 +496,9 @@ function groupResourceBooksByPublisher(resourceBooks) {
     }))
 }
 
-export default function StudentResourceLibraryModal({ student, onClose, onAssigned }) {
+// asPage: aynı görünüm pencere yerine sayfa içinde (öğretmenin öğrenciye özel "<Ad> Kitaplık"
+// linki, /teacher/students/:id/kitaplik). onClose verilmezse kapatma düğmesi gösterilmez.
+export default function StudentResourceLibraryModal({ student, onClose, onAssigned, asPage = false }) {
   const [activeTab, setActiveTab] = useState('assigned')
   const [resourceBooks, setResourceBooks] = useState(null)
   const [error, setError] = useState('')
@@ -612,8 +614,20 @@ export default function StudentResourceLibraryModal({ student, onClose, onAssign
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-center overflow-hidden bg-black/40 sm:items-center sm:p-4">
-      <div className="flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden bg-panel-surface sm:h-auto sm:max-h-[94vh] sm:max-w-5xl sm:rounded-2xl sm:shadow-panel-2">
+    <div
+      className={
+        asPage
+          ? 'flex min-w-0 justify-center'
+          : 'fixed inset-0 z-50 flex justify-center overflow-hidden bg-black/40 sm:items-center sm:p-4'
+      }
+    >
+      <div
+        className={
+          asPage
+            ? 'flex w-full min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-panel-border bg-panel-surface'
+            : 'flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden bg-panel-surface sm:h-auto sm:max-h-[94vh] sm:max-w-5xl sm:rounded-2xl sm:shadow-panel-2'
+        }
+      >
         <div className="flex shrink-0 items-center justify-between gap-3 bg-panel-blue px-4 py-3 text-white">
           <div className="flex min-w-0 items-center gap-1.5">
             {selectedBook ? (
@@ -635,14 +649,16 @@ export default function StudentResourceLibraryModal({ student, onClose, onAssign
               ) : null}
             </div>
           </div>
-          <button
-            type="button"
-            aria-label="Kapat"
-            onClick={onClose}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/80 hover:bg-white/10 hover:text-white"
-          >
-            <X size={18} />
-          </button>
+          {onClose ? (
+            <button
+              type="button"
+              aria-label="Kapat"
+              onClick={onClose}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/80 hover:bg-white/10 hover:text-white"
+            >
+              <X size={18} />
+            </button>
+          ) : null}
         </div>
 
         {selectedBook ? null : (
