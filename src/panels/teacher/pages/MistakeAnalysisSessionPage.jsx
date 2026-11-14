@@ -10,6 +10,7 @@ import {
   Loader2,
   Play,
   RotateCcw,
+  RotateCw,
   X,
   ZoomIn,
   ZoomOut,
@@ -146,6 +147,89 @@ function Thumbnail({ item, onOpen }) {
   )
 }
 
+// Görsel döndürme (sola/sağa 90°): telefonla yan çekilmiş sorular için. Açı soru başına tarayıcıda
+// hatırlanır (yalnızca görüntüleme; asıl fotoğraf değişmez).
+const ROTATION_STORAGE_KEY = 'mistake-analysis-rotations'
+
+function readRotations() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(ROTATION_STORAGE_KEY) || '{}')
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeRotations(rotations) {
+  try {
+    window.localStorage.setItem(ROTATION_STORAGE_KEY, JSON.stringify(rotations))
+  } catch {
+    // depolama kapalıysa yalnızca bu oturumda geçerli
+  }
+}
+
+// Döndürülmüş görseli kutuya sığdırır (90/270°'de en-boy yer değiştirir); zoomed iken gerçek
+// boyutunda, kaydırılabilir alanda gösterir.
+function RotatableImage({ src, alt, rotation, zoomed, onToggleZoom, onError }) {
+  const containerRef = useRef(null)
+  const [box, setBox] = useState({ width: 0, height: 0 })
+  const [natural, setNatural] = useState(null)
+
+  useEffect(() => {
+    const element = containerRef.current
+    if (!element) return undefined
+    const update = () => setBox({ width: element.clientWidth, height: element.clientHeight })
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  const sideways = rotation % 180 !== 0
+  let layout = null
+  if (natural && box.width && box.height) {
+    const rotatedWidth = sideways ? natural.height : natural.width
+    const rotatedHeight = sideways ? natural.width : natural.height
+    const scale = zoomed ? 1 : Math.min(box.width / rotatedWidth, box.height / rotatedHeight, 2)
+    layout = {
+      frameWidth: rotatedWidth * scale,
+      frameHeight: rotatedHeight * scale,
+      imageWidth: natural.width * scale,
+      imageHeight: natural.height * scale,
+    }
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className={`min-h-0 flex-1 px-2 pb-2 ${zoomed ? 'overflow-auto' : 'flex items-center justify-center overflow-hidden'}`}
+    >
+      <div
+        className="relative mx-auto shrink-0"
+        style={layout ? { width: layout.frameWidth, height: layout.frameHeight } : { width: '100%', height: '100%' }}
+      >
+        <img
+          src={src}
+          alt={alt}
+          onClick={onToggleZoom}
+          onError={onError}
+          onLoad={(event) =>
+            setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })
+          }
+          className={`absolute left-1/2 top-1/2 max-w-none rounded-lg bg-white transition-transform duration-200 ${
+            zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'
+          } ${layout ? '' : 'opacity-0'}`}
+          style={{
+            width: layout?.imageWidth,
+            height: layout?.imageHeight,
+            transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
 function SlideViewer({
   items,
   queueIds,
@@ -164,6 +248,7 @@ function SlideViewer({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [flash, setFlash] = useState('')
+  const [rotations, setRotations] = useState(readRotations)
 
   const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
   const queue = useMemo(() => queueIds.map((id) => itemsById.get(id)).filter(Boolean), [queueIds, itemsById])
@@ -187,6 +272,17 @@ function SlideViewer({
     },
     [queue.length],
   )
+
+  const rotate = useCallback((id, delta) => {
+    setRotations((prev) => {
+      const nextAngle = (((prev[id] || 0) + delta) % 360 + 360) % 360
+      const next = { ...prev }
+      if (nextAngle) next[id] = nextAngle
+      else delete next[id]
+      writeRotations(next)
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     if (!flash) return undefined
@@ -216,10 +312,11 @@ function SlideViewer({
       if (isEditableTarget(event.target)) return
       if (event.key === 'ArrowLeft') goTo(index - 1)
       else if (event.key === 'ArrowRight') goTo(index + 1)
+      else if ((event.key === 'r' || event.key === 'R') && queue[index]) rotate(queue[index].id, event.shiftKey ? -90 : 90)
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [goTo, index, onClose])
+  }, [goTo, index, onClose, queue, rotate])
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
@@ -293,6 +390,24 @@ function SlideViewer({
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
+            onClick={() => rotate(current.id, -90)}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+            aria-label="Sola döndür"
+            title="Sola döndür (Shift+R)"
+          >
+            <RotateCcw size={18} />
+          </button>
+          <button
+            type="button"
+            onClick={() => rotate(current.id, 90)}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+            aria-label="Sağa döndür"
+            title="Sağa döndür (R)"
+          >
+            <RotateCw size={18} />
+          </button>
+          <button
+            type="button"
             onClick={() => setZoomed((value) => !value)}
             className="hidden h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 sm:flex"
             aria-label={zoomed ? 'Sığdır' : 'Büyüt'}
@@ -322,24 +437,21 @@ function SlideViewer({
           >
             <ChevronLeft size={24} />
           </button>
-          <div className={`min-h-0 flex-1 ${zoomed ? 'overflow-auto' : 'flex items-center justify-center overflow-hidden'} px-2 pb-2`}>
-            {current.photoUrl ? (
-              <img
-                key={current.id}
-                src={current.photoUrl}
-                alt={questionLabel(current)}
-                onClick={() => setZoomed((value) => !value)}
-                onError={() => onPhotoError(current.id)}
-                className={
-                  zoomed
-                    ? 'mx-auto block max-w-none cursor-zoom-out'
-                    : 'max-h-full max-w-full cursor-zoom-in rounded-lg bg-white object-contain'
-                }
-              />
-            ) : (
+          {current.photoUrl ? (
+            <RotatableImage
+              key={current.id}
+              src={current.photoUrl}
+              alt={questionLabel(current)}
+              rotation={rotations[current.id] || 0}
+              zoomed={zoomed}
+              onToggleZoom={() => setZoomed((value) => !value)}
+              onError={() => onPhotoError(current.id)}
+            />
+          ) : (
+            <div className="flex flex-1 items-center justify-center">
               <p className="text-sm text-white/70">Fotoğraf yüklenemedi.</p>
-            )}
-          </div>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => goTo(index + 1)}
@@ -456,7 +568,7 @@ function SlideViewer({
                 </Button>
               ) : null}
             </div>
-            <p className="-mt-2 text-[11px] text-panel-text-muted">Kısayollar: ← → soru değiştir · Ctrl/⌘+Enter kaydet · Esc kapat</p>
+            <p className="-mt-2 text-[11px] text-panel-text-muted">Kısayollar: ← → soru değiştir · R / Shift+R döndür · Ctrl/⌘+Enter kaydet · Esc kapat</p>
 
             {current.otherComments?.length ? (
               <div className="flex flex-col gap-2 border-t border-panel-border pt-3">
