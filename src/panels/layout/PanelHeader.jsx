@@ -28,7 +28,7 @@ const ROLE_LABELS = {
   ogretmen: 'Öğretmen hesabı',
 }
 
-export default function PanelHeader() {
+export default function PanelHeader({ focusTitle = null }) {
   const { authUser, logout, enterStudent, returnToParent, returnToAdmin } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
@@ -148,6 +148,14 @@ export default function PanelHeader() {
   return (
     <header className="sticky top-0 z-20 min-w-0 border-b border-panel-border bg-panel-surface px-3 sm:px-4 md:px-6 xl:px-8">
       <div className="mx-auto flex h-14 w-full max-w-[1480px] min-w-0 items-center justify-end gap-2 sm:gap-3">
+      {/* Öğretmenin öğrenciye özel link sayfalarında başlık ("Aylin Şişman · Fen Bilimleri Çeyrek
+          Dönem Analizi") — bkz. PanelLayout / useTeacherStudentFocus. */}
+      {focusTitle ? (
+        <p className="mr-auto min-w-0 truncate text-sm font-bold text-panel-text sm:text-lg">
+          {focusTitle.name}
+          {focusTitle.detail ? <span className="font-semibold text-panel-text-muted"> · {focusTitle.detail}</span> : null}
+        </p>
+      ) : null}
       {actingParent ? (
         <button
           type="button"
