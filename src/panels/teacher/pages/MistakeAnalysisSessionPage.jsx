@@ -877,12 +877,8 @@ export default function MistakeAnalysisSessionPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <Link to={`/teacher/students/${studentTeacherId}`} className="inline-flex w-fit items-center gap-1 text-sm text-panel-text-muted hover:text-panel-text">
-        <ArrowLeft size={16} /> Öğrenci sayfası
-      </Link>
       <PageHeader
-        title={`${session.subjectName || ''} Hata Defteri`.trim()}
-        subtitle={`${session.studentFullName} · ${session.subjectName} — tüm hatalar`}
+        title="Hata Defteri"
         actions={
           <Button onClick={() => openViewer(0)} disabled={!visibleItems.length}>
             <Play size={16} /> {folder === 'pending' ? 'Analize başla' : 'Slaytı aç'}

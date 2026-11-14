@@ -1,5 +1,4 @@
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { useParams } from 'react-router-dom'
 import StudentResourceLibraryModal from '../components/StudentResourceLibraryModal'
 import LoadingState from '../../shared/LoadingState'
 import { useTeacherStudent } from '../../../hooks/useTeacherStudentFocus'
@@ -17,12 +16,6 @@ export default function TeacherStudentBookshelfPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        to={`/teacher/students/${studentTeacherId}`}
-        className="inline-flex w-fit items-center gap-1 text-sm text-panel-text-muted hover:text-panel-text"
-      >
-        <ArrowLeft size={16} /> Öğrenci sayfası
-      </Link>
       <StudentResourceLibraryModal
         asPage
         student={{ studentTeacherId, studentFullName: student.studentFullName }}

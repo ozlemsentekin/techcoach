@@ -642,7 +642,7 @@ export default function StudentResourceLibraryModal({ student, onClose, onAssign
             ) : null}
             <div className="min-w-0">
               <h2 className="truncate text-sm font-semibold sm:text-base">
-                {selectedBook ? selectedBook.name : `${student.studentFullName} · Kaynaklar`}
+                {selectedBook ? selectedBook.name : asPage ? 'Kitaplık' : `${student.studentFullName} · Kaynaklar`}
               </h2>
               {selectedBook?.publisherName ? (
                 <p className="truncate text-[11px] text-white/70">{selectedBook.publisherName}</p>
