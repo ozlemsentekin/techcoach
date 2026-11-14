@@ -119,6 +119,10 @@ const {
   getTeacherWrongQuestionPhotoRecordHandler,
   getTeacherStudentWrongQuestionTopicStatsHandler,
   updateTeacherStudentWrongQuestionHandler,
+  getTeacherMistakeAnalysisSessionHandler,
+  createTeacherMistakeAnalysisHandler,
+  updateTeacherMistakeAnalysisHandler,
+  deleteTeacherMistakeAnalysisHandler,
   grantParentAccessHandler,
   getTeacherEntitlementHandler,
   updateTeacherProfileHandler,
@@ -1030,6 +1034,36 @@ registerHttp('panel-teacher-wrong-questions-update', {
   methods: ['PATCH'],
   route: 'panel-teacher/students/{studentTeacherId}/wrong-questions/{wrongQuestionId}',
   handler: updateTeacherStudentWrongQuestionHandler,
+})
+
+// Hata Analizi Oturumu: öğretmenin dersindeki tüm yanlışlar (fotoğraf adresleriyle) + öğretmenin
+// kendi analiz yorumunu ekleme / düzeltme / geri alma (bkz. teacher.js).
+registerHttp('panel-teacher-mistake-analysis-session', {
+  authLevel: 'anonymous',
+  methods: ['GET'],
+  route: 'panel-teacher/students/{studentTeacherId}/mistake-analysis-session',
+  handler: getTeacherMistakeAnalysisSessionHandler,
+})
+
+registerHttp('panel-teacher-mistake-analysis-create', {
+  authLevel: 'anonymous',
+  methods: ['POST'],
+  route: 'panel-teacher/students/{studentTeacherId}/wrong-questions/{wrongQuestionId}/analyses',
+  handler: createTeacherMistakeAnalysisHandler,
+})
+
+registerHttp('panel-teacher-mistake-analysis-update', {
+  authLevel: 'anonymous',
+  methods: ['PATCH'],
+  route: 'panel-teacher/students/{studentTeacherId}/wrong-questions/{wrongQuestionId}/analyses/{analysisId}',
+  handler: updateTeacherMistakeAnalysisHandler,
+})
+
+registerHttp('panel-teacher-mistake-analysis-delete', {
+  authLevel: 'anonymous',
+  methods: ['DELETE'],
+  route: 'panel-teacher/students/{studentTeacherId}/wrong-questions/{wrongQuestionId}/analyses/{analysisId}',
+  handler: deleteTeacherMistakeAnalysisHandler,
 })
 
 registerHttp('panel-teacher-wrong-questions-photo', {

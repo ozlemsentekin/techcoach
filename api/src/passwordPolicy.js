@@ -4,6 +4,7 @@ const { defaultPasswordForPhone, verifyPassword } = require('./security')
 // zorunlu şifre değiştirme ekranına takılmaz — idari istisna.
 const PASSWORD_CHANGE_EXEMPT_USER_IDS = new Set([
   'ee525e48-e866-4d02-b9dc-eb4c2ec758d8', // Hakan Şafak Selvi (öğretmen)
+  '2c385bb2-a980-42cc-8edb-614cf185ae89', // Ceyda Yelaldı (Fen öğretmeni) — Hata Analizi Oturumu linki
 ])
 
 // The hash itself is the source of truth. Covers existing/default/reset accounts

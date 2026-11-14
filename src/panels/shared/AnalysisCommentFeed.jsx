@@ -25,7 +25,20 @@ export default function AnalysisCommentFeed({ comments, emptyLabel = 'Henüz yor
               {MISTAKE_REASON_LABELS[comment.mistakeReason] || comment.mistakeReason}
             </span>
           ) : null}
-          {comment.note ? <p className="mt-1 whitespace-pre-wrap text-panel-text">{comment.note}</p> : null}
+          {/* Öğretmenin Hata Analizi Oturumu'nda yazdığı yorumlar "Sorunun konusu" + "Dikkat
+              edilmesi gereken" biçimindedir; konu yoksa not eskisi gibi tek paragraf gösterilir. */}
+          {comment.questionTopic ? (
+            <p className="mt-1 text-panel-text">
+              <span className="font-semibold">Sorunun konusu: </span>
+              {comment.questionTopic}
+            </p>
+          ) : null}
+          {comment.note ? (
+            <p className="mt-1 whitespace-pre-wrap text-panel-text">
+              {comment.questionTopic ? <span className="font-semibold">Dikkat edilmesi gereken: </span> : null}
+              {comment.note}
+            </p>
+          ) : null}
         </div>
       ))}
     </div>

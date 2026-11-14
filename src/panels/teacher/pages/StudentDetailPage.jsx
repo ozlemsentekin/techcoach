@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { AlertCircle, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, FileCheck2, GraduationCap, Phone, TrendingUp } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, FileCheck2, GraduationCap, Phone, Presentation, TrendingUp } from 'lucide-react'
 import LoadingState from '../../shared/LoadingState'
 import Button from '../../ui/Button'
 import WeeklyPlannerGrid from '../../parent/components/WeeklyPlannerGrid'
@@ -312,7 +312,7 @@ export default function StudentDetailPage() {
           <ArrowLeft size={16} aria-hidden="true" />
           Öğrencilerime Dön
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-panel-blue-soft text-panel-blue">
             <GraduationCap size={24} aria-hidden="true" />
           </span>
@@ -335,6 +335,13 @@ export default function StudentDetailPage() {
               ) : null}
             </div>
           </div>
+          <Link
+            to={`/teacher/students/${studentTeacherId}/hata-analizi`}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-panel-border bg-panel-surface px-3 py-2 text-sm font-semibold text-panel-text hover:bg-panel-surface-soft sm:ml-auto"
+          >
+            <Presentation size={16} aria-hidden="true" />
+            Hata Analizi
+          </Link>
         </div>
       </div>
 

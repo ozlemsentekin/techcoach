@@ -19,6 +19,7 @@ const RequestsPage = lazy(() => import('./pages/RequestsPage'))
 const ClassAnalysisPage = lazy(() => import('./pages/ClassAnalysisPage'))
 const AnalysisPhotosPage = lazy(() => import('./pages/AnalysisPhotosPage'))
 const MembershipPage = lazy(() => import('./pages/MembershipPage'))
+const MistakeAnalysisSessionPage = lazy(() => import('./pages/MistakeAnalysisSessionPage'))
 
 function pageElement(Page) {
   return (
@@ -81,6 +82,7 @@ export default function TeacherApp() {
             <Route index element={<Navigate to="students" replace />} />
             <Route path="students" element={pageElement(StudentsPage)} />
             <Route path="students/:studentTeacherId" element={pageElement(StudentDetailPage)} />
+            <Route path="students/:studentTeacherId/hata-analizi" element={pageElement(MistakeAnalysisSessionPage)} />
             <Route path="parents" element={pageElement(ParentsPage)} />
             <Route path="lesson-plan" element={pageElement(LessonPlanPage)} />
             <Route path="library" element={pageElement(LibraryPage)} />
