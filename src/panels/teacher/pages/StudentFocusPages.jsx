@@ -21,6 +21,7 @@ function FocusPageFrame({ children }) {
 export function TeacherStudentProgressPage() {
   const { studentTeacherId } = useParams()
   const student = useTeacherStudent(studentTeacherId)
+  const fetchMockExams = useMemo(() => makeTeacherMockExamFetchers(studentTeacherId).fetchMockExams, [studentTeacherId])
   if (!student) return <LoadingState label="Gelişim analizi yükleniyor..." />
   return (
     <FocusPageFrame>
@@ -30,6 +31,8 @@ export function TeacherStudentProgressPage() {
         emptySubtitle={`${student.subjectName || 'Bu ders'} için ilerleme burada görünecek.`}
         buildSubtitle={(subjectLabel) => `${subjectLabel} için emek, doğruluk ve kaynak ilerlemesi.`}
         fetchOverview={getTeacherStudentProgressOverview}
+        hideInsights
+        fetchMockExams={fetchMockExams}
       />
     </FocusPageFrame>
   )

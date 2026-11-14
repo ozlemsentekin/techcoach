@@ -4,6 +4,7 @@ import {
   BookOpenCheck,
   CalendarCheck,
   CheckCircle2,
+  ClipboardCheck,
   Layers3,
   Target,
   Trophy,
@@ -35,6 +36,7 @@ import {
   toDateKey,
 } from './progressAnalytics'
 import { RATE_TONES, successRateTone } from './rateTones'
+import { mockExamSubjectLabel } from './analysisData'
 import { ImagePreviewLightbox, ResourceBookAvatar } from './ResourceBookCard'
 
 const RANGE_FILTERS = [
@@ -406,6 +408,10 @@ export default function StudentProgressView({
   buildSubtitle = (subjectLabelText) => `${subjectLabelText} için emek, doğruluk ve kaynak ilerlemen.`,
   headerActions,
   fetchOverview = getProgressOverview,
+  // Öğretmenin öğrenciye özel Gelişim Analizi sayfası: Odak Sinyalleri gizlenir ve seçili dersin
+  // deneme/etüt başarısı (doğru / toplam soru) ayrı bir kartta gösterilir.
+  hideInsights = false,
+  fetchMockExams = null,
 }) {
   const [overview, setOverview] = useState(null)
   const [error, setError] = useState('')
@@ -413,7 +419,23 @@ export default function StudentProgressView({
   const [selectedSubjectKey, setSelectedSubjectKey] = useState('')
   const [selectedRange, setSelectedRange] = useState('all')
   const [previewImage, setPreviewImage] = useState(null)
+  const [mockExams, setMockExams] = useState(null)
   const today = useMemo(() => todayISODate(), [])
+
+  useEffect(() => {
+    if (!fetchMockExams) return undefined
+    let ignore = false
+    fetchMockExams()
+      .then((exams) => {
+        if (!ignore) setMockExams(Array.isArray(exams) ? exams : [])
+      })
+      .catch(() => {
+        if (!ignore) setMockExams([])
+      })
+    return () => {
+      ignore = true
+    }
+  }, [fetchMockExams])
 
   useEffect(() => {
     let ignore = false
@@ -456,6 +478,29 @@ export default function StudentProgressView({
   const selectedSubject = isGeneralTab
     ? null
     : subjects.find((subject) => subject.key === effectiveSubjectKey) || subjects[0]
+
+  const examStats = useMemo(() => {
+    if (!mockExams || !selectedSubject) return null
+    const wanted = mockExamSubjectLabel(selectedSubject.label).toLocaleLowerCase('tr-TR')
+    const totals = { exams: 0, questions: 0, correct: 0, wrong: 0, blank: 0 }
+    for (const exam of mockExams) {
+      if (!dateInRange(toDateKey(exam.examDate || exam.createdAt), selectedRange, today)) continue
+      for (const subject of exam.subjects || []) {
+        if (mockExamSubjectLabel(subject.subjectName).toLocaleLowerCase('tr-TR') !== wanted) continue
+        const correct = Number(subject.correct) || 0
+        const wrong = Number(subject.wrong) || 0
+        const blank = Number(subject.blank) || 0
+        const questions = Number(subject.totalQuestions) || correct + wrong + blank
+        if (questions <= 0) continue
+        totals.exams += 1
+        totals.questions += questions
+        totals.correct += correct
+        totals.wrong += wrong
+        totals.blank += blank
+      }
+    }
+    return totals
+  }, [mockExams, selectedSubject, selectedRange, today])
 
   const filteredRecords = useMemo(
     () =>
@@ -600,7 +645,7 @@ export default function StudentProgressView({
         />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <div className={cn('grid grid-cols-1 gap-3.5 sm:grid-cols-2', examStats && 'xl:grid-cols-3')}>
             <SummaryMetric
               icon={BookOpenCheck}
               iconClassName="bg-panel-sage-soft text-panel-sage"
@@ -616,9 +661,10 @@ export default function StudentProgressView({
               value={formatPercent(accuracy)}
               description={`${formatNet(calculateNet(stats.correct, stats.wrong))} net · ${formatNumber(stats.blank)} boş`}
             />
+            {examStats ? <ExamSuccessMetric stats={examStats} /> : null}
           </div>
 
-          <InsightPanel insights={insights} />
+          {hideInsights ? null : <InsightPanel insights={insights} />}
 
           <div className="grid gap-5 xl:grid-cols-2">
             <BreakdownPanel
@@ -643,5 +689,28 @@ export default function StudentProgressView({
 
       <ImagePreviewLightbox preview={previewImage} onClose={() => setPreviewImage(null)} />
     </div>
+  )
+}
+
+// Seçili dersin deneme / branş izleme / etüt başarısı: doğru / toplam soru (Deneme Sınavları
+// sayfasıyla aynı formül).
+function ExamSuccessMetric({ stats }) {
+  const rate = stats.questions ? (stats.correct / stats.questions) * 100 : NaN
+  const tone = RATE_TONES[successRateTone(Number.isFinite(rate) ? rate / 100 : null)] || null
+  return (
+    <SummaryMetric
+      icon={ClipboardCheck}
+      iconClassName={cn('bg-panel-lilac-soft', tone?.text || 'text-panel-lilac')}
+      valueClassName={Number.isFinite(rate) ? tone?.text : undefined}
+      title="Sınav Başarısı"
+      value={Number.isFinite(rate) ? formatPercent(rate) : '–'}
+      description={
+        stats.exams
+          ? `${formatNumber(stats.exams)} sınav · ${formatNumber(stats.correct)} doğru / ${formatNumber(stats.questions)} soru · ${formatNet(
+              calculateNet(stats.correct, stats.wrong),
+            )} net`
+          : 'Bu filtrede sınav sonucu yok.'
+      }
+    />
   )
 }
