@@ -857,6 +857,7 @@ export default function WrongQuestionsView({
   const [topicStats, setTopicStats] = useState([])
   const [sourceTopicStats, setSourceTopicStats] = useState([])
   const [sourceBookStats, setSourceBookStats] = useState([])
+  const [mockExamSubjectStats, setMockExamSubjectStats] = useState([])
   const [error, setError] = useState('')
   const [selectedSubject, setSelectedSubject] = useState(null)
   const [groupMode, setGroupMode] = useState('source')
@@ -895,12 +896,14 @@ export default function WrongQuestionsView({
         setTopicStats(statsData?.topicStats || [])
         setSourceTopicStats(statsData?.sourceTopicStats || [])
         setSourceBookStats(statsData?.sourceBookStats || [])
+        setMockExamSubjectStats(statsData?.mockExamSubjectStats || [])
       })
       .catch(() => {
         if (ignore) return
         setTopicStats([])
         setSourceTopicStats([])
         setSourceBookStats([])
+        setMockExamSubjectStats([])
       })
 
     return () => {
@@ -1008,9 +1011,11 @@ export default function WrongQuestionsView({
   // Ders kartlarında, o derste fotoğraflı yanlışı olan tüm konulardan çözülen toplam soru
   // sayısını ve birleşik başarı oranını göstermek için topicStats'i ders düzeyinde toplar
   // (sourceBookStatsMap ile aynı ağırlıklı-birleştirme mantığı, ama kitap yerine ders bazında).
+  // Deneme sınavlarının ders toplamları (mockExamSubjectStats) da eklenir; yoksa kart yalnızca
+  // kitap testlerindeki yanlış/çözülen soruyu gösterir, denemeler hiç sayılmazdı.
   const subjectStatsMap = useMemo(() => {
     const map = new Map()
-    topicStats.forEach((stat) => {
+    ;[...topicStats, ...mockExamSubjectStats].forEach((stat) => {
       const key = (stat.subject || '').trim()
       if (!map.has(key)) map.set(key, { totalAnswered: 0, correct: 0, wrongCount: 0 })
       const entry = map.get(key)
@@ -1030,7 +1035,7 @@ export default function WrongQuestionsView({
         },
       ]),
     )
-  }, [topicStats])
+  }, [topicStats, mockExamSubjectStats])
 
   const activeTopics = !activeSource && groupMode === 'topic' ? selectedContentGroup?.topics : null
   const galleryTopicGroup = activeTopics?.find(
