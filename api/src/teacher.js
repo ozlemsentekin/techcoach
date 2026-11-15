@@ -59,6 +59,7 @@ const {
   sanitizeWrongQuestion,
   sanitizeManualTestCompletion,
   computeWrongQuestionTopicStats,
+  computeMockExamSubjectStats,
   fetchWrongQuestionBookImagesByName,
   fetchWrongQuestionAnalyses,
   fetchAnalysesByQuestionIds,
@@ -3645,12 +3646,11 @@ async function getTeacherStudentWrongQuestionTopicStatsHandler(request) {
       WHERE wq.student_id = @studentId AND wq.subject = @subject AND wq.test_id IS NOT NULL;
     `)
 
-    const { topicStats, sourceTopicStats, sourceBookStats } = await computeWrongQuestionTopicStats(
-      studentId,
-      result.recordset,
-      { teacherId: studentTeacherId },
-    )
-    return json(200, { topicStats, sourceTopicStats, sourceBookStats })
+    const [{ topicStats, sourceTopicStats, sourceBookStats }, mockExamSubjectStats] = await Promise.all([
+      computeWrongQuestionTopicStats(studentId, result.recordset, { teacherId: studentTeacherId }),
+      computeMockExamSubjectStats(studentId, { subjectName }),
+    ])
+    return json(200, { topicStats, sourceTopicStats, sourceBookStats, mockExamSubjectStats })
   } catch (error) {
     return handleError(error, 'getTeacherStudentWrongQuestionTopicStatsHandler', 'İçerik istatistikleri yüklenemedi.')
   }

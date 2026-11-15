@@ -1224,6 +1224,47 @@ async function computeWrongQuestionTopicStats(studentId, topicKeys, { teacherId 
   return { topicStats, sourceTopicStats, sourceBookStats }
 }
 
+// Hata Defteri ders kartlarındaki "X yanlış · Y soru çözüldü · %başarı" yalnızca kitap testlerinden
+// (topicStats) hesaplanıyordu; deneme sınavlarındaki (MockExamSubjects) doğru/yanlış/boş sayıları
+// hiç eklenmiyordu. Bu fonksiyon öğrencinin tüm denemelerini ders bazında toplar; ön yüz
+// (WrongQuestionsView subjectStatsMap) bunu ders kartı toplamına ekler. Ders adı, Hata Defteri'ne
+// yazılan adla aynı olsun diye "T.C. " öneki atılır (bkz. mockExams.js wrongQuestionSubjectName).
+async function computeMockExamSubjectStats(studentId, { subjectName } = {}) {
+  const db = await withRequest({ studentId: { type: sql.UniqueIdentifier, value: studentId } })
+  const result = await db.query(`
+    SELECT mes.subject_name,
+           SUM(mes.correct_count) AS correct_count,
+           SUM(mes.wrong_count) AS wrong_count,
+           SUM(mes.blank_count) AS blank_count
+    FROM dbo.MockExamSubjects mes
+    INNER JOIN dbo.MockExams me ON me.id = mes.mock_exam_id
+    WHERE me.student_id = @studentId
+    GROUP BY mes.subject_name;
+  `)
+
+  const bySubject = new Map()
+  result.recordset.forEach((row) => {
+    const subject = String(row.subject_name || '').replace(/^T\.\s*C\.\s*/i, '').trim()
+    if (!subject) return
+    if (subjectName && subject !== String(subjectName).trim()) return
+    if (!bySubject.has(subject)) bySubject.set(subject, { correct: 0, wrong: 0, blank: 0 })
+    const entry = bySubject.get(subject)
+    entry.correct += Number(row.correct_count) || 0
+    entry.wrong += Number(row.wrong_count) || 0
+    entry.blank += Number(row.blank_count) || 0
+  })
+
+  return Array.from(bySubject.entries()).map(([subject, entry]) => {
+    const totalAnswered = entry.correct + entry.wrong + entry.blank
+    return {
+      subject,
+      totalAnswered,
+      wrongCount: entry.wrong,
+      successRate: totalAnswered > 0 ? entry.correct / totalAnswered : null,
+    }
+  })
+}
+
 // computeWrongQuestionTopicStats için yardımcı: fotoğraflı yanlışı olan konuların ait olduğu
 // (öğrenciye atanmış, aktif) kaynak kitapları bulur ve her biri için kitap düzeyinde tamamlanma
 // oranını hesaplar. teacherId verildiğinde kitaplar ayrıca o öğretmene atanmışlarla sınırlanır.
@@ -1292,11 +1333,11 @@ async function getWrongQuestionTopicStatsHandler(request) {
       WHERE wq.student_id = @studentId AND wq.test_id IS NOT NULL;
     `)
 
-    const { topicStats, sourceTopicStats, sourceBookStats } = await computeWrongQuestionTopicStats(
-      studentId,
-      result.recordset,
-    )
-    return json(200, { topicStats, sourceTopicStats, sourceBookStats })
+    const [{ topicStats, sourceTopicStats, sourceBookStats }, mockExamSubjectStats] = await Promise.all([
+      computeWrongQuestionTopicStats(studentId, result.recordset),
+      computeMockExamSubjectStats(studentId),
+    ])
+    return json(200, { topicStats, sourceTopicStats, sourceBookStats, mockExamSubjectStats })
   } catch (error) {
     if (isConfigError(error)) {
       return json(503, { error: 'Kimlik doğrulama servisi yapılandırması eksik.' })
@@ -1915,6 +1956,7 @@ module.exports = {
   updateWrongQuestionHandler,
   getWrongQuestionTopicStatsHandler,
   computeWrongQuestionTopicStats,
+  computeMockExamSubjectStats,
   fetchWrongQuestionAnalyses,
   fetchAnalysesByQuestionIds,
   addWrongQuestionAnalysisComment,
